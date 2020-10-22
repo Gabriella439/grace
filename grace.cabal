@@ -10,6 +10,8 @@ library
   hs-source-dirs:      src
   build-depends:       base
                      , array
+                     , bytestring
+                     , bytestring-lexing
                      , prettyprinter
                      , text
   build-tools:         alex

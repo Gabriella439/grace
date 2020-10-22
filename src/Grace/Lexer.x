@@ -3,10 +3,14 @@ module Grace.Lexer where
 
 import Data.Text (Text)
 
-import qualified Data.Text as Text
+import qualified Data.ByteString              as ByteString.Strict
+import qualified Data.ByteString.Lazy         as ByteString.Lazy
+import qualified Data.ByteString.Lex.Integral as ByteString.Integral
+import qualified Data.Text.Lazy               as Text.Lazy
+import qualified Data.Text.Lazy.Encoding      as Text.Lazy.Encoding
 }
 
-%wrapper "basic"
+%wrapper "monad-bytestring"
 
 $digit = 0-9
 $alpha = [a-zA-Z]
@@ -14,27 +18,62 @@ $alpha = [a-zA-Z]
 token :-
   $white+                             ;
   "#".*                               ;
-  \&\&                                { \_ -> And                 }
-  \-\>                                { \_ -> Arrow               }
-  @                                   { \_ -> At                  }
-  Bool                                { \_ -> Bool                }
-  \)                                  { \_ -> CloseParenthesis    }
-  \:                                  { \_ -> Colon               }
-  \=                                  { \_ -> Equals              }
-  False                               { \_ -> Grace.Lexer.False   }
-  forall                              { \_ -> Forall              }
-  in                                  { \_ -> In                  }
-  $digit+                             { \s -> Int (read s)        }
-  Kind                                { \_ -> Kind                }
-  \\                                  { \_ -> Lambda              }
-  let                                 { \_ -> Let                 }
-  \(                                  { \_ -> OpenParenthesis     }
-  \(                                  { \_ -> Or                  }
-  True                                { \_ -> Grace.Lexer.True    }
-  Type                                { \_ -> Type                }
-  [ $alpha \_ ] [ $alpha $digit \_ ]* { \s -> Label (Text.pack s) }
+  \&\&                                { emit And                            }
+  \-\>                                { emit Arrow                          }
+  @                                   { emit At                             }
+  Bool                                { emit Bool                           }
+  \)                                  { emit CloseParenthesis               }
+  \:                                  { emit Colon                          }
+  \=                                  { emit Equals                         }
+  False                               { emit Grace.Lexer.False              }
+  forall                              { emit Forall                         }
+  in                                  { emit In                             }
+  $digit+                             { \i n -> fmap Int (captureInt i n)   }
+  Kind                                { emit Kind                           }
+  \\                                  { emit Lambda                         }
+  let                                 { emit Let                            }
+  \(                                  { emit OpenParenthesis                }
+  \|\|                                { emit Or                             }
+  True                                { emit Grace.Lexer.True               }
+  Type                                { emit Type                           }
+  [ $alpha \_ ] [ $alpha $digit \_ ]* { capture Label                }
 
 {
+emit :: Token -> AlexAction Token
+emit t _ _ = return t
+
+getLazyBytes :: AlexAction ByteString.Lazy.ByteString
+getLazyBytes (_, _, remainder, _) len =
+    return (ByteString.Lazy.take len remainder)
+
+getBytes :: AlexAction ByteString.Strict.ByteString
+getBytes input len =
+    fmap ByteString.Lazy.toStrict (getLazyBytes input len)
+
+getText :: AlexAction Text
+getText input len = do
+    lazyBytes <- getLazyBytes input len
+
+    lazyText <- case Text.Lazy.Encoding.decodeUtf8' lazyBytes of
+        Left exception -> fail (show exception)
+        Right lazyText -> return lazyText
+
+    return (Text.Lazy.toStrict lazyText)
+
+capture :: (Text -> Token) -> AlexAction Token
+capture f input len = fmap f (getText input len)
+
+captureInt :: AlexAction Int
+captureInt input len = do
+    bytes <- getBytes input len
+
+    case ByteString.Integral.readDecimal bytes of
+        Nothing     -> fail "Invalid integer"
+        Just (n, _) -> return n
+
+alexEOF :: Alex Token
+alexEOF = return EndOfFile
+
 data Token
     = And
     | Arrow
@@ -55,5 +94,6 @@ data Token
     | Or
     | True
     | Type
+    | EndOfFile
     deriving (Show)
 }

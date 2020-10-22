@@ -2,8 +2,7 @@ module Grace where
 
 import Grace.Syntax (Syntax)
 
-import qualified Data.Text                             as Text
-import qualified Data.Text.IO                          as Text.IO
+import qualified Data.ByteString.Lazy                  as ByteString.Lazy
 import qualified Data.Text.Prettyprint.Doc             as Pretty
 import qualified Data.Text.Prettyprint.Doc.Render.Text as Pretty.Text
 import qualified Grace.Lexer
@@ -21,11 +20,11 @@ pretty syntax = Pretty.Text.putDoc doc
 
 main :: IO ()
 main = do
-    text <- Text.IO.getContents
+    bytes <- ByteString.Lazy.getContents
 
-    let tokens = Grace.Lexer.alexScanTokens (Text.unpack text)
-
-    let expression = Grace.Parser.parseExpression tokens
+    expression <- case Grace.Lexer.runAlex bytes Grace.Parser.parseExpression of
+        Left  string     -> fail string
+        Right expression -> return expression
 
     case Grace.Type.typeOf expression of
         Left string -> do

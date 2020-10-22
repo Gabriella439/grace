@@ -1,7 +1,7 @@
 {
 module Grace.Parser where
 
-import Grace.Lexer (Token)
+import Grace.Lexer (Alex, Token)
 
 import qualified Grace.Lexer  as Lexer
 import qualified Grace.Syntax as Syntax
@@ -10,6 +10,8 @@ import qualified Grace.Syntax as Syntax
 %name parseExpression
 %tokentype { Token }
 %error { parseError }
+%lexer { lexer } { Lexer.EndOfFile }
+%monad { Alex }
 
 %token
     '&&'    { Lexer.And              }
@@ -89,6 +91,9 @@ PrimitiveExpression
        { $2 }
 
 {
-parseError :: [Token] -> a
-parseError = error . show
+lexer :: (Token -> Alex a) -> Alex a
+lexer k = Lexer.alexMonadScan >>= k
+
+parseError :: Token -> Alex a
+parseError = fail . show
 }
