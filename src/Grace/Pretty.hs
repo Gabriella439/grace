@@ -45,12 +45,22 @@ prettyExpression (Forall name inputType outputType) =
         <>   Pretty.line
         <>   prettyExpression outputType
         )
-prettyExpression (Let name annotation assignment body) =
+prettyExpression (Let name (Just annotation) assignment body) =
     Pretty.align
         (    "let "
         <>   Pretty.pretty name
         <>   " : "
         <>   prettyExpression annotation
+        <>   " = "
+        <>   prettyExpression assignment
+        <>   Pretty.line
+        <>   "in "
+        <>   prettyExpression body
+        )
+prettyExpression (Let name Nothing assignment body) =
+    Pretty.align
+        (    "let "
+        <>   Pretty.pretty name
         <>   " = "
         <>   prettyExpression assignment
         <>   Pretty.line

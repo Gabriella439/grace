@@ -95,12 +95,18 @@ infer names context environment syntax =
                     return (Normalize.instantiate closure evaluatedArgument)
                 _ -> do
                     Left "Not a function type"
-        Syntax.Let name annotation assignment body -> do
-            _ <- infer names context environment annotation
+        Syntax.Let name maybeAnnotation assignment body -> do
+            evaluatedAnnotation <- case maybeAnnotation of
+                Nothing -> do
+                    infer names context environment assignment
+                Just annotation -> do
+                    _ <- infer names context environment annotation
 
-            let evaluatedAnnotation = Normalize.evaluate environment annotation
+                    let evaluatedAnnotation = Normalize.evaluate environment annotation
 
-            check names context environment assignment evaluatedAnnotation
+                    check names context environment assignment evaluatedAnnotation
+
+                    return evaluatedAnnotation
 
             let newNames = name : names
 

@@ -16,7 +16,7 @@ data Syntax
     | Lambda Text Syntax Syntax
     | Forall Text Syntax Syntax
     | Application Syntax Syntax
-    | Let Text Syntax Syntax Syntax  -- TODO: Make annotation optional
+    | Let Text (Maybe Syntax) Syntax Syntax
     | Annotation Syntax Syntax
     | And Syntax Syntax
     | Or Syntax Syntax

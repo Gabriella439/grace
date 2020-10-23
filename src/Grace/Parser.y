@@ -61,7 +61,9 @@ Expression
     | ApplicationExpression '->' Expression
         { Syntax.Forall "_" $1 $3 }
     | let label ':' Expression '=' Expression in Expression
-        { Syntax.Let $2 $4 $6 $8 }
+        { Syntax.Let $2 (Just $4) $6 $8 }
+    | let label '=' Expression in Expression
+        { Syntax.Let $2 Nothing $4 $6 }
     | AnnotationExpression
         { $1 }
 
