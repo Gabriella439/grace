@@ -1,4 +1,12 @@
-module Grace.Type where
+{-| This module contains the logic for inferring the type of an expression,
+    and detecting any internal type errors within that expression
+-}
+
+module Grace.Type
+    ( -- * Type-checking
+      TypeError
+    , typeOf
+    ) where
 
 import Data.Text (Text)
 import Grace.Syntax (Syntax)
@@ -8,6 +16,7 @@ import qualified Grace.Normalize as Normalize
 import qualified Grace.Syntax    as Syntax
 import qualified Grace.Value     as Value
 
+-- | Type used to encode failures in the type-checking algorithm
 type TypeError = String -- TODO: Use a better error type
 
 check
@@ -129,6 +138,9 @@ infer names context environment syntax =
         Syntax.Kind -> do
             Left "Kind has no type"
 
+{-| Infer the type of an expression or return a `TypeError` if there is an
+    internal inconsistency
+-}
 typeOf :: Syntax -> Either TypeError Syntax
 typeOf syntax = fmap (Normalize.quote []) (infer [] [] [] syntax)
 

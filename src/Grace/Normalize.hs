@@ -1,4 +1,13 @@
-module Grace.Normalize where
+-- | This module contains the logic for efficiently evaluating an expression
+module Grace.Normalize
+    ( -- * Normalization
+      evaluate
+    , fresh
+    , lookupVariable
+    , instantiate
+    , normalize
+    , quote
+    ) where
 
 import Data.Text (Text)
 import Grace.Value (Closure(..), Value)
@@ -7,7 +16,15 @@ import Grace.Syntax (Syntax)
 import qualified Grace.Value  as Value
 import qualified Grace.Syntax as Syntax
 
-lookupVariable :: Text -> Int -> [(Text, Value)] -> Value
+-- | Lookup a variable from an environment using the variable's name and index
+lookupVariable
+    :: Text
+    -- ^ Variable name
+    -> Int
+    -- ^ Variable index
+    -> [(Text, Value)]
+    -- ^ Evaluation environment
+    -> Value
 lookupVariable name index environment =
     case environment of
         (key, value) : rest ->
@@ -19,7 +36,20 @@ lookupVariable name index environment =
         [] ->
             Value.Variable name (negate index - 1)
 
-evaluate :: [(Text, Value)] -> Syntax -> Value
+{-| Evaluate an expression, leaving behind a `Value` free of reducible
+    sub-expressions
+
+    This function uses separate types for the input (i.e. `Syntax`) and the
+    output (i.e. `Value`) in order to avoid wastefully evaluating the same
+    sub-expression multiple times.
+-}
+evaluate
+    :: [(Text, Value)]
+    -- ^ Evaluation environment (starting at @[]@ for a top-level expression)
+    -> Syntax
+    -- ^ Surface syntax
+    -> Value
+    -- ^ Result, free of reducible sub-expressions
 evaluate environment syntax =
     case syntax of
         Syntax.Variable name index ->
@@ -93,14 +123,28 @@ evaluate environment syntax =
 countNames :: Text -> [Text] -> Int
 countNames name = length . filter (== name)
 
+-- | Substitute an expression into a `Closure`
 instantiate :: Closure -> Value -> Value
 instantiate (Closure environment name syntax) value =
     evaluate ((name, value) : environment) syntax
 
-fresh :: Text -> [Text] -> Value
+-- | Obtain a unique variable, given a list of variable names currently in scope
+fresh
+    :: Text
+    -- ^ Variable base name (without the index)
+    -> [Text]
+    -- ^ Variables currently in scope
+    -> Value
+    -- ^ Unique variable (including the index)
 fresh name names = Value.Variable name (countNames name names)
 
-quote :: [Text] -> Value -> Syntax
+-- | Convert a `Value` back into the surface `Syntax`
+quote
+    :: [Text]
+    -- ^ Variable names currently in scope (starting at @[]@ for a top-level
+    --   expression)
+    -> Value
+    -> Syntax
 quote names value =
     case value of
         Value.Variable name index ->
@@ -135,5 +179,10 @@ quote names value =
         Value.Type -> Syntax.Type
         Value.Kind -> Syntax.Kind
 
+{-| Evaluate an expression
+
+    This is a convenient wrapper around `evaluate` and `quote` in order to
+    evaluate a top-level expression
+-}
 normalize :: Syntax -> Syntax
 normalize = quote [] . evaluate []

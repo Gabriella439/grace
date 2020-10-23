@@ -1,4 +1,10 @@
-module Grace where
+{-| This module contains the top-level `main` function that parses, type-checks
+    and evaluates an expression
+-}
+module Grace
+    ( -- * Main
+      main
+    ) where
 
 import Grace.Syntax (Syntax)
 
@@ -15,9 +21,10 @@ import qualified System.Exit                           as Exit
 pretty :: Syntax -> IO ()
 pretty syntax = Pretty.Text.putDoc doc
   where
-    doc =   Pretty.group (Grace.Pretty.expression syntax)
+    doc =   Pretty.group (Grace.Pretty.prettyExpression syntax)
         <>  Pretty.hardline
 
+-- | Command-line entrypoint
 main :: IO ()
 main = do
     bytes <- ByteString.Lazy.getContents

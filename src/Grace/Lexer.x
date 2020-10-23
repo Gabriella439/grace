@@ -1,7 +1,25 @@
 {
 {-# LANGUAGE QuasiQuotes #-}
 
-module Grace.Lexer where
+{-| This module contains the logic for lexing Grace files using @alex@.  This
+    uses a small variation on the @monad-bytestring@ wrapper to efficiently
+    lex tokens while producing customizable error messages.
+
+    The main reason for a separate lexing step using @alex@ is to take advantage
+    of the lexical analyzer's support for the longest match rule, which
+    makes the lexing logic easier to maintain.
+-}
+
+module Grace.Lexer
+    ( -- * Lexer
+      Alex
+    , AlexPosn(..)
+    , Token(..)
+    , alexError
+    , alexGetInput
+    , monadScan
+    , runAlex
+    ) where
 
 import Data.Text (Text)
 
@@ -40,7 +58,7 @@ token :-
   \|\|                                { emit Or                             }
   True                                { emit Grace.Lexer.True               }
   Type                                { emit Type                           }
-  [ $alpha \_ ] [ $alpha $digit \_ ]* { capture Label                }
+  [ $alpha \_ ] [ $alpha $digit \_ ]* { capture Label                       }
 
 {
 emit :: Token -> AlexAction Token
@@ -117,6 +135,7 @@ monadScan = do
 
         action (ignorePendingBytes input) len
 
+-- | Tokens produced by lexing
 data Token
     = And
     | Arrow

@@ -1,94 +1,106 @@
-module Grace.Pretty where
+{-| Pretty-printing logic
+
+    The organization of this module closely parallels the organization of the
+    parsing module.  Doing so ensures that precedence is handled correctly.
+
+    The downside of doing things this way is that if you forget to handle a
+    newly added constructor you will get an infinite loop when pretty-printing.
+-}
+module Grace.Pretty
+    ( -- * Pretty-printing
+      prettyExpression
+    ) where
 
 import Data.Text.Prettyprint.Doc (Doc)
 import Grace.Syntax (Syntax(..))
 
 import qualified Data.Text.Prettyprint.Doc as Pretty
 
-expression :: Syntax -> Doc a
-expression (Lambda name inputType body) =
+-- | Pretty-print an expression
+prettyExpression :: Syntax -> Doc a
+prettyExpression (Lambda name inputType body) =
     Pretty.nest 4
         (   "\\("
         <>  Pretty.pretty name
         <>  " : "
-        <>  expression inputType
+        <>  prettyExpression inputType
         <>  ") ->"
         <>  Pretty.line
-        <>  expression body
+        <>  prettyExpression body
         )
-expression (Forall "_" inputType outputType) =
+prettyExpression (Forall "_" inputType outputType) =
     Pretty.nest 4
-        (    expression inputType
+        (    prettyExpression inputType
         <>   " ->"
         <>   Pretty.line
-        <>   expression outputType
+        <>   prettyExpression outputType
         )
-expression (Forall name inputType outputType) =
+prettyExpression (Forall name inputType outputType) =
     Pretty.nest 4
         (    "forall ("
         <>   Pretty.pretty name
         <>   " : "
-        <>   expression inputType
+        <>   prettyExpression inputType
         <>   ") ->"
         <>   Pretty.line
-        <>   expression outputType
+        <>   prettyExpression outputType
         )
-expression (Let name annotation assignment body) =
+prettyExpression (Let name annotation assignment body) =
     Pretty.align
         (    "let "
         <>   Pretty.pretty name
         <>   " : "
-        <>   expression annotation
+        <>   prettyExpression annotation
         <>   " = "
-        <>   expression assignment
+        <>   prettyExpression assignment
         <>   Pretty.line
         <>   "in "
-        <>   expression body
+        <>   prettyExpression body
         )
-expression other =
-    annotationExpression other
+prettyExpression other =
+    prettyAnnotationExpression other
 
-annotationExpression :: Syntax -> Doc a
-annotationExpression (Annotation body annotation) =
-    orExpression body <> " : " <> annotationExpression annotation
-annotationExpression other =
-    orExpression other
+prettyAnnotationExpression :: Syntax -> Doc a
+prettyAnnotationExpression (Annotation body annotation) =
+    prettyOrExpression body <> " : " <> prettyAnnotationExpression annotation
+prettyAnnotationExpression other =
+    prettyOrExpression other
 
-orExpression :: Syntax -> Doc a
-orExpression (Or left right) =
-    orExpression left <> " || " <> andExpression right
-orExpression other =
-    andExpression other
+prettyOrExpression :: Syntax -> Doc a
+prettyOrExpression (Or left right) =
+    prettyOrExpression left <> " || " <> prettyAndExpression right
+prettyOrExpression other =
+    prettyAndExpression other
 
-andExpression :: Syntax -> Doc a
-andExpression (And left right) =
-    andExpression left <> " && " <> applicationExpression right
-andExpression other =
-    applicationExpression other
+prettyAndExpression :: Syntax -> Doc a
+prettyAndExpression (And left right) =
+    prettyAndExpression left <> " && " <> prettyApplicationExpression right
+prettyAndExpression other =
+    prettyApplicationExpression other
 
-applicationExpression :: Syntax -> Doc a
-applicationExpression (Application function argument) =
+prettyApplicationExpression :: Syntax -> Doc a
+prettyApplicationExpression (Application function argument) =
     Pretty.nest 4
-        (   applicationExpression function
+        (   prettyApplicationExpression function
         <>  Pretty.line
-        <>  primitiveExpression argument
+        <>  prettyPrimitiveExpression argument
         )
-applicationExpression other =
-    primitiveExpression other
+prettyApplicationExpression other =
+    prettyPrimitiveExpression other
 
-primitiveExpression :: Syntax -> Doc a
-primitiveExpression (Variable name index)
+prettyPrimitiveExpression :: Syntax -> Doc a
+prettyPrimitiveExpression (Variable name index)
     | index == 0 = Pretty.pretty name
     | otherwise  = Pretty.pretty name <> "@" <> Pretty.pretty index
-primitiveExpression Bool =
+prettyPrimitiveExpression Bool =
     "Bool"
-primitiveExpression Grace.Syntax.True =
+prettyPrimitiveExpression Grace.Syntax.True =
     "True"
-primitiveExpression Grace.Syntax.False =
+prettyPrimitiveExpression Grace.Syntax.False =
     "False"
-primitiveExpression Type =
+prettyPrimitiveExpression Type =
     "Type"
-primitiveExpression Kind =
+prettyPrimitiveExpression Kind =
     "Kind"
-primitiveExpression other =
-    "(" <> expression other <> ")"
+prettyPrimitiveExpression other =
+    "(" <> prettyExpression other <> ")"

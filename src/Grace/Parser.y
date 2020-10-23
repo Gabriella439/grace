@@ -1,9 +1,22 @@
 {
 {-# LANGUAGE QuasiQuotes #-}
 
-module Grace.Parser where
+{-| This module contains the logic for parsing Grace files using @happy@.
+
+    The main reason for not using @attoparsec@ or @megaparsec@ is because
+    LR parser generators are easier to maintain due to not needing to
+    left-factor the grammar.
+
+    The main reason for not using @Earley@ is performance.
+-}
+
+module Grace.Parser
+    ( -- * Parsing
+      parseExpression
+    ) where
 
 import Grace.Lexer (Alex, AlexPosn(..), Token)
+import Grace.Syntax (Syntax)
 
 import qualified Data.Text         as Text
 import qualified Grace.Lexer       as Lexer
@@ -95,6 +108,12 @@ PrimitiveExpression
        { $2 }
 
 {
+{-| Parse a complete expression
+
+    For simplicity, this shares the same `Alex` monad used for lexing
+-}
+parseExpression :: Alex Syntax
+
 lexer :: (Token -> Alex a) -> Alex a
 lexer k = Lexer.monadScan >>= k
 
