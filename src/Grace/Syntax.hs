@@ -17,6 +17,7 @@ data Syntax
     | Forall Text Syntax Syntax
     | Application Syntax Syntax
     | Let Text (Maybe Syntax) Syntax Syntax
+    | If Syntax Syntax Syntax
     | Annotation Syntax Syntax
     | And Syntax Syntax
     | Or Syntax Syntax

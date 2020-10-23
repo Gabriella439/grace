@@ -47,8 +47,10 @@ token :-
   \)                                  { emit CloseParenthesis               }
   \:                                  { emit Colon                          }
   \=                                  { emit Equals                         }
+  else                                { emit Else                           }
   False                               { emit Grace.Lexer.False              }
   forall                              { emit Forall                         }
+  if                                  { emit If                             }
   in                                  { emit In                             }
   $digit+                             { \i n -> fmap Int (captureInt i n)   }
   Kind                                { emit Kind                           }
@@ -57,6 +59,7 @@ token :-
   \(                                  { emit OpenParenthesis                }
   \|\|                                { emit Or                             }
   True                                { emit Grace.Lexer.True               }
+  then                                { emit Then                           }
   Type                                { emit Type                           }
   [ $alpha \_ ] [ $alpha $digit \_ ]* { capture Label                       }
 
@@ -143,9 +146,11 @@ data Token
     | Bool
     | CloseParenthesis
     | Colon
+    | Else
     | Equals
     | False
     | Forall
+    | If
     | In
     | Int Int
     | Kind
@@ -154,6 +159,7 @@ data Token
     | Let
     | OpenParenthesis
     | Or
+    | Then
     | True
     | Type
     | EndOfFile

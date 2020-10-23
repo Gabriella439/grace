@@ -47,6 +47,7 @@ infer names context environment syntax =
             case value of
                 Value.Variable _ i | i < 0 -> Left "Unbound variable"
                 _                          -> return value
+
         Syntax.Lambda name inputType body -> do
             let variable = Normalize.fresh name names
 
@@ -65,6 +66,7 @@ infer names context environment syntax =
             let quotedBodyType = Normalize.quote names bodyType
 
             return (Value.Forall evaluatedInputType (Value.Closure environment name quotedBodyType))
+
         Syntax.Forall name inputType outputType -> do
             -- TODO: Generalize to pure type system
             check names context environment inputType Value.Type
@@ -82,6 +84,7 @@ infer names context environment syntax =
             check newNames newContext newEnvironment outputType Value.Type
 
             return Value.Type
+
         Syntax.Application function argument -> do
             functionType <- infer names context environment function
 
@@ -95,6 +98,7 @@ infer names context environment syntax =
                     return (Normalize.instantiate closure evaluatedArgument)
                 _ -> do
                     Left "Not a function type"
+
         Syntax.Let name maybeAnnotation assignment body -> do
             evaluatedAnnotation <- case maybeAnnotation of
                 Nothing -> do
@@ -117,6 +121,7 @@ infer names context environment syntax =
             let newEnvironment = (name, evaluatedAssignment) : environment
 
             infer newNames newContext newEnvironment body
+
         Syntax.Annotation body annotation -> do
             _ <- infer names context environment annotation
 
@@ -125,22 +130,42 @@ infer names context environment syntax =
             check names context environment body evaluatedAnnotation
 
             return (Normalize.evaluate environment annotation)
+
+        Syntax.If predicate ifTrue ifFalse -> do
+            check names context environment predicate Value.Bool
+
+            ifTrueType <- infer names context environment ifTrue
+
+            ifFalseType <- infer names context environment ifFalse
+
+            if equivalent names ifTrueType ifFalseType
+                then return ()
+                else Left "If expression type mismatch"
+
+            return ifTrueType
+
         Syntax.And left right -> do
             check names context environment left Value.Bool
             check names context environment right Value.Bool
             return Value.Bool
+
         Syntax.Or left right -> do
             check names context environment left Value.Bool
             check names context environment right Value.Bool
             return Value.Bool
+
         Syntax.Bool -> do
             return Value.Type
+
         Syntax.True -> do
             return Value.Bool
+
         Syntax.False -> do
             return Value.Bool
+
         Syntax.Type -> do
             return Value.Kind
+
         Syntax.Kind -> do
             Left "Kind has no type"
 

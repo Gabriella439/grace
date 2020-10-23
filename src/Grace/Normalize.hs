@@ -86,6 +86,18 @@ evaluate environment syntax =
 
             newEnvironment = (name, newAssignment) : environment
 
+        Syntax.If predicate ifTrue ifFalse ->
+            case predicate' of
+                Value.True  -> ifTrue'
+                Value.False -> ifFalse'
+                _           -> Value.If predicate' ifTrue' ifFalse'
+          where
+            predicate' = evaluate environment predicate
+
+            ifTrue' = evaluate environment ifTrue
+
+            ifFalse' = evaluate environment ifFalse
+
         Syntax.Annotation body _ ->
             evaluate environment body
 
@@ -166,6 +178,10 @@ quote names value =
             variable = fresh name names
 
             newOutputType = quote (name : names) (instantiate closure variable)
+
+        Value.If predicate ifTrue ifFalse ->
+            Syntax.If (quote names predicate) (quote names ifTrue)
+                (quote names ifFalse)
 
         Value.And left right ->
             Syntax.And (quote names left) (quote names right)

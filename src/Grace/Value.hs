@@ -34,6 +34,7 @@ data Value
     = Variable Text Int
     | Lambda Value Closure
     | Forall Value Closure
+    | If Value Value Value
     | Application Value Value
     | And Value Value
     | Or Value Value

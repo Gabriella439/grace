@@ -30,42 +30,53 @@ prettyExpression (Lambda name inputType body) =
         )
 prettyExpression (Forall "_" inputType outputType) =
     Pretty.nest 4
-        (    prettyExpression inputType
-        <>   " ->"
-        <>   Pretty.line
-        <>   prettyExpression outputType
+        (   prettyExpression inputType
+        <>  " ->"
+        <>  Pretty.line
+        <>  prettyExpression outputType
         )
 prettyExpression (Forall name inputType outputType) =
     Pretty.nest 4
-        (    "forall ("
-        <>   Pretty.pretty name
-        <>   " : "
-        <>   prettyExpression inputType
-        <>   ") ->"
-        <>   Pretty.line
-        <>   prettyExpression outputType
+        (   "forall ("
+        <>  Pretty.pretty name
+        <>  " : "
+        <>  prettyExpression inputType
+        <>  ") ->"
+        <>  Pretty.line
+        <>  prettyExpression outputType
         )
 prettyExpression (Let name (Just annotation) assignment body) =
     Pretty.align
-        (    "let "
-        <>   Pretty.pretty name
-        <>   " : "
-        <>   prettyExpression annotation
-        <>   " = "
-        <>   prettyExpression assignment
-        <>   Pretty.line
-        <>   "in "
-        <>   prettyExpression body
+        (   "let "
+        <>  Pretty.pretty name
+        <>  " : "
+        <>  prettyExpression annotation
+        <>  " = "
+        <>  prettyExpression assignment
+        <>  Pretty.line
+        <>  "in "
+        <>  prettyExpression body
         )
 prettyExpression (Let name Nothing assignment body) =
     Pretty.align
-        (    "let "
-        <>   Pretty.pretty name
-        <>   " = "
-        <>   prettyExpression assignment
-        <>   Pretty.line
-        <>   "in "
-        <>   prettyExpression body
+        (   "let "
+        <>  Pretty.pretty name
+        <>  " = "
+        <>  prettyExpression assignment
+        <>  Pretty.line
+        <>  "in "
+        <>  prettyExpression body
+        )
+prettyExpression (If predicate ifTrue ifFalse) =
+    Pretty.align
+        (   "if "
+        <>  prettyExpression predicate
+        <>  Pretty.line
+        <>  "then "
+        <>  prettyExpression ifTrue
+        <>  Pretty.line
+        <>  "else "
+        <>  prettyExpression ifFalse
         )
 prettyExpression other =
     prettyAnnotationExpression other

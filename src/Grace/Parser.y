@@ -38,8 +38,10 @@ import qualified NeatInterpolation
     ')'     { Lexer.CloseParenthesis }
     ':'     { Lexer.Colon            }
     '='     { Lexer.Equals           }
+    else    { Lexer.Else             }
     False   { Lexer.False            }
     forall  { Lexer.Forall           }
+    if      { Lexer.If               }
     in      { Lexer.In               }
     int     { Lexer.Int $$           }
     Kind    { Lexer.Kind             }
@@ -47,6 +49,7 @@ import qualified NeatInterpolation
     let     { Lexer.Let              }
     '('     { Lexer.OpenParenthesis  }
     '||'    { Lexer.Or               }
+    then    { Lexer.Then             }
     True    { Lexer.True             }
     Type_   { Lexer.Type             }
     label   { Lexer.Label $$         }
@@ -64,6 +67,8 @@ Expression
         { Syntax.Let $2 (Just $4) $6 $8 }
     | let label '=' Expression in Expression
         { Syntax.Let $2 Nothing $4 $6 }
+    | if Expression then Expression else Expression
+        { Syntax.If $2 $4 $6 }
     | AnnotationExpression
         { $1 }
 
