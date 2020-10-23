@@ -206,6 +206,12 @@ equivalent names
             equivalent names functionL functionR
         &&  equivalent names argumentL argumentR
 equivalent names
+    (Value.If predicateL ifTrueL ifFalseL)
+    (Value.If predicateR ifTrueR ifFalseR) =
+            equivalent names predicateL predicateR
+        &&  equivalent names ifTrueL    ifTrueR
+        &&  equivalent names ifFalseL   ifFalseR
+equivalent names
     (Value.And leftL rightL)
     (Value.And leftR rightR) =
             equivalent names leftL  leftR
