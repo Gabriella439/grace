@@ -1,4 +1,6 @@
 {
+{-# LANGUAGE QuasiQuotes #-}
+
 module Grace.Lexer where
 
 import Data.Text (Text)
@@ -6,8 +8,10 @@ import Data.Text (Text)
 import qualified Data.ByteString              as ByteString.Strict
 import qualified Data.ByteString.Lazy         as ByteString.Lazy
 import qualified Data.ByteString.Lex.Integral as ByteString.Integral
+import qualified Data.Text                    as Text
 import qualified Data.Text.Lazy               as Text.Lazy
 import qualified Data.Text.Lazy.Encoding      as Text.Lazy.Encoding
+import qualified NeatInterpolation
 }
 
 %wrapper "monad-bytestring"
@@ -55,7 +59,7 @@ getText input len = do
     lazyBytes <- getLazyBytes input len
 
     lazyText <- case Text.Lazy.Encoding.decodeUtf8' lazyBytes of
-        Left exception -> fail (show exception)
+        Left exception -> alexError (show exception)
         Right lazyText -> return lazyText
 
     return (Text.Lazy.toStrict lazyText)
@@ -68,11 +72,50 @@ captureInt input len = do
     bytes <- getBytes input len
 
     case ByteString.Integral.readDecimal bytes of
-        Nothing     -> fail "Invalid integer"
+        Nothing     -> alexError "Invalid integer"
         Just (n, _) -> return n
 
 alexEOF :: Alex Token
 alexEOF = return EndOfFile
+
+-- | Same as `alexMonadScan`, except with a better error message
+monadScan :: Alex Token
+monadScan = do
+  input@(_,_,_,n) <- alexGetInput
+
+  sc <- alexGetStartCode
+
+  case alexScan input sc of
+    AlexEOF ->
+        alexEOF
+
+    AlexError ((AlexPn _ line column),char,_,_) -> do
+        let l = Text.pack (show line)
+
+        let c = Text.pack (show column)
+
+        let t = Text.pack (show char)
+
+        let message =
+                [NeatInterpolation.text|
+                Error: Lexing failed
+
+                ${l}:${c}: Unexpected character ${t}
+                |]
+
+        alexError (Text.unpack message)
+
+    AlexSkip input' _ -> do
+        alexSetInput input'
+
+        monadScan
+
+    AlexToken input'@(_,_,_,n') _ action -> do
+        let len = n' - n
+
+        alexSetInput input'
+
+        action (ignorePendingBytes input) len
 
 data Token
     = And

@@ -12,6 +12,7 @@ library
                      , array
                      , bytestring
                      , bytestring-lexing
+                     , neat-interpolation
                      , prettyprinter
                      , text
   build-tools:         alex

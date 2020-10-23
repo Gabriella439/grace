@@ -23,12 +23,16 @@ main = do
     bytes <- ByteString.Lazy.getContents
 
     expression <- case Grace.Lexer.runAlex bytes Grace.Parser.parseExpression of
-        Left  string     -> fail string
-        Right expression -> return expression
+        Left string -> do
+            putStr string
+
+            Exit.exitFailure
+        Right expression -> do
+            return expression
 
     case Grace.Type.typeOf expression of
         Left string -> do
-            putStrLn string
+            putStr string
 
             Exit.exitFailure
         Right inferredType -> do

@@ -1,10 +1,14 @@
 {
+{-# LANGUAGE QuasiQuotes #-}
+
 module Grace.Parser where
 
-import Grace.Lexer (Alex, Token)
+import Grace.Lexer (Alex, AlexPosn(..), Token)
 
-import qualified Grace.Lexer  as Lexer
-import qualified Grace.Syntax as Syntax
+import qualified Data.Text         as Text
+import qualified Grace.Lexer       as Lexer
+import qualified Grace.Syntax      as Syntax
+import qualified NeatInterpolation
 }
 
 %name parseExpression
@@ -92,8 +96,22 @@ PrimitiveExpression
 
 {
 lexer :: (Token -> Alex a) -> Alex a
-lexer k = Lexer.alexMonadScan >>= k
+lexer k = Lexer.monadScan >>= k
 
 parseError :: Token -> Alex a
-parseError = fail . show
+parseError token = do
+    (AlexPn _ line column, _, _, _) <- Lexer.alexGetInput
+
+    let l = Text.pack (show line)
+    let c = Text.pack (show column)
+    let t = Text.pack (show token)
+
+    let message =
+            [NeatInterpolation.text|
+            Error: Parsing failed
+
+            ${l}:${c}: Unexpected token - ${t}
+            |]
+
+    Lexer.alexError (Text.unpack message)
 }
