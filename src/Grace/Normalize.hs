@@ -16,7 +16,9 @@ import Grace.Syntax (Syntax)
 import qualified Grace.Value  as Value
 import qualified Grace.Syntax as Syntax
 
--- | Lookup a variable from an environment using the variable's name and index
+{-| Lookup a variable from an ordered environment of name-value pairs using the
+    variable's name and index
+-}
 lookupVariable
     :: Text
     -- ^ Variable name
@@ -151,7 +153,15 @@ evaluate env syntax =
 countNames :: Text -> [Text] -> Int
 countNames name = length . filter (== name)
 
--- | Obtain a unique variable, given a list of variable names currently in scope
+{-| Obtain a unique variable, given a list of variable names currently in scope
+
+    >>> fresh "x" [ "x", "y", "x" ]
+    Variable "x" 2
+    >>> fresh "y" [ "x", "y", "x" ]
+    Variable "y" 1
+    >>> fresh "z" [ "x", "y", "x" ]
+    Variable "z" 0
+-}
 fresh
     :: Text
     -- ^ Variable base name (without the index)
