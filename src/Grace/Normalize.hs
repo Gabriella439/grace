@@ -34,7 +34,24 @@ lookupVariable name index environment =
                  else lookupVariable name (index - 1) rest
             else lookupVariable name index rest
         [] ->
+            -- In the `Value` type, free variables are stored using negative
+            -- indices (starting at -1) to avoid collision with bound variables
+            --
+            -- >>> evaluate [] "x"
+            -- Variable "x" (-1)
+            --
+            -- This has the nice property that `quote` does the right thing when
+            -- converting back to the `Syntax` type.
             Value.Variable name (negate index - 1)
+
+{-| Substitute an expression into a `Closure`
+
+    > instantiate (Closure name env expression) value =
+    >    evaluate ((name, value) : env) expression
+-}
+instantiate :: Closure -> Value -> Value
+instantiate (Closure name env syntax) value =
+    evaluate ((name, value) : env) syntax
 
 {-| Evaluate an expression, leaving behind a `Value` free of reducible
     sub-expressions
@@ -50,41 +67,30 @@ evaluate
     -- ^ Surface syntax
     -> Value
     -- ^ Result, free of reducible sub-expressions
-evaluate environment syntax =
+evaluate env syntax =
     case syntax of
         Syntax.Variable name index ->
-            lookupVariable name index environment
+            lookupVariable name index env
 
         Syntax.Application function argument ->
-            case newFunction of
-                Value.Lambda _ (Closure capturedEnvironment name body) ->
-                    evaluate newCapturedEnvironment body
-                  where
-                    newCapturedEnvironment =
-                        (name, newArgument) : capturedEnvironment
+            case function' of
+                Value.Lambda _ (Closure name capturedEnv body) ->
+                    evaluate ((name, argument') : capturedEnv) body
                 _ ->
-                    Value.Application newFunction newArgument
+                    Value.Application function' argument'
           where
-            newFunction = evaluate environment function
+            function' = evaluate env function
 
-            newArgument = evaluate environment argument
+            argument' = evaluate env argument
 
         Syntax.Lambda name inputType body ->
-            Value.Lambda newInputType (Closure environment name body)
-          where
-            newInputType = evaluate environment inputType
+            Value.Lambda (evaluate env inputType) (Closure name env body)
 
         Syntax.Forall name inputType outputType ->
-            Value.Forall newInputType (Closure environment name outputType)
-          where
-            newInputType = evaluate environment inputType
+            Value.Forall (evaluate env inputType) (Closure name env outputType)
 
         Syntax.Let name _ assignment body ->
-            evaluate newEnvironment body
-          where
-            newAssignment = evaluate environment assignment
-
-            newEnvironment = (name, newAssignment) : environment
+            evaluate ((name, evaluate env assignment) : env) body
 
         Syntax.If predicate ifTrue ifFalse ->
             case predicate' of
@@ -92,14 +98,14 @@ evaluate environment syntax =
                 Value.False -> ifFalse'
                 _           -> Value.If predicate' ifTrue' ifFalse'
           where
-            predicate' = evaluate environment predicate
+            predicate' = evaluate env predicate
 
-            ifTrue' = evaluate environment ifTrue
+            ifTrue' = evaluate env ifTrue
 
-            ifFalse' = evaluate environment ifFalse
+            ifFalse' = evaluate env ifFalse
 
         Syntax.Annotation body _ ->
-            evaluate environment body
+            evaluate env body
 
         Syntax.And left right ->
             case left' of
@@ -110,9 +116,9 @@ evaluate environment syntax =
                     Value.False -> Value.False
                     _ -> Value.And left' right'
           where
-            left' = evaluate environment left
+            left' = evaluate env left
 
-            right' = evaluate environment right
+            right' = evaluate env right
 
         Syntax.Or left right ->
             case left' of
@@ -123,22 +129,27 @@ evaluate environment syntax =
                     Value.False -> left'
                     _ -> Value.Or left' right'
           where
-            left' = evaluate environment left
+            left' = evaluate env left
 
-            right' = evaluate environment right
-        Syntax.Bool -> Value.Bool
-        Syntax.True -> Value.True
-        Syntax.False -> Value.False
-        Syntax.Type -> Value.Type
-        Syntax.Kind -> Value.Kind
+            right' = evaluate env right
+
+        Syntax.Bool ->
+            Value.Bool
+
+        Syntax.True ->
+            Value.True
+
+        Syntax.False ->
+            Value.False
+
+        Syntax.Type ->
+            Value.Type
+
+        Syntax.Kind ->
+            Value.Kind
 
 countNames :: Text -> [Text] -> Int
 countNames name = length . filter (== name)
-
--- | Substitute an expression into a `Closure`
-instantiate :: Closure -> Value -> Value
-instantiate (Closure environment name syntax) value =
-    evaluate ((name, value) : environment) syntax
 
 -- | Obtain a unique variable, given a list of variable names currently in scope
 fresh
@@ -162,25 +173,28 @@ quote names value =
         Value.Variable name index ->
             Syntax.Variable name (countNames name names - index - 1)
 
+        Value.Lambda inputType closure@(Closure name _ _) ->
+            Syntax.Lambda name (quote names inputType) body
+          where
+            variable = fresh name names
+
+            body = quote (name : names) (instantiate closure variable)
+
+        Value.Forall inputType closure@(Closure name _ _) ->
+            Syntax.Forall name (quote names inputType) outputType
+          where
+            variable = fresh name names
+
+            outputType =
+                quote (name : names) (instantiate closure variable)
+
         Value.Application function argument ->
             Syntax.Application (quote names function) (quote names argument)
 
-        Value.Lambda inputType closure@(Closure _ name _) ->
-            Syntax.Lambda name (quote names inputType) newBody
-          where
-            variable = fresh name names
-
-            newBody = quote (name : names) (instantiate closure variable)
-
-        Value.Forall inputType closure@(Closure _ name _) ->
-            Syntax.Forall name (quote names inputType) newOutputType
-          where
-            variable = fresh name names
-
-            newOutputType = quote (name : names) (instantiate closure variable)
-
         Value.If predicate ifTrue ifFalse ->
-            Syntax.If (quote names predicate) (quote names ifTrue)
+            Syntax.If
+                (quote names predicate)
+                (quote names ifTrue)
                 (quote names ifFalse)
 
         Value.And left right ->
@@ -189,11 +203,20 @@ quote names value =
         Value.Or left right ->
             Syntax.Or (quote names left) (quote names right)
 
-        Value.Bool -> Syntax.Bool
-        Value.True -> Syntax.True
-        Value.False -> Syntax.False
-        Value.Type -> Syntax.Type
-        Value.Kind -> Syntax.Kind
+        Value.Bool ->
+            Syntax.Bool
+
+        Value.True ->
+            Syntax.True
+
+        Value.False ->
+            Syntax.False
+
+        Value.Type ->
+            Syntax.Type
+
+        Value.Kind ->
+            Syntax.Kind
 
 {-| Evaluate an expression
 

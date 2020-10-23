@@ -11,13 +11,18 @@ import Data.String (IsString(..))
 import Data.Text (Text)
 import Grace.Syntax (Syntax)
 
-{-| A `Closure` captures the evaluation environment in order to defer
-    substitution to a later point
+{-| A `Closure` captures the current evaluation environment in order to defer
+    evaluation until the value of some bound variable is known
+
+    You can think of @Closure name env expression@ as essentially the same thing
+    as @\\value -> evaluate ((name, value) : env) e@, except stored using a
+    first-order representation.  In fact, you convert to the latter
+    representation using `Grace.Normalize.instantiate`.
 
     This provides efficiency comparable to a higher-order abstract syntax
     tree, except using a first-order representation.
 -}
-data Closure = Closure [(Text, Value)] Text Syntax
+data Closure = Closure Text [(Text, Value)] Syntax
     deriving (Show)
 
 {-| This type represents a fully evaluated expression with no reducible

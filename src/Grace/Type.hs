@@ -65,7 +65,7 @@ infer names context environment syntax =
 
             let quotedBodyType = Normalize.quote names bodyType
 
-            return (Value.Forall evaluatedInputType (Value.Closure environment name quotedBodyType))
+            return (Value.Forall evaluatedInputType (Value.Closure name environment quotedBodyType))
 
         Syntax.Forall name inputType outputType -> do
             -- TODO: Generalize to pure type system
@@ -181,7 +181,7 @@ equivalent _
     (Value.Variable nameR indexR) =
         nameL == nameR && indexL == indexR
 equivalent names
-    (Value.Lambda inputTypeL closureL@(Closure _ nameL _))
+    (Value.Lambda inputTypeL closureL@(Closure nameL _ _))
     (Value.Lambda inputTypeR closureR) =
             equivalent names inputTypeL inputTypeR
         &&  equivalent (nameL : names) valueL valueR
@@ -191,7 +191,7 @@ equivalent names
     valueL = Normalize.instantiate closureL variable
     valueR = Normalize.instantiate closureR variable
 equivalent names
-    (Value.Forall inputTypeL closureL@(Closure _ nameL _))
+    (Value.Forall inputTypeL closureL@(Closure nameL _ _))
     (Value.Forall inputTypeR closureR) =
             equivalent names inputTypeL inputTypeR
         &&  equivalent (nameL : names) valueL valueR
