@@ -23,7 +23,6 @@ library
                      , Grace.Pretty
                      , Grace.Normalize
                      , Grace.Syntax
-                     , Grace.Type
                      , Grace.Value
   default-extensions:  DuplicateRecordFields
                      , OverloadedStrings

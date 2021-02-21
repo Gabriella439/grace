@@ -34,47 +34,30 @@ import qualified NeatInterpolation
     '&&'    { Lexer.And              }
     '->'    { Lexer.Arrow            }
     '@'     { Lexer.At               }
-    Bool    { Lexer.Bool             }
     ')'     { Lexer.CloseParenthesis }
-    ':'     { Lexer.Colon            }
     '='     { Lexer.Equals           }
     else    { Lexer.Else             }
     False   { Lexer.False            }
-    forall  { Lexer.Forall           }
     if      { Lexer.If               }
     in      { Lexer.In               }
     int     { Lexer.Int $$           }
-    Kind    { Lexer.Kind             }
     '\\'    { Lexer.Lambda           }
     let     { Lexer.Let              }
     '('     { Lexer.OpenParenthesis  }
     '||'    { Lexer.Or               }
     then    { Lexer.Then             }
     True    { Lexer.True             }
-    Type_   { Lexer.Type             }
     label   { Lexer.Label $$         }
 
 %%
 
 Expression
-    : '\\' '(' label ':' Expression ')' '->' Expression
-        { Syntax.Lambda $3 $5 $8 }
-    | forall '(' label ':' Expression ')' '->' Expression
-        { Syntax.Forall $3 $5 $8 }
-    | ApplicationExpression '->' Expression
-        { Syntax.Forall "_" $1 $3 }
-    | let label ':' Expression '=' Expression in Expression
-        { Syntax.Let $2 (Just $4) $6 $8 }
+    : '\\' label '->' Expression
+        { Syntax.Lambda $2 $4 }
     | let label '=' Expression in Expression
-        { Syntax.Let $2 Nothing $4 $6 }
+        { Syntax.Let $2 $4 $6 }
     | if Expression then Expression else Expression
         { Syntax.If $2 $4 $6 }
-    | AnnotationExpression
-        { $1 }
-
-AnnotationExpression
-    : OrExpression ':' AnnotationExpression
-        { Syntax.Annotation $1 $3 }
     | OrExpression
         { $1 }
 
@@ -101,16 +84,10 @@ PrimitiveExpression
         { Syntax.Variable $1 0 }
     | label '@' int
         { Syntax.Variable $1 $3 }
-    | Bool
-        { Syntax.Bool }
     | True
         { Syntax.True }
     | False
         { Syntax.False }
-    | Type_
-        { Syntax.Type }
-    | Kind
-        { Syntax.Kind }
     | '(' Expression ')' 
        { $2 }
 

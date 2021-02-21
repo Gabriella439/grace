@@ -13,19 +13,14 @@ import Data.String (IsString(..))
 -- | The surface syntax for the language
 data Syntax
     = Variable Text Int
-    | Lambda Text Syntax Syntax
-    | Forall Text Syntax Syntax
+    | Lambda Text Syntax
     | Application Syntax Syntax
-    | Let Text (Maybe Syntax) Syntax Syntax
+    | Let Text Syntax Syntax
     | If Syntax Syntax Syntax
-    | Annotation Syntax Syntax
     | And Syntax Syntax
     | Or Syntax Syntax
     | True
     | False
-    | Bool
-    | Type
-    | Kind
     deriving (Show)
 
 instance IsString Syntax where

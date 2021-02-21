@@ -18,46 +18,15 @@ import qualified Data.Text.Prettyprint.Doc as Pretty
 
 -- | Pretty-print an expression
 prettyExpression :: Syntax -> Doc a
-prettyExpression (Lambda name inputType body) =
+prettyExpression (Lambda name body) =
     Pretty.nest 4
-        (   "\\("
+        (   "\\"
         <>  Pretty.pretty name
-        <>  " : "
-        <>  prettyExpression inputType
-        <>  ") ->"
-        <>  Pretty.line
-        <>  prettyExpression body
-        )
-prettyExpression (Forall "_" inputType outputType) =
-    Pretty.nest 4
-        (   prettyExpression inputType
         <>  " ->"
         <>  Pretty.line
-        <>  prettyExpression outputType
-        )
-prettyExpression (Forall name inputType outputType) =
-    Pretty.nest 4
-        (   "forall ("
-        <>  Pretty.pretty name
-        <>  " : "
-        <>  prettyExpression inputType
-        <>  ") ->"
-        <>  Pretty.line
-        <>  prettyExpression outputType
-        )
-prettyExpression (Let name (Just annotation) assignment body) =
-    Pretty.align
-        (   "let "
-        <>  Pretty.pretty name
-        <>  " : "
-        <>  prettyExpression annotation
-        <>  " = "
-        <>  prettyExpression assignment
-        <>  Pretty.line
-        <>  "in "
         <>  prettyExpression body
         )
-prettyExpression (Let name Nothing assignment body) =
+prettyExpression (Let name assignment body) =
     Pretty.align
         (   "let "
         <>  Pretty.pretty name
@@ -79,12 +48,6 @@ prettyExpression (If predicate ifTrue ifFalse) =
         <>  prettyExpression ifFalse
         )
 prettyExpression other =
-    prettyAnnotationExpression other
-
-prettyAnnotationExpression :: Syntax -> Doc a
-prettyAnnotationExpression (Annotation body annotation) =
-    prettyOrExpression body <> " : " <> prettyAnnotationExpression annotation
-prettyAnnotationExpression other =
     prettyOrExpression other
 
 prettyOrExpression :: Syntax -> Doc a
@@ -113,15 +76,9 @@ prettyPrimitiveExpression :: Syntax -> Doc a
 prettyPrimitiveExpression (Variable name index)
     | index == 0 = Pretty.pretty name
     | otherwise  = Pretty.pretty name <> "@" <> Pretty.pretty index
-prettyPrimitiveExpression Bool =
-    "Bool"
 prettyPrimitiveExpression Grace.Syntax.True =
     "True"
 prettyPrimitiveExpression Grace.Syntax.False =
     "False"
-prettyPrimitiveExpression Type =
-    "Type"
-prettyPrimitiveExpression Kind =
-    "Kind"
 prettyPrimitiveExpression other =
     "(" <> prettyExpression other <> ")"

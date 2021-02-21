@@ -15,7 +15,6 @@ import qualified Grace.Lexer
 import qualified Grace.Normalize
 import qualified Grace.Parser
 import qualified Grace.Pretty
-import qualified Grace.Type
 import qualified System.Exit                           as Exit
 
 pretty :: Syntax -> IO ()
@@ -36,13 +35,5 @@ main = do
             Exit.exitFailure
         Right expression -> do
             return expression
-
-    case Grace.Type.typeOf expression of
-        Left string -> do
-            putStr string
-
-            Exit.exitFailure
-        Right inferredType -> do
-            pretty inferredType
 
     pretty (Grace.Normalize.normalize expression)

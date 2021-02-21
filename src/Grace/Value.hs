@@ -37,17 +37,13 @@ data Closure = Closure Text [(Text, Value)] Syntax
 -}
 data Value
     = Variable Text Int
-    | Lambda Value Closure
-    | Forall Value Closure
+    | Lambda Closure
     | If Value Value Value
     | Application Value Value
     | And Value Value
     | Or Value Value
     | True
     | False
-    | Bool
-    | Type
-    | Kind
     deriving (Show)
 
 instance IsString Value where

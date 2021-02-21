@@ -43,24 +43,19 @@ token :-
   \&\&                                { emit And                            }
   \-\>                                { emit Arrow                          }
   @                                   { emit At                             }
-  Bool                                { emit Bool                           }
   \)                                  { emit CloseParenthesis               }
-  \:                                  { emit Colon                          }
   \=                                  { emit Equals                         }
   else                                { emit Else                           }
   False                               { emit Grace.Lexer.False              }
-  forall                              { emit Forall                         }
   if                                  { emit If                             }
   in                                  { emit In                             }
   $digit+                             { \i n -> fmap Int (captureInt i n)   }
-  Kind                                { emit Kind                           }
   \\                                  { emit Lambda                         }
   let                                 { emit Let                            }
   \(                                  { emit OpenParenthesis                }
   \|\|                                { emit Or                             }
   True                                { emit Grace.Lexer.True               }
   then                                { emit Then                           }
-  Type                                { emit Type                           }
   [ $alpha \_ ] [ $alpha $digit \_ ]* { capture Label                       }
 
 {
@@ -143,17 +138,13 @@ data Token
     = And
     | Arrow
     | At
-    | Bool
     | CloseParenthesis
-    | Colon
     | Else
     | Equals
     | False
-    | Forall
     | If
     | In
     | Int Int
-    | Kind
     | Label Text
     | Lambda
     | Let
@@ -161,7 +152,6 @@ data Token
     | Or
     | Then
     | True
-    | Type
     | EndOfFile
     deriving (Show)
 }
