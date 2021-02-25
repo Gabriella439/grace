@@ -12,21 +12,29 @@ library
                      , array
                      , bytestring
                      , bytestring-lexing
-                     , neat-interpolation
+                     , mtl
                      , prettyprinter
+                     , string-interpolate
                      , text
   build-tools:         alex
                      , happy
   exposed-modules:     Grace
+                     , Grace.Context
+                     , Grace.Infer
                      , Grace.Lexer
-                     , Grace.Parser
-                     , Grace.Pretty
+                     , Grace.Monotype
                      , Grace.Normalize
+                     , Grace.Parser
                      , Grace.Syntax
                      , Grace.Type
                      , Grace.Value
   default-extensions:  DuplicateRecordFields
+                     , FlexibleContexts
+                     , FlexibleInstances
+                     , NamedFieldPuns
                      , OverloadedStrings
+                     , QuasiQuotes
+                     , ViewPatterns
   default-language:    Haskell2010
   ghc-options:         -Wall
 

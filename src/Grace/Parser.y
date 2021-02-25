@@ -1,6 +1,4 @@
 {
-{-# LANGUAGE QuasiQuotes #-}
-
 {-| This module contains the logic for parsing Grace files using @happy@.
 
     The main reason for not using @attoparsec@ or @megaparsec@ is because
@@ -15,13 +13,14 @@ module Grace.Parser
       parseExpression
     ) where
 
+import Data.String.Interpolate (__i)
 import Grace.Lexer (Alex, AlexPosn(..), Token)
 import Grace.Syntax (Syntax)
 
 import qualified Data.Text         as Text
 import qualified Grace.Lexer       as Lexer
 import qualified Grace.Syntax      as Syntax
-import qualified NeatInterpolation
+import qualified Grace.Type        as Type
 }
 
 %name parseExpression
@@ -37,43 +36,32 @@ import qualified NeatInterpolation
     Bool    { Lexer.Bool             }
     ')'     { Lexer.CloseParenthesis }
     ':'     { Lexer.Colon            }
+    '.'     { Lexer.Dot              }
     '='     { Lexer.Equals           }
     else    { Lexer.Else             }
-    False   { Lexer.False            }
     forall  { Lexer.Forall           }
+    False   { Lexer.False            }
     if      { Lexer.If               }
     in      { Lexer.In               }
     int     { Lexer.Int $$           }
-    Kind    { Lexer.Kind             }
     '\\'    { Lexer.Lambda           }
     let     { Lexer.Let              }
     '('     { Lexer.OpenParenthesis  }
     '||'    { Lexer.Or               }
     then    { Lexer.Then             }
     True    { Lexer.True             }
-    Type_   { Lexer.Type             }
     label   { Lexer.Label $$         }
 
 %%
 
 Expression
-    : '\\' '(' label ':' Expression ')' '->' Expression
-        { Syntax.Lambda $3 $5 $8 }
-    | forall '(' label ':' Expression ')' '->' Expression
-        { Syntax.Forall $3 $5 $8 }
-    | ApplicationExpression '->' Expression
-        { Syntax.Forall "_" $1 $3 }
-    | let label ':' Expression '=' Expression in Expression
-        { Syntax.Let $2 (Just $4) $6 $8 }
+    : '\\' label '->' Expression
+        { Syntax.Lambda $2 $4 }
     | let label '=' Expression in Expression
-        { Syntax.Let $2 Nothing $4 $6 }
+        { Syntax.Let $2 $4 $6 }
     | if Expression then Expression else Expression
         { Syntax.If $2 $4 $6 }
-    | AnnotationExpression
-        { $1 }
-
-AnnotationExpression
-    : OrExpression ':' AnnotationExpression
+    | OrExpression ':' Type
         { Syntax.Annotation $1 $3 }
     | OrExpression
         { $1 }
@@ -101,18 +89,32 @@ PrimitiveExpression
         { Syntax.Variable $1 0 }
     | label '@' int
         { Syntax.Variable $1 $3 }
-    | Bool
-        { Syntax.Bool }
     | True
         { Syntax.True }
     | False
         { Syntax.False }
-    | Type_
-        { Syntax.Type }
-    | Kind
-        { Syntax.Kind }
     | '(' Expression ')' 
        { $2 }
+
+Type
+    : forall label '.' Type
+        { Type.Forall $2 $4 }
+    | FunctionType
+        { $1 }
+
+FunctionType
+    : PrimitiveType '->' FunctionType
+        { Type.Function $1 $3 }
+    | PrimitiveType
+        { $1 }
+
+PrimitiveType
+    : Bool
+        { Type.Bool }
+    | label
+        { Type.Variable $1 }
+    | '(' Type ')'
+        { $2 }
 
 {
 {-| Parse a complete expression
@@ -133,8 +135,8 @@ parseError token = do
     let t = Text.pack (show token)
 
     let message =
-            [NeatInterpolation.text|
-            Error: Parsing failed
+            [__i|
+            Parsing failed
 
             ${l}:${c}: Unexpected token - ${t}
             |]

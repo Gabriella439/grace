@@ -1,6 +1,4 @@
 {
-{-# LANGUAGE QuasiQuotes #-}
-
 {-| This module contains the logic for lexing Grace files using @alex@.  This
     uses a small variation on the @monad-bytestring@ wrapper to efficiently
     lex tokens while producing customizable error messages.
@@ -21,6 +19,7 @@ module Grace.Lexer
     , runAlex
     ) where
 
+import Data.String.Interpolate (__i)
 import Data.Text (Text)
 
 import qualified Data.ByteString              as ByteString.Strict
@@ -29,7 +28,6 @@ import qualified Data.ByteString.Lex.Integral as ByteString.Integral
 import qualified Data.Text                    as Text
 import qualified Data.Text.Lazy               as Text.Lazy
 import qualified Data.Text.Lazy.Encoding      as Text.Lazy.Encoding
-import qualified NeatInterpolation
 }
 
 %wrapper "monad-bytestring"
@@ -43,24 +41,23 @@ token :-
   \&\&                                { emit And                            }
   \-\>                                { emit Arrow                          }
   @                                   { emit At                             }
-  Bool                                { emit Bool                           }
+  Bool                                { emit Grace.Lexer.Bool               }
   \)                                  { emit CloseParenthesis               }
-  \:                                  { emit Colon                          }
+  :                                   { emit Colon                          }
+  \.                                  { emit Dot                            }
   \=                                  { emit Equals                         }
   else                                { emit Else                           }
-  False                               { emit Grace.Lexer.False              }
   forall                              { emit Forall                         }
+  False                               { emit Grace.Lexer.False              }
   if                                  { emit If                             }
   in                                  { emit In                             }
   $digit+                             { \i n -> fmap Int (captureInt i n)   }
-  Kind                                { emit Kind                           }
   \\                                  { emit Lambda                         }
   let                                 { emit Let                            }
   \(                                  { emit OpenParenthesis                }
   \|\|                                { emit Or                             }
   True                                { emit Grace.Lexer.True               }
   then                                { emit Then                           }
-  Type                                { emit Type                           }
   [ $alpha \_ ] [ $alpha $digit \_ ]* { capture Label                       }
 
 {
@@ -118,8 +115,8 @@ monadScan = do
         let t = Text.pack (show char)
 
         let message =
-                [NeatInterpolation.text|
-                Error: Lexing failed
+                [__i|
+                Lexing failed
 
                 ${l}:${c}: Unexpected character ${t}
                 |]
@@ -146,6 +143,7 @@ data Token
     | Bool
     | CloseParenthesis
     | Colon
+    | Dot
     | Else
     | Equals
     | False
@@ -153,7 +151,6 @@ data Token
     | If
     | In
     | Int Int
-    | Kind
     | Label Text
     | Lambda
     | Let
@@ -161,7 +158,6 @@ data Token
     | Or
     | Then
     | True
-    | Type
     | EndOfFile
     deriving (Show)
 }

@@ -76,7 +76,7 @@ evaluate env syntax =
 
         Syntax.Application function argument ->
             case function' of
-                Value.Lambda _ (Closure name capturedEnv body) ->
+                Value.Lambda (Closure name capturedEnv body) ->
                     evaluate ((name, argument') : capturedEnv) body
                 _ ->
                     Value.Application function' argument'
@@ -85,13 +85,13 @@ evaluate env syntax =
 
             argument' = evaluate env argument
 
-        Syntax.Lambda name inputType body ->
-            Value.Lambda (evaluate env inputType) (Closure name env body)
+        Syntax.Lambda name body ->
+            Value.Lambda (Closure name env body)
 
-        Syntax.Forall name inputType outputType ->
-            Value.Forall (evaluate env inputType) (Closure name env outputType)
+        Syntax.Annotation annotated _ ->
+            evaluate env annotated
 
-        Syntax.Let name _ assignment body ->
+        Syntax.Let name assignment body ->
             evaluate ((name, evaluate env assignment) : env) body
 
         Syntax.If predicate ifTrue ifFalse ->
@@ -105,9 +105,6 @@ evaluate env syntax =
             ifTrue' = evaluate env ifTrue
 
             ifFalse' = evaluate env ifFalse
-
-        Syntax.Annotation body _ ->
-            evaluate env body
 
         Syntax.And left right ->
             case left' of
@@ -135,20 +132,11 @@ evaluate env syntax =
 
             right' = evaluate env right
 
-        Syntax.Bool ->
-            Value.Bool
-
         Syntax.True ->
             Value.True
 
         Syntax.False ->
             Value.False
-
-        Syntax.Type ->
-            Value.Type
-
-        Syntax.Kind ->
-            Value.Kind
 
 countNames :: Text -> [Text] -> Int
 countNames name = length . filter (== name)
@@ -183,20 +171,12 @@ quote names value =
         Value.Variable name index ->
             Syntax.Variable name (countNames name names - index - 1)
 
-        Value.Lambda inputType closure@(Closure name _ _) ->
-            Syntax.Lambda name (quote names inputType) body
+        Value.Lambda closure@(Closure name _ _) ->
+            Syntax.Lambda name body
           where
             variable = fresh name names
 
             body = quote (name : names) (instantiate closure variable)
-
-        Value.Forall inputType closure@(Closure name _ _) ->
-            Syntax.Forall name (quote names inputType) outputType
-          where
-            variable = fresh name names
-
-            outputType =
-                quote (name : names) (instantiate closure variable)
 
         Value.Application function argument ->
             Syntax.Application (quote names function) (quote names argument)
@@ -213,20 +193,11 @@ quote names value =
         Value.Or left right ->
             Syntax.Or (quote names left) (quote names right)
 
-        Value.Bool ->
-            Syntax.Bool
-
         Value.True ->
             Syntax.True
 
         Value.False ->
             Syntax.False
-
-        Value.Type ->
-            Syntax.Type
-
-        Value.Kind ->
-            Syntax.Kind
 
 {-| Evaluate an expression
 

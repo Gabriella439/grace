@@ -6,22 +6,22 @@ module Grace
       main
     ) where
 
-import Grace.Syntax (Syntax)
+import Data.Text.Prettyprint.Doc (Pretty(..))
 
 import qualified Data.ByteString.Lazy                  as ByteString.Lazy
+import qualified Data.Text.IO                          as Text.IO
 import qualified Data.Text.Prettyprint.Doc             as Pretty
 import qualified Data.Text.Prettyprint.Doc.Render.Text as Pretty.Text
+import qualified Grace.Infer
 import qualified Grace.Lexer
 import qualified Grace.Normalize
 import qualified Grace.Parser
-import qualified Grace.Pretty
-import qualified Grace.Type
 import qualified System.Exit                           as Exit
 
-pretty :: Syntax -> IO ()
-pretty syntax = Pretty.Text.putDoc doc
+pretty_ :: Pretty a => a -> IO ()
+pretty_ x = Pretty.Text.putDoc doc
   where
-    doc =   Pretty.group (Grace.Pretty.prettyExpression syntax)
+    doc =   Pretty.group (Pretty.pretty x)
         <>  Pretty.hardline
 
 -- | Command-line entrypoint
@@ -37,12 +37,10 @@ main = do
         Right expression -> do
             return expression
 
-    case Grace.Type.typeOf expression of
-        Left string -> do
-            putStr string
+    case Grace.Infer.typeOf expression of
+        Left  text -> do
+            Text.IO.putStrLn text
+        Right inferred -> do
+            pretty_ inferred
 
-            Exit.exitFailure
-        Right inferredType -> do
-            pretty inferredType
-
-    pretty (Grace.Normalize.normalize expression)
+            pretty_ (Grace.Normalize.normalize expression)

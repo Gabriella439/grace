@@ -1,229 +1,88 @@
-{-| This module contains the logic for inferring the type of an expression,
-    and detecting any internal type errors within that expression
--}
-
-module Grace.Type
-    ( -- * Type-checking
-      TypeError
-    , typeOf
-    ) where
+module Grace.Type where
 
 import Data.Text (Text)
-import Grace.Syntax (Syntax)
-import Grace.Value (Closure(..), Value)
+import Data.Text.Prettyprint.Doc (Doc, Pretty(..))
+import Grace.Monotype (Monotype)
 
-import qualified Grace.Normalize as Normalize
-import qualified Grace.Syntax    as Syntax
-import qualified Grace.Value     as Value
+import qualified Data.Text.Prettyprint.Doc as Pretty
+import qualified Grace.Monotype as Monotype
 
--- | Type used to encode failures in the type-checking algorithm
-type TypeError = String -- TODO: Use a better error type
+data Type
+    = Variable Text
+    | Unsolved Int
+    | Forall Text Type
+    | Function Type Type
+    | Bool
+    deriving (Eq, Show)
 
-check
-    :: [Text]
-    -> [(Text, Value)]
-    -> [(Text, Value)]
-    -> Syntax
-    -> Value
-    -> Either TypeError ()
-check names context environment term typeAnnotation = do
-        inferredType <- infer names context environment term
+instance Pretty Type where
+    pretty = prettyType
 
-        if equivalent names inferredType typeAnnotation
-            then return ()
-            else Left "Type mismatch"
+fromMonotype :: Monotype -> Type
+fromMonotype (Monotype.Variable α) =
+    Variable α
+fromMonotype (Monotype.Unsolved α) =
+    Unsolved α
+fromMonotype (Monotype.Function τ σ) =
+    Function (fromMonotype τ) (fromMonotype σ)
+fromMonotype Monotype.Bool =
+    Bool
 
-infer
-    :: [Text]
-    -> [(Text, Value)]
-    -> [(Text, Value)]
-    -> Syntax
-    -> Either TypeError Value
-infer names context environment syntax =
-    case syntax of
-        Syntax.Variable name index -> do
-            let value = Normalize.lookupVariable name index context
+solve :: Int -> Monotype -> Type -> Type
+solve _ _ (Variable α) =
+    Variable α
+solve α₀ τ (Unsolved α₁)
+    | α₀ == α₁ = fromMonotype τ
+    | otherwise = Unsolved α₁
+solve α₀ τ (Forall α₁ _A) =
+    Forall α₁ (solve α₀ τ _A)
+solve α τ (Function _A _B) =
+    Function (solve α τ _A) (solve α τ _B)
+solve _ _ Bool =
+    Bool
 
-            case value of
-                Value.Variable _ i | i < 0 -> Left "Unbound variable"
-                _                          -> return value
+substitute :: Text -> Int -> Type -> Type -> Type
+substitute α₀ n _A (Variable α₁)
+    | α₀ == α₁ && n == 0 = _A
+    | otherwise          = Variable α₁
+substitute _ _ _ (Unsolved α) =
+    Unsolved α
+substitute α₀ n _A₀ (Forall α₁ _A₁) =
+    if α₀ == α₁
+    then
+        if n <= 0
+        then Forall α₁ _A₁
+        else Forall α₁ (substitute α₀ (n - 1) _A₀ _A₁)
+    else Forall α₁ (substitute α₀ n _A₀ _A₁)
+substitute α n _A₀ (Function _A₁ _B) =
+    Function (substitute α n _A₀ _A₁) (substitute α n _A₀ _B)
+substitute _ _ _ Bool =
+    Bool
 
-        Syntax.Lambda name inputType body -> do
-            let variable = Normalize.fresh name names
+freeIn :: Int -> Type -> Bool
+_  `freeIn` Variable _     = False
+α₀ `freeIn` Unsolved α₁    = α₀ == α₁
+α  `freeIn` Forall _ _A    = α `freeIn` _A
+α  `freeIn` Function _A _B = α `freeIn` _A || α `freeIn` _B
+_  `freeIn` Bool           = False
 
-            let newNames = name : names
+prettyType :: Type -> Doc a
+prettyType (Forall α _A) =
+    "forall " <> Pretty.pretty α <> " . " <> prettyType _A
+prettyType other = prettyFunctionType other
 
-            _ <- infer names context environment inputType
+prettyFunctionType :: Type -> Doc a
+prettyFunctionType (Function _A _B) =
+    prettyPrimitiveType _A <> " -> " <> prettyFunctionType _B
+prettyFunctionType other =
+    prettyPrimitiveType other
 
-            let evaluatedInputType = Normalize.evaluate environment inputType
-
-            let newContext = (name, evaluatedInputType) : context
-
-            let newEnvironment = (name, variable) : environment
-
-            bodyType <- infer newNames newContext newEnvironment body
-
-            let quotedBodyType = Normalize.quote names bodyType
-
-            return (Value.Forall evaluatedInputType (Value.Closure name environment quotedBodyType))
-
-        Syntax.Forall name inputType outputType -> do
-            -- TODO: Generalize to pure type system
-            check names context environment inputType Value.Type
-
-            let newNames = name : names
-
-            let evaluatedInputType = Normalize.evaluate environment inputType
-
-            let newContext = (name, evaluatedInputType) : context
-
-            let variable = Normalize.fresh name names
-
-            let newEnvironment = (name, variable) : environment
-
-            check newNames newContext newEnvironment outputType Value.Type
-
-            return Value.Type
-
-        Syntax.Application function argument -> do
-            functionType <- infer names context environment function
-
-            case functionType of
-                Value.Forall inputType closure -> do
-                    check names context environment argument inputType
-
-                    let evaluatedArgument =
-                            Normalize.evaluate environment argument
-
-                    return (Normalize.instantiate closure evaluatedArgument)
-                _ -> do
-                    Left "Not a function type"
-
-        Syntax.Let name maybeAnnotation assignment body -> do
-            evaluatedAnnotation <- case maybeAnnotation of
-                Nothing -> do
-                    infer names context environment assignment
-                Just annotation -> do
-                    _ <- infer names context environment annotation
-
-                    let evaluatedAnnotation = Normalize.evaluate environment annotation
-
-                    check names context environment assignment evaluatedAnnotation
-
-                    return evaluatedAnnotation
-
-            let newNames = name : names
-
-            let newContext = (name, evaluatedAnnotation) : context
-
-            let evaluatedAssignment = Normalize.evaluate environment assignment
-
-            let newEnvironment = (name, evaluatedAssignment) : environment
-
-            infer newNames newContext newEnvironment body
-
-        Syntax.Annotation body annotation -> do
-            _ <- infer names context environment annotation
-
-            let evaluatedAnnotation = Normalize.evaluate environment annotation
-
-            check names context environment body evaluatedAnnotation
-
-            return (Normalize.evaluate environment annotation)
-
-        Syntax.If predicate ifTrue ifFalse -> do
-            check names context environment predicate Value.Bool
-
-            ifTrueType <- infer names context environment ifTrue
-
-            ifFalseType <- infer names context environment ifFalse
-
-            if equivalent names ifTrueType ifFalseType
-                then return ()
-                else Left "If expression type mismatch"
-
-            return ifTrueType
-
-        Syntax.And left right -> do
-            check names context environment left Value.Bool
-            check names context environment right Value.Bool
-            return Value.Bool
-
-        Syntax.Or left right -> do
-            check names context environment left Value.Bool
-            check names context environment right Value.Bool
-            return Value.Bool
-
-        Syntax.Bool -> do
-            return Value.Type
-
-        Syntax.True -> do
-            return Value.Bool
-
-        Syntax.False -> do
-            return Value.Bool
-
-        Syntax.Type -> do
-            return Value.Kind
-
-        Syntax.Kind -> do
-            Left "Kind has no type"
-
-{-| Infer the type of an expression or return a `TypeError` if there is an
-    internal inconsistency
--}
-typeOf :: Syntax -> Either TypeError Syntax
-typeOf syntax = fmap (Normalize.quote []) (infer [] [] [] syntax)
-
-equivalent :: [Text] -> Value -> Value -> Bool
-equivalent _
-    (Value.Variable nameL indexL)
-    (Value.Variable nameR indexR) =
-        nameL == nameR && indexL == indexR
-equivalent names
-    (Value.Lambda inputTypeL closureL@(Closure nameL _ _))
-    (Value.Lambda inputTypeR closureR) =
-            equivalent names inputTypeL inputTypeR
-        &&  equivalent (nameL : names) valueL valueR
-  where
-    variable = Normalize.fresh nameL names
-
-    valueL = Normalize.instantiate closureL variable
-    valueR = Normalize.instantiate closureR variable
-equivalent names
-    (Value.Forall inputTypeL closureL@(Closure nameL _ _))
-    (Value.Forall inputTypeR closureR) =
-            equivalent names inputTypeL inputTypeR
-        &&  equivalent (nameL : names) valueL valueR
-  where
-    variable = Normalize.fresh nameL names
-
-    valueL = Normalize.instantiate closureL variable
-    valueR = Normalize.instantiate closureR variable
-equivalent names
-    (Value.Application functionL argumentL)
-    (Value.Application functionR argumentR) =
-            equivalent names functionL functionR
-        &&  equivalent names argumentL argumentR
-equivalent names
-    (Value.If predicateL ifTrueL ifFalseL)
-    (Value.If predicateR ifTrueR ifFalseR) =
-            equivalent names predicateL predicateR
-        &&  equivalent names ifTrueL    ifTrueR
-        &&  equivalent names ifFalseL   ifFalseR
-equivalent names
-    (Value.And leftL rightL)
-    (Value.And leftR rightR) =
-            equivalent names leftL  leftR
-        &&  equivalent names rightL rightR
-equivalent names
-    (Value.Or leftL rightL)
-    (Value.Or leftR rightR) =
-            equivalent names leftL  leftR
-        &&  equivalent names rightL rightR
-equivalent _ Value.Bool Value.Bool = True
-equivalent _ Value.True Value.True = True
-equivalent _ Value.False Value.False = True
-equivalent _ Value.Type Value.Type = True
-equivalent _ Value.Kind Value.Kind = True
-equivalent _ _ _ = False
+prettyPrimitiveType :: Type -> Doc a
+prettyPrimitiveType (Variable α) =
+    Pretty.pretty α
+prettyPrimitiveType (Unsolved α) =
+    Pretty.pretty (Monotype.toVariable α) <> "?"
+prettyPrimitiveType Bool =
+    "Bool"
+prettyPrimitiveType other =
+    "(" <> prettyType other <> ")"
