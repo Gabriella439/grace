@@ -5,7 +5,7 @@ import Data.Text (Text)
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.State.Strict (MonadState)
 import Data.String.Interpolate (__i)
-import Grace.Context (Context, Entry)
+import Grace.Context (Context)
 import Grace.Syntax (Syntax)
 import Grace.Type (Type)
 import Prettyprinter (Pretty)
@@ -38,19 +38,7 @@ prettyToText =
 
 contextToText :: Context -> Text
 contextToText entries =
-    Text.unlines (map (\entry -> "• " <> entryToText entry) entries)
-
-entryToText :: Entry -> Text
-entryToText (Context.Variable α) =
-    α
-entryToText (Context.Unsolved α) =
-    Text.pack (show α) <> "?"
-entryToText (Context.Solved α τ) =
-    Text.pack (show α) <> " = " <> prettyToText τ
-entryToText (Context.Annotation x α) =
-    x <> " : " <> prettyToText α
-entryToText (Context.Marker α) =
-    "➤" <> Text.pack (show α) <> "?"
+    Text.unlines (map (\entry -> "• " <> prettyToText entry) entries)
 
 wellFormedType :: MonadError Text m => Context -> Type -> m ()
 -- UvarWF
@@ -172,7 +160,7 @@ Internal error: Malformed context
 
 The following unsolved variable:
 
-↳ #{entryToText (Context.Unsolved α)}}
+↳ #{prettyToText (Context.Unsolved α)}}
 
 … cannot be instantiated because the variable is missing from the context:
 
@@ -219,7 +207,7 @@ Internal error: Malformed context
 
 The following unsolved variable:
 
-↳ #{entryToText (Context.Unsolved α)}}
+↳ #{prettyToText (Context.Unsolved α)}}
 
 … cannot be instantiated because the variable is missing from the context:
 

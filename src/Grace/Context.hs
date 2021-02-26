@@ -4,11 +4,13 @@ import Data.Text (Text)
 import Grace.Monotype (Monotype)
 import Grace.Type (Type)
 import Prelude hiding (lookup)
+import Prettyprinter (Doc, Pretty(..))
 
 import qualified Control.Monad              as Monad
 import qualified Control.Monad.State.Strict as State
 import qualified Grace.Monotype             as Monotype
 import qualified Grace.Type                 as Type
+import qualified Prettyprinter              as Pretty
 
 data Entry
     = Variable Text
@@ -18,7 +20,17 @@ data Entry
     | Marker Int
     deriving (Eq, Show)
 
+instance Pretty Entry where
+    pretty = prettyEntry
+
 type Context = [Entry]
+
+prettyEntry :: Entry -> Doc a
+prettyEntry (Variable α    ) = Pretty.pretty α
+prettyEntry (Unsolved α    ) = Pretty.pretty α <> "?"
+prettyEntry (Solved α τ    ) = Pretty.pretty α <> " = " <> Pretty.pretty τ
+prettyEntry (Annotation x α) = Pretty.pretty x <> " : " <> Pretty.pretty α
+prettyEntry (Marker α      ) = "➤" <> Pretty.pretty α <> "?"
 
 solve :: Context -> Type -> Type
 solve context type_ = foldl snoc type_ context
