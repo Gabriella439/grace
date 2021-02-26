@@ -27,7 +27,7 @@ prettyPrimitiveType :: Monotype -> Doc a
 prettyPrimitiveType (Variable α) = Pretty.pretty α
 prettyPrimitiveType (Unsolved α) = Pretty.pretty (toVariable α) <> "?"
 prettyPrimitiveType  Bool        = "Bool"
-prettyPrimitiveType other = "(" <> prettyMonotype other <> ")"
+prettyPrimitiveType  other       = "(" <> prettyMonotype other <> ")"
 
 toVariable :: Int -> Text
 toVariable n = Text.cons prefix suffix

@@ -26,11 +26,16 @@ instance Pretty Entry where
 type Context = [Entry]
 
 prettyEntry :: Entry -> Doc a
-prettyEntry (Variable α    ) = Pretty.pretty α
-prettyEntry (Unsolved α    ) = Pretty.pretty α <> "?"
-prettyEntry (Solved α τ    ) = Pretty.pretty α <> " = " <> Pretty.pretty τ
-prettyEntry (Annotation x α) = Pretty.pretty x <> " : " <> Pretty.pretty α
-prettyEntry (Marker α      ) = "➤" <> Pretty.pretty α <> "?"
+prettyEntry (Variable α) =
+    Pretty.pretty α
+prettyEntry (Unsolved α) =
+    Pretty.pretty (Monotype.toVariable α) <> "?"
+prettyEntry (Solved α τ) =
+    Pretty.pretty (Monotype.toVariable α) <> " = " <> Pretty.pretty τ
+prettyEntry (Annotation x α) =
+    Pretty.pretty x <> " : " <> Pretty.pretty α
+prettyEntry (Marker α) =
+    "➤" <> Pretty.pretty (Monotype.toVariable α) <> "?"
 
 solve :: Context -> Type -> Type
 solve context type_ = foldl snoc type_ context

@@ -31,7 +31,7 @@ main = do
 
     expression <- case Grace.Lexer.runAlex bytes Grace.Parser.parseExpression of
         Left string -> do
-            putStr string
+            putStrLn string
 
             Exit.exitFailure
         Right expression -> do
