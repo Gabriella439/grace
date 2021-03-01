@@ -134,6 +134,8 @@ subtype _A₀ _B₀ = do
             discardUpTo (Context.Variable α)
         (Type.Bool, Type.Bool) -> do
             return ()
+        (Type.List _A, Type.List _B) -> do
+            subtype _A _B
         (_A, _B) -> do
             Except.throwError [__i|
             Not a subtype
