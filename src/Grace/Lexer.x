@@ -42,8 +42,10 @@ token :-
   \-\>                                { emit Arrow                          }
   @                                   { emit At                             }
   Bool                                { emit Grace.Lexer.Bool               }
+  \]                                  { emit CloseBracket                   }
   \)                                  { emit CloseParenthesis               }
   :                                   { emit Colon                          }
+  \,                                  { emit Comma                          }
   \.                                  { emit Dot                            }
   \=                                  { emit Equals                         }
   else                                { emit Else                           }
@@ -54,6 +56,7 @@ token :-
   $digit+                             { \i n -> fmap Int (captureInt i n)   }
   \\                                  { emit Lambda                         }
   let                                 { emit Let                            }
+  \[                                  { emit OpenBracket                    }
   \(                                  { emit OpenParenthesis                }
   \|\|                                { emit Or                             }
   True                                { emit Grace.Lexer.True               }
@@ -108,17 +111,11 @@ monadScan = do
         alexEOF
 
     AlexError ((AlexPn _ line column),char,_,_) -> do
-        let l = Text.pack (show line)
-
-        let c = Text.pack (show column)
-
-        let t = Text.pack (show char)
-
         let message =
                 [__i|
                 Lexing failed
 
-                ${l}:${c}: Unexpected character ${t}
+                #{show line}:#{show column}: Unexpected character #{show char}
                 |]
 
         alexError (Text.unpack message)
@@ -141,8 +138,10 @@ data Token
     | Arrow
     | At
     | Bool
+    | CloseBracket
     | CloseParenthesis
     | Colon
+    | Comma
     | Dot
     | Else
     | Equals
@@ -154,6 +153,7 @@ data Token
     | Label Text
     | Lambda
     | Let
+    | OpenBracket
     | OpenParenthesis
     | Or
     | Then

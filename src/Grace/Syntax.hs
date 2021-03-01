@@ -12,7 +12,7 @@ import Data.Text (Text)
 import Data.Text.Prettyprint.Doc (Doc, Pretty(..))
 import Grace.Type (Type)
 
-import qualified Data.Text.Prettyprint.Doc as Pretty
+import qualified Prettyprinter as Pretty
 
 -- | The surface syntax for the language
 data Syntax
@@ -21,6 +21,7 @@ data Syntax
     | Application Syntax Syntax
     | Annotation Syntax Type
     | Let Text Syntax Syntax
+    | List [Syntax]
     | If Syntax Syntax Syntax
     | And Syntax Syntax
     | Or Syntax Syntax
@@ -98,6 +99,8 @@ prettyPrimitiveExpression :: Syntax -> Doc a
 prettyPrimitiveExpression (Variable name index)
     | index == 0 = Pretty.pretty name
     | otherwise  = Pretty.pretty name <> "@" <> Pretty.pretty index
+prettyPrimitiveExpression (List elements) =
+    Pretty.list (map prettyExpression elements)
 prettyPrimitiveExpression Grace.Syntax.True =
     "True"
 prettyPrimitiveExpression Grace.Syntax.False =

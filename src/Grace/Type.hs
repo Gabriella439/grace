@@ -12,6 +12,7 @@ data Type
     | Unsolved Int
     | Forall Text Type
     | Function Type Type
+    | List Type
     | Bool
     deriving (Eq, Show)
 
@@ -25,6 +26,8 @@ fromMonotype (Monotype.Unsolved α) =
     Unsolved α
 fromMonotype (Monotype.Function τ σ) =
     Function (fromMonotype τ) (fromMonotype σ)
+fromMonotype (Monotype.List τ) =
+    List (fromMonotype τ)
 fromMonotype Monotype.Bool =
     Bool
 
@@ -38,6 +41,8 @@ solve α₀ τ (Forall α₁ _A) =
     Forall α₁ (solve α₀ τ _A)
 solve α τ (Function _A _B) =
     Function (solve α τ _A) (solve α τ _B)
+solve α τ (List _A) =
+    List (solve α τ _A)
 solve _ _ Bool =
     Bool
 
@@ -56,6 +61,8 @@ substitute α₀ n _A₀ (Forall α₁ _A₁) =
     else Forall α₁ (substitute α₀ n _A₀ _A₁)
 substitute α n _A₀ (Function _A₁ _B) =
     Function (substitute α n _A₀ _A₁) (substitute α n _A₀ _B)
+substitute α n _A₀ (List _A₁) =
+    List (substitute α n _A₀ _A₁)
 substitute _ _ _ Bool =
     Bool
 
@@ -64,6 +71,7 @@ _  `freeIn` Variable _     = False
 α₀ `freeIn` Unsolved α₁    = α₀ == α₁
 α  `freeIn` Forall _ _A    = α `freeIn` _A
 α  `freeIn` Function _A _B = α `freeIn` _A || α `freeIn` _B
+α  `freeIn` List _A        = α `freeIn` _A
 _  `freeIn` Bool           = False
 
 prettyType :: Type -> Doc a
@@ -73,9 +81,13 @@ prettyType other = prettyFunctionType other
 
 prettyFunctionType :: Type -> Doc a
 prettyFunctionType (Function _A _B) =
-    prettyPrimitiveType _A <> " -> " <> prettyFunctionType _B
+    prettyApplicationType _A <> " -> " <> prettyFunctionType _B
 prettyFunctionType other =
-    prettyPrimitiveType other
+    prettyApplicationType other
+
+prettyApplicationType :: Type -> Doc a
+prettyApplicationType (List _A) = "List " <> prettyPrimitiveType _A
+prettyApplicationType  other    = prettyPrimitiveType other
 
 prettyPrimitiveType :: Type -> Doc a
 prettyPrimitiveType (Variable α) =

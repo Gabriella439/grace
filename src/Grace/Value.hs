@@ -40,6 +40,7 @@ data Value
     | Lambda Closure
     | If Value Value Value
     | Application Value Value
+    | List [Value]
     | And Value Value
     | Or Value Value
     | True

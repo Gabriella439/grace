@@ -4,6 +4,7 @@ import Data.Text (Text)
 
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.State.Strict (MonadState)
+import Data.Foldable (traverse_)
 import Data.String.Interpolate (__i)
 import Grace.Context (Context, Entry)
 import Grace.Syntax (Syntax)
@@ -88,6 +89,8 @@ The following type:
     predicate (Context.Unsolved α₁) = α₀ == α₁
     predicate (Context.Solved α₁ _) = α₀ == α₁
     predicate  _                    = False
+wellFormedType _Γ (Type.List _A) = do
+    wellFormedType _Γ _A
 wellFormedType _Γ Type.Bool = do
     return ()
 
@@ -193,6 +196,11 @@ instantiateL α _A₀ = do
 
                 #{contextToText _Γ₀}
                 |]
+        Type.List _A -> do
+            (_ΓR, _ΓL) <- Context.split α _Γ₀ `orDie` "InstLList"
+            α₁ <- fresh
+            set (_ΓR <> (Context.Solved α (Monotype.List (Monotype.Unsolved α₁)) : Context.Unsolved α₁ : _ΓL))
+            instantiateL α₁ _A
 
 instantiateR :: (MonadState Status m, MonadError Text m) => Type -> Int -> m ()
 instantiateR _A₀ α = do
@@ -245,6 +253,11 @@ instantiateR _A₀ α = do
         
                 #{contextToText _Γ₀}
                 |]
+        Type.List _A -> do
+            (_ΓR, _ΓL) <- Context.split α _Γ₀ `orDie` "InstRArr"
+            α₁ <- fresh
+            set (_ΓR <> (Context.Solved α (Monotype.List (Monotype.Unsolved α₁)) : Context.Unsolved α₁ : _ΓL))
+            instantiateR _A α₁
 
 infer :: (MonadState Status m, MonadError Text m) => Syntax -> m Type
 -- Var
@@ -282,7 +295,16 @@ infer (Syntax.Let x a b) = do
     _A <- infer a
     push (Context.Annotation x _A)
     infer b
--- if
+infer (Syntax.List xs) = do
+    case xs of
+        [] -> do
+            α <- fresh
+            push (Context.Unsolved α)
+            return (Type.List (Type.Unsolved α))
+        y : ys -> do
+            _A <- infer y
+            traverse_ (`check` _A) ys
+            return (Type.List _A)
 infer (Syntax.If predicate l r) = do
     check predicate Type.Bool
     _L₀ <- infer l

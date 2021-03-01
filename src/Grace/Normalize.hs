@@ -94,6 +94,9 @@ evaluate env syntax =
         Syntax.Let name assignment body ->
             evaluate ((name, evaluate env assignment) : env) body
 
+        Syntax.List elements ->
+            Value.List (map (evaluate env) elements)
+
         Syntax.If predicate ifTrue ifFalse ->
             case predicate' of
                 Value.True  -> ifTrue'
@@ -180,6 +183,9 @@ quote names value =
 
         Value.Application function argument ->
             Syntax.Application (quote names function) (quote names argument)
+
+        Value.List elements ->
+            Syntax.List (map (quote names) elements)
 
         Value.If predicate ifTrue ifFalse ->
             Syntax.If

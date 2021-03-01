@@ -34,8 +34,10 @@ import qualified Grace.Type        as Type
     '->'    { Lexer.Arrow            }
     '@'     { Lexer.At               }
     Bool    { Lexer.Bool             }
+    ']'     { Lexer.CloseBracket     }
     ')'     { Lexer.CloseParenthesis }
     ':'     { Lexer.Colon            }
+    ','     { Lexer.Comma            }
     '.'     { Lexer.Dot              }
     '='     { Lexer.Equals           }
     else    { Lexer.Else             }
@@ -46,6 +48,7 @@ import qualified Grace.Type        as Type
     int     { Lexer.Int $$           }
     '\\'    { Lexer.Lambda           }
     let     { Lexer.Let              }
+    '['     { Lexer.OpenBracket      }
     '('     { Lexer.OpenParenthesis  }
     '||'    { Lexer.Or               }
     then    { Lexer.Then             }
@@ -89,12 +92,26 @@ PrimitiveExpression
         { Syntax.Variable $1 0 }
     | label '@' int
         { Syntax.Variable $1 $3 }
+    | '[' List ']'
+        { Syntax.List $2 }
     | True
         { Syntax.True }
     | False
         { Syntax.False }
     | '(' Expression ')' 
        { $2 }
+
+List
+   : ReversedList
+       { reverse $1 }
+   | {- empty -}
+       { [] }
+
+ReversedList
+    : ReversedList ',' Expression
+       { $3 : $1 }
+    | Expression
+       { [ $1 ] }
 
 Type
     : forall label '.' Type
@@ -130,15 +147,11 @@ parseError :: Token -> Alex a
 parseError token = do
     (AlexPn _ line column, _, _, _) <- Lexer.alexGetInput
 
-    let l = Text.pack (show line)
-    let c = Text.pack (show column)
-    let t = Text.pack (show token)
-
     let message =
             [__i|
             Parsing failed
 
-            ${l}:${c}: Unexpected token - ${t}
+            #{show line}:#{show column}: Unexpected token - #{show token}
             |]
 
     Lexer.alexError (Text.unpack message)

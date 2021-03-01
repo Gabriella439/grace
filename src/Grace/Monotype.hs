@@ -11,6 +11,7 @@ data Monotype
     = Variable Text
     | Unsolved Int
     | Function Monotype Monotype
+    | List Monotype
     | Bool
     deriving (Eq, Show)
 
@@ -19,9 +20,13 @@ instance Pretty Monotype where
 
 prettyMonotype :: Monotype -> Doc a
 prettyMonotype (Function _A _B) =
-    prettyPrimitiveType _A <> " -> " <> prettyMonotype _B
+    prettyApplicationType _A <> " -> " <> prettyMonotype _B
 prettyMonotype other =
-    prettyPrimitiveType other
+    prettyApplicationType other
+
+prettyApplicationType :: Monotype -> Doc a
+prettyApplicationType (List _A) = "List " <> prettyPrimitiveType _A
+prettyApplicationType  other    =  prettyPrimitiveType other
 
 prettyPrimitiveType :: Monotype -> Doc a
 prettyPrimitiveType (Variable α) = Pretty.pretty α
