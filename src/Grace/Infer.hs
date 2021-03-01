@@ -5,7 +5,7 @@ import Data.Text (Text)
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.State.Strict (MonadState)
 import Data.String.Interpolate (__i)
-import Grace.Context (Context)
+import Grace.Context (Context, Entry)
 import Grace.Syntax (Syntax)
 import Grace.Type (Type)
 import Prettyprinter (Pretty)
@@ -20,15 +20,31 @@ import qualified Grace.Monotype            as Monotype
 import qualified Grace.Syntax              as Syntax
 import qualified Grace.Type                as Type
 
+data Status = Status{ count :: !Int, context :: Context }
+    deriving (Show)
+
 orDie :: MonadError Text m => Maybe a -> Text -> m a
 Just x  `orDie` _       = return x
 Nothing `orDie` message = Except.throwError message
 
-fresh :: MonadState Int m => m Int
+fresh :: MonadState Status m => m Int
 fresh = do
-    n <- State.get
-    State.put $! n + 1
+    Status{ count = n, .. } <- State.get
+    State.put $! Status{ count = n + 1, .. }
     return n
+
+push :: MonadState Status m => Entry -> m ()
+push entry = State.modify (\s -> s { context = entry : context s })
+
+get :: MonadState Status m => m Context
+get = fmap context State.get
+
+set :: MonadState Status m => Context -> m ()
+set context = State.modify (\s -> s{ context })
+
+discardUpTo :: MonadState Status m => Entry -> m ()
+discardUpTo entry =
+    State.modify (\s -> s { context = Context.discardUpTo entry (context s) })
 
 prettyToText :: Pretty a => a -> Text
 prettyToText =
@@ -75,224 +91,251 @@ The following type:
 wellFormedType _Γ Type.Bool = do
     return ()
 
-subtype
-    :: (MonadState Int m, MonadError Text m)
-    => Context -> Type -> Type -> m Context
--- <:Var
-subtype _Γ (Type.Variable α₀) (Type.Variable α₁)
-    | α₀ == α₁ && Context.Variable α₀ `elem` _Γ = do
-        return _Γ
--- <:Exvar
-subtype _Γ (Type.Unsolved α₀) (Type.Unsolved α₁)
-    | α₀ == α₁ && Context.Unsolved α₀ `elem` _Γ = do
-        return _Γ
--- InstantiateL
-subtype _Γ (Type.Unsolved α) _A
-    | not (α `Type.freeIn` _A) && elem (Context.Unsolved α) _Γ = do
-        instantiateL _Γ α _A
--- InstantiateR
-subtype _Γ _A (Type.Unsolved α)
-    | not (α `Type.freeIn` _A) && elem (Context.Unsolved α) _Γ = do
-        instantiateR _Γ _A α
--- <:→
-subtype _Γ (Type.Function _A₁ _A₂) (Type.Function _B₁ _B₂) = do
-    _Θ <- subtype _Γ _B₁ _A₁
-    subtype _Θ (Context.solve _Θ _A₂) (Context.solve _Θ _B₂)
--- <:∀L
-subtype _Γ (Type.Forall α₀ _A) _B = do
-    α₁ <- fresh
-    (Context.discardUpTo (Context.Marker α₁) -> _Δ) <- subtype (Context.Unsolved α₁ : Context.Marker α₁ : _Γ) (Type.substitute α₀ 0 (Type.Unsolved α₁) _A) _B
-    return _Δ
--- <:∀R
-subtype _Γ _A (Type.Forall α _B) = do
-    (Context.discardUpTo (Context.Variable α) -> _Δ) <- subtype (Context.Variable α : _Γ) _A _B
-    return _Δ
-subtype _Γ Type.Bool Type.Bool = do
-    return _Γ
-subtype _ _A _B = Except.throwError [__i|
-Not a subtype
+subtype :: (MonadState Status m, MonadError Text m) => Type -> Type -> m ()
+subtype _A₀ _B₀ = do
+    _Γ <- get
 
-The following type:
+    case (_A₀, _B₀) of
+        -- <:Var
+        (Type.Variable α₀, Type.Variable α₁)
+            | α₀ == α₁ && Context.Variable α₀ `elem` _Γ -> do
+                return ()
+        -- <:Exvar
+        (Type.Unsolved α₀, Type.Unsolved α₁)
+            | α₀ == α₁ && Context.Unsolved α₀ `elem` _Γ -> do
+                return ()
+        -- InstantiateL
+        (Type.Unsolved α, _A)
+            | not (α `Type.freeIn` _A) && elem (Context.Unsolved α) _Γ -> do
+                instantiateL α _A
+        -- InstantiateR
+        (_A, Type.Unsolved α)
+            | not (α `Type.freeIn` _A) && elem (Context.Unsolved α) _Γ -> do
+                instantiateR _A α
+        -- <:→
+        (Type.Function _A₁ _A₂, Type.Function _B₁ _B₂) -> do
+            subtype _B₁ _A₁
+            _Θ <- get
+            subtype (Context.solve _Θ _A₂) (Context.solve _Θ _B₂)
+        -- <:∀L
+        (Type.Forall α₀ _A, _B) -> do
+            α₁ <- fresh
+            push (Context.Marker α₁)
+            push (Context.Unsolved α₁)
+            subtype (Type.substitute α₀ 0 (Type.Unsolved α₁) _A) _B
+            discardUpTo (Context.Marker α₁)
+        -- <:∀R
+        (_A, Type.Forall α _B) -> do
+            push (Context.Variable α)
+            subtype _A _B
+            discardUpTo (Context.Variable α)
+        (Type.Bool, Type.Bool) -> do
+            return ()
+        (_A, _B) -> do
+            Except.throwError [__i|
+            Not a subtype
+        
+            The following type:
+        
+            ↳ #{prettyToText _A}
+        
+            … cannot be a subtype of:
+        
+            ↳ #{prettyToText _B}
+            |]
 
-↳ #{prettyToText _A}
+instantiateL :: (MonadState Status m, MonadError Text m) => Int -> Type -> m ()
+instantiateL α _A₀ = do
+    _Γ₀ <- get
 
-… cannot be a subtype of:
+    case _A₀ of
+        -- InstLReach
+        Type.Unsolved β
+            | Just (_ΓR, _Γ₁) <- Context.split β _Γ₀
+            , Just (_ΓM, _ΓL) <- Context.split α _Γ₁ -> do
+                set (_ΓR <> (Context.Solved β (Monotype.Unsolved α) : _ΓM) <> (Context.Unsolved α : _ΓL))
+        -- InstLSolve
+        Type.Unsolved τ -> do
+            (_Γ', _Γ) <- Context.split α _Γ₀ `orDie` "InstLSolve"
+            wellFormedType _Γ (Type.Unsolved τ)
+            set (_Γ' <> (Context.Solved α (Monotype.Unsolved τ) : _Γ))
+        Type.Variable τ -> do
+            (_Γ', _Γ) <- Context.split α _Γ₀ `orDie` "InstLSolve"
+            wellFormedType _Γ (Type.Variable τ)
+            set (_Γ' <> (Context.Solved α (Monotype.Variable τ) : _Γ))
+        Type.Bool -> do
+            (_Γ', _Γ) <- Context.split α _Γ₀ `orDie` "InstLSolve"
+            wellFormedType _Γ Type.Bool
+            set (_Γ' <> (Context.Solved α Monotype.Bool : _Γ))
+        -- InstLArr
+        Type.Function _A₁ _A₂ -> do
+            (_ΓR, _ΓL) <- Context.split α _Γ₀ `orDie` "InstLArr"
+            α₁ <- fresh
+            α₂ <- fresh
+            set (_ΓR <> (Context.Solved α (Monotype.Function (Monotype.Unsolved α₁) (Monotype.Unsolved α₂)) : Context.Unsolved α₁ : Context.Unsolved α₂ : _ΓL))
+            instantiateR _A₁ α₁
+            _Θ <- get
+            instantiateL α₂ (Context.solve _Θ _A₂)
+        -- InstLAllR
+        Type.Forall β _B
+            | Context.Unsolved α `elem` _Γ₀ -> do
+                push (Context.Variable β)
+                instantiateL  α _B
+                discardUpTo (Context.Variable β)
+            | otherwise -> do
+                Except.throwError [__i|
+                Internal error: Malformed context
 
-↳ #{prettyToText _B}
-|]
+                The following unsolved variable:
 
-instantiateL
-    :: (MonadState Int m, MonadError Text m)
-    => Context -> Int -> Type -> m Context
--- InstLReach
-instantiateL _Γ₀ α (Type.Unsolved β)
-    | Just (_ΓR, _Γ₁) <- Context.split β _Γ₀
-    , Just (_ΓM, _ΓL) <- Context.split α _Γ₁ = do
-        return (_ΓR <> (Context.Solved β (Monotype.Unsolved α) : _ΓM) <> (Context.Unsolved α : _ΓL))
--- InstLSolve
-instantiateL _Γ₀ α (Type.Unsolved τ) = do
-    (_Γ', _Γ)  <- Context.split α _Γ₀ `orDie` "InstLSolve"
-    wellFormedType _Γ (Type.Unsolved τ)
-    return (_Γ' <> (Context.Solved α (Monotype.Unsolved τ) : _Γ))
-instantiateL _Γ₀ α (Type.Variable τ) = do
-    (_Γ', _Γ)  <- Context.split α _Γ₀ `orDie` "InstLSolve"
-    wellFormedType _Γ (Type.Variable τ)
-    return (_Γ' <> (Context.Solved α (Monotype.Variable τ) : _Γ))
-instantiateL _Γ₀ α Type.Bool = do
-    (_Γ', _Γ)  <- Context.split α _Γ₀ `orDie` "InstLSolve"
-    wellFormedType _Γ Type.Bool
-    return (_Γ' <> (Context.Solved α Monotype.Bool : _Γ))
--- InstLArr
-instantiateL _Γ α (Type.Function _A₁ _A₂) = do
-    (_ΓR, _ΓL) <- Context.split α _Γ `orDie` "InstLArr"
-    α₁ <- fresh
-    α₂ <- fresh
-    _Θ <- instantiateR (_ΓR <> (Context.Solved α (Monotype.Function (Monotype.Unsolved α₁) (Monotype.Unsolved α₂)) : Context.Unsolved α₁ : Context.Unsolved α₂ : _ΓL)) _A₁ α₁
-    instantiateL _Θ α₂ (Context.solve _Θ _A₂)
--- InstLAllR
-instantiateL _Γ α (Type.Forall β _B)
-    | Context.Unsolved α `elem` _Γ = do
-        (Context.discardUpTo (Context.Variable β) -> _Δ) <- instantiateL (Context.Variable β : _Γ) α _B
-        return _Δ
-    | otherwise = do
-        Except.throwError [__i|
-Internal error: Malformed context
+                ↳ #{prettyToText (Context.Unsolved α)}}
 
-The following unsolved variable:
+                … cannot be instantiated because the variable is missing from the context:
 
-↳ #{prettyToText (Context.Unsolved α)}}
+                #{contextToText _Γ₀}
+                |]
 
-… cannot be instantiated because the variable is missing from the context:
+instantiateR :: (MonadState Status m, MonadError Text m) => Type -> Int -> m ()
+instantiateR _A₀ α = do
+    _Γ₀ <- get
 
-#{contextToText _Γ}
-|]
+    case _A₀ of
+        -- InstRReach
+        Type.Unsolved β
+            | Just (_ΓR, _Γ₁) <- Context.split β _Γ₀
+            , Just (_ΓM, _ΓL) <- Context.split α _Γ₁ -> do
+                set (_ΓR <> (Context.Solved β (Monotype.Unsolved α) : _ΓM) <> (Context.Unsolved α : _ΓL))
+        -- InstRSolve
+        Type.Unsolved τ -> do
+            (_Γ', _Γ) <- Context.split α _Γ₀ `orDie` "InstRSolve"
+            wellFormedType _Γ (Type.Unsolved τ)
+            set (_Γ' <> (Context.Solved α (Monotype.Unsolved τ) : _Γ))
+        Type.Variable τ -> do
+            (_Γ', _Γ) <- Context.split α _Γ₀ `orDie` "InstRSolve"
+            wellFormedType _Γ (Type.Variable τ)
+            set (_Γ' <> (Context.Solved α (Monotype.Variable τ) : _Γ))
+        Type.Bool -> do
+            (_Γ', _Γ) <- Context.split α _Γ₀ `orDie` "InstRSolve"
+            wellFormedType _Γ Type.Bool
+            set (_Γ' <> (Context.Solved α Monotype.Bool  : _Γ))
+        -- InstRArr
+        Type.Function _A₁ _A₂ -> do
+            (_ΓR, _ΓL) <- Context.split α _Γ₀ `orDie` "InstRArr"
+            α₁ <- fresh
+            α₂ <- fresh
+            set (_ΓR <> (Context.Solved α (Monotype.Function (Monotype.Unsolved α₁) (Monotype.Unsolved α₂)) : Context.Unsolved α₁ : Context.Unsolved α₂ : _ΓL))
+            instantiateL α₁ _A₁
+            _Θ <- get
+            instantiateR (Context.solve _Θ _A₂) α₂
+        -- InstRAllL
+        Type.Forall β₀ _B
+            | Context.Unsolved α `elem` _Γ₀ -> do
+                β₁ <- fresh
+                push (Context.Marker β₁)
+                push (Context.Unsolved β₁)
+                instantiateR (Type.substitute β₀ 0 (Type.Unsolved β₁) _B) α
+                discardUpTo (Context.Marker β₁)
+            | otherwise -> do
+                Except.throwError [__i|
+                Internal error: Malformed context
+        
+                The following unsolved variable:
+        
+                ↳ #{prettyToText (Context.Unsolved α)}}
+        
+                … cannot be instantiated because the variable is missing from the context:
+        
+                #{contextToText _Γ₀}
+                |]
 
-instantiateR
-    :: (MonadState Int m, MonadError Text m)
-    => Context -> Type -> Int -> m Context
--- InstRReach
-instantiateR _Γ₀ (Type.Unsolved β) α
-    | Just (_ΓR, _Γ₁) <- Context.split β _Γ₀
-    , Just (_ΓM, _ΓL) <- Context.split α _Γ₁ = do
-        return (_ΓR <> (Context.Solved β (Monotype.Unsolved α) : _ΓM) <> (Context.Unsolved α : _ΓL))
--- InstRSolve
-instantiateR _Γ₀ (Type.Unsolved τ) α = do
-    (_Γ', _Γ)  <- Context.split α _Γ₀ `orDie` "InstRSolve"
-    wellFormedType _Γ (Type.Unsolved τ)
-    return (_Γ' <> (Context.Solved α (Monotype.Unsolved τ) : _Γ))
-instantiateR _Γ₀ (Type.Variable τ) α = do
-    (_Γ', _Γ)  <- Context.split α _Γ₀ `orDie` "InstRSolve"
-    wellFormedType _Γ (Type.Variable τ)
-    return (_Γ' <> (Context.Solved α (Monotype.Variable τ) : _Γ))
-instantiateR _Γ₀ Type.Bool  α = do
-    (_Γ', _Γ)  <- Context.split α _Γ₀ `orDie` "InstRSolve"
-    wellFormedType _Γ Type.Bool
-    return (_Γ' <> (Context.Solved α Monotype.Bool  : _Γ))
--- InstRArr
-instantiateR _Γ (Type.Function _A₁ _A₂) α = do
-    (_ΓR, _ΓL) <- Context.split α _Γ `orDie` "InstRArr"
-    α₁ <- fresh
-    α₂ <- fresh
-    _Θ <- instantiateL (_ΓR <> (Context.Solved α (Monotype.Function (Monotype.Unsolved α₁) (Monotype.Unsolved α₂)) : Context.Unsolved α₁ : Context.Unsolved α₂ : _ΓL)) α₁ _A₁
-    instantiateR _Θ (Context.solve _Θ _A₂) α₂
--- InstRAllL
-instantiateR _Γ (Type.Forall β₀ _B) α
-    | Context.Unsolved α `elem` _Γ = do
-        β₁ <- fresh
-        (Context.discardUpTo (Context.Marker β₁) -> _Δ) <- instantiateR (Context.Unsolved β₁ : Context.Marker β₁ : _Γ) (Type.substitute β₀ 0 (Type.Unsolved β₁) _B) α
-        return _Δ
-    | otherwise = do
-        Except.throwError [__i|
-Internal error: Malformed context
-
-The following unsolved variable:
-
-↳ #{prettyToText (Context.Unsolved α)}}
-
-… cannot be instantiated because the variable is missing from the context:
-
-#{contextToText _Γ}
-|]
-
-infer
-    :: (MonadState Int m, MonadError Text m)
-    => Context -> Syntax -> m (Type, Context)
+infer :: (MonadState Status m, MonadError Text m) => Syntax -> m Type
 -- Var
-infer _Γ (Syntax.Variable x₀ n) = do
-    _A <- Context.lookup x₀ n _Γ `orDie` ("Unbound variable: " <> x₀ <> if n == 0 then "" else "@" <> Text.pack (show n))
-    return (_A, _Γ)
-infer _Γ (Syntax.Lambda x e) = do
+infer (Syntax.Variable x₀ n) = do
+    _Γ <- get
+    Context.lookup x₀ n _Γ `orDie` ("Unbound variable: " <> x₀ <> if n == 0 then "" else "@" <> Text.pack (show n))
+infer (Syntax.Lambda x e) = do
     α <- fresh
     β <- fresh
-    (Context.discardUpTo (Context.Annotation x (Type.Unsolved α)) -> _Δ) <- check (Context.Annotation x (Type.Unsolved α) : Context.Unsolved β : Context.Unsolved α : _Γ) e (Type.Unsolved β)
-    return (Type.Function (Type.Unsolved α) (Type.Unsolved β), _Δ)
+    push (Context.Unsolved α)
+    push (Context.Unsolved β)
+    push (Context.Annotation x (Type.Unsolved α))
+    check  e (Type.Unsolved β)
+    discardUpTo (Context.Annotation x (Type.Unsolved α))
+    return (Type.Function (Type.Unsolved α) (Type.Unsolved β))
 -- →E
-infer _Γ (Syntax.Application e₁ e₂) = do
-    (_A, _Θ) <- infer _Γ e₁
-    inferApplication _Θ (Context.solve _Θ _A) e₂
+infer (Syntax.Application e₁ e₂) = do
+    _A <- infer e₁
+    _Θ <- get
+    inferApplication (Context.solve _Θ _A) e₂
 -- Anno
-infer _Γ (Syntax.Annotation e _A) = do
+infer (Syntax.Annotation e _A) = do
+    _Γ <- get
     wellFormedType _Γ _A
-    _Δ <- check _Γ e _A
-    return (_A, _Δ)
+    check e _A
+    return _A
 -- let
-infer _Γ₀ (Syntax.Let x a b) = do
-    (_A, _Γ₁) <- infer _Γ₀ a
-    infer (Context.Annotation x _A : _Γ₁) b
+infer (Syntax.Let x a b) = do
+    _A <- infer a
+    push (Context.Annotation x _A)
+    infer b
 -- if
-infer _Γ₀ (Syntax.If predicate l r) = do
-    _Γ₁ <- check _Γ₀ predicate Type.Bool
-    (_L₀, _Γ₂) <- infer _Γ₁ l
-    let _L₁ = Context.solve _Γ₂ _L₀
-    _Γ₃ <- check _Γ₂ r _L₁
-    return (_L₁, _Γ₃)
-infer _Γ₀ (Syntax.And l r) = do
-    _Γ₁ <- check _Γ₀ l Type.Bool
-    _Γ₂ <- check _Γ₁ r Type.Bool
-    return (Type.Bool, _Γ₂)
-infer _Γ₀ (Syntax.Or l r) = do
-    _Γ₁ <- check _Γ₀ l Type.Bool
-    _Γ₂ <- check _Γ₁ r Type.Bool
-    return (Type.Bool, _Γ₂)
-infer _Γ Syntax.True = do
-    return (Type.Bool, _Γ)
-infer _Γ Syntax.False = do
-    return (Type.Bool, _Γ)
+infer (Syntax.If predicate l r) = do
+    check predicate Type.Bool
+    _L₀ <- infer l
+    _Γ  <- get
+    let _L₁ = Context.solve _Γ _L₀
+    check r _L₁
+    return _L₁
+infer (Syntax.And l r) = do
+    check l Type.Bool
+    check r Type.Bool
+    return Type.Bool
+infer (Syntax.Or l r) = do
+    check l Type.Bool
+    check r Type.Bool
+    return Type.Bool
+infer Syntax.True = do
+    return Type.Bool
+infer Syntax.False = do
+    return Type.Bool
 
-check
-    :: (MonadState Int m, MonadError Text m)
-    => Context -> Syntax -> Type -> m Context
+check :: (MonadState Status m, MonadError Text m) => Syntax -> Type -> m ()
 -- →I
-check _Γ (Syntax.Lambda x e) (Type.Function _A _B) = do
-    (Context.discardUpTo (Context.Annotation x _A) -> _Δ) <- check (Context.Annotation x _A : _Γ) e _B
-    return _Δ
+check (Syntax.Lambda x e) (Type.Function _A _B) = do
+    push (Context.Annotation x _A)
+    check e _B
+    discardUpTo (Context.Annotation x _A)
 -- ∀I
-check _Γ e (Type.Forall α _A) = do
-    (Context.discardUpTo (Context.Variable α) -> _Δ) <- check (Context.Variable α : _Γ) e _A
-    return _Δ
+check e (Type.Forall α _A) = do
+    push (Context.Variable α)
+    check e _A
+    discardUpTo (Context.Variable α)
 -- Sub
-check _Γ e _B = do
-    (_A, _Θ) <- infer _Γ e
-    subtype _Θ (Context.solve _Θ _A) (Context.solve _Θ _B)
+check e _B = do
+    _A <- infer e
+    _Θ <- get
+    subtype (Context.solve _Θ _A) (Context.solve _Θ _B)
 
 inferApplication
-    :: (MonadState Int m, MonadError Text m)
-    => Context -> Type -> Syntax -> m (Type, Context)
+    :: (MonadState Status m, MonadError Text m) => Type -> Syntax -> m Type
 -- ∀App
-inferApplication _Γ (Type.Forall α₀ _A) e = do
+inferApplication (Type.Forall α₀ _A) e = do
     α₁ <- fresh
-    inferApplication (Context.Unsolved α₁ : _Γ) (Type.substitute α₀ 0 (Type.Unsolved α₁) _A) e
+    push (Context.Unsolved α₁)
+    inferApplication (Type.substitute α₀ 0 (Type.Unsolved α₁) _A) e
 -- αApp
-inferApplication _Γ (Type.Unsolved α) e = do
+inferApplication (Type.Unsolved α) e = do
+    _Γ <- get
     (_ΓR, _ΓL) <- Context.split α _Γ `orDie` "αApp"
     α₁ <- fresh
     α₂ <- fresh
-    _Δ <- check (_ΓR <> (Context.Solved α (Monotype.Function (Monotype.Unsolved α₁) (Monotype.Unsolved α₂)) : Context.Unsolved α₁ : Context.Unsolved α₂ : _ΓL)) e (Type.Unsolved α₁)
-    return (Type.Unsolved α₂, _Δ)
-inferApplication _Γ (Type.Function _A _C) e = do
-    _Δ <- check _Γ e _A
-    return (_C, _Δ)
-inferApplication _ (Type.Variable α) _ = do
+    set (_ΓR <> (Context.Solved α (Monotype.Function (Monotype.Unsolved α₁) (Monotype.Unsolved α₂)) : Context.Unsolved α₁ : Context.Unsolved α₂ : _ΓL))
+    check e (Type.Unsolved α₁)
+    return (Type.Unsolved α₂)
+inferApplication (Type.Function _A _C) e = do
+    check e _A
+    return _C
+inferApplication (Type.Variable α) _ = do
     Except.throwError [__i|
 Internal error: Unexpected type variable in function type
 
@@ -303,7 +346,7 @@ The following type variable:
 … should have been replaced with an unsolved variable when type-checking
 function application.
 |]
-inferApplication _ _A _ = do
+inferApplication _A _ = do
     Except.throwError [__i|
 Not a function type
 
@@ -317,5 +360,6 @@ type.
 
 typeOf :: Syntax -> Either Text Type
 typeOf syntax = do
-    (_A, _Δ) <- State.evalStateT (infer [] syntax) 0
+    let initialStatus = Status{ count = 0, context = [] }
+    (_A, Status{ context = _Δ }) <- State.runStateT (infer syntax) initialStatus
     return (Context.complete _Δ _A)
