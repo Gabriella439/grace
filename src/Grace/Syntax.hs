@@ -99,8 +99,12 @@ prettyPrimitiveExpression :: Syntax -> Doc a
 prettyPrimitiveExpression (Variable name index)
     | index == 0 = Pretty.pretty name
     | otherwise  = Pretty.pretty name <> "@" <> Pretty.pretty index
-prettyPrimitiveExpression (List elements) =
-    Pretty.list (map prettyExpression elements)
+prettyPrimitiveExpression (List []) =
+    "[ ]"
+prettyPrimitiveExpression (List (element₀ : elements)) =
+    "[ " <> prettyExpression element₀ <> foldMap prettyElement elements <> " ]"
+  where
+    prettyElement element = ", " <> prettyExpression element
 prettyPrimitiveExpression Grace.Syntax.True =
     "True"
 prettyPrimitiveExpression Grace.Syntax.False =
