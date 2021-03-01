@@ -61,7 +61,7 @@ wellFormedType :: MonadError Text m => Context -> Type -> m ()
 wellFormedType _Γ (Type.Variable α)
     | Context.Variable α `elem` _Γ = return ()
     | otherwise                    = Except.throwError [__i|
-Unbound variable: #{α}
+Unbound type variable: #{α}
 |]
 -- ArrowWF
 wellFormedType _Γ (Type.Function _A _B) = do
@@ -252,14 +252,20 @@ infer :: (MonadState Status m, MonadError Text m) => Syntax -> m Type
 -- Var
 infer (Syntax.Variable x₀ n) = do
     _Γ <- get
-    Context.lookup x₀ n _Γ `orDie` ("Unbound variable: " <> x₀ <> if n == 0 then "" else "@" <> Text.pack (show n))
+    case Context.lookup x₀ n _Γ of
+        Just _A -> do
+            return _A
+        Nothing -> do
+            Except.throwError [__i|
+            Unbound variable: ${x₀ <> if n == 0 then "" else "@" <> Text.pack (show n)}
+            |]
 infer (Syntax.Lambda x e) = do
     α <- fresh
     β <- fresh
     push (Context.Unsolved α)
     push (Context.Unsolved β)
     push (Context.Annotation x (Type.Unsolved α))
-    check  e (Type.Unsolved β)
+    check e (Type.Unsolved β)
     discardUpTo (Context.Annotation x (Type.Unsolved α))
     return (Type.Function (Type.Unsolved α) (Type.Unsolved β))
 -- →E
@@ -343,7 +349,7 @@ The following type variable:
 
 ↳ #{α}
 
-… should have been replaced with an unsolved variable when type-checking
+… should have been replaced with an unsolved variable when type-checking a
 function application.
 |]
 inferApplication _A _ = do
