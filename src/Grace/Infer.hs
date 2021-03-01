@@ -148,6 +148,11 @@ instantiateL :: (MonadState Status m, MonadError Text m) => Int -> Type -> m ()
 instantiateL α _A₀ = do
     _Γ₀ <- get
 
+    let instLSolve _A τ = do
+            (_Γ', _Γ) <- Context.split α _Γ₀ `orDie` "InstLSolve"
+            wellFormedType _Γ _A
+            set (_Γ' <> (Context.Solved α τ : _Γ))
+
     case _A₀ of
         -- InstLReach
         Type.Unsolved β
@@ -155,18 +160,12 @@ instantiateL α _A₀ = do
             , Just (_ΓM, _ΓL) <- Context.split α _Γ₁ -> do
                 set (_ΓR <> (Context.Solved β (Monotype.Unsolved α) : _ΓM) <> (Context.Unsolved α : _ΓL))
         -- InstLSolve
-        Type.Unsolved τ -> do
-            (_Γ', _Γ) <- Context.split α _Γ₀ `orDie` "InstLSolve"
-            wellFormedType _Γ (Type.Unsolved τ)
-            set (_Γ' <> (Context.Solved α (Monotype.Unsolved τ) : _Γ))
-        Type.Variable τ -> do
-            (_Γ', _Γ) <- Context.split α _Γ₀ `orDie` "InstLSolve"
-            wellFormedType _Γ (Type.Variable τ)
-            set (_Γ' <> (Context.Solved α (Monotype.Variable τ) : _Γ))
+        Type.Unsolved β -> do
+            instLSolve (Type.Unsolved β) (Monotype.Unsolved β)
+        Type.Variable β -> do
+            instLSolve (Type.Variable β) (Monotype.Variable β)
         Type.Bool -> do
-            (_Γ', _Γ) <- Context.split α _Γ₀ `orDie` "InstLSolve"
-            wellFormedType _Γ Type.Bool
-            set (_Γ' <> (Context.Solved α Monotype.Bool : _Γ))
+            instLSolve Type.Bool Monotype.Bool
         -- InstLArr
         Type.Function _A₁ _A₂ -> do
             (_ΓR, _ΓL) <- Context.split α _Γ₀ `orDie` "InstLArr"
@@ -199,6 +198,11 @@ instantiateR :: (MonadState Status m, MonadError Text m) => Type -> Int -> m ()
 instantiateR _A₀ α = do
     _Γ₀ <- get
 
+    let instRSolve _A τ = do
+            (_Γ', _Γ) <- Context.split α _Γ₀ `orDie` "InstRSolve"
+            wellFormedType _Γ _A
+            set (_Γ' <> (Context.Solved α τ : _Γ))
+
     case _A₀ of
         -- InstRReach
         Type.Unsolved β
@@ -206,18 +210,12 @@ instantiateR _A₀ α = do
             , Just (_ΓM, _ΓL) <- Context.split α _Γ₁ -> do
                 set (_ΓR <> (Context.Solved β (Monotype.Unsolved α) : _ΓM) <> (Context.Unsolved α : _ΓL))
         -- InstRSolve
-        Type.Unsolved τ -> do
-            (_Γ', _Γ) <- Context.split α _Γ₀ `orDie` "InstRSolve"
-            wellFormedType _Γ (Type.Unsolved τ)
-            set (_Γ' <> (Context.Solved α (Monotype.Unsolved τ) : _Γ))
-        Type.Variable τ -> do
-            (_Γ', _Γ) <- Context.split α _Γ₀ `orDie` "InstRSolve"
-            wellFormedType _Γ (Type.Variable τ)
-            set (_Γ' <> (Context.Solved α (Monotype.Variable τ) : _Γ))
+        Type.Unsolved β -> do
+            instRSolve (Type.Unsolved β) (Monotype.Unsolved β)
+        Type.Variable β -> do
+            instRSolve (Type.Variable β) (Monotype.Variable β)
         Type.Bool -> do
-            (_Γ', _Γ) <- Context.split α _Γ₀ `orDie` "InstRSolve"
-            wellFormedType _Γ Type.Bool
-            set (_Γ' <> (Context.Solved α Monotype.Bool  : _Γ))
+            instRSolve Type.Bool Monotype.Bool
         -- InstRArr
         Type.Function _A₁ _A₂ -> do
             (_ΓR, _ΓL) <- Context.split α _Γ₀ `orDie` "InstRArr"
