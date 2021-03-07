@@ -37,7 +37,41 @@ data Closure = Closure Text [(Text, Value)] Syntax
 -}
 data Value
     = Variable Text Int
+      -- ^ The `Text` field is the variable's name (i.e. \"x\")
+      --
+      -- The `Int` field disambiguates variables with the same name if there are
+      -- multiple bound variables of the same name in scope.  Zero refers to the
+      -- nearest bound variable and the index increases by one for each bound
+      -- variable of the same name going outward.  The following diagram may
+      -- help:
+      --
+      -- >              ┌──refers to──┐
+      -- >              │             │
+      -- >              v             │
+      -- > \x -> \y -> \x     ->    x@0
+      -- > 
+      -- > ┌─────────refers to────────┐
+      -- > │                          │
+      -- > v                          │
+      -- > \x -> \y -> \x     ->    x@1
+      --
+      -- This `Int` behaves like a De Bruijn index in the spcial case where all
+      -- variables have the same name.
+      --
+      -- You can optionally omit the index if it is 0:
+      --
+      -- >              ┌─refers to─┐
+      -- >              │           │
+      -- >              v           │
+      -- > \x -> \y -> \x     ->    x
+      --
+      -- Zero indices are omitted when pretty-printing variables and non-zero
+      -- indices appear as a numeric suffix.
     | Lambda Closure
+      -- The `Lambda` constructor captures the environment at the time it is
+      -- evaluated, so that evaluation can be lazily deferred until the function
+      -- input is known.  This is essentially the key optimization that powers
+      -- the fast normalization-by-evaluation algorithm.
     | If Value Value Value
     | Application Value Value
     | List [Value]

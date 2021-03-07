@@ -1,4 +1,15 @@
-module Grace.Type where
+{-| This module stores the `Type` type representing polymorphic types and
+    utilities for operating on `Type`s
+-}
+module Grace.Type
+    ( -- * Types
+      Type(..)
+
+      -- * Utilities
+    , solve
+    , freeIn
+    , substitute
+    ) where
 
 import Data.Text (Text)
 import Data.Text.Prettyprint.Doc (Doc, Pretty(..))
@@ -7,13 +18,38 @@ import Grace.Monotype (Monotype)
 import qualified Data.Text.Prettyprint.Doc as Pretty
 import qualified Grace.Monotype as Monotype
 
+-- | A potentially polymorphic type
 data Type
     = Variable Text
+    -- ^ Type variable
+    --
+    -- >>> pretty (Variable "a")
+    -- a
     | Unsolved Int
+    -- ^ A placeholder variable whose type has not yet been inferred
+    --
+    -- >>> pretty (Unsolved 0)
+    -- a?
     | Forall Text Type
+    -- ^ Universally quantified type
+    --
+    -- >>> pretty (Forall "a" (Variable "a"))
+    -- forall a . a
     | Function Type Type
+    -- ^ Function type
+    --
+    -- >>> pretty (Function (Variable "a") (Variable "b"))
+    -- a -> b
     | List Type
+    -- ^ List type
+    --
+    -- >>> pretty (List (Variable "a"))
+    -- List a
     | Bool
+    -- ^ Boolean type
+    --
+    -- >>> pretty Bool
+    -- Bool
     deriving (Eq, Show)
 
 instance Pretty Type where
@@ -31,6 +67,9 @@ fromMonotype (Monotype.List τ) =
 fromMonotype Monotype.Bool =
     Bool
 
+{-| Substitute a `Type` by replacing all occurrences of the given unsolved
+    variable with a `Monotype`
+-}
 solve :: Int -> Monotype -> Type -> Type
 solve _ _ (Variable α) =
     Variable α
@@ -46,6 +85,9 @@ solve α τ (List _A) =
 solve _ _ Bool =
     Bool
 
+{-| Replace all occurrences of a variable within one `Type` with another `Type`,
+    given the variable's label and index
+-}
 substitute :: Text -> Int -> Type -> Type -> Type
 substitute α₀ n _A (Variable α₁)
     | α₀ == α₁ && n == 0 = _A
@@ -66,6 +108,7 @@ substitute α n _A₀ (List _A₁) =
 substitute _ _ _ Bool =
     Bool
 
+-- | Count how many times the given `Unsolved` variable appears within a `Type`
 freeIn :: Int -> Type -> Bool
 _  `freeIn` Variable _     = False
 α₀ `freeIn` Unsolved α₁    = α₀ == α₁

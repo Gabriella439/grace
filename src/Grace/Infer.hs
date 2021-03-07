@@ -1,4 +1,31 @@
-module Grace.Infer where
+{-| This module implements the bidirectional type-checking algorithm from:
+
+    Dunfield, Joshua, and Neelakantan R. Krishnaswami. \"Complete and easy bidirectional typechecking for higher-rank polymorphism.\" ACM SIGPLAN Notices 48.9 (2013): 429-442.
+
+    The source code of this module strives to use the same variable-naming
+    conventions as the original paper.  The source code also includes comments
+    highlighting which subexpressions in the code correspond to which judgments
+    from the paper.
+
+    The main difference from the original algorithm that this module uses
+    `Control.Monad.State.Strict.StateT` to thread around `Context`s and
+    manipulate them instead of explicit `Context` passing as in the original
+    paper.
+-}
+module Grace.Infer
+    ( -- * Type inference
+      typeOf
+
+    , -- * Internal implementation
+      Status(..)
+    , wellFormedType
+    , subtype
+    , instantiateL
+    , instantiateR
+    , infer
+    , check
+    , inferApplication
+    ) where
 
 import Data.Text (Text)
 
@@ -21,7 +48,13 @@ import qualified Grace.Monotype            as Monotype
 import qualified Grace.Syntax              as Syntax
 import qualified Grace.Type                as Type
 
-data Status = Status{ count :: !Int, context :: Context }
+-- | Type-checking state
+data Status = Status
+    { count :: !Int
+      -- ^ Used to generate fresh unsolved variables (e.g. α̂, β̂)
+    , context :: Context
+      -- ^ The type-checking context (e.g. Γ, Δ, Θ)
+    }
     deriving (Show)
 
 orDie :: MonadError Text m => Maybe a -> Text -> m a
@@ -57,6 +90,12 @@ contextToText :: Context -> Text
 contextToText entries =
     Text.unlines (map (\entry -> "• " <> prettyToText entry) entries)
 
+{-| This corresponds to the judgment:
+
+    > Γ ⊢ A
+
+    … which checks that under context Γ, type A is well-formed
+-}
 wellFormedType :: MonadError Text m => Context -> Type -> m ()
 -- UvarWF
 wellFormedType _Γ (Type.Variable α)
@@ -94,6 +133,13 @@ wellFormedType _Γ (Type.List _A) = do
 wellFormedType _Γ Type.Bool = do
     return ()
 
+{-| This corresponds to the judgment:
+
+    > Γ ⊢ A <: B ⊣ Δ
+
+    … which updates the context Γ to produce the new context Δ, given that the
+    type A is a subtype of type B.
+-}
 subtype :: (MonadState Status m, MonadError Text m) => Type -> Type -> m ()
 subtype _A₀ _B₀ = do
     _Γ <- get
@@ -149,6 +195,13 @@ subtype _A₀ _B₀ = do
             ↳ #{prettyToText _B}
             |]
 
+{-| This corresponds to the judgment:
+
+    > Γ ⊢ α̂ :≦ A ⊣ Δ
+
+    … which updates the context Γ to produce the new context Δ, by instantiating
+    α̂ such that α̂ <: A.
+-}
 instantiateL :: (MonadState Status m, MonadError Text m) => Int -> Type -> m ()
 instantiateL α _A₀ = do
     _Γ₀ <- get
@@ -204,6 +257,13 @@ instantiateL α _A₀ = do
             set (_ΓR <> (Context.Solved α (Monotype.List (Monotype.Unsolved α₁)) : Context.Unsolved α₁ : _ΓL))
             instantiateL α₁ _A
 
+{-| This corresponds to the judgment:
+
+    > Γ ⊢ A ≦: α̂ ⊣ Δ
+
+    … which updates the context Γ to produce the new context Δ, by instantiating
+    α̂ such that A :< α̂.
+-}
 instantiateR :: (MonadState Status m, MonadError Text m) => Type -> Int -> m ()
 instantiateR _A₀ α = do
     _Γ₀ <- get
@@ -261,6 +321,13 @@ instantiateR _A₀ α = do
             set (_ΓR <> (Context.Solved α (Monotype.List (Monotype.Unsolved α₁)) : Context.Unsolved α₁ : _ΓL))
             instantiateR _A α₁
 
+{-| This corresponds to the judgment:
+
+    > Γ ⊢ e ⇒ A ⊣ Δ
+
+    … which infers the type of e under input context Γ, producing an inferred
+    type of A and an updated context Δ.
+-}
 infer :: (MonadState Status m, MonadError Text m) => Syntax -> m Type
 -- Var
 infer (Syntax.Variable x₀ n) = do
@@ -327,6 +394,13 @@ infer Syntax.True = do
 infer Syntax.False = do
     return Type.Bool
 
+{-| This corresponds to the judgment:
+
+    > Γ ⊢ e ⇐ A ⊣ Δ
+
+    … which checks that e has type A under input context Γ, producing an updated
+    context Δ.
+-}
 check :: (MonadState Status m, MonadError Text m) => Syntax -> Type -> m ()
 -- →I
 check (Syntax.Lambda x e) (Type.Function _A _B) = do
@@ -344,6 +418,13 @@ check e _B = do
     _Θ <- get
     subtype (Context.solve _Θ _A) (Context.solve _Θ _B)
 
+{-| This corresponds to the judgment:
+
+    > Γ ⊢ A • e ⇒⇒ C ⊣ Δ
+
+    … which infers the result type C when a function of type A is applied to an
+    input argument e, under input context Γ, producing an updated context Δ.
+-}
 inferApplication
     :: (MonadState Status m, MonadError Text m) => Type -> Syntax -> m Type
 -- ∀App
@@ -386,6 +467,7 @@ An expression of the following type:
 type.
 |]
 
+-- | Infer the `Type` of the given `Syntax` tree
 typeOf :: Syntax -> Either Text Type
 typeOf syntax = do
     let initialStatus = Status{ count = 0, context = [] }

@@ -17,16 +17,51 @@ import qualified Prettyprinter as Pretty
 -- | The surface syntax for the language
 data Syntax
     = Variable Text Int
+    -- ^
+    --   >>> pretty (Variable "x" 0)
+    --   x
+    --   >>> pretty (Variable "x" 1)
+    --   x@1
     | Lambda Text Syntax
+    -- ^
+    --   >>> pretty (Lambda "x" "x")
+    --   \x -> x
     | Application Syntax Syntax
+    -- ^
+    --   >>> pretty (Application "f" "x")
+    --   f x
     | Annotation Syntax Type
+    -- ^
+    --   >>> pretty (Annotation "x" (Type.Variable "A"))
+    --   x : A
     | Let Text Syntax Syntax
+    -- ^
+    --   >>> pretty (Let "x" "y" "z")
+    --   let x = y in z
     | List [Syntax]
+    -- ^
+    --   >>> pretty (List [ "x", "y", "z" ])
+    --   [ x, y, z ]
     | If Syntax Syntax Syntax
+    -- ^
+    --   >>> pretty (If "x" "y" "z")
+    --   if x then y else z
     | And Syntax Syntax
+    -- ^
+    --   >>> pretty (And "x" "y")
+    --   x && y
     | Or Syntax Syntax
+    -- ^
+    --   >>> pretty (Or "x" "y")
+    --   x || y
     | True
+    -- ^
+    --   >>> pretty True
+    --   True
     | False
+    -- ^
+    --   >>> pretty False
+    --   False
     deriving (Show)
 
 instance IsString Syntax where
@@ -41,8 +76,7 @@ prettyExpression (Lambda name body) =
     Pretty.nest 4
         (   "\\"
         <>  Pretty.pretty name
-        <>  " ->"
-        <>  Pretty.line
+        <>  " -> "
         <>  prettyExpression body
         )
 prettyExpression (Let name assignment body) =
@@ -51,19 +85,16 @@ prettyExpression (Let name assignment body) =
         <>  Pretty.pretty name
         <>  " = "
         <>  prettyExpression assignment
-        <>  Pretty.line
-        <>  "in "
+        <>  " in "
         <>  prettyExpression body
         )
 prettyExpression (If predicate ifTrue ifFalse) =
     Pretty.align
         (   "if "
         <>  prettyExpression predicate
-        <>  Pretty.line
-        <>  "then "
+        <>  " then "
         <>  prettyExpression ifTrue
-        <>  Pretty.line
-        <>  "else "
+        <>  " else "
         <>  prettyExpression ifFalse
         )
 prettyExpression (Annotation annotated annotation) =
@@ -89,7 +120,7 @@ prettyApplicationExpression :: Syntax -> Doc a
 prettyApplicationExpression (Application function argument) =
     Pretty.nest 4
         (   prettyApplicationExpression function
-        <>  Pretty.line
+        <>  " "
         <>  prettyPrimitiveExpression argument
         )
 prettyApplicationExpression other =

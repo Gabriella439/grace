@@ -1,11 +1,13 @@
 -- | This module contains the logic for efficiently evaluating an expression
 module Grace.Normalize
     ( -- * Normalization
-      evaluate
+      normalize
+
+      -- * Internal utilities
+    , evaluate
     , fresh
     , lookupVariable
     , instantiate
-    , normalize
     , quote
     ) where
 
