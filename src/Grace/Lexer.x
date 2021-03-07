@@ -42,6 +42,7 @@ token :-
   \-\>                                { emit Arrow                          }
   @                                   { emit At                             }
   Bool                                { emit Grace.Lexer.Bool               }
+  \}                                  { emit CloseBrace                     }
   \]                                  { emit CloseBracket                   }
   \)                                  { emit CloseParenthesis               }
   :                                   { emit Colon                          }
@@ -56,6 +57,7 @@ token :-
   $digit+                             { \i n -> fmap Int (captureInt i n)   }
   \\                                  { emit Lambda                         }
   let                                 { emit Let                            }
+  \{                                  { emit OpenBrace                      }
   \[                                  { emit OpenBracket                    }
   \(                                  { emit OpenParenthesis                }
   \|\|                                { emit Or                             }
@@ -138,6 +140,7 @@ data Token
     | Arrow
     | At
     | Bool
+    | CloseBrace
     | CloseBracket
     | CloseParenthesis
     | Colon
@@ -153,6 +156,7 @@ data Token
     | Label Text
     | Lambda
     | Let
+    | OpenBrace
     | OpenBracket
     | OpenParenthesis
     | Or

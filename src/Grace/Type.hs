@@ -45,6 +45,11 @@ data Type
     --
     -- >>> pretty (List (Variable "a"))
     -- List a
+    | Record [(Text, Type)]
+    -- ^ Record type
+    --
+    -- >>> pretty (Record [("x", Variable "a"), ("y", Variable "b")])
+    -- { x : a, y : b }
     | Bool
     -- ^ Boolean type
     --
@@ -64,6 +69,8 @@ fromMonotype (Monotype.Function τ σ) =
     Function (fromMonotype τ) (fromMonotype σ)
 fromMonotype (Monotype.List τ) =
     List (fromMonotype τ)
+fromMonotype (Monotype.Record kτs) =
+    Record (map (\(k, τ) -> (k, fromMonotype τ)) kτs)
 fromMonotype Monotype.Bool =
     Bool
 
@@ -82,6 +89,8 @@ solve α τ (Function _A _B) =
     Function (solve α τ _A) (solve α τ _B)
 solve α τ (List _A) =
     List (solve α τ _A)
+solve α τ (Record kAs) =
+    Record (map (\(k, _A) -> (k, solve α τ _A)) kAs)
 solve _ _ Bool =
     Bool
 
@@ -105,6 +114,8 @@ substitute α n _A₀ (Function _A₁ _B) =
     Function (substitute α n _A₀ _A₁) (substitute α n _A₀ _B)
 substitute α n _A₀ (List _A₁) =
     List (substitute α n _A₀ _A₁)
+substitute α n _A₀ (Record kAs) =
+    Record (map (\(k, _A₁) -> (k, substitute α n _A₀ _A₁)) kAs)
 substitute _ _ _ Bool =
     Bool
 
@@ -115,6 +126,7 @@ _  `freeIn` Variable _     = False
 α  `freeIn` Forall _ _A    = α `freeIn` _A
 α  `freeIn` Function _A _B = α `freeIn` _A || α `freeIn` _B
 α  `freeIn` List _A        = α `freeIn` _A
+α  `freeIn` Record kAs     = any (\(_, _A) -> α `freeIn` _A) kAs
 _  `freeIn` Bool           = False
 
 prettyType :: Type -> Doc a
@@ -137,6 +149,18 @@ prettyPrimitiveType (Variable α) =
     Pretty.pretty α
 prettyPrimitiveType (Unsolved α) =
     Pretty.pretty (Monotype.toVariable α) <> "?"
+prettyPrimitiveType (Record []) =
+    "{ }"
+prettyPrimitiveType (Record ((key₀, type₀) : keyTypes)) =
+        "{ "
+    <>  Pretty.pretty key₀
+    <>  " : "
+    <>  prettyType type₀
+    <>  foldMap prettyKeyType keyTypes
+    <>  " }"
+  where
+    prettyKeyType (key, type_) =
+        ", " <> Pretty.pretty key <> " : " <> prettyType type_
 prettyPrimitiveType Bool =
     "Bool"
 prettyPrimitiveType other =

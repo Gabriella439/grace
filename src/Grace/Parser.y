@@ -34,6 +34,7 @@ import qualified Grace.Type        as Type
     '->'    { Lexer.Arrow            }
     '@'     { Lexer.At               }
     Bool    { Lexer.Bool             }
+    '}'     { Lexer.CloseBrace       }
     ']'     { Lexer.CloseBracket     }
     ')'     { Lexer.CloseParenthesis }
     ':'     { Lexer.Colon            }
@@ -48,6 +49,7 @@ import qualified Grace.Type        as Type
     int     { Lexer.Int $$           }
     '\\'    { Lexer.Lambda           }
     let     { Lexer.Let              }
+    '{'     { Lexer.OpenBrace        }
     '['     { Lexer.OpenBracket      }
     '('     { Lexer.OpenParenthesis  }
     '||'    { Lexer.Or               }
@@ -94,6 +96,8 @@ PrimitiveExpression
         { Syntax.Variable $1 $3 }
     | '[' List ']'
         { Syntax.List $2 }
+    | '{' Record '}'
+        { Syntax.Record $2 }
     | True
         { Syntax.True }
     | False
@@ -112,6 +116,18 @@ ReversedList
        { $3 : $1 }
     | Expression
        { [ $1 ] }
+
+Record
+    : ReversedRecord
+        { reverse $1 }
+    | {- empty -}
+        { [] }
+
+ReversedRecord
+    : ReversedRecord ',' label '=' Expression
+        { ($3, $5) : $1 }
+    | label '=' Expression
+        { [ ($1, $3) ] }
 
 Type
     : forall label '.' Type

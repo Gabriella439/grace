@@ -36,6 +36,11 @@ data Monotype
     --
     -- >>> pretty (List (Variable "a"))
     -- List a
+    | Record [(Text, Monotype)]
+    -- ^ Record type
+    --
+    -- >>> pretty (Record [("x", Variable "a"), ("y", Variable "b")])
+    -- { x : a, y : b }
     | Bool
     -- ^ Boolean type
     --
@@ -57,10 +62,26 @@ prettyApplicationType (List _A) = "List " <> prettyPrimitiveType _A
 prettyApplicationType  other    =  prettyPrimitiveType other
 
 prettyPrimitiveType :: Monotype -> Doc a
-prettyPrimitiveType (Variable α) = pretty α
-prettyPrimitiveType (Unsolved α) = pretty (toVariable α) <> "?"
-prettyPrimitiveType  Bool        = "Bool"
-prettyPrimitiveType  other       = "(" <> prettyMonotype other <> ")"
+prettyPrimitiveType (Variable α) =
+    pretty α
+prettyPrimitiveType (Unsolved α) =
+    pretty (toVariable α) <> "?"
+prettyPrimitiveType (Record []) =
+    "{ }"
+prettyPrimitiveType (Record ((key₀, type₀) : keyTypes)) =
+        "{ "
+    <>  pretty key₀
+    <>  " : "
+    <>  prettyMonotype type₀
+    <>  foldMap prettyKeyType keyTypes
+    <>  " }"
+  where
+    prettyKeyType (key, type_) =
+        ", " <> pretty key <> " : " <> prettyMonotype type_
+prettyPrimitiveType Bool =
+    "Bool"
+prettyPrimitiveType other =
+    "(" <> prettyMonotype other <> ")"
 
 {-| Convert an unbound variable (internally represented as an `Int`) to a
     user-friendly `Text` representation

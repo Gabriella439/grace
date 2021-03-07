@@ -130,6 +130,8 @@ The following type:
     predicate  _                    = False
 wellFormedType _Γ (Type.List _A) = do
     wellFormedType _Γ _A
+wellFormedType _Γ (Type.Record kAs) = do
+    traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
 wellFormedType _Γ Type.Bool = do
     return ()
 
@@ -256,6 +258,16 @@ instantiateL α _A₀ = do
             α₁ <- fresh
             set (_ΓR <> (Context.Solved α (Monotype.List (Monotype.Unsolved α₁)) : Context.Unsolved α₁ : _ΓL))
             instantiateL α₁ _A
+        Type.Record kAs -> do
+            (_ΓR, _ΓL) <- Context.split α _Γ₀ `orDie` "InstLRecord"
+            let process (k, _A) = do
+                    β <- fresh
+                    return (k, _A, β)
+            kAβs <- traverse process kAs
+            let βs = map (\(_, _A, β) -> Context.Unsolved β) kAβs
+            let kβs = map (\(k, _, β) -> (k, Monotype.Unsolved β)) kAβs
+            set (_ΓR <> (Context.Solved α (Monotype.Record kβs) : βs <> _ΓL))
+            traverse_ (\(_, _A, β) -> instantiateL β _A) kAβs
 
 {-| This corresponds to the judgment:
 
@@ -320,6 +332,16 @@ instantiateR _A₀ α = do
             α₁ <- fresh
             set (_ΓR <> (Context.Solved α (Monotype.List (Monotype.Unsolved α₁)) : Context.Unsolved α₁ : _ΓL))
             instantiateR _A α₁
+        Type.Record kAs -> do
+            (_ΓR, _ΓL) <- Context.split α _Γ₀ `orDie` "InstRRecord"
+            let process (k, _A) = do
+                    β <- fresh
+                    return (k, _A, β)
+            kAβs <- traverse process kAs
+            let βs = map (\(_, _A, β) -> Context.Unsolved β) kAβs
+            let kβs = map (\(k, _, β) -> (k, Monotype.Unsolved β)) kAβs
+            set (_ΓR <> (Context.Solved α (Monotype.Record kβs) : βs <> _ΓL))
+            traverse_ (\(_, _A, β) -> instantiateR _A β) kAβs
 
 {-| This corresponds to the judgment:
 
@@ -374,6 +396,12 @@ infer (Syntax.List xs) = do
             _A <- infer y
             traverse_ (`check` _A) ys
             return (Type.List _A)
+infer (Syntax.Record kvs) = do
+    let process (k, v) = do
+            _A <- infer v
+            return (k, _A)
+    kAs <- traverse process kvs
+    return (Type.Record kAs)
 infer (Syntax.If predicate l r) = do
     check predicate Type.Bool
     _L₀ <- infer l

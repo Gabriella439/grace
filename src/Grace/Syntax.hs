@@ -42,6 +42,10 @@ data Syntax
     -- ^
     --   >>> pretty (List [ "x", "y", "z" ])
     --   [ x, y, z ]
+    | Record [(Text, Syntax)]
+    -- ^
+    --   >>> pretty (Record [ ("x", "a"), ("y", "b") ])
+    --   { x = a, y = b }
     | If Syntax Syntax Syntax
     -- ^
     --   >>> pretty (If "x" "y" "z")
@@ -136,6 +140,18 @@ prettyPrimitiveExpression (List (element₀ : elements)) =
     "[ " <> prettyExpression element₀ <> foldMap prettyElement elements <> " ]"
   where
     prettyElement element = ", " <> prettyExpression element
+prettyPrimitiveExpression (Record []) =
+    "{ }"
+prettyPrimitiveExpression (Record ((key₀, value₀) : keyValues)) =
+        "{ "
+    <>  Pretty.pretty key₀
+    <>  " = "
+    <>  prettyExpression value₀
+    <>  foldMap prettyKeyValue keyValues
+    <>  " }"
+  where
+    prettyKeyValue (key, value) =
+        ", " <> Pretty.pretty key <> " = " <> Pretty.pretty value
 prettyPrimitiveExpression Grace.Syntax.True =
     "True"
 prettyPrimitiveExpression Grace.Syntax.False =

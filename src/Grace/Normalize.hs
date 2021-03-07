@@ -99,6 +99,11 @@ evaluate env syntax =
         Syntax.List elements ->
             Value.List (map (evaluate env) elements)
 
+        Syntax.Record keyValues ->
+            Value.Record (map adapt keyValues)
+          where
+            adapt (key, value) = (key, evaluate env value)
+
         Syntax.If predicate ifTrue ifFalse ->
             case predicate' of
                 Value.True  -> ifTrue'
@@ -188,6 +193,11 @@ quote names value =
 
         Value.List elements ->
             Syntax.List (map (quote names) elements)
+
+        Value.Record keyValues ->
+            Syntax.Record (map adapt keyValues)
+          where
+            adapt (key, value_) = (key, quote names value_)
 
         Value.If predicate ifTrue ifFalse ->
             Syntax.If

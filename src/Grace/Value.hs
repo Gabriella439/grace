@@ -75,6 +75,7 @@ data Value
     | If Value Value Value
     | Application Value Value
     | List [Value]
+    | Record [(Text, Value)]
     | And Value Value
     | Or Value Value
     | True
