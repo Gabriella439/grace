@@ -55,7 +55,7 @@ data Type
     --
     -- >>> pretty Bool
     -- Bool
-    deriving (Eq, Show)
+    deriving (Eq, Ord, Show)
 
 instance Pretty Type where
     pretty = prettyType

@@ -31,22 +31,25 @@ import Data.Text (Text)
 
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.State.Strict (MonadState)
-import Data.Foldable (traverse_)
+import Data.Foldable (toList, traverse_)
 import Data.String.Interpolate (__i)
 import Grace.Context (Context, Entry)
 import Grace.Syntax (Syntax)
 import Grace.Type (Type)
 import Prettyprinter (Pretty)
 
+import qualified Control.Monad             as Monad
 import qualified Control.Monad.Except      as Except
 import qualified Control.Monad.State       as State
-import qualified Prettyprinter             as Pretty
-import qualified Prettyprinter.Render.Text as Pretty.Text
+import qualified Data.List                 as List
+import qualified Data.Set                  as Set
 import qualified Data.Text                 as Text
 import qualified Grace.Context             as Context
 import qualified Grace.Monotype            as Monotype
 import qualified Grace.Syntax              as Syntax
 import qualified Grace.Type                as Type
+import qualified Prettyprinter             as Pretty
+import qualified Prettyprinter.Render.Text as Pretty.Text
 
 -- | Type-checking state
 data Status = Status
@@ -86,9 +89,9 @@ prettyToText =
     . Pretty.layoutPretty Pretty.defaultLayoutOptions 
     . Pretty.pretty
 
-contextToText :: Context -> Text
-contextToText entries =
-    Text.unlines (map (\entry -> "• " <> prettyToText entry) entries)
+listToText :: Pretty a => [a] -> Text
+listToText elements =
+    Text.intercalate "\n" (map (\entry -> "• " <> prettyToText entry) elements)
 
 {-| This corresponds to the judgment:
 
@@ -122,7 +125,7 @@ The following type:
 
 … is not well-formed within the following context:
 
-#{contextToText _Γ}
+#{listToText _Γ}
 |]
   where
     predicate (Context.Unsolved α₁) = α₀ == α₁
@@ -184,6 +187,69 @@ subtype _A₀ _B₀ = do
             return ()
         (Type.List _A, Type.List _B) -> do
             subtype _A _B
+        (Type.Record kAs₀, Type.Record kBs₀) -> do
+            let setA = Set.fromList (map fst kAs₀)
+            let setB = Set.fromList (map fst kBs₀)
+            let extraA = toList (Set.difference setA setB)
+            let extraB = toList (Set.difference setB setA)
+            let nullA = null extraA
+            let nullB = null extraB
+            if | not nullA && not nullB -> do
+                Except.throwError [__i|
+
+                The following record type:
+
+                ↳ #{prettyToText _A₀}
+
+                … is not a subtype of:
+
+                ↳ #{prettyToText _B₀}
+
+                The former record has the following extra fields:
+
+                #{listToText extraA}
+
+                … while the latter record has the following extra fields:
+
+                #{listToText extraB}
+                |]
+               | not nullA && nullB -> do
+                Except.throwError [__i|
+
+                The following record type:
+
+                ↳ #{prettyToText _A₀}
+
+                … is not a subtype of:
+
+                ↳ #{prettyToText _B₀}
+
+                The former record has the following extra fields:
+
+                #{listToText extraA}
+                |]
+               | nullA && not nullB -> do
+                Except.throwError [__i|
+
+                The following record type:
+
+                ↳ #{prettyToText _A₀}
+
+                … is not a subtype of:
+
+                ↳ #{prettyToText _B₀}
+
+                The latter record has the following extra fields:
+
+                #{listToText extraB}
+                |]
+               | otherwise -> do
+                let process _A₁ _B₁ = do
+                        _Θ <- get
+                        subtype (Context.solve _Θ _A₁) (Context.solve _Θ _B₁)
+                let adapt = map snd . List.sort
+                Monad.zipWithM_ process (adapt kAs₀) (adapt kBs₀)
+
         (_A, _B) -> do
             Except.throwError [__i|
             Not a subtype
@@ -251,7 +317,7 @@ instantiateL α _A₀ = do
 
                 … cannot be instantiated because the variable is missing from the context:
 
-                #{contextToText _Γ₀}
+                #{listToText _Γ₀}
                 |]
         Type.List _A -> do
             (_ΓR, _ΓL) <- Context.split α _Γ₀ `orDie` "InstLList"
@@ -325,7 +391,7 @@ instantiateR _A₀ α = do
         
                 … cannot be instantiated because the variable is missing from the context:
         
-                #{contextToText _Γ₀}
+                #{listToText _Γ₀}
                 |]
         Type.List _A -> do
             (_ΓR, _ΓL) <- Context.split α _Γ₀ `orDie` "InstRArr"

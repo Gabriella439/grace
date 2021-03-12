@@ -146,8 +146,22 @@ PrimitiveType
         { Type.Bool }
     | label
         { Type.Variable $1 }
+    | '{' RecordType '}'
+        { Type.Record $2 }
     | '(' Type ')'
         { $2 }
+
+RecordType
+    : ReversedRecordType
+        { reverse $1 }
+    | {- empty -}
+        { [] }
+
+ReversedRecordType
+    : ReversedRecordType ',' label ':' Type
+        { ($3, $5) : $1 }
+    | label ':' Type
+        { [ ($1, $3) ] }
 
 {
 {-| Parse a complete expression

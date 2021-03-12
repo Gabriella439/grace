@@ -12,6 +12,7 @@ library
                      , array
                      , bytestring
                      , bytestring-lexing
+                     , containers
                      , mtl
                      , prettyprinter
                      , string-interpolate
@@ -31,6 +32,7 @@ library
   default-extensions:  DuplicateRecordFields
                      , FlexibleContexts
                      , FlexibleInstances
+                     , MultiWayIf
                      , NamedFieldPuns
                      , OverloadedStrings
                      , QuasiQuotes
