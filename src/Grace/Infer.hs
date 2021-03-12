@@ -448,8 +448,12 @@ infer (Syntax.Annotation e _A) = do
     check e _A
     return _A
 -- let
-infer (Syntax.Let x a b) = do
+infer (Syntax.Let x Nothing a b) = do
     _A <- infer a
+    push (Context.Annotation x _A)
+    infer b
+infer (Syntax.Let x (Just _A) a b) = do
+    check a _A
     push (Context.Annotation x _A)
     infer b
 infer (Syntax.List xs) = do

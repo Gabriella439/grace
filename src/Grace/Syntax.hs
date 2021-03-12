@@ -34,10 +34,12 @@ data Syntax
     -- ^
     --   >>> pretty (Annotation "x" (Type.Variable "A"))
     --   x : A
-    | Let Text Syntax Syntax
+    | Let Text (Maybe Type) Syntax Syntax
     -- ^
-    --   >>> pretty (Let "x" "y" "z")
+    --   >>> pretty (Let "x" Nothing "y" "z")
     --   let x = y in z
+    --   >>> pretty (Let "x" (Just "t") "y" "z")
+    --   let x : t = y in z
     | List [Syntax]
     -- ^
     --   >>> pretty (List [ "x", "y", "z" ])
@@ -83,10 +85,21 @@ prettyExpression (Lambda name body) =
         <>  " -> "
         <>  prettyExpression body
         )
-prettyExpression (Let name assignment body) =
+prettyExpression (Let name Nothing assignment body) =
     Pretty.align
         (   "let "
         <>  Pretty.pretty name
+        <>  " = "
+        <>  prettyExpression assignment
+        <>  " in "
+        <>  prettyExpression body
+        )
+prettyExpression (Let name (Just type_) assignment body) =
+    Pretty.align
+        (   "let "
+        <>  Pretty.pretty name
+        <>  " : "
+        <>  Pretty.pretty type_
         <>  " = "
         <>  prettyExpression assignment
         <>  " in "

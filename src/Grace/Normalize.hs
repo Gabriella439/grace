@@ -93,7 +93,7 @@ evaluate env syntax =
         Syntax.Annotation annotated _ ->
             evaluate env annotated
 
-        Syntax.Let name assignment body ->
+        Syntax.Let name _ assignment body ->
             evaluate ((name, evaluate env assignment) : env) body
 
         Syntax.List elements ->

@@ -63,7 +63,9 @@ Expression
     : '\\' label '->' Expression
         { Syntax.Lambda $2 $4 }
     | let label '=' Expression in Expression
-        { Syntax.Let $2 $4 $6 }
+        { Syntax.Let $2 Nothing $4 $6 }
+    | let label ':' Type '=' Expression in Expression
+        { Syntax.Let $2 (Just $4) $6 $8 }
     | if Expression then Expression else Expression
         { Syntax.If $2 $4 $6 }
     | OrExpression ':' Type
