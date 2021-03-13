@@ -21,6 +21,7 @@ library
                      , happy
   exposed-modules:     Grace
                      , Grace.Context
+                     , Grace.Existential
                      , Grace.Infer
                      , Grace.Lexer
                      , Grace.Monotype
@@ -29,9 +30,11 @@ library
                      , Grace.Syntax
                      , Grace.Type
                      , Grace.Value
-  default-extensions:  DuplicateRecordFields
+  default-extensions:  DerivingStrategies
+                     , DuplicateRecordFields
                      , FlexibleContexts
                      , FlexibleInstances
+                     , GeneralizedNewtypeDeriving
                      , MultiWayIf
                      , NamedFieldPuns
                      , OverloadedStrings

@@ -35,6 +35,7 @@ import Control.Monad.State.Strict (MonadState)
 import Data.Foldable (traverse_)
 import Data.String.Interpolate (__i)
 import Grace.Context (Context, Entry)
+import Grace.Existential (ExistentialRow(..), ExistentialType(..))
 import Grace.Syntax (Syntax)
 import Grace.Type (Type)
 import Prettyprinter (Pretty)
@@ -68,6 +69,12 @@ fresh = do
     Status{ count = n, .. } <- State.get
     State.put $! Status{ count = n + 1, .. }
     return n
+
+freshType :: MonadState Status m => m ExistentialType
+freshType = fmap ExistentialType fresh
+
+freshRow :: MonadState Status m => m ExistentialRow
+freshRow = fmap ExistentialRow fresh
 
 push :: MonadState Status m => Entry -> m ()
 push entry = State.modify (\s -> s { context = entry : context s })
@@ -143,16 +150,16 @@ Internal error: Invalid context
 
 The following row type variable:
 
-↳ #{prettyToText (Type.Unsolved ρ₀)}
+↳ #{prettyToText (Context.UnsolvedRow ρ₀)}
 
 … is not well-formed within the following context:
 
 #{listToText _Γ}
 |]
   where
-    predicate (Context.Unsolved ρ₁   ) = ρ₀ == ρ₁
-    predicate (Context.SolvedRow ρ₁ _) = ρ₀ == ρ₁
-    predicate  _                       = False
+    predicate (Context.UnsolvedRow ρ₁  ) = ρ₀ == ρ₁
+    predicate (Context.SolvedRow   ρ₁ _) = ρ₀ == ρ₁
+    predicate  _                         = False
 wellFormedType _Γ Type.Bool = do
     return ()
 
@@ -178,11 +185,11 @@ subtype _A₀ _B₀ = do
                 return ()
         -- InstantiateL
         (Type.Unsolved α, _A)
-            | not (α `Type.freeIn` _A) && elem (Context.Unsolved α) _Γ -> do
+            | not (α `Type.typeFreeIn` _A) && elem (Context.Unsolved α) _Γ -> do
                 instantiateL α _A
         -- InstantiateR
         (_A, Type.Unsolved α)
-            | not (α `Type.freeIn` _A) && elem (Context.Unsolved α) _Γ -> do
+            | not (α `Type.typeFreeIn` _A) && elem (Context.Unsolved α) _Γ -> do
                 instantiateR _A α
         -- <:→
         (Type.Function _A₁ _A₂, Type.Function _B₁ _B₂) -> do
@@ -191,7 +198,7 @@ subtype _A₀ _B₀ = do
             subtype (Context.solve _Θ _A₂) (Context.solve _Θ _B₂)
         -- <:∀L
         (Type.Forall α₀ _A, _B) -> do
-            α₁ <- fresh
+            α₁ <- freshType
             push (Context.Marker α₁)
             push (Context.Unsolved α₁)
             subtype (Type.substitute α₀ 0 (Type.Unsolved α₁) _A) _B
@@ -364,19 +371,19 @@ subtype _A₀ _B₀ = do
 
             _ <- Map.traverseWithKey process both
 
-            ρ₂ <- fresh
+            ρ₂ <- freshRow
 
             _Γ₀ <- get
 
             let ρ₁First = do
-                    (_ΓR, _Γ₁) <- Context.split ρ₀ _Γ₀
-                    (_ΓM, _ΓL) <- Context.split ρ₁ _Γ₁
-                    return (set (_ΓR <> (Context.Unsolved ρ₀ : _ΓM) <> (Context.Unsolved ρ₁ : Context.Unsolved ρ₂ : _ΓL)))
+                    (_ΓR, _Γ₁) <- Context.splitOnUnsolvedRow ρ₀ _Γ₀
+                    (_ΓM, _ΓL) <- Context.splitOnUnsolvedRow ρ₁ _Γ₁
+                    return (set (_ΓR <> (Context.UnsolvedRow ρ₀ : _ΓM) <> (Context.UnsolvedRow ρ₁ : Context.UnsolvedRow ρ₂ : _ΓL)))
 
             let ρ₀First = do
-                    (_ΓR, _Γ₁) <- Context.split ρ₁ _Γ₀
-                    (_ΓM, _ΓL) <- Context.split ρ₀ _Γ₁
-                    return (set (_ΓR <> (Context.Unsolved ρ₁ : _ΓM) <> (Context.Unsolved ρ₀ : Context.Unsolved ρ₂ : _ΓL)))
+                    (_ΓR, _Γ₁) <- Context.splitOnUnsolvedRow ρ₁ _Γ₀
+                    (_ΓM, _ΓL) <- Context.splitOnUnsolvedRow ρ₀ _Γ₁
+                    return (set (_ΓR <> (Context.UnsolvedRow ρ₁ : _ΓM) <> (Context.UnsolvedRow ρ₀ : Context.UnsolvedRow ρ₂ : _ΓL)))
 
             case ρ₀First <|> ρ₁First of
                 Nothing -> do
@@ -385,7 +392,7 @@ subtype _A₀ _B₀ = do
 
                     One of the following row type variables:
 
-                    #{listToText [Type.Unsolved ρ₀, Type.Unsolved ρ₁ ]}
+                    #{listToText [Context.UnsolvedRow ρ₀, Context.UnsolvedRow ρ₁ ]}
 
                     … is missing from the following context:
 
@@ -420,20 +427,22 @@ subtype _A₀ _B₀ = do
     … which updates the context Γ to produce the new context Δ, by instantiating
     α̂ such that α̂ <: A.
 -}
-instantiateL :: (MonadState Status m, MonadError Text m) => Int -> Type -> m ()
+instantiateL
+    :: (MonadState Status m, MonadError Text m)
+    => ExistentialType -> Type -> m ()
 instantiateL α _A₀ = do
     _Γ₀ <- get
 
     let instLSolve _A τ = do
-            (_Γ', _Γ) <- Context.split α _Γ₀ `orDie` "InstLSolve"
+            (_Γ', _Γ) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstLSolve"
             wellFormedType _Γ _A
             set (_Γ' <> (Context.Solved α τ : _Γ))
 
     case _A₀ of
         -- InstLReach
         Type.Unsolved β
-            | Just (_ΓR, _Γ₁) <- Context.split β _Γ₀
-            , Just (_ΓM, _ΓL) <- Context.split α _Γ₁ -> do
+            | Just (_ΓR, _Γ₁) <- Context.splitOnUnsolved β _Γ₀
+            , Just (_ΓM, _ΓL) <- Context.splitOnUnsolved α _Γ₁ -> do
                 set (_ΓR <> (Context.Solved β (Monotype.Unsolved α) : _ΓM) <> (Context.Unsolved α : _ΓL))
         -- InstLSolve
         Type.Unsolved β -> do
@@ -444,9 +453,9 @@ instantiateL α _A₀ = do
             instLSolve Type.Bool Monotype.Bool
         -- InstLArr
         Type.Function _A₁ _A₂ -> do
-            (_ΓR, _ΓL) <- Context.split α _Γ₀ `orDie` "InstLArr"
-            α₁ <- fresh
-            α₂ <- fresh
+            (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstLArr"
+            α₁ <- freshType
+            α₂ <- freshType
             set (_ΓR <> (Context.Solved α (Monotype.Function (Monotype.Unsolved α₁) (Monotype.Unsolved α₂)) : Context.Unsolved α₁ : Context.Unsolved α₂ : _ΓL))
             instantiateR _A₁ α₁
             _Θ <- get
@@ -470,14 +479,14 @@ instantiateL α _A₀ = do
                 #{listToText _Γ₀}
                 |]
         Type.List _A -> do
-            (_ΓR, _ΓL) <- Context.split α _Γ₀ `orDie` "InstLList"
-            α₁ <- fresh
+            (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstLList"
+            α₁ <- freshType
             set (_ΓR <> (Context.Solved α (Monotype.List (Monotype.Unsolved α₁)) : Context.Unsolved α₁ : _ΓL))
             instantiateL α₁ _A
         Type.Record r -> do
-            (_ΓR, _ΓL) <- Context.split α _Γ₀ `orDie` "InstLRecord"
-            ρ <- fresh
-            set (_ΓR <> (Context.Solved α (Monotype.Record (Monotype.Fields [] (Just ρ))) : Context.Unsolved ρ : _ΓL))
+            (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstLRecord"
+            ρ <- freshRow
+            set (_ΓR <> (Context.Solved α (Monotype.Record (Monotype.Fields [] (Just ρ))) : Context.UnsolvedRow ρ : _ΓL))
             instantiateRowL ρ r
 
 {-| This corresponds to the judgment:
@@ -487,20 +496,22 @@ instantiateL α _A₀ = do
     … which updates the context Γ to produce the new context Δ, by instantiating
     α̂ such that A :< α̂.
 -}
-instantiateR :: (MonadState Status m, MonadError Text m) => Type -> Int -> m ()
+instantiateR
+    :: (MonadState Status m, MonadError Text m)
+    => Type -> ExistentialType -> m ()
 instantiateR _A₀ α = do
     _Γ₀ <- get
 
     let instRSolve _A τ = do
-            (_Γ', _Γ) <- Context.split α _Γ₀ `orDie` "InstRSolve"
+            (_Γ', _Γ) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstRSolve"
             wellFormedType _Γ _A
             set (_Γ' <> (Context.Solved α τ : _Γ))
 
     case _A₀ of
         -- InstRReach
         Type.Unsolved β
-            | Just (_ΓR, _Γ₁) <- Context.split β _Γ₀
-            , Just (_ΓM, _ΓL) <- Context.split α _Γ₁ -> do
+            | Just (_ΓR, _Γ₁) <- Context.splitOnUnsolved β _Γ₀
+            , Just (_ΓM, _ΓL) <- Context.splitOnUnsolved α _Γ₁ -> do
                 set (_ΓR <> (Context.Solved β (Monotype.Unsolved α) : _ΓM) <> (Context.Unsolved α : _ΓL))
         -- InstRSolve
         Type.Unsolved β -> do
@@ -511,9 +522,9 @@ instantiateR _A₀ α = do
             instRSolve Type.Bool Monotype.Bool
         -- InstRArr
         Type.Function _A₁ _A₂ -> do
-            (_ΓR, _ΓL) <- Context.split α _Γ₀ `orDie` "InstRArr"
-            α₁ <- fresh
-            α₂ <- fresh
+            (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstRArr"
+            α₁ <- freshType
+            α₂ <- freshType
             set (_ΓR <> (Context.Solved α (Monotype.Function (Monotype.Unsolved α₁) (Monotype.Unsolved α₂)) : Context.Unsolved α₁ : Context.Unsolved α₂ : _ΓL))
             instantiateL α₁ _A₁
             _Θ <- get
@@ -521,7 +532,7 @@ instantiateR _A₀ α = do
         -- InstRAllL
         Type.Forall β₀ _B
             | Context.Unsolved α `elem` _Γ₀ -> do
-                β₁ <- fresh
+                β₁ <- freshType
                 push (Context.Marker β₁)
                 push (Context.Unsolved β₁)
                 instantiateR (Type.substitute β₀ 0 (Type.Unsolved β₁) _B) α
@@ -539,25 +550,58 @@ instantiateR _A₀ α = do
                 #{listToText _Γ₀}
                 |]
         Type.List _A -> do
-            (_ΓR, _ΓL) <- Context.split α _Γ₀ `orDie` "InstRArr"
-            α₁ <- fresh
+            (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstRArr"
+            α₁ <- freshType
             set (_ΓR <> (Context.Solved α (Monotype.List (Monotype.Unsolved α₁)) : Context.Unsolved α₁ : _ΓL))
             instantiateR _A α₁
         Type.Record r -> do
-            (_ΓR, _ΓL) <- Context.split α _Γ₀ `orDie` "InstRRecord"
-            ρ <- fresh
-            set (_ΓR <> (Context.Solved α (Monotype.Record (Monotype.Fields [] (Just ρ))) : Context.Unsolved ρ : _ΓL))
+            (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstRRecord"
+            ρ <- freshRow
+            set (_ΓR <> (Context.Solved α (Monotype.Record (Monotype.Fields [] (Just ρ))) : Context.UnsolvedRow ρ : _ΓL))
             instantiateRowR r ρ
 
+equateRows
+    :: (MonadState Status m, MonadError Text m)
+    => ExistentialRow -> ExistentialRow -> m ()
+equateRows ρ₀ ρ₁ = do
+    _Γ₀ <- get
+
+    let ρ₁First = do
+            (_ΓR, _Γ₁) <- Context.splitOnUnsolvedRow ρ₀ _Γ₀
+            (_ΓM, _ΓL) <- Context.splitOnUnsolvedRow ρ₁ _Γ₁
+            return (set (_ΓR <> (Context.SolvedRow ρ₀ (Monotype.Fields [] (Just ρ₁)) : _ΓM) <> (Context.UnsolvedRow ρ₁ : _ΓL)))
+
+    let ρ₀First = do
+            (_ΓR, _Γ₁) <- Context.splitOnUnsolvedRow ρ₁ _Γ₀
+            (_ΓM, _ΓL) <- Context.splitOnUnsolvedRow ρ₀ _Γ₁
+            return (set (_ΓR <> (Context.SolvedRow ρ₁ (Monotype.Fields [] (Just ρ₀)) : _ΓM) <> (Context.UnsolvedRow ρ₀ : _ΓL)))
+
+    case ρ₁First <|> ρ₀First of
+        Nothing -> do
+            Except.throwError [__i|
+            Internal error: Invalid context
+
+            One of the following row type variables:
+
+            #{listToText [Context.UnsolvedRow ρ₀, Context.UnsolvedRow ρ₁ ]}
+
+            … is missing from the following context:
+
+            #{listToText _Γ₀}
+            |]
+        Just setContext -> do
+            setContext
+
 instantiateRowL
-    :: (MonadState Status m, MonadError Text m) => Int -> Type.Record -> m ()
+    :: (MonadState Status m, MonadError Text m)
+    => ExistentialRow -> Type.Record -> m ()
 instantiateRowL ρ₀ (Type.Fields kAs (Just ρ₁)) = do
     let process (k, _A) = do
-            β <- fresh
+            β <- freshType
 
             return (k, _A, β)
 
-    ρ₂ <- fresh
+    ρ₂ <- freshRow
 
     kAβs <- traverse process kAs
 
@@ -566,21 +610,21 @@ instantiateRowL ρ₀ (Type.Fields kAs (Just ρ₁)) = do
 
     _Γ <- get
 
-    (_ΓR, _ΓL) <- Context.split ρ₀ _Γ `orDie` "instantiateRowL"
+    (_ΓR, _ΓL) <- Context.splitOnUnsolvedRow ρ₀ _Γ `orDie` "instantiateRowL"
 
-    set (_ΓR <> (Context.SolvedRow ρ₀ (Monotype.Fields kβs (Just ρ₂)) : Context.Unsolved ρ₂ : βs <> _ΓL))
+    set (_ΓR <> (Context.SolvedRow ρ₀ (Monotype.Fields kβs (Just ρ₂)) : Context.UnsolvedRow ρ₂ : βs <> _ΓL))
 
     let instantiate (_, _A, β) = do
             _Θ <- get
 
             instantiateL β (Context.solve _Θ _A)
 
-    instantiateL ρ₂ (Type.Unsolved ρ₁)
-
     traverse_ instantiate kAβs
+
+    equateRows ρ₁ ρ₂
 instantiateRowL ρ₀ (Type.Fields kAs Nothing) = do
     let process (k, _A) = do
-            β <- fresh
+            β <- freshType
 
             return (k, _A, β)
 
@@ -591,7 +635,7 @@ instantiateRowL ρ₀ (Type.Fields kAs Nothing) = do
 
     _Γ <- get
 
-    (_ΓR, _ΓL) <- Context.split ρ₀ _Γ `orDie` "instantiateRowL"
+    (_ΓR, _ΓL) <- Context.splitOnUnsolvedRow ρ₀ _Γ `orDie` "instantiateRowL"
 
     set (_ΓR <> (Context.SolvedRow ρ₀ (Monotype.Fields kβs Nothing) : βs <> _ΓL))
 
@@ -603,37 +647,38 @@ instantiateRowL ρ₀ (Type.Fields kAs Nothing) = do
     traverse_ instantiate kAβs
 
 instantiateRowR
-    :: (MonadState Status m, MonadError Text m) => Type.Record -> Int -> m ()
+    :: (MonadState Status m, MonadError Text m)
+    => Type.Record -> ExistentialRow -> m ()
 instantiateRowR (Type.Fields kAs (Just ρ₁)) ρ₀ = do
     let process (k, _A) = do
-            β <- fresh
+            β <- freshType
 
             return (k, _A, β)
 
-    ρ₂ <- fresh
+    ρ₂ <- freshRow
 
     kAβs <- traverse process kAs
 
     _Γ <- get
 
-    (_ΓR, _ΓL) <- Context.split ρ₀ _Γ `orDie` "instantiateRowR"
+    (_ΓR, _ΓL) <- Context.splitOnUnsolvedRow ρ₀ _Γ `orDie` "instantiateRowR"
 
     let βs  = map (\(_, _, β) -> Context.Unsolved β      ) kAβs
     let kβs = map (\(k, _, β) -> (k, Monotype.Unsolved β)) kAβs
 
-    set (_ΓR <> (Context.SolvedRow ρ₀ (Monotype.Fields kβs (Just ρ₂)) : Context.Unsolved ρ₂ : βs <> _ΓL))
+    set (_ΓR <> (Context.SolvedRow ρ₀ (Monotype.Fields kβs (Just ρ₂)) : Context.UnsolvedRow ρ₂ : βs <> _ΓL))
 
     let instantiate (_, _A, β) = do
             _Θ <- get
 
             instantiateR (Context.solve _Θ _A) β
 
-    instantiateR (Type.Unsolved ρ₁) ρ₂
-
     traverse_ instantiate kAβs
+
+    equateRows ρ₁ ρ₂
 instantiateRowR (Type.Fields kAs Nothing) ρ₀ = do
     let process (k, _A) = do
-            β <- fresh
+            β <- freshType
 
             return (k, _A, β)
 
@@ -641,7 +686,7 @@ instantiateRowR (Type.Fields kAs Nothing) ρ₀ = do
 
     _Γ <- get
 
-    (_ΓR, _ΓL) <- Context.split ρ₀ _Γ `orDie` "instantiateRowR"
+    (_ΓR, _ΓL) <- Context.splitOnUnsolvedRow ρ₀ _Γ `orDie` "instantiateRowR"
 
     let βs  = map (\(_, _, β) -> Context.Unsolved β      ) kAβs
     let kβs = map (\(k, _, β) -> (k, Monotype.Unsolved β)) kAβs
@@ -674,8 +719,8 @@ infer (Syntax.Variable x₀ n) = do
             Unbound variable: ${x₀ <> if n == 0 then "" else "@" <> Text.pack (show n)}
             |]
 infer (Syntax.Lambda x e) = do
-    α <- fresh
-    β <- fresh
+    α <- freshType
+    β <- freshType
     push (Context.Unsolved α)
     push (Context.Unsolved β)
     push (Context.Annotation x (Type.Unsolved α))
@@ -705,7 +750,7 @@ infer (Syntax.Let x (Just _A) a b) = do
 infer (Syntax.List xs) = do
     case xs of
         [] -> do
-            α <- fresh
+            α <- freshType
             push (Context.Unsolved α)
             return (Type.List (Type.Unsolved α))
         y : ys -> do
@@ -719,10 +764,10 @@ infer (Syntax.Record kvs) = do
     kAs <- traverse process kvs
     return (Type.Record (Type.Fields kAs Nothing))
 infer (Syntax.Field record key) = do
-    α <- fresh
-    ρ <- fresh
+    α <- freshType
+    ρ <- freshRow
     push (Context.Unsolved α)
-    push (Context.Unsolved ρ)
+    push (Context.UnsolvedRow ρ)
     check record (Type.Record (Type.Fields [(key, Type.Unsolved α)] (Just ρ)))
     return (Type.Unsolved α)
 infer (Syntax.If predicate l r) = do
@@ -780,15 +825,15 @@ inferApplication
     :: (MonadState Status m, MonadError Text m) => Type -> Syntax -> m Type
 -- ∀App
 inferApplication (Type.Forall α₀ _A) e = do
-    α₁ <- fresh
+    α₁ <- freshType
     push (Context.Unsolved α₁)
     inferApplication (Type.substitute α₀ 0 (Type.Unsolved α₁) _A) e
 -- αApp
 inferApplication (Type.Unsolved α) e = do
     _Γ <- get
-    (_ΓR, _ΓL) <- Context.split α _Γ `orDie` "αApp"
-    α₁ <- fresh
-    α₂ <- fresh
+    (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ `orDie` "αApp"
+    α₁ <- freshType
+    α₂ <- freshType
     set (_ΓR <> (Context.Solved α (Monotype.Function (Monotype.Unsolved α₁) (Monotype.Unsolved α₂)) : Context.Unsolved α₁ : Context.Unsolved α₂ : _ΓL))
     check e (Type.Unsolved α₁)
     return (Type.Unsolved α₂)

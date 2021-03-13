@@ -6,11 +6,13 @@ module Grace.Monotype
       Monotype(..)
     , Record(..)
 
-    , toVariable
+    , existentialTypeToVariable
+    , existentialRowToVariable
     ) where
 
 import Data.Text (Text)
 import Data.Text.Prettyprint.Doc (Doc, Pretty(..))
+import Grace.Existential (ExistentialRow(..), ExistentialType(..))
 
 import qualified Data.Char as Char
 import qualified Data.Text as Text
@@ -22,7 +24,7 @@ data Monotype
     --
     -- >>> pretty (Variable "a")
     -- a
-    | Unsolved Int
+    | Unsolved ExistentialType
     -- ^ A placeholder variable whose type has not yet been inferred
     --
     -- >>> pretty (Unsolved 0)
@@ -54,7 +56,7 @@ data Monotype
 instance Pretty Monotype where
     pretty = prettyMonotype
 
-data Record = Fields [(Text, Monotype)] (Maybe Int)
+data Record = Fields [(Text, Monotype)] (Maybe ExistentialRow)
     deriving (Eq, Show)
 
 prettyMonotype :: Monotype -> Doc a
@@ -71,7 +73,7 @@ prettyPrimitiveType :: Monotype -> Doc a
 prettyPrimitiveType (Variable α) =
     pretty α
 prettyPrimitiveType (Unsolved α) =
-    pretty (toVariable α) <> "?"
+    pretty (existentialTypeToVariable α) <> "?"
 prettyPrimitiveType (Record r) =
     prettyRecordType r
 prettyPrimitiveType Bool =
@@ -83,7 +85,7 @@ prettyRecordType :: Record -> Doc a
 prettyRecordType (Fields [] Nothing) =
     "{ }"
 prettyRecordType (Fields [] (Just ρ)) =
-    "{ " <> pretty (toVariable ρ) <> " }"
+    "{ " <> pretty (existentialRowToVariable ρ) <> " }"
 prettyRecordType (Fields ((key₀, type₀) : keyTypes) Nothing) =
         "{ "
     <>  pretty key₀
@@ -98,15 +100,15 @@ prettyRecordType (Fields ((key₀, type₀) : keyTypes) (Just ρ)) =
     <>  prettyMonotype type₀
     <>  foldMap prettyKeyType keyTypes
     <>  " | "
-    <>  pretty (toVariable ρ)
+    <>  pretty (existentialRowToVariable ρ)
     <>  " }"
 
 prettyKeyType :: (Text, Monotype) -> Doc a
 prettyKeyType (key, monotype) =
     ", " <> pretty key <> " : " <> prettyMonotype monotype
 
-{-| Convert an unbound variable (internally represented as an `Int`) to a
-    user-friendly `Text` representation
+{-| Convert an existential type variable to a user-friendly `Text`
+    representation
 
 >>> toVariable 0
 "a"
@@ -115,11 +117,19 @@ prettyKeyType (key, monotype) =
 >>> toVariable 26
 "a0"
 -}
-toVariable :: Int -> Text
-toVariable n = Text.cons prefix suffix
+existentialTypeToVariable :: ExistentialType -> Text
+existentialTypeToVariable (ExistentialType n) = Text.cons prefix suffix
   where
     (q, r) = n `quotRem` 26
 
     prefix = Char.chr (Char.ord 'a' + r)
 
     suffix = if q == 0 then "" else Text.pack (show (q - 1))
+
+{-| Convert an existential row variable to a user-friendly `Text` representation
+
+    Currently this uses the same logic as `existentialTypeTOVariable`
+-}
+existentialRowToVariable :: ExistentialRow -> Text
+existentialRowToVariable (ExistentialRow n) =
+    existentialTypeToVariable (ExistentialType n)

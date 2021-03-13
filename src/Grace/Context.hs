@@ -8,7 +8,8 @@ module Grace.Context
 
       -- * Utilities
     , lookup
-    , split
+    , splitOnUnsolved
+    , splitOnUnsolvedRow
     , discardUpTo
     , solve
     , solveRecord
@@ -16,6 +17,7 @@ module Grace.Context
     ) where
 
 import Data.Text (Text)
+import Grace.Existential (ExistentialRow, ExistentialType)
 import Grace.Monotype (Monotype)
 import Grace.Type (Type)
 import Prelude hiding (lookup)
@@ -39,25 +41,29 @@ data Entry
     --
     -- >>> pretty (Annotation "x" (Type.Variable "a"))
     -- x : a
-    | Unsolved Int
-    -- ^ A placeholder type variable or row variable whose type has not yet been
-    -- inferred
+    | Unsolved ExistentialType
+    -- ^ A placeholder type variable whose type has not yet been inferred
     --
     -- >>> pretty (Unsolved 0)
     -- a?
-    | Solved Int Monotype
+    | UnsolvedRow ExistentialRow
+    -- ^ A placeholder row type variable whose type has not yet been inferred
+    --
+    -- >>> pretty (UnsolvedRow 0)
+    -- |a?
+    | Solved ExistentialType Monotype
     -- ^ A placeholder variable whose type has been (at least partially)
     --   inferred
     --
     -- >>> pretty (Solved 0 Monotype.Bool)
     -- a = Bool
-    | SolvedRow Int Monotype.Record
+    | SolvedRow ExistentialRow Monotype.Record
     -- ^ A placeholder variable whose type has been (at least partially)
     --   inferred
     --
     -- >>> pretty (SolvedRow 0 Monotype.Bool)
     -- a = Bool
-    | Marker Int
+    | Marker ExistentialType
     -- ^ This is used by the bidirectional type-checking algorithm to separate
     --   context entries introduced before and after type-checking a universally
     --   quantified type
@@ -102,35 +108,39 @@ prettyEntry :: Entry -> Doc a
 prettyEntry (Variable α) =
     Pretty.pretty α
 prettyEntry (Unsolved α) =
-    Pretty.pretty (Monotype.toVariable α) <> "?"
+    Pretty.pretty (Monotype.existentialTypeToVariable α) <> "?"
+prettyEntry (UnsolvedRow ρ) =
+    "|" <> Pretty.pretty (Monotype.existentialRowToVariable ρ) <> "?"
 prettyEntry (Solved α τ) =
-    Pretty.pretty (Monotype.toVariable α) <> " = " <> Pretty.pretty τ
-prettyEntry (SolvedRow α (Monotype.Fields [] Nothing)) =
-    Pretty.pretty (Monotype.toVariable α) <> " = •"
-prettyEntry (SolvedRow α (Monotype.Fields [] (Just β))) =
-        Pretty.pretty (Monotype.toVariable α)
+        Pretty.pretty (Monotype.existentialTypeToVariable α)
+    <>  " = "
+    <>  Pretty.pretty τ
+prettyEntry (SolvedRow ρ (Monotype.Fields [] Nothing)) =
+    Pretty.pretty (Monotype.existentialRowToVariable ρ) <> " = •"
+prettyEntry (SolvedRow ρ₀ (Monotype.Fields [] (Just ρ₁))) =
+        Pretty.pretty (Monotype.existentialRowToVariable ρ₀)
     <>  " = • | "
-    <>  Pretty.pretty (Monotype.toVariable β)
-prettyEntry (SolvedRow α (Monotype.Fields ((k₀, τ₀) : kτs) Nothing)) =
-    Pretty.pretty (Monotype.toVariable α)
+    <>  Pretty.pretty (Monotype.existentialRowToVariable ρ₁)
+prettyEntry (SolvedRow ρ (Monotype.Fields ((k₀, τ₀) : kτs) Nothing)) =
+    Pretty.pretty (Monotype.existentialRowToVariable ρ)
     <> " = "
     <> Pretty.pretty k₀
     <> " : "
     <> Pretty.pretty τ₀
     <> foldMap prettyKeyType kτs
-prettyEntry (SolvedRow α (Monotype.Fields ((k₀, τ₀) : kτs) (Just β))) =
-    Pretty.pretty (Monotype.toVariable α)
+prettyEntry (SolvedRow ρ₀ (Monotype.Fields ((k₀, τ₀) : kτs) (Just ρ₁))) =
+    Pretty.pretty (Monotype.existentialRowToVariable ρ₀)
     <> " = "
     <> Pretty.pretty k₀
     <> " : "
     <> Pretty.pretty τ₀
     <> foldMap prettyKeyType kτs
     <> " | "
-    <> Pretty.pretty (Monotype.toVariable β)
+    <> Pretty.pretty (Monotype.existentialRowToVariable ρ₁)
 prettyEntry (Annotation x α) =
     Pretty.pretty x <> " : " <> Pretty.pretty α
 prettyEntry (Marker α) =
-    "➤" <> Pretty.pretty (Monotype.toVariable α)
+    "➤" <> Pretty.pretty (Monotype.existentialTypeToVariable α)
 
 prettyKeyType :: (Text, Monotype) -> Doc a
 prettyKeyType (k, τ) = ", " <> Pretty.pretty k <> " : " <> Pretty.pretty τ
@@ -175,9 +185,20 @@ complete context type_ = do
 
         State.put $! n + 1
 
-        let a = Monotype.toVariable n
+        let a = Monotype.existentialTypeToVariable n
 
         return (Type.Forall a (Type.solve α (Monotype.Variable a) t))
+-- TODO: Allow for user-visible row polymorphism so that this can be implemented
+{-
+    snoc t (UnsolvedRow ρ) = do
+        n <- State.get
+
+        State.put $! n + 1
+
+        let a = Monotype.toVariable n
+
+        return (Type.Forall a (Type.solveRow ρ (Monotype.Fields [] (Just a)) t))
+-}
     snoc t  _           = do
         return t
 
@@ -192,17 +213,40 @@ complete context type_ = do
     >>> split 0 [ Unsolved 1, Solved 0 Monotype.Bool ]
     Nothing
 -}
-split
-    :: Int
-    -- ^ `Unsolved` variable to split on
+splitOnUnsolved
+    :: ExistentialType
+    -- ^ `Unsolved` variable to splitOnUnsolved on
     -> Context
     -> Maybe (Context, Context)
-split α₀ (Unsolved α₁ : entries)
+splitOnUnsolved α₀ (Unsolved α₁ : entries)
     | α₀ == α₁ = return ([], entries)
-split α (entry : entries) = do
-    (prefix, suffix) <- split α entries
+splitOnUnsolved α (entry : entries) = do
+    (prefix, suffix) <- splitOnUnsolved α entries
     return (entry : prefix, suffix)
-split _ [] = Nothing
+splitOnUnsolved _ [] = Nothing
+
+{-| Split a `Context` into two `Context`s before and after the given
+    `UnsolvedRow` variable.  Neither `Context` contains the variable
+
+    Returns `Nothing` if no such `UnsolvedRow` variable is present within the
+    `Context`
+
+    >>> split 1 [ UnsolvedRow 1, Solved 0 Monotype.Bool ]
+    Just ([],[Solved 0 Bool])
+    >>> split 0 [ UnsolvedRow 1, Solved 0 Monotype.Bool ]
+    Nothing
+-}
+splitOnUnsolvedRow
+    :: ExistentialRow
+    -- ^ `UnsolvedRow` variable to split on
+    -> Context
+    -> Maybe (Context, Context)
+splitOnUnsolvedRow ρ₀ (UnsolvedRow ρ₁ : entries)
+    | ρ₀ == ρ₁ = return ([], entries)
+splitOnUnsolvedRow ρ (entry : entries) = do
+    (prefix, suffix) <- splitOnUnsolvedRow ρ entries
+    return (entry : prefix, suffix)
+splitOnUnsolvedRow _ [] = Nothing
 
 {-| Retrieve a variable's annotated type from a `Context`, given the variable's
     label and index
