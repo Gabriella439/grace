@@ -11,6 +11,7 @@ module Grace.Context
     , split
     , discardUpTo
     , solve
+    , solveRecord
     , complete
     ) where
 
@@ -50,7 +51,7 @@ data Entry
     --
     -- >>> pretty (Solved 0 Monotype.Bool)
     -- a = Bool
-    | SolvedRow Int [(Text, Monotype)] (Maybe Int)
+    | SolvedRow Int Monotype.Record
     -- ^ A placeholder variable whose type has been (at least partially)
     --   inferred
     --
@@ -104,31 +105,28 @@ prettyEntry (Unsolved α) =
     Pretty.pretty (Monotype.toVariable α) <> "?"
 prettyEntry (Solved α τ) =
     Pretty.pretty (Monotype.toVariable α) <> " = " <> Pretty.pretty τ
-prettyEntry (SolvedRow α [] Nothing) =
-    Pretty.pretty (Monotype.toVariable α) <> " = { }"
-prettyEntry (SolvedRow α [] (Just β)) =
+prettyEntry (SolvedRow α (Monotype.Fields [] Nothing)) =
+    Pretty.pretty (Monotype.toVariable α) <> " = •"
+prettyEntry (SolvedRow α (Monotype.Fields [] (Just β))) =
         Pretty.pretty (Monotype.toVariable α)
-    <>  " = { "
+    <>  " = • | "
     <>  Pretty.pretty (Monotype.toVariable β)
-    <>  " }"
-prettyEntry (SolvedRow α ((k₀, τ₀) : kτs) Nothing) =
+prettyEntry (SolvedRow α (Monotype.Fields ((k₀, τ₀) : kτs) Nothing)) =
     Pretty.pretty (Monotype.toVariable α)
-    <> " = { "
+    <> " = "
     <> Pretty.pretty k₀
     <> " : "
     <> Pretty.pretty τ₀
     <> foldMap prettyKeyType kτs
-    <> " }"
-prettyEntry (SolvedRow α ((k₀, τ₀) : kτs) (Just β)) =
+prettyEntry (SolvedRow α (Monotype.Fields ((k₀, τ₀) : kτs) (Just β))) =
     Pretty.pretty (Monotype.toVariable α)
-    <> " = { "
+    <> " = "
     <> Pretty.pretty k₀
     <> " : "
     <> Pretty.pretty τ₀
     <> foldMap prettyKeyType kτs
     <> " | "
     <> Pretty.pretty (Monotype.toVariable β)
-    <> " }"
 prettyEntry (Annotation x α) =
     Pretty.pretty x <> " : " <> Pretty.pretty α
 prettyEntry (Marker α) =
@@ -145,9 +143,15 @@ prettyKeyType (k, τ) = ", " <> Pretty.pretty k <> " : " <> Pretty.pretty τ
 solve :: Context -> Type -> Type
 solve context type_ = foldl snoc type_ context
   where
-    snoc t (Solved α τ       ) = Type.solve α τ t
-    snoc t (SolvedRow α kτs β) = Type.solveRow α kτs β t
-    snoc t  _                  = t
+    snoc t (Solved    α τ) = Type.solve    α τ t
+    snoc t (SolvedRow α r) = Type.solveRow α r t
+    snoc t  _              = t
+
+solveRecord :: Context -> Type.Record -> Type.Record
+solveRecord context record = record'
+  where
+    -- TODO: Come up with total solution
+    Type.Record record' = solve context (Type.Record record)
 
 {-| This function is used at the end of the bidirectional type-checking
     algorithm to complete the inferred type by:
@@ -164,10 +168,8 @@ complete :: Context -> Type -> Type
 complete context type_ = do
     State.evalState (Monad.foldM snoc type_ context) 0
   where
-    snoc t (Solved α τ) = do
-        return (Type.solve α τ t)
-    snoc t (SolvedRow α kτs β) = do
-        return (Type.solveRow α kτs β t)
+    snoc t (Solved    α τ) = do return (Type.solve    α τ t)
+    snoc t (SolvedRow α r) = do return (Type.solveRow α r t)
     snoc t (Unsolved α) = do
         n <- State.get
 

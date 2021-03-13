@@ -4,6 +4,7 @@
 module Grace.Monotype
     ( -- * Types
       Monotype(..)
+    , Record(..)
 
     , toVariable
     ) where
@@ -36,7 +37,7 @@ data Monotype
     --
     -- >>> pretty (List (Variable "a"))
     -- List a
-    | Record [(Text, Monotype)] (Maybe Int)
+    | Record Record
     -- ^ Record type
     --
     -- >>> pretty (Record [("x", Variable "X"), ("y", Variable "Y")] Nothing)
@@ -53,6 +54,9 @@ data Monotype
 instance Pretty Monotype where
     pretty = prettyMonotype
 
+data Record = Fields [(Text, Monotype)] (Maybe Int)
+    deriving (Eq, Show)
+
 prettyMonotype :: Monotype -> Doc a
 prettyMonotype (Function _A _B) =
     prettyApplicationType _A <> " -> " <> prettyMonotype _B
@@ -68,18 +72,26 @@ prettyPrimitiveType (Variable α) =
     pretty α
 prettyPrimitiveType (Unsolved α) =
     pretty (toVariable α) <> "?"
-prettyPrimitiveType (Record [] Nothing) =
+prettyPrimitiveType (Record r) =
+    prettyRecordType r
+prettyPrimitiveType Bool =
+    "Bool"
+prettyPrimitiveType other =
+    "(" <> prettyMonotype other <> ")"
+
+prettyRecordType :: Record -> Doc a
+prettyRecordType (Fields [] Nothing) =
     "{ }"
-prettyPrimitiveType (Record [] (Just ρ)) =
+prettyRecordType (Fields [] (Just ρ)) =
     "{ " <> pretty (toVariable ρ) <> " }"
-prettyPrimitiveType (Record ((key₀, type₀) : keyTypes) Nothing) =
+prettyRecordType (Fields ((key₀, type₀) : keyTypes) Nothing) =
         "{ "
     <>  pretty key₀
     <>  " : "
     <>  prettyMonotype type₀
     <>  foldMap prettyKeyType keyTypes
     <>  " }"
-prettyPrimitiveType (Record ((key₀, type₀) : keyTypes) (Just ρ)) =
+prettyRecordType (Fields ((key₀, type₀) : keyTypes) (Just ρ)) =
         "{ "
     <>  pretty key₀
     <>  " : "
@@ -88,10 +100,6 @@ prettyPrimitiveType (Record ((key₀, type₀) : keyTypes) (Just ρ)) =
     <>  " | "
     <>  pretty (toVariable ρ)
     <>  " }"
-prettyPrimitiveType Bool =
-    "Bool"
-prettyPrimitiveType other =
-    "(" <> prettyMonotype other <> ")"
 
 prettyKeyType :: (Text, Monotype) -> Doc a
 prettyKeyType (key, monotype) =

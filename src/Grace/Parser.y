@@ -155,7 +155,7 @@ PrimitiveType
     | label
         { Type.Variable $1 }
     | '{' RecordType '}'
-        { Type.Record $2 Nothing }
+        { Type.Record (Type.Fields $2 Nothing) }
     | '(' Type ')'
         { $2 }
 

@@ -4,6 +4,7 @@
 module Grace.Type
     ( -- * Types
       Type(..)
+    , Record(..)
 
       -- * Utilities
     , solve
@@ -46,7 +47,7 @@ data Type
     --
     -- >>> pretty (List (Variable "a"))
     -- List a
-    | Record [(Text, Type)] (Maybe Int)
+    | Record Record
     -- ^ Record type
     --
     -- >>> pretty (Record [("x", Variable "X"), ("y", Variable "Y")] Nothing)
@@ -58,6 +59,9 @@ data Type
     --
     -- >>> pretty Bool
     -- Bool
+    deriving (Eq, Ord, Show)
+
+data Record = Fields [(Text, Type)] (Maybe Int)
     deriving (Eq, Ord, Show)
 
 instance Pretty Type where
@@ -72,8 +76,8 @@ fromMonotype (Monotype.Function τ σ) =
     Function (fromMonotype τ) (fromMonotype σ)
 fromMonotype (Monotype.List τ) =
     List (fromMonotype τ)
-fromMonotype (Monotype.Record kτs ρ) =
-    Record (map (\(k, τ) -> (k, fromMonotype τ)) kτs) ρ
+fromMonotype (Monotype.Record (Monotype.Fields kτs ρ)) =
+    Record (Fields (map (\(k, τ) -> (k, fromMonotype τ)) kτs) ρ)
 fromMonotype Monotype.Bool =
     Bool
 
@@ -92,33 +96,33 @@ solve α τ (Function _A _B) =
     Function (solve α τ _A) (solve α τ _B)
 solve α τ (List _A) =
     List (solve α τ _A)
-solve α τ (Record kAs ρ) =
-    Record (map (\(k, _A) -> (k, solve α τ _A)) kAs) ρ
+solve α τ (Record (Fields kAs ρ)) =
+    Record (Fields (map (\(k, _A) -> (k, solve α τ _A)) kAs) ρ)
 solve _ _ Bool =
     Bool
 
 {-| Substitute a `Type` by replacing all occurrences of the given unsolved
-    variable with a `Monotype`
+    row variable with a `Record`
 -}
-solveRow :: Int -> [(Text, Monotype)] -> Maybe Int -> Type -> Type
-solveRow _ _ _ (Variable α) =
+solveRow :: Int -> Monotype.Record -> Type -> Type
+solveRow _ _ (Variable α) =
     Variable α
-solveRow _ _ _ (Unsolved α) =
+solveRow _ _ (Unsolved α) =
     Unsolved α
-solveRow ρ₀ kτs ρ₁ (Forall α _A) =
-    Forall α (solveRow ρ₀ kτs ρ₁ _A)
-solveRow ρ₀ kτs ρ₁ (Function _A _B) =
-    Function (solveRow ρ₀ kτs ρ₁ _A) (solveRow ρ₀ kτs ρ₁ _B)
-solveRow ρ₀ kτs ρ₁ (List _A) =
-    List (solveRow ρ₀ kτs ρ₁ _A)
-solveRow ρ₀ kτs ρ₁ (Record kAs₀ ρ)
+solveRow ρ₀ r (Forall α _A) =
+    Forall α (solveRow ρ₀ r _A)
+solveRow ρ₀ r (Function _A _B) =
+    Function (solveRow ρ₀ r _A) (solveRow ρ₀ r _B)
+solveRow ρ₀ r (List _A) =
+    List (solveRow ρ₀ r _A)
+solveRow ρ₀ r@(Monotype.Fields kτs ρ₁) (Record (Fields kAs₀ ρ))
     | Just ρ₀ == ρ =
-        Record (map (\(k, _A) -> (k, solveRow ρ₀ kτs ρ₁ _A)) kAs₁) ρ₁
+        Record (Fields (map (\(k, _A) -> (k, solveRow ρ₀ r _A)) kAs₁) ρ₁)
     | otherwise =
-        Record (map (\(k, _A) -> (k, solveRow ρ₀ kτs ρ₁ _A)) kAs₀) ρ
+        Record (Fields (map (\(k, _A) -> (k, solveRow ρ₀ r _A)) kAs₀) ρ)
   where
     kAs₁ = kAs₀ <> map (\(k, τ) -> (k, fromMonotype τ)) kτs
-solveRow _ _ _ Bool =
+solveRow _ _ Bool =
     Bool
 
 {-| Replace all occurrences of a variable within one `Type` with another `Type`,
@@ -141,20 +145,20 @@ substitute α n _A₀ (Function _A₁ _B) =
     Function (substitute α n _A₀ _A₁) (substitute α n _A₀ _B)
 substitute α n _A₀ (List _A₁) =
     List (substitute α n _A₀ _A₁)
-substitute α n _A₀ (Record kAs ρ) =
-    Record (map (\(k, _A₁) -> (k, substitute α n _A₀ _A₁)) kAs) ρ
+substitute α n _A₀ (Record (Fields kAs ρ)) =
+    Record (Fields (map (\(k, _A₁) -> (k, substitute α n _A₀ _A₁)) kAs) ρ)
 substitute _ _ _ Bool =
     Bool
 
 -- | Count how many times the given `Unsolved` variable appears within a `Type`
 freeIn :: Int -> Type -> Bool
-_  `freeIn` Variable _     = False
-α₀ `freeIn` Unsolved α₁    = α₀ == α₁
-α  `freeIn` Forall _ _A    = α `freeIn` _A
-α  `freeIn` Function _A _B = α `freeIn` _A || α `freeIn` _B
-α  `freeIn` List _A        = α `freeIn` _A
-α  `freeIn` Record kAs _   = any (\(_, _A) -> α `freeIn` _A) kAs
-_  `freeIn` Bool           = False
+_  `freeIn` Variable _            = False
+α₀ `freeIn` Unsolved α₁           = α₀ == α₁
+α  `freeIn` Forall _ _A           = α `freeIn` _A
+α  `freeIn` Function _A _B        = α `freeIn` _A || α `freeIn` _B
+α  `freeIn` List _A               = α `freeIn` _A
+_  `freeIn` Bool                  = False
+α  `freeIn` Record (Fields kAs ρ) = any (\(_, _A) -> α `freeIn` _A) kAs
 
 prettyType :: Type -> Doc a
 prettyType (Forall α _A) =
@@ -176,18 +180,26 @@ prettyPrimitiveType (Variable α) =
     Pretty.pretty α
 prettyPrimitiveType (Unsolved α) =
     Pretty.pretty (Monotype.toVariable α) <> "?"
-prettyPrimitiveType (Record [] Nothing) =
+prettyPrimitiveType (Record r) =
+    prettyRecordType r
+prettyPrimitiveType Bool =
+    "Bool"
+prettyPrimitiveType other =
+    "(" <> prettyType other <> ")"
+
+prettyRecordType :: Record -> Doc a
+prettyRecordType (Fields [] Nothing) =
     "{ }"
-prettyPrimitiveType (Record [] (Just ρ)) =
+prettyRecordType (Fields [] (Just ρ)) =
     "{ " <> Pretty.pretty (Monotype.toVariable ρ) <> " }"
-prettyPrimitiveType (Record ((key₀, type₀) : keyTypes) Nothing) =
+prettyRecordType (Fields ((key₀, type₀) : keyTypes) Nothing) =
         "{ "
     <>  Pretty.pretty key₀
     <>  " : "
     <>  prettyType type₀
     <>  foldMap prettyKeyType keyTypes
     <>  " }"
-prettyPrimitiveType (Record ((key₀, type₀) : keyTypes) (Just ρ)) =
+prettyRecordType (Fields ((key₀, type₀) : keyTypes) (Just ρ)) =
         "{ "
     <>  Pretty.pretty key₀
     <>  " : "
@@ -196,10 +208,6 @@ prettyPrimitiveType (Record ((key₀, type₀) : keyTypes) (Just ρ)) =
     <>  " | "
     <>  Pretty.pretty (Monotype.toVariable ρ)
     <>  " }"
-prettyPrimitiveType Bool =
-    "Bool"
-prettyPrimitiveType other =
-    "(" <> prettyType other <> ")"
 
 prettyKeyType :: (Text, Type) -> Doc a
 prettyKeyType (key, type_) =

@@ -132,9 +132,9 @@ The following type:
     predicate  _                    = False
 wellFormedType _Γ (Type.List _A) = do
     wellFormedType _Γ _A
-wellFormedType _Γ (Type.Record kAs Nothing) = do
+wellFormedType _Γ (Type.Record (Type.Fields kAs Nothing)) = do
     traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
-wellFormedType _Γ (Type.Record kAs (Just ρ₀))
+wellFormedType _Γ (Type.Record (Type.Fields kAs (Just ρ₀)))
     | any predicate _Γ = do
         traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
     | otherwise = do
@@ -150,9 +150,9 @@ The following row type variable:
 #{listToText _Γ}
 |]
   where
-    predicate (Context.Unsolved ρ₁     ) = ρ₀ == ρ₁
-    predicate (Context.SolvedRow ρ₁ _ _) = ρ₀ == ρ₁
-    predicate  _                         = False
+    predicate (Context.Unsolved ρ₁   ) = ρ₀ == ρ₁
+    predicate (Context.SolvedRow ρ₁ _) = ρ₀ == ρ₁
+    predicate  _                       = False
 wellFormedType _Γ Type.Bool = do
     return ()
 
@@ -205,7 +205,7 @@ subtype _A₀ _B₀ = do
             return ()
         (Type.List _A, Type.List _B) -> do
             subtype _A _B
-        (Type.Record kAs₀ Nothing, Type.Record kBs₀ Nothing) -> do
+        (Type.Record (Type.Fields kAs₀ Nothing), Type.Record (Type.Fields kBs₀ Nothing)) -> do
             let mapA = Map.fromList kAs₀
             let mapB = Map.fromList kBs₀
 
@@ -277,7 +277,7 @@ subtype _A₀ _B₀ = do
                 _ <- Map.traverseWithKey process both
 
                 return ()
-        (Type.Record kAs₀ (Just ρ), Type.Record kBs₀ Nothing) -> do
+        (Type.Record (Type.Fields kAs₀ (Just ρ)), Type.Record (Type.Fields kBs₀ Nothing)) -> do
             let mapA = Map.fromList kAs₀
             let mapB = Map.fromList kBs₀
 
@@ -310,9 +310,10 @@ subtype _A₀ _B₀ = do
 
                 _ <- Map.traverseWithKey process both
 
-                instantiateRowL ρ (Map.toList extraB) Nothing
+                _Θ <- get
+                instantiateRowL ρ (Context.solveRecord _Θ (Type.Fields (Map.toList extraB) Nothing))
 
-        (Type.Record kAs₀ Nothing, Type.Record kBs₀ (Just ρ)) -> do
+        (Type.Record (Type.Fields kAs₀ Nothing), Type.Record (Type.Fields kBs₀ (Just ρ))) -> do
             let mapA = Map.fromList kAs₀
             let mapB = Map.fromList kBs₀
 
@@ -345,9 +346,10 @@ subtype _A₀ _B₀ = do
 
                 _ <- Map.traverseWithKey process both
 
-                instantiateRowR (Map.toList extraA) Nothing ρ
+                _Θ <- get
+                instantiateRowR (Context.solveRecord _Θ (Type.Fields (Map.toList extraA) Nothing)) ρ
 
-        (Type.Record kAs₀ (Just ρ₀), Type.Record kBs₀ (Just ρ₁)) -> do
+        (Type.Record (Type.Fields kAs₀ (Just ρ₀)), Type.Record (Type.Fields kBs₀ (Just ρ₁))) -> do
             let mapA = Map.fromList kAs₀
             let mapB = Map.fromList kBs₀
 
@@ -364,31 +366,39 @@ subtype _A₀ _B₀ = do
 
             ρ₂ <- fresh
 
-            let ρ₀First = do
-                    (_ΓR, _ΓL) <- Context.split ρ₀ _Γ
-                    _          <- Context.split ρ₁ _ΓL
-                    return (set (_ΓR <> (Context.Unsolved ρ₀ : Context.Unsolved ρ₂ : _ΓL)))
+            _Γ₀ <- get
 
             let ρ₁First = do
-                    (_ΓR, _ΓL) <- Context.split ρ₁ _Γ
-                    _          <- Context.split ρ₀ _ΓL
-                    return (set (_ΓR <> (Context.Unsolved ρ₁ : Context.Unsolved ρ₂ : _ΓL)))
+                    (_ΓR, _Γ₁) <- Context.split ρ₀ _Γ₀
+                    (_ΓM, _ΓL) <- Context.split ρ₁ _Γ₁
+                    return (set (_ΓR <> (Context.Unsolved ρ₀ : _ΓM) <> (Context.Unsolved ρ₁ : Context.Unsolved ρ₂ : _ΓL)))
+
+            let ρ₀First = do
+                    (_ΓR, _Γ₁) <- Context.split ρ₁ _Γ₀
+                    (_ΓM, _ΓL) <- Context.split ρ₀ _Γ₁
+                    return (set (_ΓR <> (Context.Unsolved ρ₁ : _ΓM) <> (Context.Unsolved ρ₀ : Context.Unsolved ρ₂ : _ΓL)))
 
             case ρ₀First <|> ρ₁First of
                 Nothing -> do
                     Except.throwError [__i|
                     Internal error: Invalid context
 
-                    One of the following row type variables is missing from the context:
+                    One of the following row type variables:
 
                     #{listToText [Type.Unsolved ρ₀, Type.Unsolved ρ₁ ]}
+
+                    … is missing from the following context:
+
+                    #{listToText _Γ}
                     |]
-                Just m -> do
-                    m
+                Just setContext -> do
+                    setContext
 
-            instantiateRowL ρ₀ (Map.toList extraB) (Just ρ₂)
+            _Θ <- get
+            instantiateRowL ρ₀ (Context.solveRecord _Θ (Type.Fields (Map.toList extraB) (Just ρ₂)))
 
-            instantiateRowR (Map.toList extraA) (Just ρ₂) ρ₁
+            _Δ <- get
+            instantiateRowR (Context.solveRecord _Δ (Type.Fields (Map.toList extraA) (Just ρ₂))) ρ₁
 
         (_A, _B) -> do
             Except.throwError [__i|
@@ -464,19 +474,11 @@ instantiateL α _A₀ = do
             α₁ <- fresh
             set (_ΓR <> (Context.Solved α (Monotype.List (Monotype.Unsolved α₁)) : Context.Unsolved α₁ : _ΓL))
             instantiateL α₁ _A
-        Type.Record kAs ρ -> do
+        Type.Record r -> do
             (_ΓR, _ΓL) <- Context.split α _Γ₀ `orDie` "InstLRecord"
-            let process (k, _A) = do
-                    β <- fresh
-                    return (k, _A, β)
-            kAβs <- traverse process kAs
-            let βs = map (\(_, _, β) -> Context.Unsolved β) kAβs
-            let kβs = map (\(k, _, β) -> (k, Monotype.Unsolved β)) kAβs
-            set (_ΓR <> (Context.Solved α (Monotype.Record kβs ρ) : βs <> _ΓL))
-            let instantiate (_, _A, β) = do
-                    _Θ <- get
-                    instantiateL β (Context.solve _Θ _A)
-            traverse_ instantiate kAβs
+            ρ <- fresh
+            set (_ΓR <> (Context.Solved α (Monotype.Record (Monotype.Fields [] (Just ρ))) : Context.Unsolved ρ : _ΓL))
+            instantiateRowL ρ r
 
 {-| This corresponds to the judgment:
 
@@ -541,34 +543,57 @@ instantiateR _A₀ α = do
             α₁ <- fresh
             set (_ΓR <> (Context.Solved α (Monotype.List (Monotype.Unsolved α₁)) : Context.Unsolved α₁ : _ΓL))
             instantiateR _A α₁
-        Type.Record kAs ρ -> do
+        Type.Record r -> do
             (_ΓR, _ΓL) <- Context.split α _Γ₀ `orDie` "InstRRecord"
-            let process (k, _A) = do
-                    β <- fresh
-                    return (k, _A, β)
-            kAβs <- traverse process kAs
-            let βs = map (\(_, _A, β) -> Context.Unsolved β) kAβs
-            let kβs = map (\(k, _, β) -> (k, Monotype.Unsolved β)) kAβs
-            set (_ΓR <> (Context.Solved α (Monotype.Record kβs ρ) : βs <> _ΓL))
-            let instantiate (_, _A, β) = do
-                    _Θ <- get
-                    instantiateR (Context.solve _Θ _A) β
-            traverse_ instantiate kAβs
+            ρ <- fresh
+            set (_ΓR <> (Context.Solved α (Monotype.Record (Monotype.Fields [] (Just ρ))) : Context.Unsolved ρ : _ΓL))
+            instantiateRowR r ρ
 
 instantiateRowL
-    :: (MonadState Status m, MonadError Text m)
-    => Int -> [(Text, Type)] -> Maybe Int -> m ()
-instantiateRowL ρ₀ kAs ρ₁ = do
+    :: (MonadState Status m, MonadError Text m) => Int -> Type.Record -> m ()
+instantiateRowL ρ₀ (Type.Fields kAs (Just ρ₁)) = do
+    let process (k, _A) = do
+            β <- fresh
+
+            return (k, _A, β)
+
+    ρ₂ <- fresh
+
+    kAβs <- traverse process kAs
+
+    let βs  = map (\(_, _, β) -> Context.Unsolved β      ) kAβs
+    let kβs = map (\(k, _, β) -> (k, Monotype.Unsolved β)) kAβs
+
     _Γ <- get
 
     (_ΓR, _ΓL) <- Context.split ρ₀ _Γ `orDie` "instantiateRowL"
 
+    set (_ΓR <> (Context.SolvedRow ρ₀ (Monotype.Fields kβs (Just ρ₂)) : Context.Unsolved ρ₂ : βs <> _ΓL))
+
+    let instantiate (_, _A, β) = do
+            _Θ <- get
+
+            instantiateL β (Context.solve _Θ _A)
+
+    instantiateL ρ₂ (Type.Unsolved ρ₁)
+
+    traverse_ instantiate kAβs
+instantiateRowL ρ₀ (Type.Fields kAs Nothing) = do
     let process (k, _A) = do
             β <- fresh
 
             return (k, _A, β)
 
     kAβs <- traverse process kAs
+
+    let βs  = map (\(_, _, β) -> Context.Unsolved β      ) kAβs
+    let kβs = map (\(k, _, β) -> (k, Monotype.Unsolved β)) kAβs
+
+    _Γ <- get
+
+    (_ΓR, _ΓL) <- Context.split ρ₀ _Γ `orDie` "instantiateRowL"
+
+    set (_ΓR <> (Context.SolvedRow ρ₀ (Monotype.Fields kβs Nothing) : βs <> _ΓL))
 
     let instantiate (_, _A, β) = do
             _Θ <- get
@@ -577,19 +602,36 @@ instantiateRowL ρ₀ kAs ρ₁ = do
 
     traverse_ instantiate kAβs
 
-    let βs  = map (\(_, _, β) -> Context.Unsolved β      ) kAβs
-    let kβs = map (\(k, _, β) -> (k, Monotype.Unsolved β)) kAβs
-
-    set (_ΓR <> (Context.SolvedRow ρ₀ kβs ρ₁ : βs <> _ΓL))
-
 instantiateRowR
-    :: (MonadState Status m, MonadError Text m)
-    => [(Text, Type)] -> Maybe Int -> Int -> m ()
-instantiateRowR kAs ρ₁ ρ₀ = do
+    :: (MonadState Status m, MonadError Text m) => Type.Record -> Int -> m ()
+instantiateRowR (Type.Fields kAs (Just ρ₁)) ρ₀ = do
+    let process (k, _A) = do
+            β <- fresh
+
+            return (k, _A, β)
+
+    ρ₂ <- fresh
+
+    kAβs <- traverse process kAs
+
     _Γ <- get
 
     (_ΓR, _ΓL) <- Context.split ρ₀ _Γ `orDie` "instantiateRowR"
 
+    let βs  = map (\(_, _, β) -> Context.Unsolved β      ) kAβs
+    let kβs = map (\(k, _, β) -> (k, Monotype.Unsolved β)) kAβs
+
+    set (_ΓR <> (Context.SolvedRow ρ₀ (Monotype.Fields kβs (Just ρ₂)) : Context.Unsolved ρ₂ : βs <> _ΓL))
+
+    let instantiate (_, _A, β) = do
+            _Θ <- get
+
+            instantiateR (Context.solve _Θ _A) β
+
+    instantiateR (Type.Unsolved ρ₁) ρ₂
+
+    traverse_ instantiate kAβs
+instantiateRowR (Type.Fields kAs Nothing) ρ₀ = do
     let process (k, _A) = do
             β <- fresh
 
@@ -597,17 +639,21 @@ instantiateRowR kAs ρ₁ ρ₀ = do
 
     kAβs <- traverse process kAs
 
+    _Γ <- get
+
+    (_ΓR, _ΓL) <- Context.split ρ₀ _Γ `orDie` "instantiateRowR"
+
+    let βs  = map (\(_, _, β) -> Context.Unsolved β      ) kAβs
+    let kβs = map (\(k, _, β) -> (k, Monotype.Unsolved β)) kAβs
+
+    set (_ΓR <> (Context.SolvedRow ρ₀ (Monotype.Fields kβs Nothing) : βs <> _ΓL))
+
     let instantiate (_, _A, β) = do
             _Θ <- get
 
             instantiateR (Context.solve _Θ _A) β
 
     traverse_ instantiate kAβs
-
-    let βs  = map (\(_, _, β) -> Context.Unsolved β      ) kAβs
-    let kβs = map (\(k, _, β) -> (k, Monotype.Unsolved β)) kAβs
-
-    set (_ΓR <> (Context.SolvedRow ρ₀ kβs ρ₁ : βs <> _ΓL))
 
 {-| This corresponds to the judgment:
 
@@ -671,13 +717,13 @@ infer (Syntax.Record kvs) = do
             _A <- infer v
             return (k, _A)
     kAs <- traverse process kvs
-    return (Type.Record kAs Nothing)
+    return (Type.Record (Type.Fields kAs Nothing))
 infer (Syntax.Field record key) = do
     α <- fresh
     ρ <- fresh
     push (Context.Unsolved α)
     push (Context.Unsolved ρ)
-    check record (Type.Record [(key, Type.Unsolved α)] (Just ρ))
+    check record (Type.Record (Type.Fields [(key, Type.Unsolved α)] (Just ρ)))
     return (Type.Unsolved α)
 infer (Syntax.If predicate l r) = do
     check predicate Type.Bool
