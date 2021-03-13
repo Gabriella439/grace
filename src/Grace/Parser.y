@@ -86,8 +86,14 @@ AndExpression
         { $1 }
 
 ApplicationExpression
-    : ApplicationExpression PrimitiveExpression
+    : ApplicationExpression FieldExpression
         { Syntax.Application $1 $2 }
+    | FieldExpression
+        { $1 }
+
+FieldExpression
+    : FieldExpression '.' label
+        { Syntax.Field $1 $3 }
     | PrimitiveExpression
         { $1 }
 
@@ -149,7 +155,7 @@ PrimitiveType
     | label
         { Type.Variable $1 }
     | '{' RecordType '}'
-        { Type.Record $2 }
+        { Type.Record $2 Nothing }
     | '(' Type ')'
         { $2 }
 

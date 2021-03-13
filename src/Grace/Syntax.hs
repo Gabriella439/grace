@@ -48,6 +48,10 @@ data Syntax
     -- ^
     --   >>> pretty (Record [ ("x", "a"), ("y", "b") ])
     --   { x = a, y = b }
+    | Field Syntax Text
+    -- ^
+    --   >>> pretty (Field "x" "a")
+    --   x.a
     | If Syntax Syntax Syntax
     -- ^
     --   >>> pretty (If "x" "y" "z")
@@ -138,9 +142,15 @@ prettyApplicationExpression (Application function argument) =
     Pretty.nest 4
         (   prettyApplicationExpression function
         <>  " "
-        <>  prettyPrimitiveExpression argument
+        <>  prettyFieldExpression argument
         )
 prettyApplicationExpression other =
+    prettyFieldExpression other
+
+prettyFieldExpression :: Syntax -> Doc a
+prettyFieldExpression (Field record key) =
+    prettyFieldExpression record <> "." <> Pretty.pretty key
+prettyFieldExpression other =
     prettyPrimitiveExpression other
 
 prettyPrimitiveExpression :: Syntax -> Doc a

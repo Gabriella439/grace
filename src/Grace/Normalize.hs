@@ -104,6 +104,14 @@ evaluate env syntax =
           where
             adapt (key, value) = (key, evaluate env value)
 
+        Syntax.Field record key ->
+            case evaluate env record of
+                Value.Record keyValues
+                    | Just value <- lookup key keyValues ->
+                        value
+                other ->
+                    Value.Field other key
+
         Syntax.If predicate ifTrue ifFalse ->
             case predicate' of
                 Value.True  -> ifTrue'
@@ -198,6 +206,9 @@ quote names value =
             Syntax.Record (map adapt keyValues)
           where
             adapt (key, value_) = (key, quote names value_)
+
+        Value.Field record key ->
+            Syntax.Field (quote names record) key
 
         Value.If predicate ifTrue ifFalse ->
             Syntax.If

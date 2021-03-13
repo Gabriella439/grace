@@ -7,6 +7,7 @@ module Grace.Type
 
       -- * Utilities
     , solve
+    , solveRow
     , freeIn
     , substitute
     ) where
@@ -45,11 +46,13 @@ data Type
     --
     -- >>> pretty (List (Variable "a"))
     -- List a
-    | Record [(Text, Type)]
+    | Record [(Text, Type)] (Maybe Int)
     -- ^ Record type
     --
-    -- >>> pretty (Record [("x", Variable "a"), ("y", Variable "b")])
-    -- { x : a, y : b }
+    -- >>> pretty (Record [("x", Variable "X"), ("y", Variable "Y")] Nothing)
+    -- { x : X, y : Y }
+    -- >>> pretty (Record [("x", Variable "X"), ("y", Variable "Y")] (Just 0))
+    -- { x : X, y : Y | a }
     | Bool
     -- ^ Boolean type
     --
@@ -69,8 +72,8 @@ fromMonotype (Monotype.Function τ σ) =
     Function (fromMonotype τ) (fromMonotype σ)
 fromMonotype (Monotype.List τ) =
     List (fromMonotype τ)
-fromMonotype (Monotype.Record kτs) =
-    Record (map (\(k, τ) -> (k, fromMonotype τ)) kτs)
+fromMonotype (Monotype.Record kτs ρ) =
+    Record (map (\(k, τ) -> (k, fromMonotype τ)) kτs) ρ
 fromMonotype Monotype.Bool =
     Bool
 
@@ -89,9 +92,33 @@ solve α τ (Function _A _B) =
     Function (solve α τ _A) (solve α τ _B)
 solve α τ (List _A) =
     List (solve α τ _A)
-solve α τ (Record kAs) =
-    Record (map (\(k, _A) -> (k, solve α τ _A)) kAs)
+solve α τ (Record kAs ρ) =
+    Record (map (\(k, _A) -> (k, solve α τ _A)) kAs) ρ
 solve _ _ Bool =
+    Bool
+
+{-| Substitute a `Type` by replacing all occurrences of the given unsolved
+    variable with a `Monotype`
+-}
+solveRow :: Int -> [(Text, Monotype)] -> Maybe Int -> Type -> Type
+solveRow _ _ _ (Variable α) =
+    Variable α
+solveRow _ _ _ (Unsolved α) =
+    Unsolved α
+solveRow ρ₀ kτs ρ₁ (Forall α _A) =
+    Forall α (solveRow ρ₀ kτs ρ₁ _A)
+solveRow ρ₀ kτs ρ₁ (Function _A _B) =
+    Function (solveRow ρ₀ kτs ρ₁ _A) (solveRow ρ₀ kτs ρ₁ _B)
+solveRow ρ₀ kτs ρ₁ (List _A) =
+    List (solveRow ρ₀ kτs ρ₁ _A)
+solveRow ρ₀ kτs ρ₁ (Record kAs₀ ρ)
+    | Just ρ₀ == ρ =
+        Record (map (\(k, _A) -> (k, solveRow ρ₀ kτs ρ₁ _A)) kAs₁) ρ₁
+    | otherwise =
+        Record (map (\(k, _A) -> (k, solveRow ρ₀ kτs ρ₁ _A)) kAs₀) ρ
+  where
+    kAs₁ = kAs₀ <> map (\(k, τ) -> (k, fromMonotype τ)) kτs
+solveRow _ _ _ Bool =
     Bool
 
 {-| Replace all occurrences of a variable within one `Type` with another `Type`,
@@ -114,8 +141,8 @@ substitute α n _A₀ (Function _A₁ _B) =
     Function (substitute α n _A₀ _A₁) (substitute α n _A₀ _B)
 substitute α n _A₀ (List _A₁) =
     List (substitute α n _A₀ _A₁)
-substitute α n _A₀ (Record kAs) =
-    Record (map (\(k, _A₁) -> (k, substitute α n _A₀ _A₁)) kAs)
+substitute α n _A₀ (Record kAs ρ) =
+    Record (map (\(k, _A₁) -> (k, substitute α n _A₀ _A₁)) kAs) ρ
 substitute _ _ _ Bool =
     Bool
 
@@ -126,7 +153,7 @@ _  `freeIn` Variable _     = False
 α  `freeIn` Forall _ _A    = α `freeIn` _A
 α  `freeIn` Function _A _B = α `freeIn` _A || α `freeIn` _B
 α  `freeIn` List _A        = α `freeIn` _A
-α  `freeIn` Record kAs     = any (\(_, _A) -> α `freeIn` _A) kAs
+α  `freeIn` Record kAs _   = any (\(_, _A) -> α `freeIn` _A) kAs
 _  `freeIn` Bool           = False
 
 prettyType :: Type -> Doc a
@@ -149,19 +176,31 @@ prettyPrimitiveType (Variable α) =
     Pretty.pretty α
 prettyPrimitiveType (Unsolved α) =
     Pretty.pretty (Monotype.toVariable α) <> "?"
-prettyPrimitiveType (Record []) =
+prettyPrimitiveType (Record [] Nothing) =
     "{ }"
-prettyPrimitiveType (Record ((key₀, type₀) : keyTypes)) =
+prettyPrimitiveType (Record [] (Just ρ)) =
+    "{ " <> Pretty.pretty (Monotype.toVariable ρ) <> " }"
+prettyPrimitiveType (Record ((key₀, type₀) : keyTypes) Nothing) =
         "{ "
     <>  Pretty.pretty key₀
     <>  " : "
     <>  prettyType type₀
     <>  foldMap prettyKeyType keyTypes
     <>  " }"
-  where
-    prettyKeyType (key, type_) =
-        ", " <> Pretty.pretty key <> " : " <> prettyType type_
+prettyPrimitiveType (Record ((key₀, type₀) : keyTypes) (Just ρ)) =
+        "{ "
+    <>  Pretty.pretty key₀
+    <>  " : "
+    <>  prettyType type₀
+    <>  foldMap prettyKeyType keyTypes
+    <>  " | "
+    <>  Pretty.pretty (Monotype.toVariable ρ)
+    <>  " }"
 prettyPrimitiveType Bool =
     "Bool"
 prettyPrimitiveType other =
     "(" <> prettyType other <> ")"
+
+prettyKeyType :: (Text, Type) -> Doc a
+prettyKeyType (key, type_) =
+    ", " <> Pretty.pretty key <> " : " <> prettyType type_

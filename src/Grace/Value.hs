@@ -76,6 +76,7 @@ data Value
     | Application Value Value
     | List [Value]
     | Record [(Text, Value)]
+    | Field Value Text
     | And Value Value
     | Or Value Value
     | True

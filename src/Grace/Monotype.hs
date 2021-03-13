@@ -36,11 +36,13 @@ data Monotype
     --
     -- >>> pretty (List (Variable "a"))
     -- List a
-    | Record [(Text, Monotype)]
+    | Record [(Text, Monotype)] (Maybe Int)
     -- ^ Record type
     --
-    -- >>> pretty (Record [("x", Variable "a"), ("y", Variable "b")])
-    -- { x : a, y : b }
+    -- >>> pretty (Record [("x", Variable "X"), ("y", Variable "Y")] Nothing)
+    -- { x : X, y : Y }
+    -- >>> pretty (Record [("x", Variable "X"), ("y", Variable "Y")] (Just 0))
+    -- { x : X, y : Y | a }
     | Bool
     -- ^ Boolean type
     --
@@ -66,22 +68,34 @@ prettyPrimitiveType (Variable α) =
     pretty α
 prettyPrimitiveType (Unsolved α) =
     pretty (toVariable α) <> "?"
-prettyPrimitiveType (Record []) =
+prettyPrimitiveType (Record [] Nothing) =
     "{ }"
-prettyPrimitiveType (Record ((key₀, type₀) : keyTypes)) =
+prettyPrimitiveType (Record [] (Just ρ)) =
+    "{ " <> pretty (toVariable ρ) <> " }"
+prettyPrimitiveType (Record ((key₀, type₀) : keyTypes) Nothing) =
         "{ "
     <>  pretty key₀
     <>  " : "
     <>  prettyMonotype type₀
     <>  foldMap prettyKeyType keyTypes
     <>  " }"
-  where
-    prettyKeyType (key, type_) =
-        ", " <> pretty key <> " : " <> prettyMonotype type_
+prettyPrimitiveType (Record ((key₀, type₀) : keyTypes) (Just ρ)) =
+        "{ "
+    <>  pretty key₀
+    <>  " : "
+    <>  prettyMonotype type₀
+    <>  foldMap prettyKeyType keyTypes
+    <>  " | "
+    <>  pretty (toVariable ρ)
+    <>  " }"
 prettyPrimitiveType Bool =
     "Bool"
 prettyPrimitiveType other =
     "(" <> prettyMonotype other <> ")"
+
+prettyKeyType :: (Text, Monotype) -> Doc a
+prettyKeyType (key, monotype) =
+    ", " <> pretty key <> " : " <> prettyMonotype monotype
 
 {-| Convert an unbound variable (internally represented as an `Int`) to a
     user-friendly `Text` representation

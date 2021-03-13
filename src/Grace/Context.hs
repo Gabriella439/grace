@@ -39,7 +39,8 @@ data Entry
     -- >>> pretty (Annotation "x" (Type.Variable "a"))
     -- x : a
     | Unsolved Int
-    -- ^ A placeholder variable whose type has not yet been inferred
+    -- ^ A placeholder type variable or row variable whose type has not yet been
+    -- inferred
     --
     -- >>> pretty (Unsolved 0)
     -- a?
@@ -48,6 +49,12 @@ data Entry
     --   inferred
     --
     -- >>> pretty (Solved 0 Monotype.Bool)
+    -- a = Bool
+    | SolvedRow Int [(Text, Monotype)] (Maybe Int)
+    -- ^ A placeholder variable whose type has been (at least partially)
+    --   inferred
+    --
+    -- >>> pretty (SolvedRow 0 Monotype.Bool)
     -- a = Bool
     | Marker Int
     -- ^ This is used by the bidirectional type-checking algorithm to separate
@@ -97,10 +104,38 @@ prettyEntry (Unsolved α) =
     Pretty.pretty (Monotype.toVariable α) <> "?"
 prettyEntry (Solved α τ) =
     Pretty.pretty (Monotype.toVariable α) <> " = " <> Pretty.pretty τ
+prettyEntry (SolvedRow α [] Nothing) =
+    Pretty.pretty (Monotype.toVariable α) <> " = { }"
+prettyEntry (SolvedRow α [] (Just β)) =
+        Pretty.pretty (Monotype.toVariable α)
+    <>  " = { "
+    <>  Pretty.pretty (Monotype.toVariable β)
+    <>  " }"
+prettyEntry (SolvedRow α ((k₀, τ₀) : kτs) Nothing) =
+    Pretty.pretty (Monotype.toVariable α)
+    <> " = { "
+    <> Pretty.pretty k₀
+    <> " : "
+    <> Pretty.pretty τ₀
+    <> foldMap prettyKeyType kτs
+    <> " }"
+prettyEntry (SolvedRow α ((k₀, τ₀) : kτs) (Just β)) =
+    Pretty.pretty (Monotype.toVariable α)
+    <> " = { "
+    <> Pretty.pretty k₀
+    <> " : "
+    <> Pretty.pretty τ₀
+    <> foldMap prettyKeyType kτs
+    <> " | "
+    <> Pretty.pretty (Monotype.toVariable β)
+    <> " }"
 prettyEntry (Annotation x α) =
     Pretty.pretty x <> " : " <> Pretty.pretty α
 prettyEntry (Marker α) =
     "➤" <> Pretty.pretty (Monotype.toVariable α)
+
+prettyKeyType :: (Text, Monotype) -> Doc a
+prettyKeyType (k, τ) = ", " <> Pretty.pretty k <> " : " <> Pretty.pretty τ
 
 {-| Substitute a `Type` using the `Solved` entries of a `Context`
 
@@ -110,13 +145,15 @@ prettyEntry (Marker α) =
 solve :: Context -> Type -> Type
 solve context type_ = foldl snoc type_ context
   where
-    snoc t (Solved α τ) = Type.solve α τ t
-    snoc t  _           = t
+    snoc t (Solved α τ       ) = Type.solve α τ t
+    snoc t (SolvedRow α kτs β) = Type.solveRow α kτs β t
+    snoc t  _                  = t
 
 {-| This function is used at the end of the bidirectional type-checking
     algorithm to complete the inferred type by:
 
-    * Substituting the type with all `Solved` entries in the `Context`
+    * Substituting the type with all `Solved` / `SolvedRow` entries in the
+      `Context`
 
     * Adding universal quantifiers for all `Unsolved` entries in the `Context`
 
@@ -129,6 +166,8 @@ complete context type_ = do
   where
     snoc t (Solved α τ) = do
         return (Type.solve α τ t)
+    snoc t (SolvedRow α kτs β) = do
+        return (Type.solveRow α kτs β t)
     snoc t (Unsolved α) = do
         n <- State.get
 
