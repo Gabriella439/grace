@@ -677,7 +677,24 @@ equateRows ρ₀ ρ₁ = do
 instantiateRowL
     :: (MonadState Status m, MonadError Text m)
     => Existential Monotype.Record -> Type.Record -> m ()
-instantiateRowL ρ₀ (Type.Fields kAs rest) = do
+instantiateRowL ρ₀ r@(Type.Fields kAs rest) = do
+    if ρ₀ `Type.rowFreeIn` Type.Record r
+        then do
+            Except.throwError [__i|
+            Not a subtype
+
+            The following row variable:
+
+            ↳ #{Pretty.pretty ρ₀}
+
+            … cannot be instantiated to the following record type:
+
+            ↳ #{Pretty.pretty (Type.Record r)}
+
+            … because the same row variable appears within that record type.
+            |]
+        else return ()
+
     let process (k, _A) = do
             β <- fresh
 
@@ -712,7 +729,24 @@ instantiateRowL ρ₀ (Type.Fields kAs rest) = do
 instantiateRowR
     :: (MonadState Status m, MonadError Text m)
     => Type.Record -> Existential Monotype.Record -> m ()
-instantiateRowR (Type.Fields kAs rest) ρ₀ = do
+instantiateRowR r@(Type.Fields kAs rest) ρ₀ = do
+    if ρ₀ `Type.rowFreeIn` Type.Record r
+        then do
+            Except.throwError [__i|
+            Not a subtype
+
+            The following row variable:
+
+            ↳ #{Pretty.pretty ρ₀}
+
+            … cannot be instantiated to the following record type:
+
+            ↳ #{Pretty.pretty (Type.Record r)}
+
+            … because the same row variable appears within that record type.
+            |]
+        else return ()
+
     let process (k, _A) = do
             β <- fresh
 
