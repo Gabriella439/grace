@@ -18,7 +18,7 @@ module Grace.Context
 
 import Data.Text (Text)
 import Grace.Existential (Existential)
-import Grace.Monotype (Monotype, Record(..))
+import Grace.Monotype (Monotype)
 import Grace.Type (Type)
 import Prelude hiding (lookup)
 import Prettyprinter (Doc, Pretty(..))
@@ -62,7 +62,7 @@ data Entry
     -- ^ A placeholder row variable whose type has been (at least partially)
     --   inferred
     --
-    -- >>>  pretty (SolvedRow 0 (Fields [("x", "X")] (Just 1)))
+    -- >>>  pretty (SolvedRow 0 (Monotype.Fields [("x", "X")] (Just 1)))
     -- a = x : X | b
     | Marker (Existential Monotype)
     -- ^ This is used by the bidirectional type-checking algorithm to separate
@@ -158,7 +158,7 @@ solve context type_ = foldl snoc type_ context
 {-| Substitute a t`Type.Record` using the `Solved` and `SolvedRow` entries of a
     `Context`
 
-    >>> solve [ SolvedRow 0 (Fields [] Nothing) ] (Type.Record (Type.Fields [("a", Type.Bool)] (Just 0)))
+    >>> solve [ SolvedRow 0 (Monotype.Fields [] Nothing) ] (Type.Record (Type.Fields [("a", Type.Bool)] (Just 0)))
     Record (Fields [("a",Bool)] Nothing)
 -}
 solveRecord :: Context -> Type.Record -> Type.Record

@@ -12,7 +12,6 @@ import Data.Text (Text)
 import Data.Text.Prettyprint.Doc (Doc, Pretty(..))
 import Grace.Type (Type)
 
-import qualified Grace.Type    as Type
 import qualified Prettyprinter as Pretty
 
 -- | The surface syntax for the language
@@ -33,7 +32,7 @@ data Syntax
     --   f x
     | Annotation Syntax Type
     -- ^
-    --   >>> pretty (Annotation "x" (Type.Variable "A"))
+    --   >>> pretty (Annotation "x" "A")
     --   x : A
     | Let Text (Maybe Type) Syntax Syntax
     -- ^

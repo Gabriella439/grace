@@ -18,7 +18,7 @@ library
                      , string-interpolate
                      , text
   build-tools:         alex
-                     , doctest -- For `cabal doctest`
+                     , doctest
                      , happy
   exposed-modules:     Grace
                      , Grace.Context
