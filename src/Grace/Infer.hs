@@ -569,14 +569,18 @@ equateRows ρ₀ ρ₁ = do
     _Γ₀ <- get
 
     let ρ₁First = do
-            (_ΓR, _Γ₁) <- Context.splitOnUnsolvedRow ρ₀ _Γ₀
-            (_ΓM, _ΓL) <- Context.splitOnUnsolvedRow ρ₁ _Γ₁
-            return (set (_ΓR <> (Context.SolvedRow ρ₀ (Monotype.Fields [] (Just ρ₁)) : _ΓM) <> (Context.UnsolvedRow ρ₁ : _ΓL)))
+            (_ΓR, _ΓL) <- Context.splitOnUnsolvedRow ρ₀ _Γ₀
+
+            Monad.guard (Context.UnsolvedRow ρ₁ `elem` _ΓL)
+
+            return (set (_ΓR <> (Context.SolvedRow ρ₀ (Monotype.Fields [] (Just ρ₁)) : _ΓL)))
 
     let ρ₀First = do
-            (_ΓR, _Γ₁) <- Context.splitOnUnsolvedRow ρ₁ _Γ₀
-            (_ΓM, _ΓL) <- Context.splitOnUnsolvedRow ρ₀ _Γ₁
-            return (set (_ΓR <> (Context.SolvedRow ρ₁ (Monotype.Fields [] (Just ρ₀)) : _ΓM) <> (Context.UnsolvedRow ρ₀ : _ΓL)))
+            (_ΓR, _ΓL) <- Context.splitOnUnsolvedRow ρ₁ _Γ₀
+
+            Monad.guard (Context.UnsolvedRow ρ₀ `elem` _ΓL)
+
+            return (set (_ΓR <> (Context.SolvedRow ρ₁ (Monotype.Fields [] (Just ρ₀)) : _ΓL)))
 
     case ρ₁First <|> ρ₀First of
         Nothing -> do
