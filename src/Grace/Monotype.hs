@@ -7,6 +7,7 @@ module Grace.Monotype
     , Record(..)
     ) where
 
+import Data.String (IsString(..))
 import Data.Text (Text)
 import Data.Text.Prettyprint.Doc (Doc, Pretty(..))
 import Grace.Existential (Existential)
@@ -26,19 +27,19 @@ data Monotype
     | Function Monotype Monotype
     -- ^ Function type
     --
-    -- >>> pretty (Function (Variable "a") (Variable "b"))
+    -- >>> pretty (Function "a" "b")
     -- a -> b
     | List Monotype
     -- ^ List type
     --
-    -- >>> pretty (List (Variable "a"))
+    -- >>> pretty (List "a")
     -- List a
     | Record Record
     -- ^ Record type
     --
-    -- >>> pretty (Record [("x", Variable "X"), ("y", Variable "Y")] Nothing)
+    -- >>> pretty (Record (Fields [("x", "X"), ("y", "Y")] Nothing))
     -- { x : X, y : Y }
-    -- >>> pretty (Record [("x", Variable "X"), ("y", Variable "Y")] (Just 0))
+    -- >>> pretty (Record (Fields [("x", "X"), ("y", "Y")] (Just 0)))
     -- { x : X, y : Y | a }
     | Bool
     -- ^ Boolean type
@@ -46,6 +47,9 @@ data Monotype
     -- >>> pretty Bool
     -- Bool
     deriving (Eq, Show)
+
+instance IsString Monotype where
+    fromString string = Variable (fromString string)
 
 instance Pretty Monotype where
     pretty = prettyMonotype

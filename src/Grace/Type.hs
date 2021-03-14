@@ -14,6 +14,7 @@ module Grace.Type
     , substitute
     ) where
 
+import Data.String (IsString(..))
 import Data.Text (Text)
 import Data.Text.Prettyprint.Doc (Doc, Pretty(..))
 import Grace.Existential (Existential)
@@ -37,24 +38,24 @@ data Type
     | Forall Text Type
     -- ^ Universally quantified type
     --
-    -- >>> pretty (Forall "a" (Variable "a"))
+    -- >>> pretty (Forall "a" "a")
     -- forall a . a
     | Function Type Type
     -- ^ Function type
     --
-    -- >>> pretty (Function (Variable "a") (Variable "b"))
+    -- >>> pretty (Function "a" "b")
     -- a -> b
     | List Type
     -- ^ List type
     --
-    -- >>> pretty (List (Variable "a"))
+    -- >>> pretty (List "a")
     -- List a
     | Record Record
     -- ^ Record type
     --
-    -- >>> pretty (Record [("x", Variable "X"), ("y", Variable "Y")] Nothing)
+    -- >>> pretty (Record (Fields [("x", "X"), ("y", "Y")] Nothing))
     -- { x : X, y : Y }
-    -- >>> pretty (Record [("x", Variable "X"), ("y", Variable "Y")] (Just 0))
+    -- >>> pretty (Record (Fields [("x", "X"), ("y", "Y")] (Just 0)))
     -- { x : X, y : Y | a }
     | Bool
     -- ^ Boolean type
@@ -63,12 +64,15 @@ data Type
     -- Bool
     deriving (Eq, Ord, Show)
 
--- | A potentially polymorphic record type
-data Record = Fields [(Text, Type)] (Maybe (Existential Monotype.Record))
-    deriving (Eq, Ord, Show)
+instance IsString Type where
+    fromString string = Variable (fromString string)
 
 instance Pretty Type where
     pretty = prettyType
+
+-- | A potentially polymorphic record type
+data Record = Fields [(Text, Type)] (Maybe (Existential Monotype.Record))
+    deriving (Eq, Ord, Show)
 
 {-| This function should not be exported or generally used.  It is only really
     safe to use within one of the @solve*@ functions
@@ -108,7 +112,7 @@ solve _ _ Bool =
     Bool
 
 {-| Substitute a `Type` by replacing all occurrences of the given unsolved
-    row variable with a `Record`
+    row variable with a t`Monotype.Record`
 -}
 solveRow :: Existential Monotype.Record -> Monotype.Record -> Type -> Type
 solveRow _ _ (Variable α) =
@@ -168,7 +172,7 @@ _  `typeFreeIn` Variable _            = False
 _  `typeFreeIn` Bool                  = False
 α  `typeFreeIn` Record (Fields kAs _) = any (\(_, _A) -> α `typeFreeIn` _A) kAs
 
-{-| Count how many times the given `Existential` `Record` variable appears
+{-| Count how many times the given `Existential` t`Monotype.Record` variable appears
     within a `Type`
 -}
 rowFreeIn :: Existential Monotype.Record -> Type -> Bool

@@ -40,7 +40,7 @@ data Entry
     | Annotation Text Type
     -- ^ A bound variable whose type is known
     --
-    -- >>> pretty (Annotation "x" (Type.Variable "a"))
+    -- >>> pretty (Annotation "x" "a")
     -- x : a
     | Unsolved (Existential Monotype)
     -- ^ A placeholder type variable whose type has not yet been inferred
@@ -48,22 +48,22 @@ data Entry
     -- >>> pretty (Unsolved 0)
     -- a?
     | UnsolvedRow (Existential Monotype.Record)
-    -- ^ A placeholder row type variable whose type has not yet been inferred
+    -- ^ A placeholder row variable whose type has not yet been inferred
     --
     -- >>> pretty (UnsolvedRow 0)
     -- |a?
     | Solved (Existential Monotype) Monotype
-    -- ^ A placeholder variable whose type has been (at least partially)
+    -- ^ A placeholder type variable whose type has been (at least partially)
     --   inferred
     --
     -- >>> pretty (Solved 0 Monotype.Bool)
     -- a = Bool
     | SolvedRow (Existential Monotype.Record) Monotype.Record
-    -- ^ A placeholder variable whose type has been (at least partially)
+    -- ^ A placeholder row variable whose type has been (at least partially)
     --   inferred
     --
-    -- >>> pretty (SolvedRow 0 Monotype.Bool)
-    -- a = Bool
+    -- >>>  pretty (SolvedRow 0 (Fields [("x", "X")] (Just 1)))
+    -- a = x : X | b
     | Marker (Existential Monotype)
     -- ^ This is used by the bidirectional type-checking algorithm to separate
     --   context entries introduced before and after type-checking a universally
@@ -155,7 +155,7 @@ solve context type_ = foldl snoc type_ context
     snoc t (SolvedRow α r) = Type.solveRow α r t
     snoc t  _              = t
 
-{-| Substitute a `Type.Record` using the `Solved` and `SolvedRow` entries of a
+{-| Substitute a t`Type.Record` using the `Solved` and `SolvedRow` entries of a
     `Context`
 
     >>> solve [ SolvedRow 0 (Fields [] Nothing) ] (Type.Record (Type.Fields [("a", Bool)] (Just 0)))
@@ -219,7 +219,7 @@ complete context type_ = do
 -}
 splitOnUnsolved
     :: Existential Monotype
-    -- ^ `Unsolved` variable to splitOnUnsolved on
+    -- ^ `Unsolved` variable to split on
     -> Context
     -> Maybe (Context, Context)
 splitOnUnsolved α₀ (Unsolved α₁ : entries)
