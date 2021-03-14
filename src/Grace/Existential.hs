@@ -6,14 +6,42 @@
 -}
 module Grace.Existential
     ( -- * Types
-      ExistentialType(..)
-    , ExistentialRow(..)
+      Existential(..)
+
+      -- * Utilities
+    , toVariable
     ) where
 
--- | An unsolved type variable
-newtype ExistentialType = ExistentialType Int
+import Data.Text (Text)
+import Prettyprinter (Pretty(..))
+
+import qualified Data.Char as Char
+import qualified Data.Text as Text
+
+{-| An unsolved existential variable (e.g. an existential type variable or an
+    existential row variable)
+-}
+newtype Existential a = UnsafeExistential Int
     deriving newtype (Eq, Ord, Num, Show)
 
--- | An unsolved row variable
-newtype ExistentialRow = ExistentialRow Int
-    deriving newtype (Eq, Ord, Num, Show)
+instance Pretty (Existential a) where
+    pretty x = pretty (toVariable x)
+
+{-| Convert an existential variable to a user-friendly `Text`
+    representation
+
+>>> toVariable 0
+"a"
+>>> toVariable 1
+"b"
+>>> toVariable 26
+"a0"
+-}
+toVariable :: Existential a -> Text
+toVariable (UnsafeExistential n) = Text.cons prefix suffix
+  where
+    (q, r) = n `quotRem` 26
+
+    prefix = Char.chr (Char.ord 'a' + r)
+
+    suffix = if q == 0 then "" else Text.pack (show (q - 1))

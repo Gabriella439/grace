@@ -17,7 +17,7 @@ module Grace.Context
     ) where
 
 import Data.Text (Text)
-import Grace.Existential (ExistentialRow, ExistentialType)
+import Grace.Existential (Existential)
 import Grace.Monotype (Monotype)
 import Grace.Type (Type)
 import Prelude hiding (lookup)
@@ -25,6 +25,7 @@ import Prettyprinter (Doc, Pretty(..))
 
 import qualified Control.Monad              as Monad
 import qualified Control.Monad.State.Strict as State
+import qualified Grace.Existential          as Existential
 import qualified Grace.Monotype             as Monotype
 import qualified Grace.Type                 as Type
 import qualified Prettyprinter              as Pretty
@@ -41,29 +42,29 @@ data Entry
     --
     -- >>> pretty (Annotation "x" (Type.Variable "a"))
     -- x : a
-    | Unsolved ExistentialType
+    | Unsolved (Existential Monotype)
     -- ^ A placeholder type variable whose type has not yet been inferred
     --
     -- >>> pretty (Unsolved 0)
     -- a?
-    | UnsolvedRow ExistentialRow
+    | UnsolvedRow (Existential Monotype.Record)
     -- ^ A placeholder row type variable whose type has not yet been inferred
     --
     -- >>> pretty (UnsolvedRow 0)
     -- |a?
-    | Solved ExistentialType Monotype
+    | Solved (Existential Monotype) Monotype
     -- ^ A placeholder variable whose type has been (at least partially)
     --   inferred
     --
     -- >>> pretty (Solved 0 Monotype.Bool)
     -- a = Bool
-    | SolvedRow ExistentialRow Monotype.Record
+    | SolvedRow (Existential Monotype.Record) Monotype.Record
     -- ^ A placeholder variable whose type has been (at least partially)
     --   inferred
     --
     -- >>> pretty (SolvedRow 0 Monotype.Bool)
     -- a = Bool
-    | Marker ExistentialType
+    | Marker (Existential Monotype)
     -- ^ This is used by the bidirectional type-checking algorithm to separate
     --   context entries introduced before and after type-checking a universally
     --   quantified type
@@ -108,39 +109,35 @@ prettyEntry :: Entry -> Doc a
 prettyEntry (Variable α) =
     Pretty.pretty α
 prettyEntry (Unsolved α) =
-    Pretty.pretty (Monotype.existentialTypeToVariable α) <> "?"
+    Pretty.pretty α <> "?"
 prettyEntry (UnsolvedRow ρ) =
-    "|" <> Pretty.pretty (Monotype.existentialRowToVariable ρ) <> "?"
+    "|" <> Pretty.pretty ρ <> "?"
 prettyEntry (Solved α τ) =
-        Pretty.pretty (Monotype.existentialTypeToVariable α)
-    <>  " = "
-    <>  Pretty.pretty τ
+    Pretty.pretty α <> " = " <> Pretty.pretty τ
 prettyEntry (SolvedRow ρ (Monotype.Fields [] Nothing)) =
-    Pretty.pretty (Monotype.existentialRowToVariable ρ) <> " = •"
+    Pretty.pretty ρ <> " = •"
 prettyEntry (SolvedRow ρ₀ (Monotype.Fields [] (Just ρ₁))) =
-        Pretty.pretty (Monotype.existentialRowToVariable ρ₀)
-    <>  " = • | "
-    <>  Pretty.pretty (Monotype.existentialRowToVariable ρ₁)
+    Pretty.pretty ρ₀ <> " = • | " <>  Pretty.pretty ρ₁
 prettyEntry (SolvedRow ρ (Monotype.Fields ((k₀, τ₀) : kτs) Nothing)) =
-    Pretty.pretty (Monotype.existentialRowToVariable ρ)
-    <> " = "
-    <> Pretty.pretty k₀
-    <> " : "
-    <> Pretty.pretty τ₀
-    <> foldMap prettyKeyType kτs
+        Pretty.pretty ρ
+    <>  " = "
+    <>  Pretty.pretty k₀
+    <>  " : "
+    <>  Pretty.pretty τ₀
+    <>  foldMap prettyKeyType kτs
 prettyEntry (SolvedRow ρ₀ (Monotype.Fields ((k₀, τ₀) : kτs) (Just ρ₁))) =
-    Pretty.pretty (Monotype.existentialRowToVariable ρ₀)
-    <> " = "
-    <> Pretty.pretty k₀
-    <> " : "
-    <> Pretty.pretty τ₀
-    <> foldMap prettyKeyType kτs
-    <> " | "
-    <> Pretty.pretty (Monotype.existentialRowToVariable ρ₁)
+        Pretty.pretty ρ₀
+    <>  " = "
+    <>  Pretty.pretty k₀
+    <>  " : "
+    <>  Pretty.pretty τ₀
+    <>  foldMap prettyKeyType kτs
+    <>  " | "
+    <>  Pretty.pretty ρ₁
 prettyEntry (Annotation x α) =
     Pretty.pretty x <> " : " <> Pretty.pretty α
 prettyEntry (Marker α) =
-    "➤" <> Pretty.pretty (Monotype.existentialTypeToVariable α)
+    "➤" <> Pretty.pretty α
 
 prettyKeyType :: (Text, Monotype) -> Doc a
 prettyKeyType (k, τ) = ", " <> Pretty.pretty k <> " : " <> Pretty.pretty τ
@@ -185,7 +182,7 @@ complete context type_ = do
 
         State.put $! n + 1
 
-        let a = Monotype.existentialTypeToVariable n
+        let a = Existential.toVariable n
 
         return (Type.Forall a (Type.solve α (Monotype.Variable a) t))
 -- TODO: Allow for user-visible row polymorphism so that this can be implemented
@@ -214,7 +211,7 @@ complete context type_ = do
     Nothing
 -}
 splitOnUnsolved
-    :: ExistentialType
+    :: Existential Monotype
     -- ^ `Unsolved` variable to splitOnUnsolved on
     -> Context
     -> Maybe (Context, Context)
@@ -237,7 +234,7 @@ splitOnUnsolved _ [] = Nothing
     Nothing
 -}
 splitOnUnsolvedRow
-    :: ExistentialRow
+    :: Existential Monotype.Record
     -- ^ `UnsolvedRow` variable to split on
     -> Context
     -> Maybe (Context, Context)

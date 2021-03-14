@@ -16,7 +16,7 @@ module Grace.Type
 
 import Data.Text (Text)
 import Data.Text.Prettyprint.Doc (Doc, Pretty(..))
-import Grace.Existential (ExistentialRow, ExistentialType)
+import Grace.Existential (Existential(..))
 import Grace.Monotype (Monotype)
 
 import qualified Data.Text.Prettyprint.Doc as Pretty
@@ -29,7 +29,7 @@ data Type
     --
     -- >>> pretty (Variable "a")
     -- a
-    | Unsolved ExistentialType
+    | Unsolved (Existential Monotype)
     -- ^ A placeholder variable whose type has not yet been inferred
     --
     -- >>> pretty (Unsolved 0)
@@ -63,7 +63,7 @@ data Type
     -- Bool
     deriving (Eq, Ord, Show)
 
-data Record = Fields [(Text, Type)] (Maybe ExistentialRow)
+data Record = Fields [(Text, Type)] (Maybe (Existential Monotype.Record))
     deriving (Eq, Ord, Show)
 
 instance Pretty Type where
@@ -75,8 +75,8 @@ instance Pretty Type where
 fromMonotype :: Monotype -> Type
 fromMonotype (Monotype.Variable α) =
     Variable α
-fromMonotype (Monotype.Unsolved α) =
-    Unsolved α
+fromMonotype (Monotype.Unsolved (UnsafeExistential α)) =
+    Unsolved (UnsafeExistential α)
 fromMonotype (Monotype.Function τ σ) =
     Function (fromMonotype τ) (fromMonotype σ)
 fromMonotype (Monotype.List τ) =
@@ -89,7 +89,7 @@ fromMonotype Monotype.Bool =
 {-| Substitute a `Type` by replacing all occurrences of the given unsolved
     variable with a `Monotype`
 -}
-solve :: ExistentialType -> Monotype -> Type -> Type
+solve :: Existential Monotype -> Monotype -> Type -> Type
 solve _ _ (Variable α) =
     Variable α
 solve α₀ τ (Unsolved α₁)
@@ -109,7 +109,7 @@ solve _ _ Bool =
 {-| Substitute a `Type` by replacing all occurrences of the given unsolved
     row variable with a `Record`
 -}
-solveRow :: ExistentialRow -> Monotype.Record -> Type -> Type
+solveRow :: Existential Monotype.Record -> Monotype.Record -> Type -> Type
 solveRow _ _ (Variable α) =
     Variable α
 solveRow _ _ (Unsolved α) =
@@ -155,10 +155,10 @@ substitute α n _A₀ (Record (Fields kAs ρ)) =
 substitute _ _ _ Bool =
     Bool
 
-{-| Count how many times the given `ExistentialType` variable appears within a
-    `Type`
+{-| Count how many times the given `Existential` `Type` variable appears within
+    a `Type`
 -}
-typeFreeIn :: ExistentialType -> Type -> Bool
+typeFreeIn :: Existential Monotype -> Type -> Bool
 _  `typeFreeIn` Variable _            = False
 α₀ `typeFreeIn` Unsolved α₁           = α₀ == α₁
 α  `typeFreeIn` Forall _ _A           = α `typeFreeIn` _A
@@ -167,10 +167,10 @@ _  `typeFreeIn` Variable _            = False
 _  `typeFreeIn` Bool                  = False
 α  `typeFreeIn` Record (Fields kAs _) = any (\(_, _A) -> α `typeFreeIn` _A) kAs
 
-{-| Count how many times the given `ExistentialRow` variable appears within a
-    `Type`
+{-| Count how many times the given `Existential` `Record` variable appears
+    within a `Type`
 -}
-rowFreeIn :: ExistentialRow -> Type -> Bool
+rowFreeIn :: Existential Monotype.Record -> Type -> Bool
 _  `rowFreeIn` Variable _             = False
 _  `rowFreeIn` Unsolved _             = False
 ρ  `rowFreeIn` Forall _ _A            = ρ `rowFreeIn` _A
@@ -196,22 +196,17 @@ prettyApplicationType (List _A) = "List " <> prettyPrimitiveType _A
 prettyApplicationType  other    = prettyPrimitiveType other
 
 prettyPrimitiveType :: Type -> Doc a
-prettyPrimitiveType (Variable α) =
-    Pretty.pretty α
-prettyPrimitiveType (Unsolved α) =
-    Pretty.pretty (Monotype.existentialTypeToVariable α) <> "?"
-prettyPrimitiveType (Record r) =
-    prettyRecordType r
-prettyPrimitiveType Bool =
-    "Bool"
-prettyPrimitiveType other =
-    "(" <> prettyType other <> ")"
+prettyPrimitiveType (Variable α) = Pretty.pretty α
+prettyPrimitiveType (Unsolved α) = Pretty.pretty α <> "?"
+prettyPrimitiveType (Record r)   = prettyRecordType r
+prettyPrimitiveType  Bool        = "Bool"
+prettyPrimitiveType  other       = "(" <> prettyType other <> ")"
 
 prettyRecordType :: Record -> Doc a
 prettyRecordType (Fields [] Nothing) =
     "{ }"
 prettyRecordType (Fields [] (Just ρ)) =
-    "{ " <> Pretty.pretty (Monotype.existentialRowToVariable ρ) <> " }"
+    "{ " <> Pretty.pretty ρ <> " }"
 prettyRecordType (Fields ((key₀, type₀) : keyTypes) Nothing) =
         "{ "
     <>  Pretty.pretty key₀
@@ -226,7 +221,7 @@ prettyRecordType (Fields ((key₀, type₀) : keyTypes) (Just ρ)) =
     <>  prettyType type₀
     <>  foldMap prettyKeyType keyTypes
     <>  " | "
-    <>  Pretty.pretty (Monotype.existentialRowToVariable ρ)
+    <>  Pretty.pretty ρ
     <>  " }"
 
 prettyKeyType :: (Text, Type) -> Doc a
