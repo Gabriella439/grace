@@ -41,6 +41,7 @@ import Grace.Syntax (Syntax)
 import Grace.Type (Type)
 import Prettyprinter (Pretty)
 
+import qualified Control.Monad             as Monad
 import qualified Control.Monad.Except      as Except
 import qualified Control.Monad.State       as State
 import qualified Data.Map                  as Map
@@ -306,7 +307,6 @@ subtype _A₀ _B₀ = do
                 The former record has the following extra fields:
 
                 #{listToText (Map.keys extraA)}
-
                 |]
 
                | otherwise -> do
@@ -342,7 +342,6 @@ subtype _A₀ _B₀ = do
                 The latter record has the following extra fields:
 
                 #{listToText (Map.keys extraB)}
-
                 |]
 
                | otherwise -> do
@@ -375,14 +374,18 @@ subtype _A₀ _B₀ = do
             _Γ₀ <- get
 
             let ρ₁First = do
-                    (_ΓR, _Γ₁) <- Context.splitOnUnsolvedRow ρ₀ _Γ₀
-                    (_ΓM, _ΓL) <- Context.splitOnUnsolvedRow ρ₁ _Γ₁
-                    return (set (_ΓR <> (Context.UnsolvedRow ρ₀ : _ΓM) <> (Context.UnsolvedRow ρ₁ : Context.UnsolvedRow ρ₂ : _ΓL)))
+                    (_ΓR, _ΓL) <- Context.splitOnUnsolvedRow ρ₁ _Γ₀
+
+                    Monad.guard (Context.UnsolvedRow ρ₀ `elem` _ΓR)
+
+                    return (set (_ΓR <> (Context.UnsolvedRow ρ₁ : Context.UnsolvedRow ρ₂ : _ΓL)))
 
             let ρ₀First = do
-                    (_ΓR, _Γ₁) <- Context.splitOnUnsolvedRow ρ₁ _Γ₀
-                    (_ΓM, _ΓL) <- Context.splitOnUnsolvedRow ρ₀ _Γ₁
-                    return (set (_ΓR <> (Context.UnsolvedRow ρ₁ : _ΓM) <> (Context.UnsolvedRow ρ₀ : Context.UnsolvedRow ρ₂ : _ΓL)))
+                    (_ΓR, _ΓL) <- Context.splitOnUnsolvedRow ρ₀ _Γ₀
+
+                    Monad.guard (Context.UnsolvedRow ρ₁ `elem` _ΓR)
+
+                    return (set (_ΓR <> (Context.UnsolvedRow ρ₀ : Context.UnsolvedRow ρ₂ : _ΓL)))
 
             case ρ₀First <|> ρ₁First of
                 Nothing -> do
