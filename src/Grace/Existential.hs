@@ -6,7 +6,7 @@
 -}
 module Grace.Existential
     ( -- * Types
-      Existential(..)
+      Existential
 
       -- * Utilities
     , toVariable

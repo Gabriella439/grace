@@ -9,7 +9,7 @@ module Grace.Monotype
 
 import Data.Text (Text)
 import Data.Text.Prettyprint.Doc (Doc, Pretty(..))
-import Grace.Existential (Existential(..))
+import Grace.Existential (Existential)
 
 -- | A monomorphic type
 data Monotype

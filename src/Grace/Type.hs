@@ -16,7 +16,7 @@ module Grace.Type
 
 import Data.Text (Text)
 import Data.Text.Prettyprint.Doc (Doc, Pretty(..))
-import Grace.Existential (Existential(..))
+import Grace.Existential (Existential)
 import Grace.Monotype (Monotype)
 
 import qualified Data.Text.Prettyprint.Doc as Pretty
@@ -76,8 +76,8 @@ instance Pretty Type where
 fromMonotype :: Monotype -> Type
 fromMonotype (Monotype.Variable α) =
     Variable α
-fromMonotype (Monotype.Unsolved (UnsafeExistential α)) =
-    Unsolved (UnsafeExistential α)
+fromMonotype (Monotype.Unsolved α) =
+    Unsolved α
 fromMonotype (Monotype.Function τ σ) =
     Function (fromMonotype τ) (fromMonotype σ)
 fromMonotype (Monotype.List τ) =

@@ -35,7 +35,7 @@ import Control.Monad.State.Strict (MonadState)
 import Data.Foldable (traverse_)
 import Data.String.Interpolate (__i)
 import Grace.Context (Context, Entry)
-import Grace.Existential (Existential(..))
+import Grace.Existential (Existential)
 import Grace.Monotype (Monotype)
 import Grace.Syntax (Syntax)
 import Grace.Type (Type)
@@ -69,7 +69,7 @@ fresh :: MonadState Status m => m (Existential a)
 fresh = do
     Status{ count = n, .. } <- State.get
     State.put $! Status{ count = n + 1, .. }
-    return (UnsafeExistential n)
+    return (fromIntegral n)
 
 push :: MonadState Status m => Entry -> m ()
 push entry = State.modify (\s -> s { context = entry : context s })
@@ -117,7 +117,7 @@ wellFormedType _Γ (Type.Function _A _B) = do
 wellFormedType _Γ (Type.Forall α _A) = do
     wellFormedType (Context.Variable α : _Γ) _A
 -- EvarWF / SolvedEvarWF
-wellFormedType _Γ _A@(Type.Unsolved (UnsafeExistential n₀))
+wellFormedType _Γ _A@(Type.Unsolved α₀)
     | any predicate _Γ = do
         return ()
     | otherwise = do
@@ -133,14 +133,14 @@ wellFormedType _Γ _A@(Type.Unsolved (UnsafeExistential n₀))
         #{listToText _Γ}
         |]
   where
-    predicate (Context.Unsolved (UnsafeExistential n₁)  ) = n₀ == n₁
-    predicate (Context.Solved   (UnsafeExistential n₁) _) = n₀ == n₁
-    predicate  _                                          = False
+    predicate (Context.Unsolved α₁  ) = α₀ == α₁
+    predicate (Context.Solved   α₁ _) = α₀ == α₁
+    predicate  _                      = False
 wellFormedType _Γ (Type.List _A) = do
     wellFormedType _Γ _A
 wellFormedType _Γ (Type.Record (Type.Fields kAs Nothing)) = do
     traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
-wellFormedType _Γ (Type.Record (Type.Fields kAs (Just (UnsafeExistential n₀))))
+wellFormedType _Γ (Type.Record (Type.Fields kAs (Just α₀)))
     | any predicate _Γ = do
         traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
     | otherwise = do
@@ -149,16 +149,16 @@ wellFormedType _Γ (Type.Record (Type.Fields kAs (Just (UnsafeExistential n₀))
 
         The following row type variable:
 
-        ↳ #{prettyToText (Context.UnsolvedRow (UnsafeExistential n₀))}
+        ↳ #{prettyToText (Context.UnsolvedRow α₀)}
 
         … is not well-formed within the following context:
 
         #{listToText _Γ}
         |]
   where
-    predicate (Context.UnsolvedRow (UnsafeExistential n₁)  ) = n₀ == n₁
-    predicate (Context.SolvedRow   (UnsafeExistential n₁) _) = n₀ == n₁
-    predicate  _                                             = False
+    predicate (Context.UnsolvedRow α₁  ) = α₀ == α₁
+    predicate (Context.SolvedRow   α₁ _) = α₀ == α₁
+    predicate  _                         = False
 wellFormedType _Γ Type.Bool = do
     return ()
 

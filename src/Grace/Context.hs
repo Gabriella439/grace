@@ -199,7 +199,7 @@ complete context type_ = do
 
         State.put $! n + 1
 
-        let a = Monotype.toVariable n
+        let a = Existential.toVariable n
 
         return (Type.Forall a (Type.solveRow ρ (Monotype.Fields [] (Just a)) t))
 -}
