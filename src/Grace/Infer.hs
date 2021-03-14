@@ -632,6 +632,11 @@ instantiateR _A₀ α = do
 
             instantiateRowR r ρ
 
+{- The following `equateRows` / `instantiateRowL` / `instantiateRowR` judgments
+   are not present in the bidirectional type-checking paper.  These were added in
+   order to support row polymorphism, by following the same general type-checking
+   principles as the original paper.
+-}
 equateRows
     :: (MonadState Status m, MonadError Text m)
     => Existential Monotype.Record -> Existential Monotype.Record -> m ()
@@ -672,35 +677,7 @@ equateRows ρ₀ ρ₁ = do
 instantiateRowL
     :: (MonadState Status m, MonadError Text m)
     => Existential Monotype.Record -> Type.Record -> m ()
-instantiateRowL ρ₀ (Type.Fields kAs (Just ρ₁)) = do
-    let process (k, _A) = do
-            β <- fresh
-
-            return (k, _A, β)
-
-    ρ₂ <- fresh
-
-    kAβs <- traverse process kAs
-
-    let βs  = map (\(_, _, β) -> Context.Unsolved β      ) kAβs
-    let kβs = map (\(k, _, β) -> (k, Monotype.Unsolved β)) kAβs
-
-    _Γ <- get
-
-    (_ΓR, _ΓL) <- Context.splitOnUnsolvedRow ρ₀ _Γ `orDie` "instantiateRowL"
-
-    set (_ΓR <> (Context.SolvedRow ρ₀ (Monotype.Fields kβs (Just ρ₂)) : Context.UnsolvedRow ρ₂ : βs <> _ΓL))
-
-    let instantiate (_, _A, β) = do
-            _Θ <- get
-
-            instantiateL β (Context.solve _Θ _A)
-
-    traverse_ instantiate kAβs
-
-    equateRows ρ₁ ρ₂
-
-instantiateRowL ρ₀ (Type.Fields kAs Nothing) = do
+instantiateRowL ρ₀ (Type.Fields kAs rest) = do
     let process (k, _A) = do
             β <- fresh
 
@@ -715,8 +692,16 @@ instantiateRowL ρ₀ (Type.Fields kAs Nothing) = do
 
     (_ΓR, _ΓL) <- Context.splitOnUnsolvedRow ρ₀ _Γ `orDie` "instantiateRowL"
 
-    set (_ΓR <> (Context.SolvedRow ρ₀ (Monotype.Fields kβs Nothing) : βs <> _ΓL))
+    case rest of
+        Just ρ₁ -> do
+            ρ₂ <- fresh
 
+            set (_ΓR <> (Context.SolvedRow ρ₀ (Monotype.Fields kβs (Just ρ₂)) : Context.UnsolvedRow ρ₂ : βs <> _ΓL))
+
+            equateRows ρ₁ ρ₂
+
+        Nothing -> do
+            set (_ΓR <> (Context.SolvedRow ρ₀ (Monotype.Fields kβs Nothing) : βs <> _ΓL))
     let instantiate (_, _A, β) = do
             _Θ <- get
 
@@ -727,35 +712,7 @@ instantiateRowL ρ₀ (Type.Fields kAs Nothing) = do
 instantiateRowR
     :: (MonadState Status m, MonadError Text m)
     => Type.Record -> Existential Monotype.Record -> m ()
-instantiateRowR (Type.Fields kAs (Just ρ₁)) ρ₀ = do
-    let process (k, _A) = do
-            β <- fresh
-
-            return (k, _A, β)
-
-    ρ₂ <- fresh
-
-    kAβs <- traverse process kAs
-
-    _Γ <- get
-
-    (_ΓR, _ΓL) <- Context.splitOnUnsolvedRow ρ₀ _Γ `orDie` "instantiateRowR"
-
-    let βs  = map (\(_, _, β) -> Context.Unsolved β      ) kAβs
-    let kβs = map (\(k, _, β) -> (k, Monotype.Unsolved β)) kAβs
-
-    set (_ΓR <> (Context.SolvedRow ρ₀ (Monotype.Fields kβs (Just ρ₂)) : Context.UnsolvedRow ρ₂ : βs <> _ΓL))
-
-    let instantiate (_, _A, β) = do
-            _Θ <- get
-
-            instantiateR (Context.solve _Θ _A) β
-
-    traverse_ instantiate kAβs
-
-    equateRows ρ₁ ρ₂
-
-instantiateRowR (Type.Fields kAs Nothing) ρ₀ = do
+instantiateRowR (Type.Fields kAs rest) ρ₀ = do
     let process (k, _A) = do
             β <- fresh
 
@@ -763,14 +720,23 @@ instantiateRowR (Type.Fields kAs Nothing) ρ₀ = do
 
     kAβs <- traverse process kAs
 
+    let βs  = map (\(_, _, β) -> Context.Unsolved β      ) kAβs
+    let kβs = map (\(k, _, β) -> (k, Monotype.Unsolved β)) kAβs
+
     _Γ <- get
 
     (_ΓR, _ΓL) <- Context.splitOnUnsolvedRow ρ₀ _Γ `orDie` "instantiateRowR"
 
-    let βs  = map (\(_, _, β) -> Context.Unsolved β      ) kAβs
-    let kβs = map (\(k, _, β) -> (k, Monotype.Unsolved β)) kAβs
+    case rest of
+        Just ρ₁ -> do
+            ρ₂ <- fresh
 
-    set (_ΓR <> (Context.SolvedRow ρ₀ (Monotype.Fields kβs Nothing) : βs <> _ΓL))
+            set (_ΓR <> (Context.SolvedRow ρ₀ (Monotype.Fields kβs (Just ρ₂)) : Context.UnsolvedRow ρ₂ : βs <> _ΓL))
+
+            equateRows ρ₁ ρ₂
+
+        Nothing -> do
+            set (_ΓR <> (Context.SolvedRow ρ₀ (Monotype.Fields kβs Nothing) : βs <> _ΓL))
 
     let instantiate (_, _A, β) = do
             _Θ <- get
@@ -788,7 +754,7 @@ instantiateRowR (Type.Fields kAs Nothing) ρ₀ = do
 -}
 infer :: (MonadState Status m, MonadError Text m) => Syntax -> m Type
 -- Var
-infer (Syntax.Variable x₀ n) = do
+infer _A@(Syntax.Variable x₀ n) = do
     _Γ <- get
 
     case Context.lookup x₀ n _Γ of
@@ -797,7 +763,7 @@ infer (Syntax.Variable x₀ n) = do
 
         Nothing -> do
             Except.throwError [__i|
-            Unbound variable: ${pretty (Syntax.Variable x₀ n)}
+            Unbound variable: ${pretty _A}
             |]
 
 -- →I⇒ 
