@@ -142,7 +142,8 @@ prettyEntry (Marker α) =
 prettyKeyType :: (Text, Monotype) -> Doc a
 prettyKeyType (k, τ) = ", " <> Pretty.pretty k <> " : " <> Pretty.pretty τ
 
-{-| Substitute a `Type` using the `Solved` entries of a `Context`
+{-| Substitute a `Type` using the `Solved` and `SolvedRow` entries of a
+    `Context`
 
     >>> solve [ Unsolved 1, Solved 0 Monotype.Bool ] (Type.Function (Type.Unsolved 0) (Type.Unsolved 0))
     Function Bool Bool
@@ -154,6 +155,12 @@ solve context type_ = foldl snoc type_ context
     snoc t (SolvedRow α r) = Type.solveRow α r t
     snoc t  _              = t
 
+{-| Substitute a `Type.Record` using the `Solved` and `SolvedRow` entries of a
+    `Context`
+
+    >>> solve [ SolvedRow 0 (Fields [] Nothing) ] (Type.Record (Type.Fields [("a", Bool)] (Just 0)))
+    Record (Fields [("a", Bool)] Nothing)
+-}
 solveRecord :: Context -> Type.Record -> Type.Record
 solveRecord context record = record'
   where

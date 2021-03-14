@@ -50,6 +50,7 @@ data Monotype
 instance Pretty Monotype where
     pretty = prettyMonotype
 
+-- | A monomorphic record type
 data Record = Fields [(Text, Monotype)] (Maybe (Existential Record))
     deriving (Eq, Show)
 

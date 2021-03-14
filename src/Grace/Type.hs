@@ -63,6 +63,7 @@ data Type
     -- Bool
     deriving (Eq, Ord, Show)
 
+-- | A potentially polymorphic record type
 data Record = Fields [(Text, Type)] (Maybe (Existential Monotype.Record))
     deriving (Eq, Ord, Show)
 
