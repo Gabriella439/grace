@@ -69,7 +69,9 @@ Nothing `orDie` message = Except.throwError message
 fresh :: MonadState Status m => m (Existential a)
 fresh = do
     Status{ count = n, .. } <- State.get
+
     State.put $! Status{ count = n + 1, .. }
+
     return (fromIntegral n)
 
 push :: MonadState Status m => Entry -> m ()
@@ -110,13 +112,16 @@ wellFormedType _Γ (Type.Variable α)
         Except.throwError [__i|
         Unbound type variable: #{α}
         |]
+
 -- ArrowWF
 wellFormedType _Γ (Type.Function _A _B) = do
     wellFormedType _Γ _A
     wellFormedType _Γ _B
+
 -- ForallWF
 wellFormedType _Γ (Type.Forall α _A) = do
     wellFormedType (Context.Variable α : _Γ) _A
+
 -- EvarWF / SolvedEvarWF
 wellFormedType _Γ _A@(Type.Unsolved α₀)
     | any predicate _Γ = do
@@ -137,10 +142,13 @@ wellFormedType _Γ _A@(Type.Unsolved α₀)
     predicate (Context.Unsolved α₁  ) = α₀ == α₁
     predicate (Context.Solved   α₁ _) = α₀ == α₁
     predicate  _                      = False
+
 wellFormedType _Γ (Type.List _A) = do
     wellFormedType _Γ _A
+
 wellFormedType _Γ (Type.Record (Type.Fields kAs Nothing)) = do
     traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
+
 wellFormedType _Γ (Type.Record (Type.Fields kAs (Just α₀)))
     | any predicate _Γ = do
         traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
@@ -160,6 +168,7 @@ wellFormedType _Γ (Type.Record (Type.Fields kAs (Just α₀)))
     predicate (Context.UnsolvedRow α₁  ) = α₀ == α₁
     predicate (Context.SolvedRow   α₁ _) = α₀ == α₁
     predicate  _                         = False
+
 wellFormedType _Γ Type.Bool = do
     return ()
 
@@ -179,39 +188,53 @@ subtype _A₀ _B₀ = do
         (Type.Variable α₀, Type.Variable α₁)
             | α₀ == α₁ && Context.Variable α₀ `elem` _Γ -> do
                 return ()
+
         -- <:Exvar
         (Type.Unsolved α₀, Type.Unsolved α₁)
             | α₀ == α₁ && Context.Unsolved α₀ `elem` _Γ -> do
                 return ()
+
         -- InstantiateL
         (Type.Unsolved α, _A)
             | not (α `Type.typeFreeIn` _A) && elem (Context.Unsolved α) _Γ -> do
                 instantiateL α _A
+
         -- InstantiateR
         (_A, Type.Unsolved α)
             | not (α `Type.typeFreeIn` _A) && elem (Context.Unsolved α) _Γ -> do
                 instantiateR _A α
+
         -- <:→
         (Type.Function _A₁ _A₂, Type.Function _B₁ _B₂) -> do
             subtype _B₁ _A₁
             _Θ <- get
             subtype (Context.solve _Θ _A₂) (Context.solve _Θ _B₂)
+
         -- <:∀L
         (Type.Forall α₀ _A, _B) -> do
             α₁ <- fresh
-            push (Context.Marker α₁)
+
+            push (Context.Marker   α₁)
             push (Context.Unsolved α₁)
+
             subtype (Type.substitute α₀ 0 (Type.Unsolved α₁) _A) _B
+
             discardUpTo (Context.Marker α₁)
+
         -- <:∀R
         (_A, Type.Forall α _B) -> do
             push (Context.Variable α)
+
             subtype _A _B
+
             discardUpTo (Context.Variable α)
+
         (Type.Bool, Type.Bool) -> do
             return ()
+
         (Type.List _A, Type.List _B) -> do
             subtype _A _B
+
         (Type.Record (Type.Fields kAs₀ Nothing), Type.Record (Type.Fields kBs₀ Nothing)) -> do
             let mapA = Map.fromList kAs₀
             let mapB = Map.fromList kBs₀
@@ -246,6 +269,7 @@ subtype _A₀ _B₀ = do
 
                | not nullA && nullB -> do
                 Except.throwError [__i|
+                Record type mismatch
 
                 The following record type:
 
@@ -262,6 +286,7 @@ subtype _A₀ _B₀ = do
 
                | nullA && not nullB -> do
                 Except.throwError [__i|
+                Record type mismatch
 
                 The following record type:
 
@@ -284,6 +309,7 @@ subtype _A₀ _B₀ = do
                 _ <- Map.traverseWithKey process both
 
                 return ()
+
         (Type.Record (Type.Fields kAs₀ (Just ρ)), Type.Record (Type.Fields kBs₀ Nothing)) -> do
             let mapA = Map.fromList kAs₀
             let mapB = Map.fromList kBs₀
@@ -295,6 +321,7 @@ subtype _A₀ _B₀ = do
 
             if | not (Map.null extraA) -> do
                 Except.throwError [__i|
+                Record type mismatch
 
                 The following record type:
 
@@ -330,6 +357,7 @@ subtype _A₀ _B₀ = do
 
             if | not (Map.null extraB) -> do
                 Except.throwError [__i|
+                Record type mismatch
 
                 The following record type:
 
@@ -400,13 +428,16 @@ subtype _A₀ _B₀ = do
 
                     #{listToText _Γ}
                     |]
+
                 Just setContext -> do
                     setContext
 
             _Θ <- get
+
             instantiateRowL ρ₀ (Context.solveRecord _Θ (Type.Fields (Map.toList extraB) (Just ρ₂)))
 
             _Δ <- get
+
             instantiateRowR (Context.solveRecord _Δ (Type.Fields (Map.toList extraA) (Just ρ₂))) ρ₁
 
         (_A, _B) -> do
@@ -437,7 +468,9 @@ instantiateL α _A₀ = do
 
     let instLSolve _A τ = do
             (_Γ', _Γ) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstLSolve"
+
             wellFormedType _Γ _A
+
             set (_Γ' <> (Context.Solved α τ : _Γ))
 
     case _A₀ of
@@ -446,6 +479,7 @@ instantiateL α _A₀ = do
             | Just (_ΓR, _Γ₁) <- Context.splitOnUnsolved β _Γ₀
             , Just (_ΓM, _ΓL) <- Context.splitOnUnsolved α _Γ₁ -> do
                 set (_ΓR <> (Context.Solved β (Monotype.Unsolved α) : _ΓM) <> (Context.Unsolved α : _ΓL))
+
         -- InstLSolve
         Type.Unsolved β -> do
             instLSolve (Type.Unsolved β) (Monotype.Unsolved β)
@@ -453,21 +487,31 @@ instantiateL α _A₀ = do
             instLSolve (Type.Variable β) (Monotype.Variable β)
         Type.Bool -> do
             instLSolve Type.Bool Monotype.Bool
+
         -- InstLArr
         Type.Function _A₁ _A₂ -> do
             (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstLArr"
+
             α₁ <- fresh
             α₂ <- fresh
+
             set (_ΓR <> (Context.Solved α (Monotype.Function (Monotype.Unsolved α₁) (Monotype.Unsolved α₂)) : Context.Unsolved α₁ : Context.Unsolved α₂ : _ΓL))
+
             instantiateR _A₁ α₁
+
             _Θ <- get
+
             instantiateL α₂ (Context.solve _Θ _A₂)
+
         -- InstLAllR
         Type.Forall β _B
             | Context.Unsolved α `elem` _Γ₀ -> do
                 push (Context.Variable β)
+
                 instantiateL  α _B
+
                 discardUpTo (Context.Variable β)
+
             | otherwise -> do
                 Except.throwError [__i|
                 Internal error: Malformed context
@@ -480,15 +524,22 @@ instantiateL α _A₀ = do
 
                 #{listToText _Γ₀}
                 |]
+
         Type.List _A -> do
             (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstLList"
+
             α₁ <- fresh
+
             set (_ΓR <> (Context.Solved α (Monotype.List (Monotype.Unsolved α₁)) : Context.Unsolved α₁ : _ΓL))
+
             instantiateL α₁ _A
         Type.Record r -> do
             (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstLRecord"
+
             ρ <- fresh
+
             set (_ΓR <> (Context.Solved α (Monotype.Record (Monotype.Fields [] (Just ρ))) : Context.UnsolvedRow ρ : _ΓL))
+
             instantiateRowL ρ r
 
 {-| This corresponds to the judgment:
@@ -506,7 +557,9 @@ instantiateR _A₀ α = do
 
     let instRSolve _A τ = do
             (_Γ', _Γ) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstRSolve"
+
             wellFormedType _Γ _A
+
             set (_Γ' <> (Context.Solved α τ : _Γ))
 
     case _A₀ of
@@ -515,6 +568,7 @@ instantiateR _A₀ α = do
             | Just (_ΓR, _Γ₁) <- Context.splitOnUnsolved β _Γ₀
             , Just (_ΓM, _ΓL) <- Context.splitOnUnsolved α _Γ₁ -> do
                 set (_ΓR <> (Context.Solved β (Monotype.Unsolved α) : _ΓM) <> (Context.Unsolved α : _ΓL))
+
         -- InstRSolve
         Type.Unsolved β -> do
             instRSolve (Type.Unsolved β) (Monotype.Unsolved β)
@@ -522,22 +576,32 @@ instantiateR _A₀ α = do
             instRSolve (Type.Variable β) (Monotype.Variable β)
         Type.Bool -> do
             instRSolve Type.Bool Monotype.Bool
+
         -- InstRArr
         Type.Function _A₁ _A₂ -> do
             (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstRArr"
+
             α₁ <- fresh
             α₂ <- fresh
+
             set (_ΓR <> (Context.Solved α (Monotype.Function (Monotype.Unsolved α₁) (Monotype.Unsolved α₂)) : Context.Unsolved α₁ : Context.Unsolved α₂ : _ΓL))
+
             instantiateL α₁ _A₁
+
             _Θ <- get
+
             instantiateR (Context.solve _Θ _A₂) α₂
+
         -- InstRAllL
         Type.Forall β₀ _B
             | Context.Unsolved α `elem` _Γ₀ -> do
                 β₁ <- fresh
+
                 push (Context.Marker β₁)
                 push (Context.Unsolved β₁)
+
                 instantiateR (Type.substitute β₀ 0 (Type.Unsolved β₁) _B) α
+
                 discardUpTo (Context.Marker β₁)
             | otherwise -> do
                 Except.throwError [__i|
@@ -553,13 +617,19 @@ instantiateR _A₀ α = do
                 |]
         Type.List _A -> do
             (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstRArr"
+
             α₁ <- fresh
+
             set (_ΓR <> (Context.Solved α (Monotype.List (Monotype.Unsolved α₁)) : Context.Unsolved α₁ : _ΓL))
+
             instantiateR _A α₁
         Type.Record r -> do
             (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstRRecord"
+
             ρ <- fresh
+
             set (_ΓR <> (Context.Solved α (Monotype.Record (Monotype.Fields [] (Just ρ))) : Context.UnsolvedRow ρ : _ΓL))
+
             instantiateRowR r ρ
 
 equateRows
@@ -595,6 +665,7 @@ equateRows ρ₀ ρ₁ = do
 
             #{listToText _Γ₀}
             |]
+
         Just setContext -> do
             setContext
 
@@ -628,6 +699,7 @@ instantiateRowL ρ₀ (Type.Fields kAs (Just ρ₁)) = do
     traverse_ instantiate kAβs
 
     equateRows ρ₁ ρ₂
+
 instantiateRowL ρ₀ (Type.Fields kAs Nothing) = do
     let process (k, _A) = do
             β <- fresh
@@ -682,6 +754,7 @@ instantiateRowR (Type.Fields kAs (Just ρ₁)) ρ₀ = do
     traverse_ instantiate kAβs
 
     equateRows ρ₁ ρ₂
+
 instantiateRowR (Type.Fields kAs Nothing) ρ₀ = do
     let process (k, _A) = do
             β <- fresh
@@ -717,82 +790,127 @@ infer :: (MonadState Status m, MonadError Text m) => Syntax -> m Type
 -- Var
 infer (Syntax.Variable x₀ n) = do
     _Γ <- get
+
     case Context.lookup x₀ n _Γ of
         Just _A -> do
             return _A
+
         Nothing -> do
             Except.throwError [__i|
-            Unbound variable: ${x₀ <> if n == 0 then "" else "@" <> Text.pack (show n)}
+            Unbound variable: ${pretty (Syntax.Variable x₀ n)}
             |]
+
+-- →I⇒ 
 infer (Syntax.Lambda x e) = do
     α <- fresh
     β <- fresh
+
     push (Context.Unsolved α)
     push (Context.Unsolved β)
     push (Context.Annotation x (Type.Unsolved α))
+
     check e (Type.Unsolved β)
+
     discardUpTo (Context.Annotation x (Type.Unsolved α))
+
     return (Type.Function (Type.Unsolved α) (Type.Unsolved β))
+
 -- →E
 infer (Syntax.Application e₁ e₂) = do
     _A <- infer e₁
+
     _Θ <- get
+
     inferApplication (Context.solve _Θ _A) e₂
+
 -- Anno
 infer (Syntax.Annotation e _A) = do
     _Γ <- get
+
     wellFormedType _Γ _A
+
     check e _A
+
     return _A
--- let
+
 infer (Syntax.Let x Nothing a b) = do
     _A <- infer a
+
     push (Context.Annotation x _A)
+
     infer b
+
 infer (Syntax.Let x (Just _A) a b) = do
     check a _A
+
     push (Context.Annotation x _A)
+
     infer b
+
 infer (Syntax.List xs) = do
     case xs of
         [] -> do
             α <- fresh
+
             push (Context.Unsolved α)
+
             return (Type.List (Type.Unsolved α))
         y : ys -> do
             _A <- infer y
+
             traverse_ (`check` _A) ys
+
             return (Type.List _A)
+
 infer (Syntax.Record kvs) = do
     let process (k, v) = do
             _A <- infer v
+
             return (k, _A)
+
     kAs <- traverse process kvs
+
     return (Type.Record (Type.Fields kAs Nothing))
+
 infer (Syntax.Field record key) = do
     α <- fresh
     ρ <- fresh
+
     push (Context.Unsolved α)
     push (Context.UnsolvedRow ρ)
+
     check record (Type.Record (Type.Fields [(key, Type.Unsolved α)] (Just ρ)))
+
     return (Type.Unsolved α)
+
 infer (Syntax.If predicate l r) = do
     check predicate Type.Bool
+
     _L₀ <- infer l
+
     _Γ  <- get
+
     let _L₁ = Context.solve _Γ _L₀
+
     check r _L₁
+
     return _L₁
+
 infer (Syntax.And l r) = do
     check l Type.Bool
     check r Type.Bool
+
     return Type.Bool
+
 infer (Syntax.Or l r) = do
     check l Type.Bool
     check r Type.Bool
+
     return Type.Bool
+
 infer Syntax.True = do
     return Type.Bool
+
 infer Syntax.False = do
     return Type.Bool
 
@@ -807,17 +925,25 @@ check :: (MonadState Status m, MonadError Text m) => Syntax -> Type -> m ()
 -- →I
 check (Syntax.Lambda x e) (Type.Function _A _B) = do
     push (Context.Annotation x _A)
+
     check e _B
+
     discardUpTo (Context.Annotation x _A)
+
 -- ∀I
 check e (Type.Forall α _A) = do
     push (Context.Variable α)
+
     check e _A
+
     discardUpTo (Context.Variable α)
+
 -- Sub
 check e _B = do
     _A <- infer e
+
     _Θ <- get
+
     subtype (Context.solve _Θ _A) (Context.solve _Θ _B)
 
 {-| This corresponds to the judgment:
@@ -832,46 +958,57 @@ inferApplication
 -- ∀App
 inferApplication (Type.Forall α₀ _A) e = do
     α₁ <- fresh
+
     push (Context.Unsolved α₁)
+
     inferApplication (Type.substitute α₀ 0 (Type.Unsolved α₁) _A) e
+
 -- αApp
 inferApplication (Type.Unsolved α) e = do
     _Γ <- get
+
     (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ `orDie` "αApp"
+
     α₁ <- fresh
     α₂ <- fresh
+
     set (_ΓR <> (Context.Solved α (Monotype.Function (Monotype.Unsolved α₁) (Monotype.Unsolved α₂)) : Context.Unsolved α₁ : Context.Unsolved α₂ : _ΓL))
+
     check e (Type.Unsolved α₁)
+
     return (Type.Unsolved α₂)
 inferApplication (Type.Function _A _C) e = do
     check e _A
+
     return _C
 inferApplication (Type.Variable α) _ = do
     Except.throwError [__i|
-Internal error: Unexpected type variable in function type
+    Internal error: Unexpected type variable in function type
 
-The following type variable:
+    The following type variable:
 
-↳ #{α}
+    ↳ #{α}
 
-… should have been replaced with an unsolved variable when type-checking a
-function application.
-|]
+    … should have been replaced with an unsolved variable when type-checking a
+    function application.
+    |]
 inferApplication _A _ = do
     Except.throwError [__i|
-Not a function type
+    Not a function type
 
-An expression of the following type:
+    An expression of the following type:
 
-↳ #{prettyToText _A}
+    ↳ #{prettyToText _A}
 
-… was invoked as if it were a function, but the above type is not a function
-type.
-|]
+    … was invoked as if it were a function, but the above type is not a function
+    type.
+    |]
 
 -- | Infer the `Type` of the given `Syntax` tree
 typeOf :: Syntax -> Either Text Type
 typeOf syntax = do
     let initialStatus = Status{ count = 0, context = [] }
+
     (_A, Status{ context = _Δ }) <- State.runStateT (infer syntax) initialStatus
+
     return (Context.complete _Δ _A)
