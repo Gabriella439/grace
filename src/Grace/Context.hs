@@ -18,7 +18,7 @@ module Grace.Context
 
 import Data.Text (Text)
 import Grace.Existential (Existential)
-import Grace.Monotype (Monotype)
+import Grace.Monotype (Monotype, Record(..))
 import Grace.Type (Type)
 import Prelude hiding (lookup)
 import Prettyprinter (Doc, Pretty(..))
@@ -158,8 +158,8 @@ solve context type_ = foldl snoc type_ context
 {-| Substitute a t`Type.Record` using the `Solved` and `SolvedRow` entries of a
     `Context`
 
-    >>> solve [ SolvedRow 0 (Fields [] Nothing) ] (Type.Record (Type.Fields [("a", Bool)] (Just 0)))
-    Record (Fields [("a", Bool)] Nothing)
+    >>> solve [ SolvedRow 0 (Fields [] Nothing) ] (Type.Record (Type.Fields [("a", Type.Bool)] (Just 0)))
+    Record (Fields [("a",Bool)] Nothing)
 -}
 solveRecord :: Context -> Type.Record -> Type.Record
 solveRecord context record = record'
@@ -212,9 +212,9 @@ complete context type_ = do
     Returns `Nothing` if no such `Unsolved` variable is present within the
     `Context`
 
-    >>> split 1 [ Unsolved 1, Solved 0 Monotype.Bool ]
+    >>> splitOnUnsolved 1 [ Unsolved 1, Solved 0 Monotype.Bool ]
     Just ([],[Solved 0 Bool])
-    >>> split 0 [ Unsolved 1, Solved 0 Monotype.Bool ]
+    >>> splitOnUnsolved 0 [ Unsolved 1, Solved 0 Monotype.Bool ]
     Nothing
 -}
 splitOnUnsolved
@@ -235,9 +235,9 @@ splitOnUnsolved _ [] = Nothing
     Returns `Nothing` if no such `UnsolvedRow` variable is present within the
     `Context`
 
-    >>> split 1 [ UnsolvedRow 1, Solved 0 Monotype.Bool ]
+    >>> splitOnUnsolvedRow 1 [ UnsolvedRow 1, Solved 0 Monotype.Bool ]
     Just ([],[Solved 0 Bool])
-    >>> split 0 [ UnsolvedRow 1, Solved 0 Monotype.Bool ]
+    >>> splitOnUnsolvedRow 0 [ UnsolvedRow 1, Solved 0 Monotype.Bool ]
     Nothing
 -}
 splitOnUnsolvedRow

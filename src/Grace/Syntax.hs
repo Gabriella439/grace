@@ -12,6 +12,7 @@ import Data.Text (Text)
 import Data.Text.Prettyprint.Doc (Doc, Pretty(..))
 import Grace.Type (Type)
 
+import qualified Grace.Type    as Type
 import qualified Prettyprinter as Pretty
 
 -- | The surface syntax for the language
@@ -66,11 +67,11 @@ data Syntax
     --   x || y
     | True
     -- ^
-    --   >>> pretty True
+    --   >>> pretty Grace.Syntax.True
     --   True
     | False
     -- ^
-    --   >>> pretty False
+    --   >>> pretty Grace.Syntax.False
     --   False
     deriving (Show)
 
