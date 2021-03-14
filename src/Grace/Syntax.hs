@@ -83,41 +83,33 @@ instance Pretty Syntax where
 -- | Pretty-print an expression
 prettyExpression :: Syntax -> Doc a
 prettyExpression (Lambda name body) =
-    Pretty.nest 4
-        (   "\\"
-        <>  Pretty.pretty name
-        <>  " -> "
-        <>  prettyExpression body
-        )
+        "\\"
+    <>  Pretty.pretty name
+    <>  " -> "
+    <>  prettyExpression body
 prettyExpression (Let name Nothing assignment body) =
-    Pretty.align
-        (   "let "
-        <>  Pretty.pretty name
-        <>  " = "
-        <>  prettyExpression assignment
-        <>  " in "
-        <>  prettyExpression body
-        )
+        "let "
+    <>  Pretty.pretty name
+    <>  " = "
+    <>  prettyExpression assignment
+    <>  " in "
+    <>  prettyExpression body
 prettyExpression (Let name (Just type_) assignment body) =
-    Pretty.align
-        (   "let "
-        <>  Pretty.pretty name
-        <>  " : "
-        <>  Pretty.pretty type_
-        <>  " = "
-        <>  prettyExpression assignment
-        <>  " in "
-        <>  prettyExpression body
-        )
+        "let "
+    <>  Pretty.pretty name
+    <>  " : "
+    <>  Pretty.pretty type_
+    <>  " = "
+    <>  prettyExpression assignment
+    <>  " in "
+    <>  prettyExpression body
 prettyExpression (If predicate ifTrue ifFalse) =
-    Pretty.align
-        (   "if "
-        <>  prettyExpression predicate
-        <>  " then "
-        <>  prettyExpression ifTrue
-        <>  " else "
-        <>  prettyExpression ifFalse
-        )
+        "if "
+    <>  prettyExpression predicate
+    <>  " then "
+    <>  prettyExpression ifTrue
+    <>  " else "
+    <>  prettyExpression ifFalse
 prettyExpression (Annotation annotated annotation) =
         prettyOrExpression annotated
     <>  " : "
@@ -139,11 +131,9 @@ prettyAndExpression other =
 
 prettyApplicationExpression :: Syntax -> Doc a
 prettyApplicationExpression (Application function argument) =
-    Pretty.nest 4
-        (   prettyApplicationExpression function
-        <>  " "
-        <>  prettyFieldExpression argument
-        )
+        prettyApplicationExpression function
+    <>  " "
+    <>  prettyFieldExpression argument
 prettyApplicationExpression other =
     prettyFieldExpression other
 
