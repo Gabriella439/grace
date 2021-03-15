@@ -110,6 +110,8 @@ PrimitiveExpression
         { Syntax.True }
     | False
         { Syntax.False }
+    | int
+        { Syntax.Natural (fromIntegral $1) }
     | '(' Expression ')' 
        { $2 }
 

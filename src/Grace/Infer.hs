@@ -172,6 +172,9 @@ wellFormedType _Γ (Type.Record (Type.Fields kAs (Just α₀)))
 wellFormedType _Γ Type.Bool = do
     return ()
 
+wellFormedType _Γ Type.Natural = do
+    return ()
+
 {-| This corresponds to the judgment:
 
     > Γ ⊢ A <: B ⊣ Δ
@@ -230,6 +233,9 @@ subtype _A₀ _B₀ = do
             discardUpTo (Context.Variable α)
 
         (Type.Bool, Type.Bool) -> do
+            return ()
+
+        (Type.Natural, Type.Natural) -> do
             return ()
 
         (Type.List _A, Type.List _B) -> do
@@ -487,6 +493,8 @@ instantiateL α _A₀ = do
             instLSolve (Type.Variable β) (Monotype.Variable β)
         Type.Bool -> do
             instLSolve Type.Bool Monotype.Bool
+        Type.Natural -> do
+            instLSolve Type.Natural Monotype.Natural
 
         -- InstLArr
         Type.Function _A₁ _A₂ -> do
@@ -576,6 +584,8 @@ instantiateR _A₀ α = do
             instRSolve (Type.Variable β) (Monotype.Variable β)
         Type.Bool -> do
             instRSolve Type.Bool Monotype.Bool
+        Type.Natural -> do
+            instRSolve Type.Natural Monotype.Natural
 
         -- InstRArr
         Type.Function _A₁ _A₂ -> do
@@ -913,6 +923,9 @@ infer Syntax.True = do
 
 infer Syntax.False = do
     return Type.Bool
+
+infer (Syntax.Natural _) = do
+    return Type.Natural
 
 {-| This corresponds to the judgment:
 

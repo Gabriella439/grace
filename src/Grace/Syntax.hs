@@ -11,6 +11,7 @@ import Data.String (IsString(..))
 import Data.Text (Text)
 import Data.Text.Prettyprint.Doc (Doc, Pretty(..))
 import Grace.Type (Type)
+import Numeric.Natural (Natural)
 
 import qualified Prettyprinter as Pretty
 
@@ -72,6 +73,10 @@ data Syntax
     -- ^
     --   >>> pretty Grace.Syntax.False
     --   False
+    | Natural Natural
+    -- ^
+    --   >>> pretty (Natural 1)
+    --   1
     deriving (Show)
 
 instance IsString Syntax where
@@ -169,5 +174,7 @@ prettyPrimitiveExpression Grace.Syntax.True =
     "True"
 prettyPrimitiveExpression Grace.Syntax.False =
     "False"
+prettyPrimitiveExpression (Natural n) =
+    Pretty.pretty n
 prettyPrimitiveExpression other =
     "(" <> prettyExpression other <> ")"

@@ -62,6 +62,11 @@ data Type
     --
     -- >>> pretty Bool
     -- Bool
+    | Natural
+    -- ^ Natural number type
+    --
+    -- >>> pretty Natural
+    -- Natural
     deriving (Eq, Ord, Show)
 
 instance IsString Type where
@@ -90,6 +95,8 @@ fromMonotype (Monotype.Record (Monotype.Fields kτs ρ)) =
     Record (Fields (map (\(k, τ) -> (k, fromMonotype τ)) kτs) ρ)
 fromMonotype Monotype.Bool =
     Bool
+fromMonotype Monotype.Natural =
+    Natural
 
 {-| Substitute a `Type` by replacing all occurrences of the given unsolved
     variable with a `Monotype`
@@ -110,6 +117,8 @@ solve α τ (Record (Fields kAs ρ)) =
     Record (Fields (map (\(k, _A) -> (k, solve α τ _A)) kAs) ρ)
 solve _ _ Bool =
     Bool
+solve _ _ Natural =
+    Natural
 
 {-| Substitute a `Type` by replacing all occurrences of the given unsolved
     row variable with a t`Monotype.Record`
@@ -134,6 +143,8 @@ solveRow ρ₀ r@(Monotype.Fields kτs ρ₁) (Record (Fields kAs₀ ρ))
     kAs₁ = kAs₀ <> map (\(k, τ) -> (k, fromMonotype τ)) kτs
 solveRow _ _ Bool =
     Bool
+solveRow _ _ Natural =
+    Natural
 
 {-| Replace all occurrences of a variable within one `Type` with another `Type`,
     given the variable's label and index
@@ -159,6 +170,8 @@ substitute α n _A₀ (Record (Fields kAs ρ)) =
     Record (Fields (map (\(k, _A₁) -> (k, substitute α n _A₀ _A₁)) kAs) ρ)
 substitute _ _ _ Bool =
     Bool
+substitute _ _ _ Natural =
+    Natural
 
 {-| Count how many times the given `Existential` `Type` variable appears within
     a `Type`
@@ -170,6 +183,7 @@ _  `typeFreeIn` Variable _            = False
 α  `typeFreeIn` Function _A _B        = α `typeFreeIn` _A || α `typeFreeIn` _B
 α  `typeFreeIn` List _A               = α `typeFreeIn` _A
 _  `typeFreeIn` Bool                  = False
+_  `typeFreeIn` Natural               = False
 α  `typeFreeIn` Record (Fields kAs _) = any (\(_, _A) -> α `typeFreeIn` _A) kAs
 
 {-| Count how many times the given `Existential` t`Monotype.Record` variable appears
@@ -182,6 +196,7 @@ _  `rowFreeIn` Unsolved _             = False
 ρ  `rowFreeIn` Function _A _B         = ρ `rowFreeIn` _A || ρ `rowFreeIn` _B
 ρ  `rowFreeIn` List _A                = ρ `rowFreeIn` _A
 _  `rowFreeIn` Bool                   = False
+_  `rowFreeIn` Natural                = False
 ρ₀ `rowFreeIn` Record (Fields kAs ρ₁) =
     any (ρ₀ ==) ρ₁ || any (\(_, _A) -> ρ₀ `rowFreeIn` _A) kAs
 
@@ -205,6 +220,7 @@ prettyPrimitiveType (Variable α) = Pretty.pretty α
 prettyPrimitiveType (Unsolved α) = Pretty.pretty α <> "?"
 prettyPrimitiveType (Record r)   = prettyRecordType r
 prettyPrimitiveType  Bool        = "Bool"
+prettyPrimitiveType  Natural     = "Natural"
 prettyPrimitiveType  other       = "(" <> prettyType other <> ")"
 
 prettyRecordType :: Record -> Doc a

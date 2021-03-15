@@ -156,6 +156,9 @@ evaluate env syntax =
         Syntax.False ->
             Value.False
 
+        Syntax.Natural n ->
+            Value.Natural n
+
 countNames :: Text -> [Text] -> Int
 countNames name = length . filter (== name)
 
@@ -227,6 +230,9 @@ quote names value =
 
         Value.False ->
             Syntax.False
+
+        Value.Natural n ->
+            Syntax.Natural n
 
 {-| Evaluate an expression
 

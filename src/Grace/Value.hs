@@ -9,6 +9,7 @@ module Grace.Value
 
 import Data.String (IsString(..))
 import Data.Text (Text)
+import Numeric.Natural (Natural)
 import Grace.Syntax (Syntax)
 
 {-| A `Closure` captures the current evaluation environment in order to defer
@@ -81,6 +82,7 @@ data Value
     | Or Value Value
     | True
     | False
+    | Natural Natural
     deriving (Show)
 
 instance IsString Value where
