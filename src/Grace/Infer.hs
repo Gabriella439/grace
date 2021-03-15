@@ -797,7 +797,7 @@ infer _A@(Syntax.Variable x₀ n) = do
 
         Nothing -> do
             Except.throwError [__i|
-            Unbound variable: ${pretty _A}
+            Unbound variable: #{prettyToText _A}
             |]
 
 -- →I⇒ 
