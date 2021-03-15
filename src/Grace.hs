@@ -19,10 +19,7 @@ import qualified Grace.Parser
 import qualified System.Exit                           as Exit
 
 pretty_ :: Pretty a => a -> IO ()
-pretty_ x = Pretty.Text.putDoc doc
-  where
-    doc =   Pretty.group (Pretty.pretty x)
-        <>  Pretty.hardline
+pretty_ x = Pretty.Text.putDoc (Pretty.pretty x <> Pretty.hardline)
 
 -- | Command-line entrypoint
 main :: IO ()
@@ -38,7 +35,7 @@ main = do
             return expression
 
     case Grace.Infer.typeOf expression of
-        Left  text -> do
+        Left text -> do
             Text.IO.putStrLn text
         Right inferred -> do
             pretty_ inferred

@@ -50,3 +50,20 @@ executable grace
   build-depends:       base, grace
   hs-source-dirs:      grace
   default-language:    Haskell2010
+
+test-suite tasty
+  type:                exitcode-stdio-1.0
+  main-is:             Main.hs
+  build-depends:       base
+                     , bytestring
+                     , directory
+                     , filepath
+                     , grace
+                     , prettyprinter
+                     , tasty
+                     , tasty-silver
+                     , text
+  hs-source-dirs:      tasty
+  default-extensions:  OverloadedStrings
+  default-language:    Haskell2010
+  ghc-options:         -Wall
