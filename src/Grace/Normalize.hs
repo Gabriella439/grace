@@ -100,8 +100,11 @@ evaluate env syntax =
         Syntax.Annotation annotated _ ->
             evaluate env annotated
 
-        Syntax.Let name _ assignment body ->
-            evaluate ((name, evaluate env assignment) : env) body
+        Syntax.Let bindings body ->
+            evaluate (foldl snoc env bindings) body
+          where
+            snoc environment (Syntax.Binding name _ assignment) =
+                (name, evaluate environment assignment) : environment
 
         Syntax.List elements ->
             Value.List (map (evaluate env) elements)

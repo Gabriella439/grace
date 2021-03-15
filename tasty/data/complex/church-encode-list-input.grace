@@ -2,14 +2,14 @@
 let nil : forall a . forall list . (a -> list -> list) -> list -> list
         = \cons -> \nil -> nil
 
-in let cons
+let cons
         : forall a
         .   a
         ->  (forall list . (a -> list -> list) -> list -> list)
         ->  (forall list . (a -> list -> list) -> list -> list)
         = \x -> \list_ -> \cons -> \nil -> cons x (list_ cons nil)
 
-in let and : (forall list . (Bool -> list -> list) -> list -> list) -> Bool
+let and : (forall list . (Bool -> list -> list) -> list -> list) -> Bool
        = \list -> list (\x -> \y -> x && y) True
 
 in  and (cons True (cons False (cons True nil)))

@@ -843,17 +843,17 @@ infer (Syntax.Annotation e _A) = do
 
     return _A
 
-infer (Syntax.Let x Nothing a b) = do
-    _A <- infer a
+infer (Syntax.Let bindings b) = do
+    let process (Syntax.Binding x Nothing a) = do
+            _A <- infer a
 
-    push (Context.Annotation x _A)
+            push (Context.Annotation x _A)
+        process (Syntax.Binding x (Just _A) a) = do
+            check a _A
 
-    infer b
+            push (Context.Annotation x _A)
 
-infer (Syntax.Let x (Just _A) a b) = do
-    check a _A
-
-    push (Context.Annotation x _A)
+    traverse_ process bindings
 
     infer b
 

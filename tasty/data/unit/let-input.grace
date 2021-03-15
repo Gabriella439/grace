@@ -1,1 +1,5 @@
-let x = True in x
+let x = True
+
+let y = x
+
+in  y

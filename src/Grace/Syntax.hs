@@ -5,15 +5,15 @@
 module Grace.Syntax
     ( -- * Syntax
       Syntax(..)
+    , Binding(..)
     ) where
 
+import Data.List.NonEmpty (NonEmpty)
 import Data.String (IsString(..))
 import Data.Text (Text)
 import Data.Text.Prettyprint.Doc (Doc, Pretty(..))
 import Grace.Type (Type)
 import Numeric.Natural (Natural)
-
-import qualified Prettyprinter as Pretty
 
 -- | The surface syntax for the language
 data Syntax
@@ -35,12 +35,14 @@ data Syntax
     -- ^
     --   >>> pretty (Annotation "x" "A")
     --   x : A
-    | Let Text (Maybe Type) Syntax Syntax
+    | Let (NonEmpty Binding) Syntax
     -- ^
-    --   >>> pretty (Let "x" Nothing "y" "z")
+    --   >>> pretty (Let (Binding "x" Nothing "y" :| []) "z")
     --   let x = y in z
-    --   >>> pretty (Let "x" (Just "t") "y" "z")
-    --   let x : t = y in z
+    --   >>> pretty (Let (Binding "x" (Just "X") "y" :| []) "z")
+    --   let x : X = y in z
+    --   >>> pretty (Let (Binding "a" Nothing "b" :| [ Binding "c" Nothing "d" ]) "e")
+    --   let a = b let c = d in e
     | List [Syntax]
     -- ^
     --   >>> pretty (List [ "x", "y", "z" ])
@@ -100,26 +102,9 @@ instance Pretty Syntax where
 -- | Pretty-print an expression
 prettyExpression :: Syntax -> Doc a
 prettyExpression (Lambda name body) =
-        "\\"
-    <>  Pretty.pretty name
-    <>  " -> "
-    <>  prettyExpression body
-prettyExpression (Let name Nothing assignment body) =
-        "let "
-    <>  Pretty.pretty name
-    <>  " = "
-    <>  prettyExpression assignment
-    <>  " in "
-    <>  prettyExpression body
-prettyExpression (Let name (Just type_) assignment body) =
-        "let "
-    <>  Pretty.pretty name
-    <>  " : "
-    <>  Pretty.pretty type_
-    <>  " = "
-    <>  prettyExpression assignment
-    <>  " in "
-    <>  prettyExpression body
+    "\\" <> pretty name <> " -> " <> prettyExpression body
+prettyExpression (Let bindings body) =
+    foldMap pretty bindings <> "in " <> prettyExpression body
 prettyExpression (If predicate ifTrue ifFalse) =
         "if "
     <>  prettyExpression predicate
@@ -128,9 +113,7 @@ prettyExpression (If predicate ifTrue ifFalse) =
     <>  " else "
     <>  prettyExpression ifFalse
 prettyExpression (Annotation annotated annotation) =
-        prettyTimesExpression annotated
-    <>  " : "
-    <>  Pretty.pretty annotation
+        prettyTimesExpression annotated <> " : " <> pretty annotation
 prettyExpression other =
     prettyTimesExpression other
 
@@ -168,14 +151,14 @@ prettyApplicationExpression other =
 
 prettyFieldExpression :: Syntax -> Doc a
 prettyFieldExpression (Field record key) =
-    prettyFieldExpression record <> "." <> Pretty.pretty key
+    prettyFieldExpression record <> "." <> pretty key
 prettyFieldExpression other =
     prettyPrimitiveExpression other
 
 prettyPrimitiveExpression :: Syntax -> Doc a
 prettyPrimitiveExpression (Variable name index)
-    | index == 0 = Pretty.pretty name
-    | otherwise  = Pretty.pretty name <> "@" <> Pretty.pretty index
+    | index == 0 = pretty name
+    | otherwise  = pretty name <> "@" <> pretty index
 prettyPrimitiveExpression (List []) =
     "[ ]"
 prettyPrimitiveExpression (List (element₀ : elements)) =
@@ -186,21 +169,46 @@ prettyPrimitiveExpression (Record []) =
     "{ }"
 prettyPrimitiveExpression (Record ((key₀, value₀) : keyValues)) =
         "{ "
-    <>  Pretty.pretty key₀
+    <>  pretty key₀
     <>  " = "
     <>  prettyExpression value₀
     <>  foldMap prettyKeyValue keyValues
     <>  " }"
   where
-    prettyKeyValue (key, value) =
-        ", " <> Pretty.pretty key <> " = " <> Pretty.pretty value
+    prettyKeyValue (key, value) = ", " <> pretty key <> " = " <> pretty value
 prettyPrimitiveExpression Grace.Syntax.True =
     "True"
 prettyPrimitiveExpression Grace.Syntax.False =
     "False"
 prettyPrimitiveExpression (Natural n) =
-    Pretty.pretty n
+    pretty n
 prettyPrimitiveExpression NaturalFold =
     "Natural/fold"
 prettyPrimitiveExpression other =
     "(" <> prettyExpression other <> ")"
+
+{-| The assignment part of a @let@ binding
+
+    >>> pretty (Binding "x" Nothing "y")
+    let x = y
+    >>> pretty (Binding "x" (Just "X") "y")
+    let x : X = y
+-}
+data Binding = Binding Text (Maybe Type) Syntax
+    deriving (Show)
+
+instance Pretty Binding where
+    pretty (Binding name Nothing assignment) =
+            "let "
+        <>  pretty name
+        <>  " = "
+        <>  prettyExpression assignment
+        <>  " "
+    pretty (Binding name (Just type_) assignment) =
+            "let "
+        <>  pretty name
+        <>  " : "
+        <>  pretty type_
+        <>  " = "
+        <>  prettyExpression assignment
+        <>  " "

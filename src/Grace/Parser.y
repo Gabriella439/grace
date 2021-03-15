@@ -13,14 +13,16 @@ module Grace.Parser
       parseExpression
     ) where
 
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.String.Interpolate (__i)
 import Grace.Lexer (Alex, AlexPosn(..), Token)
 import Grace.Syntax (Syntax)
 
-import qualified Data.Text         as Text
-import qualified Grace.Lexer       as Lexer
-import qualified Grace.Syntax      as Syntax
-import qualified Grace.Type        as Type
+import qualified Data.List.NonEmpty as NonEmpty
+import qualified Data.Text          as Text
+import qualified Grace.Lexer        as Lexer
+import qualified Grace.Syntax       as Syntax
+import qualified Grace.Type         as Type
 }
 
 %name parseExpression
@@ -66,10 +68,8 @@ import qualified Grace.Type        as Type
 Expression
     : '\\' label '->' Expression
         { Syntax.Lambda $2 $4 }
-    | let label '=' Expression in Expression
-        { Syntax.Let $2 Nothing $4 $6 }
-    | let label ':' Type '=' Expression in Expression
-        { Syntax.Let $2 (Just $4) $6 $8 }
+    | Bindings in Expression
+        { Syntax.Let $1 $3 }
     | if Expression then Expression else Expression
         { Syntax.If $2 $4 $6 }
     | TimesExpression ':' Type
@@ -132,6 +132,22 @@ PrimitiveExpression
         { Syntax.NaturalFold }
     | '(' Expression ')' 
        { $2 }
+
+Bindings
+    : ReversedBindings
+        { NonEmpty.reverse $1 }
+
+ReversedBindings
+    : ReversedBindings Binding
+        { NonEmpty.cons $2 $1 }
+    | Binding
+        { $1 :| [] }
+
+Binding
+    : let label '=' Expression
+        { Syntax.Binding $2 Nothing $4 }
+    | let label ':' Type '=' Expression
+        { Syntax.Binding $2 (Just $4) $6 }
 
 List
    : ReversedList
