@@ -939,6 +939,15 @@ infer (Syntax.Plus l r) = do
 
     return Type.Natural
 
+infer Syntax.NaturalFold = do
+    return
+        (Type.Forall "a"
+            (Type.Function
+                Type.Natural
+                (Type.Function (Type.Function "a" "a") (Type.Function "a" "a"))
+            )
+        )
+
 {-| This corresponds to the judgment:
 
     > Γ ⊢ e ⇐ A ⊣ Δ

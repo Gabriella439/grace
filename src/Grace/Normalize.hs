@@ -14,6 +14,7 @@ module Grace.Normalize
 import Data.Text (Text)
 import Grace.Value (Closure(..), Value)
 import Grace.Syntax (Syntax)
+import Prelude hiding (succ)
 
 import qualified Grace.Value  as Value
 import qualified Grace.Syntax as Syntax
@@ -77,11 +78,18 @@ evaluate env syntax =
             lookupVariable name index env
 
         Syntax.Application function argument ->
-            case function' of
-                Value.Lambda (Closure name capturedEnv body) ->
-                    evaluate ((name, argument') : capturedEnv) body
+            case (function', argument') of
+                (Value.Application
+                    (Value.Application Value.NaturalFold (Value.Natural n))
+                    succ
+                  , nil
+                  ) ->
+                    go n nil
+                  where
+                    go 0 !result = result
+                    go m !result = go (m - 1) (evaluateApplication succ result)
                 _ ->
-                    Value.Application function' argument'
+                    evaluateApplication function' argument'
           where
             function' = evaluate env function
             argument' = evaluate env argument
@@ -175,6 +183,17 @@ evaluate env syntax =
           where
             left'  = evaluate env left
             right' = evaluate env right
+
+        Syntax.NaturalFold ->
+            Value.NaturalFold
+
+evaluateApplication :: Value -> Value -> Value
+evaluateApplication (Value.Lambda (Closure name capturedEnv body)) argument =
+    evaluate ((name, argument) : capturedEnv) body
+evaluateApplication function argument =
+    Value.Application function argument
+
+
 countNames :: Text -> [Text] -> Int
 countNames name = length . filter (== name)
 
@@ -255,6 +274,9 @@ quote names value =
 
         Value.Plus left right ->
             Syntax.Plus (quote names left ) (quote names right)
+
+        Value.NaturalFold ->
+            Syntax.NaturalFold
 
 {-| Evaluate an expression
 

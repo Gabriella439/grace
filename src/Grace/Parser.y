@@ -30,34 +30,35 @@ import qualified Grace.Type        as Type
 %monad { Alex }
 
 %token
-    '&&'    { Lexer.And              }
-    '->'    { Lexer.Arrow            }
-    '@'     { Lexer.At               }
-    Bool    { Lexer.Bool             }
-    '}'     { Lexer.CloseBrace       }
-    ']'     { Lexer.CloseBracket     }
-    ')'     { Lexer.CloseParenthesis }
-    ':'     { Lexer.Colon            }
-    ','     { Lexer.Comma            }
-    '.'     { Lexer.Dot              }
-    '='     { Lexer.Equals           }
-    else    { Lexer.Else             }
-    forall  { Lexer.Forall           }
-    False   { Lexer.False            }
-    if      { Lexer.If               }
-    in      { Lexer.In               }
-    int     { Lexer.Int $$           }
-    '\\'    { Lexer.Lambda           }
-    let     { Lexer.Let              }
-    '{'     { Lexer.OpenBrace        }
-    '['     { Lexer.OpenBracket      }
-    '('     { Lexer.OpenParenthesis  }
-    '||'    { Lexer.Or               }
-    '+'     { Lexer.Plus             }
-    then    { Lexer.Then             }
-    '*'     { Lexer.Times            }
-    True    { Lexer.True             }
-    label   { Lexer.Label $$         }
+    '&&'           { Lexer.And              }
+    '->'           { Lexer.Arrow            }
+    '@'            { Lexer.At               }
+    Bool           { Lexer.Bool             }
+    '}'            { Lexer.CloseBrace       }
+    ']'            { Lexer.CloseBracket     }
+    ')'            { Lexer.CloseParenthesis }
+    ':'            { Lexer.Colon            }
+    ','            { Lexer.Comma            }
+    '.'            { Lexer.Dot              }
+    '='            { Lexer.Equals           }
+    else           { Lexer.Else             }
+    forall         { Lexer.Forall           }
+    False          { Lexer.False_           }
+    if             { Lexer.If               }
+    in             { Lexer.In               }
+    int            { Lexer.Int $$           }
+    '\\'           { Lexer.Lambda           }
+    let            { Lexer.Let              }
+    'Natural/fold' { Lexer.NaturalFold      }
+    '{'            { Lexer.OpenBrace        }
+    '['            { Lexer.OpenBracket      }
+    '('            { Lexer.OpenParenthesis  }
+    '||'           { Lexer.Or               }
+    '+'            { Lexer.Plus             }
+    then           { Lexer.Then             }
+    '*'            { Lexer.Times            }
+    True           { Lexer.True_            }
+    label          { Lexer.Label $$         }
 
 %%
 
@@ -126,6 +127,8 @@ PrimitiveExpression
         { Syntax.False }
     | int
         { Syntax.Natural (fromIntegral $1) }
+    | 'Natural/fold'
+        { Syntax.NaturalFold }
     | '(' Expression ')' 
        { $2 }
 

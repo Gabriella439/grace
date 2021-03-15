@@ -85,6 +85,7 @@ data Value
     | Natural Natural
     | Times Value Value
     | Plus Value Value
+    | NaturalFold
     deriving (Show)
 
 instance IsString Value where

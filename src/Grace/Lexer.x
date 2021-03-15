@@ -51,12 +51,13 @@ token :-
   \=                                  { emit Equals                         }
   else                                { emit Else                           }
   forall                              { emit Forall                         }
-  False                               { emit Grace.Lexer.False              }
+  False                               { emit False_                         }
   if                                  { emit If                             }
   in                                  { emit In                             }
   $digit+                             { \i n -> fmap Int (captureInt i n)   }
   \\                                  { emit Lambda                         }
   let                                 { emit Let                            }
+  Natural\/fold                       { emit NaturalFold                    }
   \{                                  { emit OpenBrace                      }
   \[                                  { emit OpenBracket                    }
   \(                                  { emit OpenParenthesis                }
@@ -64,7 +65,7 @@ token :-
   \+                                  { emit Plus                           }
   then                                { emit Then                           }
   \*                                  { emit Times                          }
-  True                                { emit Grace.Lexer.True               }
+  True                                { emit True_                          }
   [ $alpha \_ ] [ $alpha $digit \_ ]* { capture Label                       }
 
 {
@@ -150,7 +151,7 @@ data Token
     | Dot
     | Else
     | Equals
-    | False
+    | False_
     | Forall
     | If
     | In
@@ -158,6 +159,7 @@ data Token
     | Label Text
     | Lambda
     | Let
+    | NaturalFold
     | OpenBrace
     | OpenBracket
     | OpenParenthesis
@@ -165,7 +167,7 @@ data Token
     | Plus
     | Then
     | Times
-    | True
+    | True_
     | EndOfFile
     deriving (Show)
 }

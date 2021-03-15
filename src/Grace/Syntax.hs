@@ -85,6 +85,10 @@ data Syntax
     -- ^
     --   >>> pretty (Plus "x" "y")
     --   x + y
+    | NaturalFold
+    -- ^
+    --   >>> pretty NaturalFold
+    --   Natural/fold
     deriving (Show)
 
 instance IsString Syntax where
@@ -196,5 +200,7 @@ prettyPrimitiveExpression Grace.Syntax.False =
     "False"
 prettyPrimitiveExpression (Natural n) =
     Pretty.pretty n
+prettyPrimitiveExpression NaturalFold =
+    "Natural/fold"
 prettyPrimitiveExpression other =
     "(" <> prettyExpression other <> ")"

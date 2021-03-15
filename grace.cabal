@@ -31,7 +31,8 @@ library
                      , Grace.Syntax
                      , Grace.Type
                      , Grace.Value
-  default-extensions:  DerivingStrategies
+  default-extensions:  BangPatterns
+                     , DerivingStrategies
                      , DuplicateRecordFields
                      , FlexibleContexts
                      , FlexibleInstances
