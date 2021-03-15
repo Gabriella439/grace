@@ -84,7 +84,6 @@ evaluate env syntax =
                     Value.Application function' argument'
           where
             function' = evaluate env function
-
             argument' = evaluate env argument
 
         Syntax.Lambda name body ->
@@ -112,17 +111,11 @@ evaluate env syntax =
                 other ->
                     Value.Field other key
 
-        Syntax.If predicate ifTrue ifFalse ->
-            case predicate' of
-                Value.True  -> ifTrue'
-                Value.False -> ifFalse'
-                _           -> Value.If predicate' ifTrue' ifFalse'
-          where
-            predicate' = evaluate env predicate
+        Syntax.True ->
+            Value.True
 
-            ifTrue' = evaluate env ifTrue
-
-            ifFalse' = evaluate env ifFalse
+        Syntax.False ->
+            Value.False
 
         Syntax.And left right ->
             case left' of
@@ -133,8 +126,7 @@ evaluate env syntax =
                     Value.False -> Value.False
                     _ -> Value.And left' right'
           where
-            left' = evaluate env left
-
+            left'  = evaluate env left
             right' = evaluate env right
 
         Syntax.Or left right ->
@@ -146,19 +138,43 @@ evaluate env syntax =
                     Value.False -> left'
                     _ -> Value.Or left' right'
           where
-            left' = evaluate env left
-
+            left'  = evaluate env left
             right' = evaluate env right
 
-        Syntax.True ->
-            Value.True
-
-        Syntax.False ->
-            Value.False
+        Syntax.If predicate ifTrue ifFalse ->
+            case predicate' of
+                Value.True  -> ifTrue'
+                Value.False -> ifFalse'
+                _           -> Value.If predicate' ifTrue' ifFalse'
+          where
+            predicate' = evaluate env predicate
+            ifTrue'    = evaluate env ifTrue
+            ifFalse'   = evaluate env ifFalse
 
         Syntax.Natural n ->
             Value.Natural n
 
+        Syntax.Times left right ->
+            case (left', right') of
+                (Value.Natural 1, _              ) -> right'
+                (Value.Natural 0, _              ) -> Value.Natural 0
+                (_              , Value.Natural 1) -> left'
+                (_              , Value.Natural 0) -> Value.Natural 0
+                (Value.Natural l, Value.Natural r) -> Value.Natural (l * r)
+                _                                  -> Value.Times left' right'
+          where
+            left'  = evaluate env left
+            right' = evaluate env right
+
+        Syntax.Plus left right ->
+            case (left', right') of
+                (Value.Natural 0, _              ) -> right'
+                (_              , Value.Natural 0) -> left'
+                (Value.Natural l, Value.Natural r) -> Value.Natural (l + r)
+                _                                  -> Value.Plus left' right'
+          where
+            left'  = evaluate env left
+            right' = evaluate env right
 countNames :: Text -> [Text] -> Int
 countNames name = length . filter (== name)
 
@@ -213,11 +229,11 @@ quote names value =
         Value.Field record key ->
             Syntax.Field (quote names record) key
 
-        Value.If predicate ifTrue ifFalse ->
-            Syntax.If
-                (quote names predicate)
-                (quote names ifTrue)
-                (quote names ifFalse)
+        Value.True ->
+            Syntax.True
+
+        Value.False ->
+            Syntax.False
 
         Value.And left right ->
             Syntax.And (quote names left) (quote names right)
@@ -225,14 +241,20 @@ quote names value =
         Value.Or left right ->
             Syntax.Or (quote names left) (quote names right)
 
-        Value.True ->
-            Syntax.True
-
-        Value.False ->
-            Syntax.False
+        Value.If predicate ifTrue ifFalse ->
+            Syntax.If
+                (quote names predicate)
+                (quote names ifTrue)
+                (quote names ifFalse)
 
         Value.Natural n ->
             Syntax.Natural n
+
+        Value.Times left right ->
+            Syntax.Times (quote names left ) (quote names right)
+
+        Value.Plus left right ->
+            Syntax.Plus (quote names left ) (quote names right)
 
 {-| Evaluate an expression
 

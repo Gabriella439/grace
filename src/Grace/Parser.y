@@ -53,7 +53,9 @@ import qualified Grace.Type        as Type
     '['     { Lexer.OpenBracket      }
     '('     { Lexer.OpenParenthesis  }
     '||'    { Lexer.Or               }
+    '+'     { Lexer.Plus             }
     then    { Lexer.Then             }
+    '*'     { Lexer.Times            }
     True    { Lexer.True             }
     label   { Lexer.Label $$         }
 
@@ -68,8 +70,20 @@ Expression
         { Syntax.Let $2 (Just $4) $6 $8 }
     | if Expression then Expression else Expression
         { Syntax.If $2 $4 $6 }
-    | OrExpression ':' Type
+    | TimesExpression ':' Type
         { Syntax.Annotation $1 $3 }
+    | TimesExpression
+        { $1 }
+
+TimesExpression
+    : TimesExpression '*' PlusExpression
+        { Syntax.Times $1 $3 }
+    | PlusExpression
+        { $1 }
+
+PlusExpression
+    : PlusExpression '+' OrExpression
+        { Syntax.Plus $1 $3 }
     | OrExpression
         { $1 }
 

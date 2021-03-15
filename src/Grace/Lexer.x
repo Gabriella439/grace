@@ -61,8 +61,10 @@ token :-
   \[                                  { emit OpenBracket                    }
   \(                                  { emit OpenParenthesis                }
   \|\|                                { emit Or                             }
-  True                                { emit Grace.Lexer.True               }
+  \+                                  { emit Plus                           }
   then                                { emit Then                           }
+  \*                                  { emit Times                          }
+  True                                { emit Grace.Lexer.True               }
   [ $alpha \_ ] [ $alpha $digit \_ ]* { capture Label                       }
 
 {
@@ -160,7 +162,9 @@ data Token
     | OpenBracket
     | OpenParenthesis
     | Or
+    | Plus
     | Then
+    | Times
     | True
     | EndOfFile
     deriving (Show)

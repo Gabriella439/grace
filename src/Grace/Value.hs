@@ -73,16 +73,18 @@ data Value
       -- evaluated, so that evaluation can be lazily deferred until the function
       -- input is known.  This is essentially the key optimization that powers
       -- the fast normalization-by-evaluation algorithm.
-    | If Value Value Value
     | Application Value Value
     | List [Value]
     | Record [(Text, Value)]
     | Field Value Text
-    | And Value Value
-    | Or Value Value
     | True
     | False
+    | And Value Value
+    | Or Value Value
+    | If Value Value Value
     | Natural Natural
+    | Times Value Value
+    | Plus Value Value
     deriving (Show)
 
 instance IsString Value where

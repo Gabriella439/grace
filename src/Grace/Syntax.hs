@@ -53,18 +53,6 @@ data Syntax
     -- ^
     --   >>> pretty (Field "x" "a")
     --   x.a
-    | If Syntax Syntax Syntax
-    -- ^
-    --   >>> pretty (If "x" "y" "z")
-    --   if x then y else z
-    | And Syntax Syntax
-    -- ^
-    --   >>> pretty (And "x" "y")
-    --   x && y
-    | Or Syntax Syntax
-    -- ^
-    --   >>> pretty (Or "x" "y")
-    --   x || y
     | True
     -- ^
     --   >>> pretty Grace.Syntax.True
@@ -73,10 +61,30 @@ data Syntax
     -- ^
     --   >>> pretty Grace.Syntax.False
     --   False
+    | And Syntax Syntax
+    -- ^
+    --   >>> pretty (And "x" "y")
+    --   x && y
+    | Or Syntax Syntax
+    -- ^
+    --   >>> pretty (Or "x" "y")
+    --   x || y
+    | If Syntax Syntax Syntax
+    -- ^
+    --   >>> pretty (If "x" "y" "z")
+    --   if x then y else z
     | Natural Natural
     -- ^
     --   >>> pretty (Natural 1)
     --   1
+    | Times Syntax Syntax
+    -- ^
+    --   >>> pretty (Times "x" "y")
+    --   x * y
+    | Plus Syntax Syntax
+    -- ^
+    --   >>> pretty (Plus "x" "y")
+    --   x + y
     deriving (Show)
 
 instance IsString Syntax where
@@ -116,10 +124,22 @@ prettyExpression (If predicate ifTrue ifFalse) =
     <>  " else "
     <>  prettyExpression ifFalse
 prettyExpression (Annotation annotated annotation) =
-        prettyOrExpression annotated
+        prettyTimesExpression annotated
     <>  " : "
     <>  Pretty.pretty annotation
 prettyExpression other =
+    prettyTimesExpression other
+
+prettyTimesExpression :: Syntax -> Doc a
+prettyTimesExpression (Times left right) =
+    prettyTimesExpression left <> " * " <> prettyPlusExpression right
+prettyTimesExpression other =
+    prettyPlusExpression other
+
+prettyPlusExpression :: Syntax -> Doc a
+prettyPlusExpression (Plus left right) =
+    prettyPlusExpression left <> " + " <> prettyOrExpression right
+prettyPlusExpression other =
     prettyOrExpression other
 
 prettyOrExpression :: Syntax -> Doc a

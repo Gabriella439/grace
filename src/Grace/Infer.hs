@@ -893,18 +893,11 @@ infer (Syntax.Field record key) = do
 
     return (Type.Unsolved α)
 
-infer (Syntax.If predicate l r) = do
-    check predicate Type.Bool
+infer Syntax.True = do
+    return Type.Bool
 
-    _L₀ <- infer l
-
-    _Γ  <- get
-
-    let _L₁ = Context.solve _Γ _L₀
-
-    check r _L₁
-
-    return _L₁
+infer Syntax.False = do
+    return Type.Bool
 
 infer (Syntax.And l r) = do
     check l Type.Bool
@@ -918,13 +911,32 @@ infer (Syntax.Or l r) = do
 
     return Type.Bool
 
-infer Syntax.True = do
-    return Type.Bool
+infer (Syntax.If predicate l r) = do
+    check predicate Type.Bool
 
-infer Syntax.False = do
-    return Type.Bool
+    _L₀ <- infer l
+
+    _Γ  <- get
+
+    let _L₁ = Context.solve _Γ _L₀
+
+    check r _L₁
+
+    return _L₁
 
 infer (Syntax.Natural _) = do
+    return Type.Natural
+
+infer (Syntax.Times l r) = do
+    check l Type.Natural
+    check r Type.Natural
+
+    return Type.Natural
+
+infer (Syntax.Plus l r) = do
+    check l Type.Natural
+    check r Type.Natural
+
     return Type.Natural
 
 {-| This corresponds to the judgment:
