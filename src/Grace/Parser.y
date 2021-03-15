@@ -49,6 +49,7 @@ import qualified Grace.Type        as Type
     int            { Lexer.Int $$           }
     '\\'           { Lexer.Lambda           }
     let            { Lexer.Let              }
+    Natural        { Lexer.Natural          }
     'Natural/fold' { Lexer.NaturalFold      }
     '{'            { Lexer.OpenBrace        }
     '['            { Lexer.OpenBracket      }
@@ -171,6 +172,8 @@ FunctionType
 PrimitiveType
     : Bool
         { Type.Bool }
+    | Natural
+        { Type.Natural }
     | label
         { Type.Variable $1 }
     | '{' RecordType '}'

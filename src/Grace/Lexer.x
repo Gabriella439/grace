@@ -57,6 +57,7 @@ token :-
   $digit+                             { \i n -> fmap Int (captureInt i n)   }
   \\                                  { emit Lambda                         }
   let                                 { emit Let                            }
+  Natural                             { emit Natural                        }
   Natural\/fold                       { emit NaturalFold                    }
   \{                                  { emit OpenBrace                      }
   \[                                  { emit OpenBracket                    }
@@ -159,6 +160,7 @@ data Token
     | Label Text
     | Lambda
     | Let
+    | Natural
     | NaturalFold
     | OpenBrace
     | OpenBracket
