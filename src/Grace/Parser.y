@@ -62,6 +62,7 @@ import qualified Grace.Type         as Type
     '*'            { Lexer.Times            }
     True           { Lexer.True_            }
     label          { Lexer.Label $$         }
+    file           { Lexer.File  $$         }
 
 %%
 
@@ -130,6 +131,8 @@ PrimitiveExpression
         { Syntax.Natural (fromIntegral $1) }
     | 'Natural/fold'
         { Syntax.NaturalFold }
+    | file
+        { Syntax.Embed $1 }
     | '(' Expression ')' 
        { $2 }
 
@@ -214,7 +217,7 @@ ReversedRecordType
 
     For simplicity, this shares the same `Alex` monad used for lexing
 -}
-parseExpression :: Alex Syntax
+parseExpression :: Alex (Syntax FilePath)
 
 lexer :: (Token -> Alex a) -> Alex a
 lexer k = Lexer.monadScan >>= k

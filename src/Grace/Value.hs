@@ -11,6 +11,7 @@ import Data.String (IsString(..))
 import Data.Text (Text)
 import Numeric.Natural (Natural)
 import Grace.Syntax (Syntax)
+import Grace.Type (Type)
 
 {-| A `Closure` captures the current evaluation environment in order to defer
     evaluation until the value of some bound variable is known
@@ -23,7 +24,7 @@ import Grace.Syntax (Syntax)
     This provides efficiency comparable to a higher-order abstract syntax
     tree, except using a first-order representation.
 -}
-data Closure = Closure Text [(Text, Value)] Syntax
+data Closure = Closure Text [(Text, Value)] (Syntax (Type, Value))
     deriving (Show)
 
 {-| This type represents a fully evaluated expression with no reducible

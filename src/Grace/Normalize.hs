@@ -12,8 +12,10 @@ module Grace.Normalize
     ) where
 
 import Data.Text (Text)
+import Data.Void (Void)
 import Grace.Value (Closure(..), Value)
 import Grace.Syntax (Syntax)
+import Grace.Type (Type)
 import Prelude hiding (succ)
 
 import qualified Grace.Value  as Value
@@ -68,7 +70,7 @@ instantiate (Closure name env syntax) value =
 evaluate
     :: [(Text, Value)]
     -- ^ Evaluation environment (starting at @[]@ for a top-level expression)
-    -> Syntax
+    -> Syntax (Type, Value)
     -- ^ Surface syntax
     -> Value
     -- ^ Result, free of reducible sub-expressions
@@ -190,6 +192,9 @@ evaluate env syntax =
         Syntax.NaturalFold ->
             Value.NaturalFold
 
+        Syntax.Embed (_, value) ->
+            value
+
 evaluateApplication :: Value -> Value -> Value
 evaluateApplication (Value.Lambda (Closure name capturedEnv body)) argument =
     evaluate ((name, argument) : capturedEnv) body
@@ -224,7 +229,7 @@ quote
     -- ^ Variable names currently in scope (starting at @[]@ for a top-level
     --   expression)
     -> Value
-    -> Syntax
+    -> Syntax Void
 quote names value =
     case value of
         Value.Variable name index ->
@@ -286,5 +291,5 @@ quote names value =
     This is a convenient wrapper around `evaluate` and `quote` in order to
     evaluate a top-level expression
 -}
-normalize :: Syntax -> Syntax
+normalize :: Syntax (Type, Value) -> Syntax Void
 normalize = quote [] . evaluate []

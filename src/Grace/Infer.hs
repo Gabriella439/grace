@@ -39,6 +39,7 @@ import Grace.Existential (Existential)
 import Grace.Monotype (Monotype)
 import Grace.Syntax (Syntax)
 import Grace.Type (Type)
+import Grace.Value (Value)
 import Prettyprinter (Pretty)
 
 import qualified Control.Monad             as Monad
@@ -796,7 +797,9 @@ instantiateRowR r@(Type.Fields kAs rest) ρ₀ = do
     … which infers the type of e under input context Γ, producing an inferred
     type of A and an updated context Δ.
 -}
-infer :: (MonadState Status m, MonadError Text m) => Syntax -> m Type
+infer
+    :: (MonadState Status m, MonadError Text m) => Syntax (Type, Value)
+    -> m Type
 -- Var
 infer _A@(Syntax.Variable x₀ n) = do
     _Γ <- get
@@ -807,7 +810,7 @@ infer _A@(Syntax.Variable x₀ n) = do
 
         Nothing -> do
             Except.throwError [__i|
-            Unbound variable: #{prettyToText _A}
+            Unbound variable: #{prettyToText (fmap (\_ -> ()) _A)}
             |]
 
 -- →I⇒ 
@@ -948,6 +951,9 @@ infer Syntax.NaturalFold = do
             )
         )
 
+infer (Syntax.Embed (type_, _)) = do
+    return type_
+
 {-| This corresponds to the judgment:
 
     > Γ ⊢ e ⇐ A ⊣ Δ
@@ -955,7 +961,9 @@ infer Syntax.NaturalFold = do
     … which checks that e has type A under input context Γ, producing an updated
     context Δ.
 -}
-check :: (MonadState Status m, MonadError Text m) => Syntax -> Type -> m ()
+check
+    :: (MonadState Status m, MonadError Text m)
+    => Syntax (Type, Value) -> Type -> m ()
 -- →I
 check (Syntax.Lambda x e) (Type.Function _A _B) = do
     push (Context.Annotation x _A)
@@ -988,7 +996,8 @@ check e _B = do
     input argument e, under input context Γ, producing an updated context Δ.
 -}
 inferApplication
-    :: (MonadState Status m, MonadError Text m) => Type -> Syntax -> m Type
+    :: (MonadState Status m, MonadError Text m)
+    => Type -> Syntax (Type, Value) -> m Type
 -- ∀App
 inferApplication (Type.Forall α₀ _A) e = do
     α₁ <- fresh
@@ -1039,7 +1048,7 @@ inferApplication _A _ = do
     |]
 
 -- | Infer the `Type` of the given `Syntax` tree
-typeOf :: Syntax -> Either Text Type
+typeOf :: Syntax (Type, Value) -> Either Text Type
 typeOf syntax = do
     let initialStatus = Status{ count = 0, context = [] }
 

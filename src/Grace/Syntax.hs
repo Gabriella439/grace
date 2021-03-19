@@ -16,26 +16,26 @@ import Grace.Type (Type)
 import Numeric.Natural (Natural)
 
 -- | The surface syntax for the language
-data Syntax
+data Syntax a
     = Variable Text Int
     -- ^
     --   >>> pretty (Variable "x" 0)
     --   x
     --   >>> pretty (Variable "x" 1)
     --   x@1
-    | Lambda Text Syntax
+    | Lambda Text (Syntax a)
     -- ^
     --   >>> pretty (Lambda "x" "x")
     --   \x -> x
-    | Application Syntax Syntax
+    | Application (Syntax a) (Syntax a)
     -- ^
     --   >>> pretty (Application "f" "x")
     --   f x
-    | Annotation Syntax Type
+    | Annotation (Syntax a) Type
     -- ^
     --   >>> pretty (Annotation "x" "A")
     --   x : A
-    | Let (NonEmpty Binding) Syntax
+    | Let (NonEmpty (Binding a)) (Syntax a)
     -- ^
     --   >>> pretty (Let (Binding "x" Nothing "y" :| []) "z")
     --   let x = y in z
@@ -43,15 +43,15 @@ data Syntax
     --   let x : X = y in z
     --   >>> pretty (Let (Binding "a" Nothing "b" :| [ Binding "c" Nothing "d" ]) "e")
     --   let a = b let c = d in e
-    | List [Syntax]
+    | List [Syntax a]
     -- ^
     --   >>> pretty (List [ "x", "y", "z" ])
     --   [ x, y, z ]
-    | Record [(Text, Syntax)]
+    | Record [(Text, Syntax a)]
     -- ^
     --   >>> pretty (Record [ ("x", "a"), ("y", "b") ])
     --   { x = a, y = b }
-    | Field Syntax Text
+    | Field (Syntax a) Text
     -- ^
     --   >>> pretty (Field "x" "a")
     --   x.a
@@ -63,15 +63,15 @@ data Syntax
     -- ^
     --   >>> pretty Grace.Syntax.False
     --   False
-    | And Syntax Syntax
+    | And (Syntax a) (Syntax a)
     -- ^
     --   >>> pretty (And "x" "y")
     --   x && y
-    | Or Syntax Syntax
+    | Or (Syntax a) (Syntax a)
     -- ^
     --   >>> pretty (Or "x" "y")
     --   x || y
-    | If Syntax Syntax Syntax
+    | If (Syntax a) (Syntax a) (Syntax a)
     -- ^
     --   >>> pretty (If "x" "y" "z")
     --   if x then y else z
@@ -79,11 +79,11 @@ data Syntax
     -- ^
     --   >>> pretty (Natural 1)
     --   1
-    | Times Syntax Syntax
+    | Times (Syntax a) (Syntax a)
     -- ^
     --   >>> pretty (Times "x" "y")
     --   x * y
-    | Plus Syntax Syntax
+    | Plus (Syntax a) (Syntax a)
     -- ^
     --   >>> pretty (Plus "x" "y")
     --   x + y
@@ -91,16 +91,17 @@ data Syntax
     -- ^
     --   >>> pretty NaturalFold
     --   Natural/fold
-    deriving (Show)
+    | Embed a
+    deriving stock (Functor, Show)
 
-instance IsString Syntax where
+instance IsString (Syntax a) where
     fromString string = Variable (fromString string) 0
 
-instance Pretty Syntax where
+instance Pretty a => Pretty (Syntax a) where
     pretty = prettyExpression
 
 -- | Pretty-print an expression
-prettyExpression :: Syntax -> Doc a
+prettyExpression :: Pretty a => Syntax a -> Doc b
 prettyExpression (Lambda name body) =
     "\\" <> pretty name <> " -> " <> prettyExpression body
 prettyExpression (Let bindings body) =
@@ -117,31 +118,31 @@ prettyExpression (Annotation annotated annotation) =
 prettyExpression other =
     prettyTimesExpression other
 
-prettyTimesExpression :: Syntax -> Doc a
+prettyTimesExpression :: Pretty a => Syntax a -> Doc b
 prettyTimesExpression (Times left right) =
     prettyTimesExpression left <> " * " <> prettyPlusExpression right
 prettyTimesExpression other =
     prettyPlusExpression other
 
-prettyPlusExpression :: Syntax -> Doc a
+prettyPlusExpression :: Pretty a => Syntax a -> Doc b
 prettyPlusExpression (Plus left right) =
     prettyPlusExpression left <> " + " <> prettyOrExpression right
 prettyPlusExpression other =
     prettyOrExpression other
 
-prettyOrExpression :: Syntax -> Doc a
+prettyOrExpression :: Pretty a => Syntax a -> Doc b
 prettyOrExpression (Or left right) =
     prettyOrExpression left <> " || " <> prettyAndExpression right
 prettyOrExpression other =
     prettyAndExpression other
 
-prettyAndExpression :: Syntax -> Doc a
+prettyAndExpression :: Pretty a => Syntax a -> Doc b
 prettyAndExpression (And left right) =
     prettyAndExpression left <> " && " <> prettyApplicationExpression right
 prettyAndExpression other =
     prettyApplicationExpression other
 
-prettyApplicationExpression :: Syntax -> Doc a
+prettyApplicationExpression :: Pretty a => Syntax a -> Doc b
 prettyApplicationExpression (Application function argument) =
         prettyApplicationExpression function
     <>  " "
@@ -149,13 +150,13 @@ prettyApplicationExpression (Application function argument) =
 prettyApplicationExpression other =
     prettyFieldExpression other
 
-prettyFieldExpression :: Syntax -> Doc a
+prettyFieldExpression :: Pretty a => Syntax a -> Doc b
 prettyFieldExpression (Field record key) =
     prettyFieldExpression record <> "." <> pretty key
 prettyFieldExpression other =
     prettyPrimitiveExpression other
 
-prettyPrimitiveExpression :: Syntax -> Doc a
+prettyPrimitiveExpression :: Pretty a => Syntax a -> Doc b
 prettyPrimitiveExpression (Variable name index)
     | index == 0 = pretty name
     | otherwise  = pretty name <> "@" <> pretty index
@@ -184,6 +185,8 @@ prettyPrimitiveExpression (Natural n) =
     pretty n
 prettyPrimitiveExpression NaturalFold =
     "Natural/fold"
+prettyPrimitiveExpression (Embed a) =
+    pretty a
 prettyPrimitiveExpression other =
     "(" <> prettyExpression other <> ")"
 
@@ -194,10 +197,10 @@ prettyPrimitiveExpression other =
     >>> pretty (Binding "x" (Just "X") "y")
     let x : X = y
 -}
-data Binding = Binding Text (Maybe Type) Syntax
-    deriving (Show)
+data Binding a = Binding Text (Maybe Type) (Syntax a)
+    deriving stock (Functor, Show)
 
-instance Pretty Binding where
+instance Pretty a => Pretty (Binding a) where
     pretty (Binding name Nothing assignment) =
             "let "
         <>  pretty name

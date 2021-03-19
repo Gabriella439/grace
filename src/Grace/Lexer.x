@@ -34,6 +34,7 @@ import qualified Data.Text.Lazy.Encoding      as Text.Lazy.Encoding
 
 $digit = 0-9
 $alpha = [a-zA-Z]
+$pathchar = [\x21\x24-\x27\x2A-\x2B\x2D-\x2E\x30-\x3B\x3D\x40-\x5A\x5E-\x7A\x7C\x7E]
 
 token :-
   $white+                             ;
@@ -50,6 +51,7 @@ token :-
   \.                                  { emit Dot                            }
   \=                                  { emit Equals                         }
   else                                { emit Else                           }
+  (\.|\.\.|())(\/$pathchar+)+         { capture (File . Text.unpack)        }
   forall                              { emit Forall                         }
   False                               { emit False_                         }
   if                                  { emit If                             }
@@ -153,6 +155,7 @@ data Token
     | Else
     | Equals
     | False_
+    | File FilePath
     | Forall
     | If
     | In

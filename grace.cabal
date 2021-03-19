@@ -13,6 +13,7 @@ library
                      , bytestring
                      , bytestring-lexing
                      , containers
+                     , filepath
                      , mtl
                      , prettyprinter
                      , string-interpolate
@@ -23,6 +24,7 @@ library
   exposed-modules:     Grace
                      , Grace.Context
                      , Grace.Existential
+                     , Grace.Import
                      , Grace.Infer
                      , Grace.Lexer
                      , Grace.Monotype
@@ -32,6 +34,7 @@ library
                      , Grace.Type
                      , Grace.Value
   default-extensions:  BangPatterns
+                     , DeriveFunctor
                      , DerivingStrategies
                      , DuplicateRecordFields
                      , FlexibleContexts
