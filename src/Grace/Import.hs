@@ -1,4 +1,8 @@
-module Grace.Import where
+-- | This module implements support for file-based imports
+module Grace.Import
+    ( -- * Resolve
+      resolve
+    ) where
 
 import Grace.Syntax (Syntax)
 import Grace.Type (Type)
@@ -14,6 +18,9 @@ import qualified Grace.Parser         as Parser
 import qualified Grace.Syntax         as Syntax
 import qualified System.FilePath      as FilePath
 
+{-| Resolve all imports, replacing each import with its inferred type and normal
+    form
+-}
 resolve :: FilePath -> Syntax FilePath -> IO (Syntax (Type, Value))
 resolve _ (Syntax.Variable name index) = do
     return (Syntax.Variable name index)

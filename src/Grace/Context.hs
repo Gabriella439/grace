@@ -158,7 +158,7 @@ solve context type_ = foldl snoc type_ context
 {-| Substitute a t`Type.Record` using the `Solved` and `SolvedRow` entries of a
     `Context`
 
-    >>> solve [ SolvedRow 0 (Monotype.Fields [] Nothing) ] (Type.Record (Type.Fields [("a", Type.Bool)] (Just 0)))
+    >>> solveRecord [ SolvedRow 0 (Monotype.Fields [] Nothing) ] (Type.Record (Type.Fields [("a", Type.Bool)] (Just 0)))
     Record (Fields [("a",Bool)] Nothing)
 -}
 solveRecord :: Context -> Type.Record -> Type.Record
