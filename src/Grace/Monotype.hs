@@ -5,6 +5,7 @@ module Grace.Monotype
     ( -- * Types
       Monotype(..)
     , Record(..)
+    , Union(..)
     ) where
 
 import Data.String (IsString(..))
@@ -41,6 +42,13 @@ data Monotype
     -- { x : X, y : Y }
     -- >>> pretty (Record (Fields [("x", "X"), ("y", "Y")] (Just 0)))
     -- { x : X, y : Y | a }
+    | Union Union
+    -- ^ Union type
+    --
+    -- >>> pretty (Union (Alternatives [("x", "X"), ("y", "Y")] Nothing))
+    -- < x : X, y : Y >
+    -- >>> pretty (Union (Alternatives [("x", "X"), ("y", "Y")] (Just 0)))
+    -- < x : X, y : Y | a >
     | Bool
     -- ^ Boolean type
     --
@@ -63,6 +71,10 @@ instance Pretty Monotype where
 data Record = Fields [(Text, Monotype)] (Maybe (Existential Record))
     deriving (Eq, Show)
 
+-- | A monomorphic union type
+data Union = Alternatives [(Text, Monotype)] (Maybe (Existential Union))
+    deriving (Eq, Show)
+
 prettyMonotype :: Monotype -> Doc a
 prettyMonotype (Function _A _B) =
     prettyApplicationType _A <> " -> " <> prettyMonotype _B
@@ -80,6 +92,8 @@ prettyPrimitiveType (Unsolved α) =
     pretty α <> "?"
 prettyPrimitiveType (Record r) =
     prettyRecordType r
+prettyPrimitiveType (Union u) =
+    prettyUnionType u
 prettyPrimitiveType Bool =
     "Bool"
 prettyPrimitiveType Natural =
@@ -108,6 +122,28 @@ prettyRecordType (Fields ((key₀, type₀) : keyTypes) (Just ρ)) =
     <>  " | "
     <>  pretty ρ
     <>  " }"
+
+prettyUnionType :: Union -> Doc a
+prettyUnionType (Alternatives [] Nothing) =
+    "< >"
+prettyUnionType (Alternatives [] (Just ρ)) =
+    "< " <> pretty ρ <> " >"
+prettyUnionType (Alternatives ((key₀, type₀) : keyTypes) Nothing) =
+        "< "
+    <>  pretty key₀
+    <>  " : "
+    <>  prettyMonotype type₀
+    <>  foldMap prettyKeyType keyTypes
+    <>  " >"
+prettyUnionType (Alternatives ((key₀, type₀) : keyTypes) (Just ρ)) =
+        "< "
+    <>  pretty key₀
+    <>  " : "
+    <>  prettyMonotype type₀
+    <>  foldMap prettyKeyType keyTypes
+    <>  " | "
+    <>  pretty ρ
+    <>  " >"
 
 prettyKeyType :: (Text, Monotype) -> Doc a
 prettyKeyType (key, monotype) =

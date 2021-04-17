@@ -34,6 +34,8 @@ import qualified Data.Text.Lazy.Encoding      as Text.Lazy.Encoding
 
 $digit = 0-9
 $alpha = [a-zA-Z]
+$lower = [a-z]
+$upper = [A-Z]
 $pathchar = [\x21\x24-\x27\x2A-\x2B\x2D-\x2E\x30-\x3B\x3D\x40-\x5A\x5E-\x7A\x7C\x7E]
 
 token :-
@@ -69,7 +71,8 @@ token :-
   then                                { emit Then                           }
   \*                                  { emit Times                          }
   True                                { emit True_                          }
-  [ $alpha \_ ] [ $alpha $digit \_ ]* { capture Label                       }
+  [ $lower \_ ] [ $alpha $digit \_ ]* { capture Label                       }
+    $upper      [ $alpha $digit \_ ]* { capture Alternative                 }
 
 {
 emit :: Token -> AlexAction Token
@@ -151,6 +154,7 @@ data Token
     | CloseParenthesis
     | Colon
     | Comma
+    | Alternative Text
     | Dot
     | Else
     | Equals

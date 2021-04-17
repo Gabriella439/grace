@@ -170,6 +170,29 @@ wellFormedType _Γ (Type.Record (Type.Fields kAs (Just α₀)))
     predicate (Context.SolvedRow   α₁ _) = α₀ == α₁
     predicate  _                         = False
 
+wellFormedType _Γ (Type.Union (Type.Alternatives kAs Nothing)) = do
+    traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
+
+wellFormedType _Γ (Type.Union (Type.Alternatives kAs (Just α₀)))
+    | any predicate _Γ = do
+        traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
+    | otherwise = do
+        Except.throwError [__i|
+        Internal error: Invalid context
+
+        The following variant type variable:
+
+        ↳ #{prettyToText (Context.UnsolvedVariant α₀)}
+
+        … is not well-formed within the following context:
+
+        #{listToText _Γ}
+        |]
+  where
+    predicate (Context.UnsolvedVariant α₁  ) = α₀ == α₁
+    predicate (Context.SolvedVariant   α₁ _) = α₀ == α₁
+    predicate  _                             = False
+
 wellFormedType _Γ Type.Bool = do
     return ()
 
