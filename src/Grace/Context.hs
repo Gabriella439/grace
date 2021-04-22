@@ -10,9 +10,11 @@ module Grace.Context
     , lookup
     , splitOnUnsolved
     , splitOnUnsolvedRow
+    , splitOnUnsolvedVariant
     , discardUpTo
     , solve
     , solveRecord
+    , solveUnion
     , complete
     ) where
 
@@ -52,6 +54,11 @@ data Entry
     --
     -- >>> pretty (UnsolvedRow 0)
     -- |a?
+    | UnsolvedVariant (Existential Monotype.Union)
+    -- ^ A placeholder variant variable whose type has not yet been inferred
+    --
+    -- >>> pretty (UnsolvedVariant 0)
+    -- |a?
     | Solved (Existential Monotype) Monotype
     -- ^ A placeholder type variable whose type has been (at least partially)
     --   inferred
@@ -62,7 +69,13 @@ data Entry
     -- ^ A placeholder row variable whose type has been (at least partially)
     --   inferred
     --
-    -- >>>  pretty (SolvedRow 0 (Monotype.Fields [("x", "X")] (Just 1)))
+    -- >>> pretty (SolvedRow 0 (Monotype.Fields [("x", "X")] (Just 1)))
+    -- a = x : X | b
+    | SolvedVariant (Existential Monotype.Union) Monotype.Union
+    -- ^ A placeholder variant variable whose type has been (at least partially)
+    --   inferred
+    --
+    -- >>> pretty (SolvedVariant 0 (Monotype.Alternatives [("x", "X")] (Just 1)))
     -- a = x : X | b
     | Marker (Existential Monotype)
     -- ^ This is used by the bidirectional type-checking algorithm to separate
@@ -112,6 +125,8 @@ prettyEntry (Unsolved α) =
     Pretty.pretty α <> "?"
 prettyEntry (UnsolvedRow ρ) =
     "|" <> Pretty.pretty ρ <> "?"
+prettyEntry (UnsolvedVariant ρ) =
+    "|" <> Pretty.pretty ρ <> "?"
 prettyEntry (Solved α τ) =
     Pretty.pretty α <> " = " <> Pretty.pretty τ
 prettyEntry (SolvedRow ρ (Monotype.Fields [] Nothing)) =
@@ -124,14 +139,34 @@ prettyEntry (SolvedRow ρ (Monotype.Fields ((k₀, τ₀) : kτs) Nothing)) =
     <>  Pretty.pretty k₀
     <>  " : "
     <>  Pretty.pretty τ₀
-    <>  foldMap prettyKeyType kτs
+    <>  foldMap prettyRowType kτs
 prettyEntry (SolvedRow ρ₀ (Monotype.Fields ((k₀, τ₀) : kτs) (Just ρ₁))) =
         Pretty.pretty ρ₀
     <>  " = "
     <>  Pretty.pretty k₀
     <>  " : "
     <>  Pretty.pretty τ₀
-    <>  foldMap prettyKeyType kτs
+    <>  foldMap prettyRowType kτs
+    <>  " | "
+    <>  Pretty.pretty ρ₁
+prettyEntry (SolvedVariant ρ (Monotype.Alternatives [] Nothing)) =
+    Pretty.pretty ρ <> " = •"
+prettyEntry (SolvedVariant ρ₀ (Monotype.Alternatives [] (Just ρ₁))) =
+    Pretty.pretty ρ₀ <> " = • | " <>  Pretty.pretty ρ₁
+prettyEntry (SolvedVariant ρ (Monotype.Alternatives ((k₀, τ₀) : kτs) Nothing)) =
+        Pretty.pretty ρ
+    <>  " = "
+    <>  Pretty.pretty k₀
+    <>  " : "
+    <>  Pretty.pretty τ₀
+    <>  foldMap prettyVariantType kτs
+prettyEntry (SolvedVariant ρ₀ (Monotype.Alternatives ((k₀, τ₀) : kτs) (Just ρ₁))) =
+        Pretty.pretty ρ₀
+    <>  " = "
+    <>  Pretty.pretty k₀
+    <>  " : "
+    <>  Pretty.pretty τ₀
+    <>  foldMap prettyVariantType kτs
     <>  " | "
     <>  Pretty.pretty ρ₁
 prettyEntry (Annotation x α) =
@@ -139,11 +174,14 @@ prettyEntry (Annotation x α) =
 prettyEntry (Marker α) =
     "➤" <> Pretty.pretty α
 
-prettyKeyType :: (Text, Monotype) -> Doc a
-prettyKeyType (k, τ) = ", " <> Pretty.pretty k <> " : " <> Pretty.pretty τ
+prettyRowType :: (Text, Monotype) -> Doc a
+prettyRowType (k, τ) = ", " <> Pretty.pretty k <> " : " <> Pretty.pretty τ
 
-{-| Substitute a `Type` using the `Solved` and `SolvedRow` entries of a
-    `Context`
+prettyVariantType :: (Text, Monotype) -> Doc a
+prettyVariantType (k, τ) = "| " <> Pretty.pretty k <> " : " <> Pretty.pretty τ
+
+{-| Substitute a `Type` using the `Solved`, `SolvedRow`, and `SolvedVariant`
+    entries of a `Context`
 
     >>> solve [ Unsolved 1, Solved 0 Monotype.Bool ] (Type.Function (Type.Unsolved 0) (Type.Unsolved 0))
     Function Bool Bool
@@ -151,12 +189,12 @@ prettyKeyType (k, τ) = ", " <> Pretty.pretty k <> " : " <> Pretty.pretty τ
 solve :: Context -> Type -> Type
 solve context type_ = foldl snoc type_ context
   where
-    snoc t (Solved    α τ) = Type.solve    α τ t
-    snoc t (SolvedRow α r) = Type.solveRow α r t
-    snoc t  _              = t
+    snoc t (Solved        α τ) = Type.solve        α τ t
+    snoc t (SolvedRow     α r) = Type.solveRow     α r t
+    snoc t (SolvedVariant α r) = Type.solveVariant α r t
+    snoc t  _                  = t
 
-{-| Substitute a t`Type.Record` using the `Solved` and `SolvedRow` entries of a
-    `Context`
+{-| Substitute a t`Type.Record` using the solved entries of a `Context`
 
     >>> solveRecord [ SolvedRow 0 (Monotype.Fields [] Nothing) ] (Type.Record (Type.Fields [("a", Type.Bool)] (Just 0)))
     Record (Fields [("a",Bool)] Nothing)
@@ -166,6 +204,18 @@ solveRecord context record = record'
   where
     -- TODO: Come up with total solution
     Type.Record record' = solve context (Type.Record record)
+
+{-| Substitute a t`Type.Union` using the solved entries of a `Context`
+    `Context`
+
+    >>> solveUnion [ SolvedVariant 0 (Monotype.Alternatives [] Nothing) ] (Type.Union (Type.Alternatives [("a", Type.Bool)] (Just 0)))
+    Union (Alternatives [("a",Bool)] Nothing)
+-}
+solveUnion :: Context -> Type.Union -> Type.Union
+solveUnion context union = union'
+  where
+    -- TODO: Come up with total solution
+    Type.Union union' = solve context (Type.Union union)
 
 {-| This function is used at the end of the bidirectional type-checking
     algorithm to complete the inferred type by:
@@ -182,8 +232,9 @@ complete :: Context -> Type -> Type
 complete context type_ = do
     State.evalState (Monad.foldM snoc type_ context) 0
   where
-    snoc t (Solved    α τ) = do return (Type.solve    α τ t)
-    snoc t (SolvedRow α r) = do return (Type.solveRow α r t)
+    snoc t (Solved        α τ) = do return (Type.solve        α τ t)
+    snoc t (SolvedRow     α r) = do return (Type.solveRow     α r t)
+    snoc t (SolvedVariant α r) = do return (Type.solveVariant α r t)
     snoc t (Unsolved α) = do
         n <- State.get
 
@@ -192,7 +243,8 @@ complete context type_ = do
         let a = Existential.toVariable n
 
         return (Type.Forall a (Type.solve α (Monotype.Variable a) t))
--- TODO: Allow for user-visible row polymorphism so that this can be implemented
+-- TODO: Allow for user-visible row and variant polymorphism so that these can
+-- be implemented
 {-
     snoc t (UnsolvedRow ρ) = do
         n <- State.get
@@ -202,6 +254,14 @@ complete context type_ = do
         let a = Existential.toVariable n
 
         return (Type.Forall a (Type.solveRow ρ (Monotype.Fields [] (Just a)) t))
+   snoc t (UnsolvedVariant ρ) = do
+        n <- State.get
+
+        State.put $! n + 1
+
+        let a = Existential.toVariable n
+
+        return (Type.Forall a (Type.solveVariant ρ (Monotype.Alternatives [] (Just a)) t))
 -}
     snoc t  _           = do
         return t
@@ -251,6 +311,29 @@ splitOnUnsolvedRow ρ (entry : entries) = do
     (prefix, suffix) <- splitOnUnsolvedRow ρ entries
     return (entry : prefix, suffix)
 splitOnUnsolvedRow _ [] = Nothing
+
+{-| Split a `Context` into two `Context`s before and after the given
+    `UnsolvedVariant` variable.  Neither `Context` contains the variable
+
+    Returns `Nothing` if no such `UnsolvedVariant` variable is present within
+    the `Context`
+
+    >>> splitOnUnsolvedVariant 1 [ UnsolvedVariant 1, Solved 0 Monotype.Bool ]
+    Just ([],[Solved 0 Bool])
+    >>> splitOnUnsolvedVariant 0 [ UnsolvedVariant 1, Solved 0 Monotype.Bool ]
+    Nothing
+-}
+splitOnUnsolvedVariant
+    :: Existential Monotype.Union
+    -- ^ `UnsolvedVariant` variable to split on
+    -> Context
+    -> Maybe (Context, Context)
+splitOnUnsolvedVariant ρ₀ (UnsolvedVariant ρ₁ : entries)
+    | ρ₀ == ρ₁ = return ([], entries)
+splitOnUnsolvedVariant ρ (entry : entries) = do
+    (prefix, suffix) <- splitOnUnsolvedVariant ρ entries
+    return (entry : prefix, suffix)
+splitOnUnsolvedVariant _ [] = Nothing
 
 {-| Retrieve a variable's annotated type from a `Context`, given the variable's
     label and index

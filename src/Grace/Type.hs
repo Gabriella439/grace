@@ -10,8 +10,10 @@ module Grace.Type
       -- * Utilities
     , solve
     , solveRow
+    , solveVariant
     , typeFreeIn
     , rowFreeIn
+    , variantFreeIn
     , substitute
     ) where
 
@@ -166,6 +168,36 @@ solveRow _ _ Bool =
 solveRow _ _ Natural =
     Natural
 
+{-| Substitute a `Type` by replacing all occurrences of the given unsolved
+    variant variable with a t`Monotype.Union`
+-}
+solveVariant :: Existential Monotype.Union -> Monotype.Union -> Type -> Type
+solveVariant _ _ (Variable α) =
+    Variable α
+solveVariant _ _ (Unsolved α) =
+    Unsolved α
+solveVariant ρ₀ r (Forall α _A) =
+    Forall α (solveVariant ρ₀ r _A)
+solveVariant ρ₀ r (Function _A _B) =
+    Function (solveVariant ρ₀ r _A) (solveVariant ρ₀ r _B)
+solveVariant ρ₀ r (List _A) =
+    List (solveVariant ρ₀ r _A)
+solveVariant ρ₀ r (Record (Fields kAs ρ)) =
+    Record (Fields (map adapt kAs) ρ)
+  where
+    adapt (k, _A) = (k, solveVariant ρ₀ r _A)
+solveVariant ρ₀ r@(Monotype.Alternatives kτs ρ₁) (Union (Alternatives kAs₀ ρ))
+    | Just ρ₀ == ρ =
+        Union (Alternatives (map (\(k, _A) -> (k, solveVariant ρ₀ r _A)) kAs₁) ρ₁)
+    | otherwise =
+        Union (Alternatives (map (\(k, _A) -> (k, solveVariant ρ₀ r _A)) kAs₀) ρ)
+  where
+    kAs₁ = kAs₀ <> map (\(k, τ) -> (k, fromMonotype τ)) kτs
+solveVariant _ _ Bool =
+    Bool
+solveVariant _ _ Natural =
+    Natural
+
 {-| Replace all occurrences of a variable within one `Type` with another `Type`,
     given the variable's label and index
 -}
@@ -218,8 +250,8 @@ _ `typeFreeIn` Natural =
 α `typeFreeIn` Union (Alternatives kAs _) =
     any (\(_, _A) -> α `typeFreeIn` _A) kAs
 
-{-| Count how many times the given `Existential` t`Monotype.Record` variable appears
-    within a `Type`
+{-| Count how many times the given `Existential` t`Monotype.Record` variable
+    appears within a `Type`
 -}
 rowFreeIn :: Existential Monotype.Record -> Type -> Bool
 _ `rowFreeIn` Variable _ =
@@ -240,6 +272,29 @@ _ `rowFreeIn` Natural =
     any (ρ₀ ==) ρ₁ || any (\(_, _A) -> ρ₀ `rowFreeIn` _A) kAs
 ρ₀ `rowFreeIn` Union (Alternatives kAs _) =
     any (\(_, _A) -> ρ₀ `rowFreeIn` _A) kAs
+
+{-| Count how many times the given `Existential` t`Monotype.Union` variable
+    appears within a `Type`
+-}
+variantFreeIn :: Existential Monotype.Union -> Type -> Bool
+_ `variantFreeIn` Variable _ =
+    False
+_ `variantFreeIn` Unsolved _ =
+    False
+ρ `variantFreeIn` Forall _ _A =
+    ρ `variantFreeIn` _A
+ρ `variantFreeIn` Function _A _B =
+    ρ `variantFreeIn` _A || ρ `variantFreeIn` _B
+ρ `variantFreeIn` List _A =
+    ρ `variantFreeIn` _A
+_ `variantFreeIn` Bool =
+    False
+_ `variantFreeIn` Natural =
+    False
+ρ₀ `variantFreeIn` Record (Fields kAs _) =
+    any (\(_, _A) -> ρ₀ `variantFreeIn` _A) kAs
+ρ₀ `variantFreeIn` Union (Alternatives kAs ρ₁) =
+    any (ρ₀ ==) ρ₁ || any (\(_, _A) -> ρ₀ `variantFreeIn` _A) kAs
 
 prettyType :: Type -> Doc a
 prettyType (Forall α _A) =
