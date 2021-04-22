@@ -74,6 +74,9 @@ resolve here (Syntax.Field record₀ key) = do
 
     return (Syntax.Field record₁ key)
 
+resolve _ (Syntax.Alternative name) = do
+    return (Syntax.Alternative name)
+
 resolve _ Syntax.True = do
     return Syntax.True
 

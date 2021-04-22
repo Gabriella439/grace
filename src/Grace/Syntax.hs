@@ -55,6 +55,10 @@ data Syntax a
     -- ^
     --   >>> pretty (Field "x" "a")
     --   x.a
+    | Alternative Text
+    -- ^
+    --   >>> pretty (Alternative "Nil")
+    --   Nil
     | True
     -- ^
     --   >>> pretty Grace.Syntax.True
@@ -160,6 +164,8 @@ prettyPrimitiveExpression :: Pretty a => Syntax a -> Doc b
 prettyPrimitiveExpression (Variable name index)
     | index == 0 = pretty name
     | otherwise  = pretty name <> "@" <> pretty index
+prettyPrimitiveExpression (Alternative name) =
+    pretty name
 prettyPrimitiveExpression (List []) =
     "[ ]"
 prettyPrimitiveExpression (List (element₀ : elements)) =

@@ -62,7 +62,8 @@ import qualified Grace.Type         as Type
     '*'            { Lexer.Times            }
     True           { Lexer.True_            }
     label          { Lexer.Label $$         }
-    file           { Lexer.File  $$         }
+    alternative    { Lexer.Alternative $$   }
+    file           { Lexer.File $$          }
 
 %%
 
@@ -119,6 +120,8 @@ PrimitiveExpression
         { Syntax.Variable $1 0 }
     | label '@' int
         { Syntax.Variable $1 $3 }
+    | alternative
+        { Syntax.Alternative $1 }
     | '[' List ']'
         { Syntax.List $2 }
     | '{' Record '}'

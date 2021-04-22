@@ -5,12 +5,15 @@ module Grace.Type
     ( -- * Types
       Type(..)
     , Record(..)
+    , Union(..)
 
       -- * Utilities
     , solve
     , solveRow
+    , solveVariant
     , typeFreeIn
     , rowFreeIn
+    , variantFreeIn
     , substitute
     ) where
 
@@ -57,6 +60,13 @@ data Type
     -- { x : X, y : Y }
     -- >>> pretty (Record (Fields [("x", "X"), ("y", "Y")] (Just 0)))
     -- { x : X, y : Y | a }
+    | Union Union
+    -- ^ Union type
+    --
+    -- >>> pretty (Union (Alternatives [("x", "X"), ("y", "Y")] Nothing))
+    -- < x : X, y : Y >
+    -- >>> pretty (Union (Alternatives [("x", "X"), ("y", "Y")] (Just 0)))
+    -- < x : X, y : Y | a >
     | Bool
     -- ^ Boolean type
     --
@@ -79,6 +89,10 @@ instance Pretty Type where
 data Record = Fields [(Text, Type)] (Maybe (Existential Monotype.Record))
     deriving (Eq, Ord, Show)
 
+-- | A potentially polymorphic union type
+data Union = Alternatives [(Text, Type)] (Maybe (Existential Monotype.Union))
+    deriving (Eq, Ord, Show)
+
 {-| This function should not be exported or generally used.  It is only really
     safe to use within one of the @solve*@ functions
 -}
@@ -93,6 +107,8 @@ fromMonotype (Monotype.List τ) =
     List (fromMonotype τ)
 fromMonotype (Monotype.Record (Monotype.Fields kτs ρ)) =
     Record (Fields (map (\(k, τ) -> (k, fromMonotype τ)) kτs) ρ)
+fromMonotype (Monotype.Union (Monotype.Alternatives kτs ρ)) =
+    Union (Alternatives (map (\(k, τ) -> (k, fromMonotype τ)) kτs) ρ)
 fromMonotype Monotype.Bool =
     Bool
 fromMonotype Monotype.Natural =
@@ -115,6 +131,8 @@ solve α τ (List _A) =
     List (solve α τ _A)
 solve α τ (Record (Fields kAs ρ)) =
     Record (Fields (map (\(k, _A) -> (k, solve α τ _A)) kAs) ρ)
+solve α τ (Union (Alternatives kAs ρ)) =
+    Union (Alternatives (map (\(k, _A) -> (k, solve α τ _A)) kAs) ρ)
 solve _ _ Bool =
     Bool
 solve _ _ Natural =
@@ -141,9 +159,43 @@ solveRow ρ₀ r@(Monotype.Fields kτs ρ₁) (Record (Fields kAs₀ ρ))
         Record (Fields (map (\(k, _A) -> (k, solveRow ρ₀ r _A)) kAs₀) ρ)
   where
     kAs₁ = kAs₀ <> map (\(k, τ) -> (k, fromMonotype τ)) kτs
+solveRow ρ₀ r (Union (Alternatives kAs ρ)) =
+    Union (Alternatives (map adapt kAs) ρ)
+  where
+    adapt (k, _A) = (k, solveRow ρ₀ r _A)
 solveRow _ _ Bool =
     Bool
 solveRow _ _ Natural =
+    Natural
+
+{-| Substitute a `Type` by replacing all occurrences of the given unsolved
+    variant variable with a t`Monotype.Union`
+-}
+solveVariant :: Existential Monotype.Union -> Monotype.Union -> Type -> Type
+solveVariant _ _ (Variable α) =
+    Variable α
+solveVariant _ _ (Unsolved α) =
+    Unsolved α
+solveVariant ρ₀ r (Forall α _A) =
+    Forall α (solveVariant ρ₀ r _A)
+solveVariant ρ₀ r (Function _A _B) =
+    Function (solveVariant ρ₀ r _A) (solveVariant ρ₀ r _B)
+solveVariant ρ₀ r (List _A) =
+    List (solveVariant ρ₀ r _A)
+solveVariant ρ₀ r (Record (Fields kAs ρ)) =
+    Record (Fields (map adapt kAs) ρ)
+  where
+    adapt (k, _A) = (k, solveVariant ρ₀ r _A)
+solveVariant ρ₀ r@(Monotype.Alternatives kτs ρ₁) (Union (Alternatives kAs₀ ρ))
+    | Just ρ₀ == ρ =
+        Union (Alternatives (map (\(k, _A) -> (k, solveVariant ρ₀ r _A)) kAs₁) ρ₁)
+    | otherwise =
+        Union (Alternatives (map (\(k, _A) -> (k, solveVariant ρ₀ r _A)) kAs₀) ρ)
+  where
+    kAs₁ = kAs₀ <> map (\(k, τ) -> (k, fromMonotype τ)) kτs
+solveVariant _ _ Bool =
+    Bool
+solveVariant _ _ Natural =
     Natural
 
 {-| Replace all occurrences of a variable within one `Type` with another `Type`,
@@ -168,6 +220,8 @@ substitute α n _A₀ (List _A₁) =
     List (substitute α n _A₀ _A₁)
 substitute α n _A₀ (Record (Fields kAs ρ)) =
     Record (Fields (map (\(k, _A₁) -> (k, substitute α n _A₀ _A₁)) kAs) ρ)
+substitute α n _A₀ (Union (Alternatives kAs ρ)) =
+    Union (Alternatives (map (\(k, _A₁) -> (k, substitute α n _A₀ _A₁)) kAs) ρ)
 substitute _ _ _ Bool =
     Bool
 substitute _ _ _ Natural =
@@ -177,28 +231,70 @@ substitute _ _ _ Natural =
     a `Type`
 -}
 typeFreeIn :: Existential Monotype -> Type -> Bool
-_  `typeFreeIn` Variable _            = False
-α₀ `typeFreeIn` Unsolved α₁           = α₀ == α₁
-α  `typeFreeIn` Forall _ _A           = α `typeFreeIn` _A
-α  `typeFreeIn` Function _A _B        = α `typeFreeIn` _A || α `typeFreeIn` _B
-α  `typeFreeIn` List _A               = α `typeFreeIn` _A
-_  `typeFreeIn` Bool                  = False
-_  `typeFreeIn` Natural               = False
-α  `typeFreeIn` Record (Fields kAs _) = any (\(_, _A) -> α `typeFreeIn` _A) kAs
+_ `typeFreeIn` Variable _ =
+    False
+α₀ `typeFreeIn` Unsolved α₁ =
+    α₀ == α₁
+α `typeFreeIn` Forall _ _A =
+    α `typeFreeIn` _A
+α `typeFreeIn` Function _A _B =
+    α `typeFreeIn` _A || α `typeFreeIn` _B
+α `typeFreeIn` List _A =
+    α `typeFreeIn` _A
+_ `typeFreeIn` Bool =
+    False
+_ `typeFreeIn` Natural =
+    False
+α `typeFreeIn` Record (Fields kAs _) =
+    any (\(_, _A) -> α `typeFreeIn` _A) kAs
+α `typeFreeIn` Union (Alternatives kAs _) =
+    any (\(_, _A) -> α `typeFreeIn` _A) kAs
 
-{-| Count how many times the given `Existential` t`Monotype.Record` variable appears
-    within a `Type`
+{-| Count how many times the given `Existential` t`Monotype.Record` variable
+    appears within a `Type`
 -}
 rowFreeIn :: Existential Monotype.Record -> Type -> Bool
-_  `rowFreeIn` Variable _             = False
-_  `rowFreeIn` Unsolved _             = False
-ρ  `rowFreeIn` Forall _ _A            = ρ `rowFreeIn` _A
-ρ  `rowFreeIn` Function _A _B         = ρ `rowFreeIn` _A || ρ `rowFreeIn` _B
-ρ  `rowFreeIn` List _A                = ρ `rowFreeIn` _A
-_  `rowFreeIn` Bool                   = False
-_  `rowFreeIn` Natural                = False
+_ `rowFreeIn` Variable _ =
+    False
+_ `rowFreeIn` Unsolved _ =
+    False
+ρ `rowFreeIn` Forall _ _A =
+    ρ `rowFreeIn` _A
+ρ `rowFreeIn` Function _A _B =
+    ρ `rowFreeIn` _A || ρ `rowFreeIn` _B
+ρ `rowFreeIn` List _A =
+    ρ `rowFreeIn` _A
+_ `rowFreeIn` Bool =
+    False
+_ `rowFreeIn` Natural =
+    False
 ρ₀ `rowFreeIn` Record (Fields kAs ρ₁) =
     any (ρ₀ ==) ρ₁ || any (\(_, _A) -> ρ₀ `rowFreeIn` _A) kAs
+ρ₀ `rowFreeIn` Union (Alternatives kAs _) =
+    any (\(_, _A) -> ρ₀ `rowFreeIn` _A) kAs
+
+{-| Count how many times the given `Existential` t`Monotype.Union` variable
+    appears within a `Type`
+-}
+variantFreeIn :: Existential Monotype.Union -> Type -> Bool
+_ `variantFreeIn` Variable _ =
+    False
+_ `variantFreeIn` Unsolved _ =
+    False
+ρ `variantFreeIn` Forall _ _A =
+    ρ `variantFreeIn` _A
+ρ `variantFreeIn` Function _A _B =
+    ρ `variantFreeIn` _A || ρ `variantFreeIn` _B
+ρ `variantFreeIn` List _A =
+    ρ `variantFreeIn` _A
+_ `variantFreeIn` Bool =
+    False
+_ `variantFreeIn` Natural =
+    False
+ρ₀ `variantFreeIn` Record (Fields kAs _) =
+    any (\(_, _A) -> ρ₀ `variantFreeIn` _A) kAs
+ρ₀ `variantFreeIn` Union (Alternatives kAs ρ₁) =
+    any (ρ₀ ==) ρ₁ || any (\(_, _A) -> ρ₀ `variantFreeIn` _A) kAs
 
 prettyType :: Type -> Doc a
 prettyType (Forall α _A) =
@@ -219,6 +315,7 @@ prettyPrimitiveType :: Type -> Doc a
 prettyPrimitiveType (Variable α) = Pretty.pretty α
 prettyPrimitiveType (Unsolved α) = Pretty.pretty α <> "?"
 prettyPrimitiveType (Record r)   = prettyRecordType r
+prettyPrimitiveType (Union u)    = prettyUnionType u
 prettyPrimitiveType  Bool        = "Bool"
 prettyPrimitiveType  Natural     = "Natural"
 prettyPrimitiveType  other       = "(" <> prettyType other <> ")"
@@ -244,6 +341,28 @@ prettyRecordType (Fields ((key₀, type₀) : keyTypes) (Just ρ)) =
     <>  " | "
     <>  Pretty.pretty ρ
     <>  " }"
+
+prettyUnionType :: Union -> Doc a
+prettyUnionType (Alternatives [] Nothing) =
+    "< >"
+prettyUnionType (Alternatives [] (Just ρ)) =
+    "< " <> Pretty.pretty ρ <> " >"
+prettyUnionType (Alternatives ((key₀, type₀) : keyTypes) Nothing) =
+        "< "
+    <>  Pretty.pretty key₀
+    <>  " : "
+    <>  prettyType type₀
+    <>  foldMap prettyKeyType keyTypes
+    <>  " >"
+prettyUnionType (Alternatives ((key₀, type₀) : keyTypes) (Just ρ)) =
+        "< "
+    <>  Pretty.pretty key₀
+    <>  " : "
+    <>  prettyType type₀
+    <>  foldMap prettyKeyType keyTypes
+    <>  " | "
+    <>  Pretty.pretty ρ
+    <>  " >"
 
 prettyKeyType :: (Text, Type) -> Doc a
 prettyKeyType (key, type_) =

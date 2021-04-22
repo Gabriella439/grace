@@ -124,6 +124,9 @@ evaluate env syntax =
                 other ->
                     Value.Field other key
 
+        Syntax.Alternative name ->
+            Value.Alternative name
+
         Syntax.True ->
             Value.True
 
@@ -255,6 +258,9 @@ quote names value =
 
         Value.Field record key ->
             Syntax.Field (quote names record) key
+
+        Value.Alternative name ->
+            Syntax.Alternative name
 
         Value.True ->
             Syntax.True

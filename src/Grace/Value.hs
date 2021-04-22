@@ -78,6 +78,7 @@ data Value
     | List [Value]
     | Record [(Text, Value)]
     | Field Value Text
+    | Alternative Text
     | True
     | False
     | And Value Value

@@ -170,6 +170,29 @@ wellFormedType _Γ (Type.Record (Type.Fields kAs (Just α₀)))
     predicate (Context.SolvedRow   α₁ _) = α₀ == α₁
     predicate  _                         = False
 
+wellFormedType _Γ (Type.Union (Type.Alternatives kAs Nothing)) = do
+    traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
+
+wellFormedType _Γ (Type.Union (Type.Alternatives kAs (Just α₀)))
+    | any predicate _Γ = do
+        traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
+    | otherwise = do
+        Except.throwError [__i|
+        Internal error: Invalid context
+
+        The following variant type variable:
+
+        ↳ #{prettyToText (Context.UnsolvedVariant α₀)}
+
+        … is not well-formed within the following context:
+
+        #{listToText _Γ}
+        |]
+  where
+    predicate (Context.UnsolvedVariant α₁  ) = α₀ == α₁
+    predicate (Context.SolvedVariant   α₁ _) = α₀ == α₁
+    predicate  _                             = False
+
 wellFormedType _Γ Type.Bool = do
     return ()
 
@@ -256,6 +279,7 @@ subtype _A₀ _B₀ = do
 
             if | not nullA && not nullB -> do
                 Except.throwError [__i|
+                Record type mismatch
 
                 The following record type:
 
@@ -447,6 +471,212 @@ subtype _A₀ _B₀ = do
 
             instantiateRowR (Context.solveRecord _Δ (Type.Fields (Map.toList extraA) (Just ρ₂))) ρ₁
 
+        (Type.Union (Type.Alternatives kAs₀ Nothing), Type.Union (Type.Alternatives kBs₀ Nothing)) -> do
+            let mapA = Map.fromList kAs₀
+            let mapB = Map.fromList kBs₀
+
+            let extraA = Map.difference mapA mapB
+            let extraB = Map.difference mapB mapA
+
+            let both = Map.intersectionWith (,) mapA mapB
+
+            let nullA = Map.null extraA
+            let nullB = Map.null extraB
+
+            if | not nullA && not nullB -> do
+                Except.throwError [__i|
+                Union type mismatch
+
+                The following union type:
+
+                ↳ #{prettyToText _A₀}
+
+                … is not a subtype of:
+
+                ↳ #{prettyToText _B₀}
+
+                The former union has the following extra alternatives:
+
+                #{listToText (Map.keys extraA)}
+
+                … while the latter union has the following extra alternatives:
+
+                #{listToText (Map.keys extraB)}
+                |]
+
+               | not nullA && nullB -> do
+                Except.throwError [__i|
+                Union type mismatch
+
+                The following union type:
+
+                ↳ #{prettyToText _A₀}
+
+                … is not a subtype of:
+
+                ↳ #{prettyToText _B₀}
+
+                The former union has the following extra alternatives:
+
+                #{listToText (Map.keys extraA)}
+                |]
+
+               | nullA && not nullB -> do
+                Except.throwError [__i|
+                Union type mismatch
+
+                The following union type:
+
+                ↳ #{prettyToText _A₀}
+
+                … is not a subtype of:
+
+                ↳ #{prettyToText _B₀}
+
+                The latter union has the following extra alternatives:
+
+                #{listToText (Map.keys extraB)}
+                |]
+
+               | otherwise -> do
+                let process _ (_A₁, _B₁) = do
+                        _Θ <- get
+                        subtype (Context.solve _Θ _A₁) (Context.solve _Θ _B₁)
+
+                _ <- Map.traverseWithKey process both
+
+                return ()
+
+        (Type.Union (Type.Alternatives kAs₀ (Just ρ)), Type.Union (Type.Alternatives kBs₀ Nothing)) -> do
+            let mapA = Map.fromList kAs₀
+            let mapB = Map.fromList kBs₀
+
+            let extraA = Map.difference mapA mapB
+            let extraB = Map.difference mapB mapA
+
+            let both = Map.intersectionWith (,) mapA mapB
+
+            if | not (Map.null extraA) -> do
+                Except.throwError [__i|
+                Union type mismatch
+
+                The following union type:
+
+                ↳ #{prettyToText _A₀}
+
+                … is not a subtype of:
+
+                ↳ #{prettyToText _B₀}
+
+                The former union has the following extra alternatives:
+
+                #{listToText (Map.keys extraA)}
+                |]
+
+               | otherwise -> do
+                let process _ (_A₁, _B₁) = do
+                        _Θ <- get
+                        subtype (Context.solve _Θ _A₁) (Context.solve _Θ _B₁)
+
+                _ <- Map.traverseWithKey process both
+
+                _Θ <- get
+                instantiateVariantL ρ (Context.solveUnion _Θ (Type.Alternatives (Map.toList extraB) Nothing))
+
+        (Type.Union (Type.Alternatives kAs₀ Nothing), Type.Union (Type.Alternatives kBs₀ (Just ρ))) -> do
+            let mapA = Map.fromList kAs₀
+            let mapB = Map.fromList kBs₀
+
+            let extraA = Map.difference mapA mapB
+            let extraB = Map.difference mapB mapA
+
+            let both = Map.intersectionWith (,) mapA mapB
+
+            if | not (Map.null extraB) -> do
+                Except.throwError [__i|
+                Union type mismatch
+
+                The following union type:
+
+                ↳ #{prettyToText _A₀}
+
+                … is not a subtype of:
+
+                ↳ #{prettyToText _B₀}
+
+                The latter union has the following extra alternatives:
+
+                #{listToText (Map.keys extraB)}
+                |]
+
+               | otherwise -> do
+                let process _ (_A₁, _B₁) = do
+                        _Θ <- get
+                        subtype (Context.solve _Θ _A₁) (Context.solve _Θ _B₁)
+
+                _ <- Map.traverseWithKey process both
+
+                _Θ <- get
+                instantiateVariantR (Context.solveUnion _Θ (Type.Alternatives (Map.toList extraA) Nothing)) ρ
+
+        (Type.Union (Type.Alternatives kAs₀ (Just ρ₀)), Type.Union (Type.Alternatives kBs₀ (Just ρ₁))) -> do
+            let mapA = Map.fromList kAs₀
+            let mapB = Map.fromList kBs₀
+
+            let extraA = Map.difference mapA mapB
+            let extraB = Map.difference mapB mapA
+
+            let both = Map.intersectionWith (,) mapA mapB
+
+            let process _ (_A₁, _B₁) = do
+                    _Θ <- get
+                    subtype (Context.solve _Θ _A₁) (Context.solve _Θ _B₁)
+
+            _ <- Map.traverseWithKey process both
+
+            ρ₂ <- fresh
+
+            _Γ₀ <- get
+
+            let ρ₁First = do
+                    (_ΓR, _ΓL) <- Context.splitOnUnsolvedVariant ρ₁ _Γ₀
+
+                    Monad.guard (Context.UnsolvedVariant ρ₀ `elem` _ΓR)
+
+                    return (set (_ΓR <> (Context.UnsolvedVariant ρ₁ : Context.UnsolvedVariant ρ₂ : _ΓL)))
+
+            let ρ₀First = do
+                    (_ΓR, _ΓL) <- Context.splitOnUnsolvedVariant ρ₀ _Γ₀
+
+                    Monad.guard (Context.UnsolvedVariant ρ₁ `elem` _ΓR)
+
+                    return (set (_ΓR <> (Context.UnsolvedVariant ρ₀ : Context.UnsolvedVariant ρ₂ : _ΓL)))
+
+            case ρ₀First <|> ρ₁First of
+                Nothing -> do
+                    Except.throwError [__i|
+                    Internal error: Invalid context
+
+                    One of the following variant type variables:
+
+                    #{listToText [Context.UnsolvedVariant ρ₀, Context.UnsolvedVariant ρ₁ ]}
+
+                    … is missing from the following context:
+
+                    #{listToText _Γ}
+                    |]
+
+                Just setContext -> do
+                    setContext
+
+            _Θ <- get
+
+            instantiateVariantL ρ₀ (Context.solveUnion _Θ (Type.Alternatives (Map.toList extraB) (Just ρ₂)))
+
+            _Δ <- get
+
+            instantiateVariantR (Context.solveUnion _Δ (Type.Alternatives (Map.toList extraA) (Just ρ₂))) ρ₁
+
         (_A, _B) -> do
             Except.throwError [__i|
             Not a subtype
@@ -550,6 +780,14 @@ instantiateL α _A₀ = do
             set (_ΓR <> (Context.Solved α (Monotype.Record (Monotype.Fields [] (Just ρ))) : Context.UnsolvedRow ρ : _ΓL))
 
             instantiateRowL ρ r
+        Type.Union u -> do
+            (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstLUnion"
+
+            ρ <- fresh
+
+            set (_ΓR <> (Context.Solved α (Monotype.Union (Monotype.Alternatives [] (Just ρ))) : Context.UnsolvedVariant ρ : _ΓL))
+
+            instantiateVariantL ρ u
 
 {-| This corresponds to the judgment:
 
@@ -642,11 +880,20 @@ instantiateR _A₀ α = do
             set (_ΓR <> (Context.Solved α (Monotype.Record (Monotype.Fields [] (Just ρ))) : Context.UnsolvedRow ρ : _ΓL))
 
             instantiateRowR r ρ
+        Type.Union u -> do
+            (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstRUnion"
 
-{- The following `equateRows` / `instantiateRowL` / `instantiateRowR` judgments
-   are not present in the bidirectional type-checking paper.  These were added in
-   order to support row polymorphism, by following the same general type-checking
-   principles as the original paper.
+            ρ <- fresh
+
+            set (_ΓR <> (Context.Solved α (Monotype.Union (Monotype.Alternatives [] (Just ρ))) : Context.UnsolvedVariant ρ : _ΓL))
+
+            instantiateVariantR u ρ
+
+{- The following `equateRows` / `instantiateRowL` / `instantiateRowR`,
+   `equateVariants` / `instantiateVariantL` / `instantiateVariantR` judgments
+   are not present in the bidirectional type-checking paper.  These were added
+   in order to support row polymorphism, by following the same general
+   type-checking principles as the original paper.
 -}
 equateRows
     :: (MonadState Status m, MonadError Text m)
@@ -790,6 +1037,148 @@ instantiateRowR r@(Type.Fields kAs rest) ρ₀ = do
 
     traverse_ instantiate kAβs
 
+equateVariants
+    :: (MonadState Status m, MonadError Text m)
+    => Existential Monotype.Union-> Existential Monotype.Union -> m ()
+equateVariants ρ₀ ρ₁ = do
+    _Γ₀ <- get
+
+    let ρ₁First = do
+            (_ΓR, _ΓL) <- Context.splitOnUnsolvedVariant ρ₀ _Γ₀
+
+            Monad.guard (Context.UnsolvedVariant ρ₁ `elem` _ΓL)
+
+            return (set (_ΓR <> (Context.SolvedVariant ρ₀ (Monotype.Alternatives [] (Just ρ₁)) : _ΓL)))
+
+    let ρ₀First = do
+            (_ΓR, _ΓL) <- Context.splitOnUnsolvedVariant ρ₁ _Γ₀
+
+            Monad.guard (Context.UnsolvedVariant ρ₀ `elem` _ΓL)
+
+            return (set (_ΓR <> (Context.SolvedVariant ρ₁ (Monotype.Alternatives [] (Just ρ₀)) : _ΓL)))
+
+    case ρ₁First <|> ρ₀First of
+        Nothing -> do
+            Except.throwError [__i|
+            Internal error: Invalid context
+
+            One of the following variant type variables:
+
+            #{listToText [Context.UnsolvedVariant ρ₀, Context.UnsolvedVariant ρ₁ ]}
+
+            … is missing from the following context:
+
+            #{listToText _Γ₀}
+            |]
+
+        Just setContext -> do
+            setContext
+
+instantiateVariantL
+    :: (MonadState Status m, MonadError Text m)
+    => Existential Monotype.Union -> Type.Union-> m ()
+instantiateVariantL ρ₀ u@(Type.Alternatives kAs rest) = do
+    if ρ₀ `Type.variantFreeIn` Type.Union u
+        then do
+            Except.throwError [__i|
+            Not a subtype
+
+            The following variant variable:
+
+            ↳ #{Pretty.pretty ρ₀}
+
+            … cannot be instantiated to the following union type:
+
+            ↳ #{Pretty.pretty (Type.Union u)}
+
+            … because the same variant variable appears within that record type.
+            |]
+        else return ()
+
+    let process (k, _A) = do
+            β <- fresh
+
+            return (k, _A, β)
+
+    kAβs <- traverse process kAs
+
+    let βs  = map (\(_, _, β) -> Context.Unsolved β      ) kAβs
+    let kβs = map (\(k, _, β) -> (k, Monotype.Unsolved β)) kAβs
+
+    _Γ <- get
+
+    (_ΓR, _ΓL) <- Context.splitOnUnsolvedVariant ρ₀ _Γ `orDie` "instantiateVariantL"
+
+    case rest of
+        Just ρ₁ -> do
+            ρ₂ <- fresh
+
+            set (_ΓR <> (Context.SolvedVariant ρ₀ (Monotype.Alternatives kβs (Just ρ₂)) : Context.UnsolvedVariant ρ₂ : βs <> _ΓL))
+
+            equateVariants ρ₁ ρ₂
+
+        Nothing -> do
+            set (_ΓR <> (Context.SolvedVariant ρ₀ (Monotype.Alternatives kβs Nothing) : βs <> _ΓL))
+    let instantiate (_, _A, β) = do
+            _Θ <- get
+
+            instantiateL β (Context.solve _Θ _A)
+
+    traverse_ instantiate kAβs
+
+instantiateVariantR
+    :: (MonadState Status m, MonadError Text m)
+    => Type.Union -> Existential Monotype.Union -> m ()
+instantiateVariantR u@(Type.Alternatives kAs rest) ρ₀ = do
+    if ρ₀ `Type.variantFreeIn` Type.Union u
+        then do
+            Except.throwError [__i|
+            Not a subtype
+
+            The following variant variable:
+
+            ↳ #{Pretty.pretty ρ₀}
+
+            … cannot be instantiated to the following union type:
+
+            ↳ #{Pretty.pretty (Type.Union u)}
+
+            … because the same variant variable appears within that union type.
+            |]
+        else return ()
+
+    let process (k, _A) = do
+            β <- fresh
+
+            return (k, _A, β)
+
+    kAβs <- traverse process kAs
+
+    let βs  = map (\(_, _, β) -> Context.Unsolved β      ) kAβs
+    let kβs = map (\(k, _, β) -> (k, Monotype.Unsolved β)) kAβs
+
+    _Γ <- get
+
+    (_ΓR, _ΓL) <- Context.splitOnUnsolvedVariant ρ₀ _Γ `orDie` "instantiateVariantR"
+
+    case rest of
+        Just ρ₁ -> do
+            ρ₂ <- fresh
+
+            set (_ΓR <> (Context.SolvedVariant ρ₀ (Monotype.Alternatives kβs (Just ρ₂)) : Context.UnsolvedVariant ρ₂ : βs <> _ΓL))
+
+            equateVariants ρ₁ ρ₂
+
+        Nothing -> do
+            set (_ΓR <> (Context.SolvedVariant ρ₀ (Monotype.Alternatives kβs Nothing) : βs <> _ΓL))
+
+    let instantiate (_, _A, β) = do
+            _Θ <- get
+
+            instantiateR (Context.solve _Θ _A) β
+
+    traverse_ instantiate kAβs
+
 {-| This corresponds to the judgment:
 
     > Γ ⊢ e ⇒ A ⊣ Δ
@@ -884,6 +1273,19 @@ infer (Syntax.Record kvs) = do
     kAs <- traverse process kvs
 
     return (Type.Record (Type.Fields kAs Nothing))
+
+infer (Syntax.Alternative k) = do
+    α <- fresh
+    ρ <- fresh
+
+    push (Context.Unsolved α)
+    push (Context.UnsolvedVariant ρ)
+
+    return
+        (Type.Function
+            (Type.Unsolved α)
+            (Type.Union (Type.Alternatives [(k, (Type.Unsolved α))] (Just ρ)))
+        )
 
 infer (Syntax.Field record key) = do
     α <- fresh
