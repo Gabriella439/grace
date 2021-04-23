@@ -81,6 +81,11 @@ evaluate env syntax =
 
         Syntax.Application function argument ->
             case (function', argument') of
+                (Value.Merge (Value.Record alternativeHandlers)
+                  , Value.Application (Value.Alternative alternative) x
+                  )
+                  | Just f <- lookup alternative alternativeHandlers ->
+                      evaluateApplication f x
                 (Value.Application
                     (Value.Application Value.NaturalFold (Value.Natural n))
                     succ
@@ -126,6 +131,9 @@ evaluate env syntax =
 
         Syntax.Alternative name ->
             Value.Alternative name
+
+        Syntax.Merge record ->
+            Value.Merge (evaluate env record)
 
         Syntax.True ->
             Value.True
@@ -261,6 +269,9 @@ quote names value =
 
         Value.Alternative name ->
             Syntax.Alternative name
+
+        Value.Merge record ->
+            Syntax.Merge (quote names record)
 
         Value.True ->
             Syntax.True

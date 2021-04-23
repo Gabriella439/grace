@@ -77,6 +77,11 @@ resolve here (Syntax.Field record₀ key) = do
 resolve _ (Syntax.Alternative name) = do
     return (Syntax.Alternative name)
 
+resolve here (Syntax.Merge record₀) = do
+    record₁ <- resolve here record₀
+
+    return (Syntax.Merge record₁)
+
 resolve _ Syntax.True = do
     return Syntax.True
 

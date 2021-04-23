@@ -79,6 +79,7 @@ data Value
     | Record [(Text, Value)]
     | Field Value Text
     | Alternative Text
+    | Merge Value
     | True
     | False
     | And Value Value

@@ -59,6 +59,10 @@ data Syntax a
     -- ^
     --   >>> pretty (Alternative "Nil")
     --   Nil
+    | Merge (Syntax a)
+    -- ^
+    --   >>> pretty (Merge "x")
+    --   merge x
     | True
     -- ^
     --   >>> pretty Grace.Syntax.True
@@ -151,6 +155,9 @@ prettyApplicationExpression (Application function argument) =
         prettyApplicationExpression function
     <>  " "
     <>  prettyFieldExpression argument
+prettyApplicationExpression (Merge record) =
+        "merge "
+    <>  prettyFieldExpression record
 prettyApplicationExpression other =
     prettyFieldExpression other
 

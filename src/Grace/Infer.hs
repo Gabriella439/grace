@@ -1287,6 +1287,63 @@ infer (Syntax.Alternative k) = do
             (Type.Union (Type.Alternatives [(k, (Type.Unsolved α))] (Just ρ)))
         )
 
+infer (Syntax.Merge record) = do
+    _R <- infer record
+
+    case _R of
+        Type.Record (Type.Fields keyTypes Nothing) -> do
+            β <- fresh
+
+            push (Context.Unsolved β)
+
+            let process (key, Type.Function _A _B) = do
+                    _ϴ <- get
+
+                    subtype (Context.solve _ϴ _B) (Context.solve _ϴ (Type.Unsolved β))
+
+                    return (key, _A)
+                process (_, _A) = do
+                    Except.throwError [__i|
+                        Invalid handler
+
+                        The merge keyword expects a record of handlers where all handlers are functions,
+                        but you provided a handler of the following type:
+
+                        ↳ #{prettyToText _A}
+
+                        … which is not a function type.
+                    |]
+                    
+            keyTypes' <- traverse process keyTypes
+
+            let unionType =
+                    Type.Union (Type.Alternatives keyTypes'  Nothing)
+
+            return (Type.Function unionType (Type.Unsolved β))
+
+        Type.Record (Type.Fields _ (Just _)) -> do
+            Except.throwError [__i|
+                Must merge a concrete record
+
+                The first argument to a merge expression must be a record where all fields are
+                statically known.  However, you provided an argument of type:
+
+                ↳ #{prettyToText _R}
+
+                … where not all fields could be inferred.
+            |]
+        _ -> do
+            Except.throwError [__i|
+                Must merge a record
+
+                The first argument to a merge expression must be a record, but you provided an
+                expression of the following type:
+
+                ↳ #{prettyToText _R}
+
+                … which is not a record type.
+            |]
+
 infer (Syntax.Field record key) = do
     α <- fresh
     ρ <- fresh

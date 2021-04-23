@@ -51,6 +51,7 @@ import qualified Grace.Type         as Type
     int            { Lexer.Int $$           }
     '\\'           { Lexer.Lambda           }
     let            { Lexer.Let              }
+    merge          { Lexer.Merge            }
     Natural        { Lexer.Natural          }
     'Natural/fold' { Lexer.NaturalFold      }
     '{'            { Lexer.OpenBrace        }
@@ -106,6 +107,8 @@ AndExpression
 ApplicationExpression
     : ApplicationExpression FieldExpression
         { Syntax.Application $1 $2 }
+    | merge FieldExpression
+        { Syntax.Merge $2 }
     | FieldExpression
         { $1 }
 
@@ -176,7 +179,11 @@ Record
 ReversedRecord
     : ReversedRecord ',' label '=' Expression
         { ($3, $5) : $1 }
+    | ReversedRecord ',' alternative '=' Expression
+        { ($3, $5) : $1 }
     | label '=' Expression
+        { [ ($1, $3) ] }
+    | alternative '=' Expression
         { [ ($1, $3) ] }
 
 Type
