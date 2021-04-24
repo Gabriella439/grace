@@ -1384,6 +1384,7 @@ infer (Syntax.Merge record) = do
 
                 … where not all fields could be inferred.
             |]
+
         _ -> do
             Except.throwError [__i|
                 Must merge a record
