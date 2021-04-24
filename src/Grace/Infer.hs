@@ -1249,14 +1249,10 @@ infer
 infer _A@(Syntax.Variable x₀ n) = do
     _Γ <- get
 
-    case Context.lookup x₀ n _Γ of
-        Just _A -> do
-            return _A
-
-        Nothing -> do
-            Except.throwError [__i|
-            Unbound variable: #{prettyToText (fmap (\_ -> ()) _A)}
-            |]
+    Context.lookup x₀ n _Γ `orDie`
+        [__i|
+        Unbound variable: #{prettyToText (fmap (\_ -> ()) _A)}
+        |]
 
 -- →I⇒ 
 infer (Syntax.Lambda x e) = do
