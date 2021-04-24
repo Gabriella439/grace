@@ -252,12 +252,24 @@ parseError :: Token -> Alex a
 parseError token = do
     (AlexPn _ line column, _, _, _) <- Lexer.alexGetInput
 
-    let message =
-            [__i|
-            Parsing failed
+    case token of
+        Lexer.EndOfFile -> do
+            let message =
+                    [__i|
+                    Parsing failed
 
-            #{show line}:#{show column}: Unexpected token - #{show token}
-            |]
+                    #{show line}:#{show column}: Unexpected end of file
+                    |]
 
-    Lexer.alexError (Text.unpack message)
+            Lexer.alexError (Text.unpack message)
+
+        _ -> do
+            let message =
+                    [__i|
+                    Parsing failed
+
+                    #{show line}:#{show column}: Unexpected token - #{show token}
+                    |]
+
+            Lexer.alexError (Text.unpack message)
 }

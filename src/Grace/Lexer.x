@@ -24,6 +24,7 @@ import Data.Text (Text)
 
 import qualified Data.ByteString              as ByteString.Strict
 import qualified Data.ByteString.Lazy         as ByteString.Lazy
+import qualified Data.ByteString.Lazy.Char8   as ByteString.Lazy.Char8
 import qualified Data.ByteString.Lex.Integral as ByteString.Integral
 import qualified Data.Text                    as Text
 import qualified Data.Text.Lazy               as Text.Lazy
@@ -124,15 +125,26 @@ monadScan = do
     AlexEOF ->
         alexEOF
 
-    AlexError ((AlexPn _ line column),char,_,_) -> do
-        let message =
-                [__i|
-                Lexing failed
+    AlexError ((AlexPn _ line column),_,current,_) -> do
+        case ByteString.Lazy.Char8.uncons current of
+            Just (char, _) -> do
+                let message =
+                        [__i|
+                        Lexing failed
 
-                #{show line}:#{show column}: Unexpected character #{show char}
-                |]
+                        #{show line}:#{show column}: Unexpected character #{show char}
+                        |]
 
-        alexError (Text.unpack message)
+                alexError (Text.unpack message)
+            Nothing -> do
+                let message =
+                        [__i|
+                        Lexing failed
+
+                        #{show line}:#{show column}: Unexpected end of file
+                        |]
+
+                alexError (Text.unpack message)
 
     AlexSkip input' _ -> do
         alexSetInput input'
