@@ -52,6 +52,7 @@ import qualified Grace.Type         as Type
     int            { Lexer.Int $$           }
     '\\'           { Lexer.Lambda           }
     let            { Lexer.Let              }
+    List           { Lexer.List             }
     merge          { Lexer.Merge            }
     Natural        { Lexer.Natural          }
     'Natural/fold' { Lexer.NaturalFold      }
@@ -129,7 +130,7 @@ PrimitiveExpression
         { Syntax.Variable $1 $3 }
     | alternative
         { Syntax.Alternative $1 }
-    | '[' List ']'
+    | '[' ListLiteral ']'
         { Syntax.List $2 }
     | '{' Record '}'
         { Syntax.Record $2 }
@@ -164,7 +165,7 @@ Binding
     | let label ':' Type '=' Expression
         { Syntax.Binding $2 (Just $4) $6 }
 
-List
+ListLiteral
    : ReversedList
        { reverse $1 }
    | {- empty -}
@@ -199,8 +200,14 @@ Type
         { $1 }
 
 FunctionType
-    : PrimitiveType '->' FunctionType
+    : ApplicationType '->' FunctionType
         { Type.Function $1 $3 }
+    | ApplicationType
+        { $1 }
+
+ApplicationType
+    : List PrimitiveType
+        { Type.List $2 }
     | PrimitiveType
         { $1 }
 
@@ -239,9 +246,9 @@ UnionType
         { [] }
 
 ReversedUnionType
-    : ReversedUnionType ',' label ':' Type
+    : ReversedUnionType ',' alternative ':' Type
         { ($3, $5) : $1 }
-    | label ':' Type
+    | alternative ':' Type
         { [ ($1, $3) ] }
 
 {

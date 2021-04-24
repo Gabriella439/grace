@@ -65,6 +65,7 @@ token :-
   in                                  { emit In                             }
   \\                                  { emit Lambda                         }
   let                                 { emit Let                            }
+  List                                { emit List                           }
   merge                               { emit Merge                          }
   Natural                             { emit Natural                        }
   Natural\/fold                       { emit NaturalFold                    }
@@ -235,6 +236,7 @@ data Token
     | Label Text
     | Lambda
     | Let
+    | List
     | Merge
     | Natural
     | NaturalFold
