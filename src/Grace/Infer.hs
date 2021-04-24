@@ -996,6 +996,7 @@ instantiateRowL ρ₀ r@(Type.Fields kAs rest) = do
 
         Nothing -> do
             set (_ΓR <> (Context.SolvedRow ρ₀ (Monotype.Fields kβs Nothing) : βs <> _ΓL))
+
     let instantiate (_, _A, β) = do
             _Θ <- get
 
@@ -1161,6 +1162,7 @@ instantiateVariantL ρ₀ u@(Type.Alternatives kAs rest) = do
 
         Nothing -> do
             set (_ΓR <> (Context.SolvedVariant ρ₀ (Monotype.Alternatives kβs Nothing) : βs <> _ΓL))
+
     let instantiate (_, _A, β) = do
             _Θ <- get
 
