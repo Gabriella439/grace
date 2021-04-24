@@ -15,6 +15,8 @@ import Data.Text.Prettyprint.Doc (Doc, Pretty(..))
 import Grace.Type (Type)
 import Numeric.Natural (Natural)
 
+import qualified Data.Text as Text
+
 {- $setup
    >>> import Data.Void (Void)
 -}
@@ -103,6 +105,10 @@ data Syntax a
     -- ^
     --   >>> pretty @(Syntax Void) NaturalFold
     --   Natural/fold
+    | Text Text
+    -- ^
+    --   >>> pretty @(Syntax Void) (Text "a\n")
+    --   "a\n"
     | Embed a
     deriving stock (Functor, Show)
 
@@ -198,10 +204,22 @@ prettyPrimitiveExpression Grace.Syntax.True =
     "True"
 prettyPrimitiveExpression Grace.Syntax.False =
     "False"
-prettyPrimitiveExpression (Natural n) =
-    pretty n
+prettyPrimitiveExpression (Natural number) =
+    pretty number
 prettyPrimitiveExpression NaturalFold =
     "Natural/fold"
+prettyPrimitiveExpression (Text text) =
+        "\""
+    <>  ( pretty
+        . Text.replace "\"" "\\\""
+        . Text.replace "\b" "\\b"
+        . Text.replace "\f" "\\f"
+        . Text.replace "\n" "\\n"
+        . Text.replace "\r" "\\r"
+        . Text.replace "\t" "\\t"
+        . Text.replace "\\" "\\\\"
+        ) text
+    <>  "\""
 prettyPrimitiveExpression (Embed a) =
     pretty a
 prettyPrimitiveExpression other =

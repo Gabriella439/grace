@@ -63,6 +63,8 @@ import qualified Grace.Type         as Type
     '+'            { Lexer.Plus             }
     then           { Lexer.Then             }
     '*'            { Lexer.Times            }
+    Text           { Lexer.Text             }
+    text           { Lexer.TextLiteral $$   }
     True           { Lexer.True_            }
     label          { Lexer.Label $$         }
     alternative    { Lexer.Alternative $$   }
@@ -139,6 +141,8 @@ PrimitiveExpression
         { Syntax.Natural (fromIntegral $1) }
     | 'Natural/fold'
         { Syntax.NaturalFold }
+    | text
+        { Syntax.Text $1 }
     | file
         { Syntax.Embed $1 }
     | '(' Expression ')' 
@@ -205,6 +209,8 @@ PrimitiveType
         { Type.Bool }
     | Natural
         { Type.Natural }
+    | Text
+        { Type.Text }
     | label
         { Type.Variable $1 }
     | '{' RecordType '}'

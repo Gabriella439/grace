@@ -203,6 +203,9 @@ evaluate env syntax =
         Syntax.NaturalFold ->
             Value.NaturalFold
 
+        Syntax.Text text ->
+            Value.Text text
+
         Syntax.Embed (_, value) ->
             value
 
@@ -302,6 +305,9 @@ quote names value =
 
         Value.NaturalFold ->
             Syntax.NaturalFold
+
+        Value.Text text ->
+            Syntax.Text text
 
 {-| Evaluate an expression
 

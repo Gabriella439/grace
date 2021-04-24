@@ -77,6 +77,11 @@ data Type
     --
     -- >>> pretty Natural
     -- Natural
+    | Text
+    -- ^ Text type
+    --
+    -- >>> pretty Text
+    -- Text
     deriving (Eq, Ord, Show)
 
 instance IsString Type where
@@ -113,6 +118,8 @@ fromMonotype Monotype.Bool =
     Bool
 fromMonotype Monotype.Natural =
     Natural
+fromMonotype Monotype.Text =
+    Text
 
 {-| Substitute a `Type` by replacing all occurrences of the given unsolved
     variable with a `Monotype`
@@ -137,6 +144,8 @@ solve _ _ Bool =
     Bool
 solve _ _ Natural =
     Natural
+solve _ _ Text =
+    Text
 
 {-| Substitute a `Type` by replacing all occurrences of the given unsolved
     row variable with a t`Monotype.Record`
@@ -167,6 +176,8 @@ solveRow _ _ Bool =
     Bool
 solveRow _ _ Natural =
     Natural
+solveRow _ _ Text =
+    Text
 
 {-| Substitute a `Type` by replacing all occurrences of the given unsolved
     variant variable with a t`Monotype.Union`
@@ -197,6 +208,8 @@ solveVariant _ _ Bool =
     Bool
 solveVariant _ _ Natural =
     Natural
+solveVariant _ _ Text =
+    Text
 
 {-| Replace all occurrences of a variable within one `Type` with another `Type`,
     given the variable's label and index
@@ -226,6 +239,8 @@ substitute _ _ _ Bool =
     Bool
 substitute _ _ _ Natural =
     Natural
+substitute _ _ _ Text =
+    Text
 
 {-| Count how many times the given `Existential` `Type` variable appears within
     a `Type`
@@ -244,6 +259,8 @@ _ `typeFreeIn` Variable _ =
 _ `typeFreeIn` Bool =
     False
 _ `typeFreeIn` Natural =
+    False
+_ `typeFreeIn` Text =
     False
 α `typeFreeIn` Record (Fields kAs _) =
     any (\(_, _A) -> α `typeFreeIn` _A) kAs
@@ -268,6 +285,8 @@ _ `rowFreeIn` Bool =
     False
 _ `rowFreeIn` Natural =
     False
+_ `rowFreeIn` Text =
+    False
 ρ₀ `rowFreeIn` Record (Fields kAs ρ₁) =
     any (ρ₀ ==) ρ₁ || any (\(_, _A) -> ρ₀ `rowFreeIn` _A) kAs
 ρ₀ `rowFreeIn` Union (Alternatives kAs _) =
@@ -290,6 +309,8 @@ _ `variantFreeIn` Unsolved _ =
 _ `variantFreeIn` Bool =
     False
 _ `variantFreeIn` Natural =
+    False
+_ `variantFreeIn` Text =
     False
 ρ₀ `variantFreeIn` Record (Fields kAs _) =
     any (\(_, _A) -> ρ₀ `variantFreeIn` _A) kAs
@@ -318,6 +339,7 @@ prettyPrimitiveType (Record r)   = prettyRecordType r
 prettyPrimitiveType (Union u)    = prettyUnionType u
 prettyPrimitiveType  Bool        = "Bool"
 prettyPrimitiveType  Natural     = "Natural"
+prettyPrimitiveType  Text        = "Text"
 prettyPrimitiveType  other       = "(" <> prettyType other <> ")"
 
 prettyRecordType :: Record -> Doc a

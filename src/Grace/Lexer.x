@@ -26,7 +26,9 @@ import qualified Data.ByteString              as ByteString.Strict
 import qualified Data.ByteString.Lazy         as ByteString.Lazy
 import qualified Data.ByteString.Lazy.Char8   as ByteString.Lazy.Char8
 import qualified Data.ByteString.Lex.Integral as ByteString.Integral
+import qualified Data.Char                    as Char
 import qualified Data.Text                    as Text
+import qualified Data.Text.Read               as Text.Read
 import qualified Data.Text.Lazy               as Text.Lazy
 import qualified Data.Text.Lazy.Encoding      as Text.Lazy.Encoding
 }
@@ -38,6 +40,8 @@ $alpha = [a-zA-Z]
 $lower = [a-z]
 $upper = [A-Z]
 $pathchar = [\x21\x24-\x27\x2A-\x2B\x2D-\x2E\x30-\x3B\x3D\x40-\x5A\x5E-\x7A\x7C\x7E]
+$stringchar = [\x20-\x21\x23-\x5b\x5d-\x10FFFF]
+$hex = [a-fA-F0-9]
 
 token :-
   $white+                             ;
@@ -55,12 +59,10 @@ token :-
   \.                                  { emit Dot                            }
   \=                                  { emit Equals                         }
   else                                { emit Else                           }
-  (\.|\.\.|())(\/$pathchar+)+         { capture (File . Text.unpack)        }
   forall                              { emit Forall                         }
   False                               { emit False_                         }
   if                                  { emit If                             }
   in                                  { emit In                             }
-  $digit+                             { \i n -> fmap Int (captureInt i n)   }
   \\                                  { emit Lambda                         }
   let                                 { emit Let                            }
   merge                               { emit Merge                          }
@@ -74,9 +76,18 @@ token :-
   \+                                  { emit Plus                           }
   then                                { emit Then                           }
   \*                                  { emit Times                          }
+  Text                                { emit Text                           }
   True                                { emit True_                          }
-  [ $lower \_ ] [ $alpha $digit \_ ]* { capture Label                       }
-    $upper      [ $alpha $digit \_ ]* { capture Alternative                 }
+  $digit+
+    { \i n -> fmap Int (captureInt i n)   }
+  (\.|\.\.|())(\/$pathchar+)+
+    { capture (File . Text.unpack)        }
+  \"( $stringchar | \\ ([\"\\\/bfnrt] | u ($hex{4})) )*\"
+    { \i n -> fmap TextLiteral (captureText i n) }
+  [ $lower \_ ] [ $alpha $digit \_ ]*
+    { capture Label                       }
+    $upper      [ $alpha $digit \_ ]*
+    { capture Alternative                 }
 
 {
 emit :: Token -> AlexAction Token
@@ -110,6 +121,47 @@ captureInt input len = do
     case ByteString.Integral.readDecimal bytes of
         Nothing     -> alexError "Invalid integer"
         Just (n, _) -> return n
+
+captureText :: AlexAction Text
+captureText input len = do
+    text <- getText input len
+
+    return (unescape text)
+
+unescape :: Text -> Text
+unescape =
+      Text.intercalate "\\"
+    . map unescapeInner
+    . Text.splitOn "\\\\"
+    . Text.init
+    . Text.tail
+  where
+    unescapeInner =
+          unescapeUnicode
+        . Text.replace "\\b" "\b"
+        . Text.replace "\\f" "\f"
+        . Text.replace "\\n" "\n"
+        . Text.replace "\\r" "\r"
+        . Text.replace "\\t" "\t"
+
+    unescapeUnicode text = Text.concat (x0 : ys)
+      where
+        x0 : xs = Text.splitOn "\\u" text
+
+        ys = do
+            x <- xs
+
+            let (prefix, suffix) = Text.splitAt 4 x
+
+            if Text.length prefix == 4
+                then do
+                    case Text.Read.hexadecimal prefix of
+                        Right (n, "") -> do
+                            return (Text.singleton (Char.chr n) <> suffix)
+                        _             -> do
+                            return ("\\u" <> x)
+                else do
+                    return ("\\u" <> x)
 
 alexEOF :: Alex Token
 alexEOF = return EndOfFile
@@ -192,6 +244,8 @@ data Token
     | OpenParenthesis
     | Or
     | Plus
+    | Text
+    | TextLiteral Text
     | Then
     | Times
     | True_

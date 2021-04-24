@@ -107,8 +107,8 @@ resolve here (Syntax.If predicate₀ ifTrue₀ ifFalse₀) = do
 
     return (Syntax.If predicate₁ ifTrue₁ ifFalse₁)
 
-resolve _ (Syntax.Natural n) = do
-    return (Syntax.Natural n)
+resolve _ (Syntax.Natural number) = do
+    return (Syntax.Natural number)
 
 resolve here (Syntax.Times left₀ right₀) = do
     left₁  <- resolve here left₀
@@ -124,6 +124,9 @@ resolve here (Syntax.Plus left₀ right₀) = do
 
 resolve _ Syntax.NaturalFold = do
     return Syntax.NaturalFold
+
+resolve _ (Syntax.Text text) = do
+    return (Syntax.Text text)
 
 resolve here (Syntax.Embed file) = do
     let there = FilePath.takeDirectory here </> file

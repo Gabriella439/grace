@@ -199,6 +199,9 @@ wellFormedType _Γ Type.Bool = do
 wellFormedType _Γ Type.Natural = do
     return ()
 
+wellFormedType _Γ Type.Text = do
+    return ()
+
 {-| This corresponds to the judgment:
 
     > Γ ⊢ A <: B ⊣ Δ
@@ -260,6 +263,9 @@ subtype _A₀ _B₀ = do
             return ()
 
         (Type.Natural, Type.Natural) -> do
+            return ()
+
+        (Type.Text, Type.Text) -> do
             return ()
 
         (Type.List _A, Type.List _B) -> do
@@ -737,6 +743,8 @@ instantiateL α _A₀ = do
             instLSolve Type.Bool Monotype.Bool
         Type.Natural -> do
             instLSolve Type.Natural Monotype.Natural
+        Type.Text -> do
+            instLSolve Type.Natural Monotype.Natural
 
         -- InstLArr
         Type.Function _A₁ _A₂ -> do
@@ -839,6 +847,8 @@ instantiateR _A₀ α = do
             instRSolve Type.Bool Monotype.Bool
         Type.Natural -> do
             instRSolve Type.Natural Monotype.Natural
+        Type.Text -> do
+            instRSolve Type.Text Monotype.Text
 
         -- InstRArr
         Type.Function _A₁ _A₂ -> do
@@ -1462,6 +1472,9 @@ infer Syntax.NaturalFold = do
                 (Type.Function (Type.Function "a" "a") (Type.Function "a" "a"))
             )
         )
+
+infer (Syntax.Text _) = do
+    return Type.Text
 
 infer (Syntax.Embed (type_, _)) = do
     return type_

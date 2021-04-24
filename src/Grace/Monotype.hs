@@ -59,6 +59,11 @@ data Monotype
     --
     -- >>> pretty Natural
     -- Natural
+    | Text
+    -- ^ Text type
+    --
+    -- >>> pretty Text
+    -- Text
     deriving (Eq, Show)
 
 instance IsString Monotype where
@@ -98,6 +103,8 @@ prettyPrimitiveType Bool =
     "Bool"
 prettyPrimitiveType Natural =
     "Natural"
+prettyPrimitiveType Text =
+    "Text"
 prettyPrimitiveType other =
     "(" <> prettyMonotype other <> ")"
 
