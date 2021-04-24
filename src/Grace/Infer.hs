@@ -333,11 +333,11 @@ subtype _A₀ _B₀ = do
                 |]
 
                | otherwise -> do
-                let process _ (_A₁, _B₁) = do
+                let process (_A₁, _B₁) = do
                         _Θ <- get
                         subtype (Context.solve _Θ _A₁) (Context.solve _Θ _B₁)
 
-                _ <- Map.traverseWithKey process both
+                _ <- traverse process both
 
                 return ()
 
@@ -368,11 +368,11 @@ subtype _A₀ _B₀ = do
                 |]
 
                | otherwise -> do
-                let process _ (_A₁, _B₁) = do
+                let process (_A₁, _B₁) = do
                         _Θ <- get
                         subtype (Context.solve _Θ _A₁) (Context.solve _Θ _B₁)
 
-                _ <- Map.traverseWithKey process both
+                _ <- traverse process both
 
                 _Θ <- get
                 instantiateRowL ρ (Context.solveRecord _Θ (Type.Fields (Map.toList extraB) Nothing))
@@ -404,11 +404,11 @@ subtype _A₀ _B₀ = do
                 |]
 
                | otherwise -> do
-                let process _ (_A₁, _B₁) = do
+                let process (_A₁, _B₁) = do
                         _Θ <- get
                         subtype (Context.solve _Θ _A₁) (Context.solve _Θ _B₁)
 
-                _ <- Map.traverseWithKey process both
+                _ <- traverse process both
 
                 _Θ <- get
                 instantiateRowR (Context.solveRecord _Θ (Type.Fields (Map.toList extraA) Nothing)) ρ
@@ -422,11 +422,11 @@ subtype _A₀ _B₀ = do
 
             let both = Map.intersectionWith (,) mapA mapB
 
-            let process _ (_A₁, _B₁) = do
+            let process (_A₁, _B₁) = do
                     _Θ <- get
                     subtype (Context.solve _Θ _A₁) (Context.solve _Θ _B₁)
 
-            _ <- Map.traverseWithKey process both
+            _ <- traverse process both
 
             ρ₂ <- fresh
 
@@ -539,11 +539,11 @@ subtype _A₀ _B₀ = do
                 |]
 
                | otherwise -> do
-                let process _ (_A₁, _B₁) = do
+                let process (_A₁, _B₁) = do
                         _Θ <- get
                         subtype (Context.solve _Θ _A₁) (Context.solve _Θ _B₁)
 
-                _ <- Map.traverseWithKey process both
+                _ <- traverse process both
 
                 return ()
 
@@ -574,11 +574,11 @@ subtype _A₀ _B₀ = do
                 |]
 
                | otherwise -> do
-                let process _ (_A₁, _B₁) = do
+                let process (_A₁, _B₁) = do
                         _Θ <- get
                         subtype (Context.solve _Θ _A₁) (Context.solve _Θ _B₁)
 
-                _ <- Map.traverseWithKey process both
+                _ <- traverse process both
 
                 _Θ <- get
                 instantiateVariantL ρ (Context.solveUnion _Θ (Type.Alternatives (Map.toList extraB) Nothing))
@@ -610,11 +610,11 @@ subtype _A₀ _B₀ = do
                 |]
 
                | otherwise -> do
-                let process _ (_A₁, _B₁) = do
+                let process (_A₁, _B₁) = do
                         _Θ <- get
                         subtype (Context.solve _Θ _A₁) (Context.solve _Θ _B₁)
 
-                _ <- Map.traverseWithKey process both
+                _ <- traverse process both
 
                 _Θ <- get
                 instantiateVariantR (Context.solveUnion _Θ (Type.Alternatives (Map.toList extraA) Nothing)) ρ
@@ -628,11 +628,11 @@ subtype _A₀ _B₀ = do
 
             let both = Map.intersectionWith (,) mapA mapB
 
-            let process _ (_A₁, _B₁) = do
+            let process (_A₁, _B₁) = do
                     _Θ <- get
                     subtype (Context.solve _Θ _A₁) (Context.solve _Θ _B₁)
 
-            _ <- Map.traverseWithKey process both
+            _ <- traverse process both
 
             ρ₂ <- fresh
 
