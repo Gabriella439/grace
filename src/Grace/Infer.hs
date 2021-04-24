@@ -703,9 +703,20 @@ instantiateL
 instantiateL α _A₀ = do
     _Γ₀ <- get
 
-    let instLSolve _A τ = do
-            (_Γ', _Γ) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstLSolve"
+    (_Γ', _Γ) <- Context.splitOnUnsolved α _Γ₀ `orDie`
+        [__i|
+        Internal error: Invalid context
 
+        The following unsolved variable:
+
+        ↳ #{prettyToText (Context.Unsolved α)}}
+
+        … cannot be instantiated because the variable is missing from the context:
+
+        #{listToText _Γ₀}
+        |]
+
+    let instLSolve _A τ = do
             wellFormedType _Γ _A
 
             set (_Γ' <> (Context.Solved α τ : _Γ))
@@ -713,8 +724,8 @@ instantiateL α _A₀ = do
     case _A₀ of
         -- InstLReach
         Type.Unsolved β
-            | Just (_ΓR, _Γ₁) <- Context.splitOnUnsolved β _Γ₀
-            , Just (_ΓM, _ΓL) <- Context.splitOnUnsolved α _Γ₁ -> do
+            | let _ΓL = _Γ
+            , Just (_ΓR, _ΓM) <- Context.splitOnUnsolved β _Γ' -> do
                 set (_ΓR <> (Context.Solved β (Monotype.Unsolved α) : _ΓM) <> (Context.Unsolved α : _ΓL))
 
         -- InstLSolve
@@ -729,7 +740,8 @@ instantiateL α _A₀ = do
 
         -- InstLArr
         Type.Function _A₁ _A₂ -> do
-            (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstLArr"
+            let _ΓL = _Γ
+            let _ΓR = _Γ'
 
             α₁ <- fresh
             α₂ <- fresh
@@ -743,45 +755,36 @@ instantiateL α _A₀ = do
             instantiateL α₂ (Context.solve _Θ _A₂)
 
         -- InstLAllR
-        Type.Forall β _B
-            | Context.Unsolved α `elem` _Γ₀ -> do
-                push (Context.Variable β)
+        Type.Forall β _B -> do
+            push (Context.Variable β)
 
-                instantiateL  α _B
+            instantiateL α _B
 
-                discardUpTo (Context.Variable β)
-
-            | otherwise -> do
-                Except.throwError [__i|
-                Internal error: Malformed context
-
-                The following unsolved variable:
-
-                ↳ #{prettyToText (Context.Unsolved α)}}
-
-                … cannot be instantiated because the variable is missing from the context:
-
-                #{listToText _Γ₀}
-                |]
+            discardUpTo (Context.Variable β)
 
         Type.List _A -> do
-            (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstLList"
+            let _ΓL = _Γ
+            let _ΓR = _Γ'
 
             α₁ <- fresh
 
             set (_ΓR <> (Context.Solved α (Monotype.List (Monotype.Unsolved α₁)) : Context.Unsolved α₁ : _ΓL))
 
             instantiateL α₁ _A
+
         Type.Record r -> do
-            (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstLRecord"
+            let _ΓL = _Γ
+            let _ΓR = _Γ'
 
             ρ <- fresh
 
             set (_ΓR <> (Context.Solved α (Monotype.Record (Monotype.Fields [] (Just ρ))) : Context.UnsolvedRow ρ : _ΓL))
 
             instantiateRowL ρ r
+
         Type.Union u -> do
-            (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstLUnion"
+            let _ΓL = _Γ
+            let _ΓR = _Γ'
 
             ρ <- fresh
 
@@ -802,9 +805,20 @@ instantiateR
 instantiateR _A₀ α = do
     _Γ₀ <- get
 
-    let instRSolve _A τ = do
-            (_Γ', _Γ) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstRSolve"
+    (_Γ', _Γ) <- Context.splitOnUnsolved α _Γ₀ `orDie`
+        [__i|
+        Internal error: Invalid context
+        
+        The following unsolved variable:
+        
+        ↳ #{prettyToText (Context.Unsolved α)}}
+        
+        … cannot be instantiated because the variable is missing from the context:
+        
+        #{listToText _Γ₀}
+        |]
 
+    let instRSolve _A τ = do
             wellFormedType _Γ _A
 
             set (_Γ' <> (Context.Solved α τ : _Γ))
@@ -812,8 +826,8 @@ instantiateR _A₀ α = do
     case _A₀ of
         -- InstRReach
         Type.Unsolved β
-            | Just (_ΓR, _Γ₁) <- Context.splitOnUnsolved β _Γ₀
-            , Just (_ΓM, _ΓL) <- Context.splitOnUnsolved α _Γ₁ -> do
+            | let _ΓL = _Γ
+            , Just (_ΓR, _ΓM) <- Context.splitOnUnsolved β _Γ' -> do
                 set (_ΓR <> (Context.Solved β (Monotype.Unsolved α) : _ΓM) <> (Context.Unsolved α : _ΓL))
 
         -- InstRSolve
@@ -828,7 +842,8 @@ instantiateR _A₀ α = do
 
         -- InstRArr
         Type.Function _A₁ _A₂ -> do
-            (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstRArr"
+            let _ΓL = _Γ
+            let _ΓR = _Γ'
 
             α₁ <- fresh
             α₂ <- fresh
@@ -842,46 +857,39 @@ instantiateR _A₀ α = do
             instantiateR (Context.solve _Θ _A₂) α₂
 
         -- InstRAllL
-        Type.Forall β₀ _B
-            | Context.Unsolved α `elem` _Γ₀ -> do
-                β₁ <- fresh
+        Type.Forall β₀ _B -> do
+            β₁ <- fresh
 
-                push (Context.Marker β₁)
-                push (Context.Unsolved β₁)
+            push (Context.Marker β₁)
+            push (Context.Unsolved β₁)
 
-                instantiateR (Type.substitute β₀ 0 (Type.Unsolved β₁) _B) α
+            instantiateR (Type.substitute β₀ 0 (Type.Unsolved β₁) _B) α
 
-                discardUpTo (Context.Marker β₁)
-            | otherwise -> do
-                Except.throwError [__i|
-                Internal error: Malformed context
-        
-                The following unsolved variable:
-        
-                ↳ #{prettyToText (Context.Unsolved α)}}
-        
-                … cannot be instantiated because the variable is missing from the context:
-        
-                #{listToText _Γ₀}
-                |]
+            discardUpTo (Context.Marker β₁)
+
         Type.List _A -> do
-            (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstRArr"
+            let _ΓL = _Γ
+            let _ΓR = _Γ'
 
             α₁ <- fresh
 
             set (_ΓR <> (Context.Solved α (Monotype.List (Monotype.Unsolved α₁)) : Context.Unsolved α₁ : _ΓL))
 
             instantiateR _A α₁
+
         Type.Record r -> do
-            (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstRRecord"
+            let _ΓL = _Γ
+            let _ΓR = _Γ'
 
             ρ <- fresh
 
             set (_ΓR <> (Context.Solved α (Monotype.Record (Monotype.Fields [] (Just ρ))) : Context.UnsolvedRow ρ : _ΓL))
 
             instantiateRowR r ρ
+
         Type.Union u -> do
-            (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ₀ `orDie` "InstRUnion"
+            let _ΓL = _Γ
+            let _ΓR = _Γ'
 
             ρ <- fresh
 
@@ -965,7 +973,18 @@ instantiateRowL ρ₀ r@(Type.Fields kAs rest) = do
 
     _Γ <- get
 
-    (_ΓR, _ΓL) <- Context.splitOnUnsolvedRow ρ₀ _Γ `orDie` "instantiateRowL"
+    (_ΓR, _ΓL) <- Context.splitOnUnsolvedRow ρ₀ _Γ `orDie`
+        [__i|
+        Internal error: Invalid context
+        
+        The following unsolved row variable:
+        
+        ↳ #{prettyToText (Context.UnsolvedRow ρ₀)}}
+        
+        … cannot be instantiated because the row variable is missing from the context:
+        
+        #{listToText _Γ}
+        |]
 
     case rest of
         Just ρ₁ -> do
@@ -1017,7 +1036,18 @@ instantiateRowR r@(Type.Fields kAs rest) ρ₀ = do
 
     _Γ <- get
 
-    (_ΓR, _ΓL) <- Context.splitOnUnsolvedRow ρ₀ _Γ `orDie` "instantiateRowR"
+    (_ΓR, _ΓL) <- Context.splitOnUnsolvedRow ρ₀ _Γ `orDie`
+        [__i|
+        Internal error: Invalid context
+        
+        The following unsolved row variable:
+        
+        ↳ #{prettyToText (Context.UnsolvedRow ρ₀)}}
+        
+        … cannot be instantiated because the row variable is missing from the context:
+        
+        #{listToText _Γ}
+        |]
 
     case rest of
         Just ρ₁ -> do
@@ -1107,7 +1137,19 @@ instantiateVariantL ρ₀ u@(Type.Alternatives kAs rest) = do
 
     _Γ <- get
 
-    (_ΓR, _ΓL) <- Context.splitOnUnsolvedVariant ρ₀ _Γ `orDie` "instantiateVariantL"
+    (_ΓR, _ΓL) <- Context.splitOnUnsolvedVariant ρ₀ _Γ `orDie`
+        [__i|
+        Internal error: Invalid context
+        
+        The following unsolved variant variable:
+        
+        ↳ #{prettyToText (Context.UnsolvedVariant ρ₀)}}
+        
+        … cannot be instantiated because the variant variable is missing from the
+        context:
+        
+        #{listToText _Γ}
+        |]
 
     case rest of
         Just ρ₁ -> do
@@ -1159,7 +1201,19 @@ instantiateVariantR u@(Type.Alternatives kAs rest) ρ₀ = do
 
     _Γ <- get
 
-    (_ΓR, _ΓL) <- Context.splitOnUnsolvedVariant ρ₀ _Γ `orDie` "instantiateVariantR"
+    (_ΓR, _ΓL) <- Context.splitOnUnsolvedVariant ρ₀ _Γ `orDie`
+        [__i|
+        Internal error: Invalid context
+        
+        The following unsolved variant variable:
+        
+        ↳ #{prettyToText (Context.UnsolvedVariant ρ₀)}}
+        
+        … cannot be instantiated because the variant variable is missing from the
+        context:
+        
+        #{listToText _Γ}
+        |]
 
     case rest of
         Just ρ₁ -> do
@@ -1469,7 +1523,18 @@ inferApplication (Type.Forall α₀ _A) e = do
 inferApplication (Type.Unsolved α) e = do
     _Γ <- get
 
-    (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ `orDie` "αApp"
+    (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ `orDie`
+        [__i|
+        Internal error: Invalid context
+
+        The following unsolved variable:
+        
+        ↳ #{prettyToText (Context.Unsolved α)}}
+        
+        … cannot be solved because the variable is missing from the context:
+        
+        #{listToText _Γ}
+        |]
 
     α₁ <- fresh
     α₂ <- fresh
