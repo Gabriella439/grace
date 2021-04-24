@@ -8,96 +8,100 @@ module Grace.Syntax
     , Binding(..)
     ) where
 
-import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.String (IsString(..))
 import Data.Text (Text)
 import Data.Text.Prettyprint.Doc (Doc, Pretty(..))
 import Grace.Type (Type)
 import Numeric.Natural (Natural)
 
+{- $setup
+   >>> import Data.Void (Void)
+-}
+
 -- | The surface syntax for the language
 data Syntax a
     = Variable Text Int
     -- ^
-    --   >>> pretty (Variable "x" 0)
+    --   >>> pretty @(Syntax Void) (Variable "x" 0)
     --   x
-    --   >>> pretty (Variable "x" 1)
+    --   >>> pretty @(Syntax Void) (Variable "x" 1)
     --   x@1
     | Lambda Text (Syntax a)
     -- ^
-    --   >>> pretty (Lambda "x" "x")
+    --   >>> pretty @(Syntax Void) (Lambda "x" "x")
     --   \x -> x
     | Application (Syntax a) (Syntax a)
     -- ^
-    --   >>> pretty (Application "f" "x")
+    --   >>> pretty @(Syntax Void) (Application "f" "x")
     --   f x
     | Annotation (Syntax a) Type
     -- ^
-    --   >>> pretty (Annotation "x" "A")
+    --   >>> pretty @(Syntax Void) (Annotation "x" "A")
     --   x : A
     | Let (NonEmpty (Binding a)) (Syntax a)
     -- ^
-    --   >>> pretty (Let (Binding "x" Nothing "y" :| []) "z")
+    --   >>> pretty @(Syntax Void) (Let (Binding "x" Nothing "y" :| []) "z")
     --   let x = y in z
-    --   >>> pretty (Let (Binding "x" (Just "X") "y" :| []) "z")
+    --   >>> pretty @(Syntax Void) (Let (Binding "x" (Just "X") "y" :| []) "z")
     --   let x : X = y in z
-    --   >>> pretty (Let (Binding "a" Nothing "b" :| [ Binding "c" Nothing "d" ]) "e")
+    --   >>> pretty @(Syntax Void) (Let (Binding "a" Nothing "b" :| [ Binding "c" Nothing "d" ]) "e")
     --   let a = b let c = d in e
     | List [Syntax a]
     -- ^
-    --   >>> pretty (List [ "x", "y", "z" ])
+    --   >>> pretty @(Syntax Void) (List [ "x", "y", "z" ])
     --   [ x, y, z ]
     | Record [(Text, Syntax a)]
     -- ^
-    --   >>> pretty (Record [ ("x", "a"), ("y", "b") ])
+    --   >>> pretty @(Syntax Void) (Record [ ("x", "a"), ("y", "b") ])
     --   { x = a, y = b }
     | Field (Syntax a) Text
     -- ^
-    --   >>> pretty (Field "x" "a")
+    --   >>> pretty @(Syntax Void) (Field "x" "a")
     --   x.a
     | Alternative Text
     -- ^
-    --   >>> pretty (Alternative "Nil")
+    --   >>> pretty @(Syntax Void) (Alternative "Nil")
     --   Nil
     | Merge (Syntax a)
     -- ^
-    --   >>> pretty (Merge "x")
+    --   >>> pretty @(Syntax Void) (Merge "x")
     --   merge x
     | True
     -- ^
-    --   >>> pretty Grace.Syntax.True
+    --   >>> pretty @(Syntax Void) Grace.Syntax.True
     --   True
     | False
     -- ^
-    --   >>> pretty Grace.Syntax.False
+    --   >>> pretty @(Syntax Void) Grace.Syntax.False
     --   False
     | And (Syntax a) (Syntax a)
     -- ^
-    --   >>> pretty (And "x" "y")
+    --   >>> pretty @(Syntax Void) (And "x" "y")
     --   x && y
     | Or (Syntax a) (Syntax a)
     -- ^
-    --   >>> pretty (Or "x" "y")
+    --   >>> pretty @(Syntax Void) (Or "x" "y")
     --   x || y
     | If (Syntax a) (Syntax a) (Syntax a)
     -- ^
-    --   >>> pretty (If "x" "y" "z")
+    --   >>> pretty @(Syntax Void) (If "x" "y" "z")
     --   if x then y else z
     | Natural Natural
     -- ^
-    --   >>> pretty (Natural 1)
+    --   >>> pretty @(Syntax Void) (Natural 1)
     --   1
     | Times (Syntax a) (Syntax a)
     -- ^
-    --   >>> pretty (Times "x" "y")
+    --   >>> pretty @(Syntax Void) (Times "x" "y")
     --   x * y
     | Plus (Syntax a) (Syntax a)
     -- ^
-    --   >>> pretty (Plus "x" "y")
+    --   >>> pretty @(Syntax Void) (Plus "x" "y")
     --   x + y
     | NaturalFold
     -- ^
-    --   >>> pretty NaturalFold
+    --   >>> pretty @(Syntax Void) NaturalFold
     --   Natural/fold
     | Embed a
     deriving stock (Functor, Show)
@@ -205,9 +209,9 @@ prettyPrimitiveExpression other =
 
 {-| The assignment part of a @let@ binding
 
-    >>> pretty (Binding "x" Nothing "y")
+    >>> pretty @(Binding Void) (Binding "x" Nothing "y")
     let x = y
-    >>> pretty (Binding "x" (Just "X") "y")
+    >>> pretty @(Binding Void) (Binding "x" (Just "X") "y")
     let x : X = y
 -}
 data Binding a = Binding Text (Maybe Type) (Syntax a)

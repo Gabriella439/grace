@@ -45,6 +45,7 @@ library
                      , OverloadedStrings
                      , QuasiQuotes
                      , RecordWildCards
+                     , TypeApplications
                      , ViewPatterns
   default-language:    Haskell2010
   ghc-options:         -Wall

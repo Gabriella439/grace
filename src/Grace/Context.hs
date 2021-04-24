@@ -196,8 +196,8 @@ solve context type_ = foldl snoc type_ context
 
 {-| Substitute a t`Type.Record` using the solved entries of a `Context`
 
-    >>> solveRecord [ SolvedRow 0 (Monotype.Fields [] Nothing) ] (Type.Record (Type.Fields [("a", Type.Bool)] (Just 0)))
-    Record (Fields [("a",Bool)] Nothing)
+    >>> solveRecord [ SolvedRow 0 (Monotype.Fields [] Nothing) ] (Type.Fields [("a", Type.Bool)] (Just 0))
+    Fields [("a",Bool)] Nothing
 -}
 solveRecord :: Context -> Type.Record -> Type.Record
 solveRecord context record = record'
@@ -208,8 +208,8 @@ solveRecord context record = record'
 {-| Substitute a t`Type.Union` using the solved entries of a `Context`
     `Context`
 
-    >>> solveUnion [ SolvedVariant 0 (Monotype.Alternatives [] Nothing) ] (Type.Union (Type.Alternatives [("a", Type.Bool)] (Just 0)))
-    Union (Alternatives [("a",Bool)] Nothing)
+    >>> solveUnion [ SolvedVariant 0 (Monotype.Alternatives [] Nothing) ] (Type.Alternatives [("a", Type.Bool)] (Just 0))
+    Alternatives [("a",Bool)] Nothing
 -}
 solveUnion :: Context -> Type.Union -> Type.Union
 solveUnion context union = union'
