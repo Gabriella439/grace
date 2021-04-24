@@ -36,6 +36,7 @@ import qualified Grace.Type         as Type
     '->'           { Lexer.Arrow            }
     '@'            { Lexer.At               }
     Bool           { Lexer.Bool             }
+    '>'            { Lexer.CloseAngle       }
     '}'            { Lexer.CloseBrace       }
     ']'            { Lexer.CloseBracket     }
     ')'            { Lexer.CloseParenthesis }
@@ -54,6 +55,7 @@ import qualified Grace.Type         as Type
     merge          { Lexer.Merge            }
     Natural        { Lexer.Natural          }
     'Natural/fold' { Lexer.NaturalFold      }
+    '<'            { Lexer.OpenAngle        }
     '{'            { Lexer.OpenBrace        }
     '['            { Lexer.OpenBracket      }
     '('            { Lexer.OpenParenthesis  }
@@ -207,6 +209,8 @@ PrimitiveType
         { Type.Variable $1 }
     | '{' RecordType '}'
         { Type.Record (Type.Fields $2 Nothing) }
+    | '<' UnionType '>'
+        { Type.Union (Type.Alternatives $2 Nothing) }
     | '(' Type ')'
         { $2 }
 
@@ -218,6 +222,18 @@ RecordType
 
 ReversedRecordType
     : ReversedRecordType ',' label ':' Type
+        { ($3, $5) : $1 }
+    | label ':' Type
+        { [ ($1, $3) ] }
+
+UnionType
+    : ReversedUnionType
+        { reverse $1 }
+    | {- empty -}
+        { [] }
+
+ReversedUnionType
+    : ReversedUnionType ',' label ':' Type
         { ($3, $5) : $1 }
     | label ':' Type
         { [ ($1, $3) ] }

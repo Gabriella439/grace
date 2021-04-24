@@ -45,6 +45,7 @@ token :-
   \-\>                                { emit Arrow                          }
   @                                   { emit At                             }
   Bool                                { emit Grace.Lexer.Bool               }
+  \>                                  { emit CloseAngle                     }
   \}                                  { emit CloseBrace                     }
   \]                                  { emit CloseBracket                   }
   \)                                  { emit CloseParenthesis               }
@@ -64,6 +65,7 @@ token :-
   merge                               { emit Merge                          }
   Natural                             { emit Natural                        }
   Natural\/fold                       { emit NaturalFold                    }
+  \<                                  { emit OpenAngle                      }
   \{                                  { emit OpenBrace                      }
   \[                                  { emit OpenBracket                    }
   \(                                  { emit OpenParenthesis                }
@@ -150,6 +152,7 @@ data Token
     | Arrow
     | At
     | Bool
+    | CloseAngle
     | CloseBrace
     | CloseBracket
     | CloseParenthesis
@@ -171,6 +174,7 @@ data Token
     | Merge
     | Natural
     | NaturalFold
+    | OpenAngle
     | OpenBrace
     | OpenBracket
     | OpenParenthesis

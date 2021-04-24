@@ -1,0 +1,1 @@
+merge { } : forall a . < > -> a
