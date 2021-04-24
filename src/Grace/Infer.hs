@@ -900,8 +900,8 @@ instantiateR _A₀ α = do
 {- The following `equateRows` / `instantiateRowL` / `instantiateRowR`,
    `equateVariants` / `instantiateVariantL` / `instantiateVariantR` judgments
    are not present in the bidirectional type-checking paper.  These were added
-   in order to support row polymorphism, by following the same general
-   type-checking principles as the original paper.
+   in order to support row polymorphism and variant polymorphism, by following
+   the same general type-checking principles as the original paper.
 -}
 equateRows
     :: (MonadState Status m, MonadError Text m)
