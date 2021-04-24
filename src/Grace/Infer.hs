@@ -432,19 +432,19 @@ subtype _A₀ _B₀ = do
 
             _Γ₀ <- get
 
-            let ρ₁First = do
-                    (_ΓR, _ΓL) <- Context.splitOnUnsolvedRow ρ₁ _Γ₀
-
-                    Monad.guard (Context.UnsolvedRow ρ₀ `elem` _ΓR)
-
-                    return (set (_ΓR <> (Context.UnsolvedRow ρ₁ : Context.UnsolvedRow ρ₂ : _ΓL)))
-
             let ρ₀First = do
                     (_ΓR, _ΓL) <- Context.splitOnUnsolvedRow ρ₀ _Γ₀
 
                     Monad.guard (Context.UnsolvedRow ρ₁ `elem` _ΓR)
 
                     return (set (_ΓR <> (Context.UnsolvedRow ρ₀ : Context.UnsolvedRow ρ₂ : _ΓL)))
+
+            let ρ₁First = do
+                    (_ΓR, _ΓL) <- Context.splitOnUnsolvedRow ρ₁ _Γ₀
+
+                    Monad.guard (Context.UnsolvedRow ρ₀ `elem` _ΓR)
+
+                    return (set (_ΓR <> (Context.UnsolvedRow ρ₁ : Context.UnsolvedRow ρ₂ : _ΓL)))
 
             case ρ₀First <|> ρ₁First of
                 Nothing -> do
@@ -638,19 +638,19 @@ subtype _A₀ _B₀ = do
 
             _Γ₀ <- get
 
-            let ρ₁First = do
-                    (_ΓR, _ΓL) <- Context.splitOnUnsolvedVariant ρ₁ _Γ₀
-
-                    Monad.guard (Context.UnsolvedVariant ρ₀ `elem` _ΓR)
-
-                    return (set (_ΓR <> (Context.UnsolvedVariant ρ₁ : Context.UnsolvedVariant ρ₂ : _ΓL)))
-
             let ρ₀First = do
                     (_ΓR, _ΓL) <- Context.splitOnUnsolvedVariant ρ₀ _Γ₀
 
                     Monad.guard (Context.UnsolvedVariant ρ₁ `elem` _ΓR)
 
                     return (set (_ΓR <> (Context.UnsolvedVariant ρ₀ : Context.UnsolvedVariant ρ₂ : _ΓL)))
+
+            let ρ₁First = do
+                    (_ΓR, _ΓL) <- Context.splitOnUnsolvedVariant ρ₁ _Γ₀
+
+                    Monad.guard (Context.UnsolvedVariant ρ₀ `elem` _ΓR)
+
+                    return (set (_ΓR <> (Context.UnsolvedVariant ρ₁ : Context.UnsolvedVariant ρ₂ : _ΓL)))
 
             case ρ₀First <|> ρ₁First of
                 Nothing -> do
@@ -901,13 +901,6 @@ equateRows
 equateRows ρ₀ ρ₁ = do
     _Γ₀ <- get
 
-    let ρ₁First = do
-            (_ΓR, _ΓL) <- Context.splitOnUnsolvedRow ρ₀ _Γ₀
-
-            Monad.guard (Context.UnsolvedRow ρ₁ `elem` _ΓL)
-
-            return (set (_ΓR <> (Context.SolvedRow ρ₀ (Monotype.Fields [] (Just ρ₁)) : _ΓL)))
-
     let ρ₀First = do
             (_ΓR, _ΓL) <- Context.splitOnUnsolvedRow ρ₁ _Γ₀
 
@@ -915,7 +908,14 @@ equateRows ρ₀ ρ₁ = do
 
             return (set (_ΓR <> (Context.SolvedRow ρ₁ (Monotype.Fields [] (Just ρ₀)) : _ΓL)))
 
-    case ρ₁First <|> ρ₀First of
+    let ρ₁First = do
+            (_ΓR, _ΓL) <- Context.splitOnUnsolvedRow ρ₀ _Γ₀
+
+            Monad.guard (Context.UnsolvedRow ρ₁ `elem` _ΓL)
+
+            return (set (_ΓR <> (Context.SolvedRow ρ₀ (Monotype.Fields [] (Just ρ₁)) : _ΓL)))
+
+    case ρ₀First <|> ρ₁First of
         Nothing -> do
             Except.throwError [__i|
             Internal error: Invalid context
@@ -1043,13 +1043,6 @@ equateVariants
 equateVariants ρ₀ ρ₁ = do
     _Γ₀ <- get
 
-    let ρ₁First = do
-            (_ΓR, _ΓL) <- Context.splitOnUnsolvedVariant ρ₀ _Γ₀
-
-            Monad.guard (Context.UnsolvedVariant ρ₁ `elem` _ΓL)
-
-            return (set (_ΓR <> (Context.SolvedVariant ρ₀ (Monotype.Alternatives [] (Just ρ₁)) : _ΓL)))
-
     let ρ₀First = do
             (_ΓR, _ΓL) <- Context.splitOnUnsolvedVariant ρ₁ _Γ₀
 
@@ -1057,7 +1050,14 @@ equateVariants ρ₀ ρ₁ = do
 
             return (set (_ΓR <> (Context.SolvedVariant ρ₁ (Monotype.Alternatives [] (Just ρ₀)) : _ΓL)))
 
-    case ρ₁First <|> ρ₀First of
+    let ρ₁First = do
+            (_ΓR, _ΓL) <- Context.splitOnUnsolvedVariant ρ₀ _Γ₀
+
+            Monad.guard (Context.UnsolvedVariant ρ₁ `elem` _ΓL)
+
+            return (set (_ΓR <> (Context.SolvedVariant ρ₀ (Monotype.Alternatives [] (Just ρ₁)) : _ΓL)))
+
+    case ρ₀First <|> ρ₁First of
         Nothing -> do
             Except.throwError [__i|
             Internal error: Invalid context
