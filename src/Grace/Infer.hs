@@ -744,7 +744,7 @@ instantiateL α _A₀ = do
         Type.Natural -> do
             instLSolve Type.Natural Monotype.Natural
         Type.Text -> do
-            instLSolve Type.Natural Monotype.Natural
+            instLSolve Type.Text Monotype.Text
 
         -- InstLArr
         Type.Function _A₁ _A₂ -> do
@@ -1474,6 +1474,12 @@ infer Syntax.NaturalFold = do
         )
 
 infer (Syntax.Text _) = do
+    return Type.Text
+
+infer (Syntax.Append l r) = do
+    check l Type.Text
+    check r Type.Text
+
     return Type.Text
 
 infer (Syntax.Embed (type_, _)) = do

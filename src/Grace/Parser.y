@@ -34,6 +34,7 @@ import qualified Grace.Type         as Type
 %token
     '&&'           { Lexer.And              }
     '->'           { Lexer.Arrow            }
+    '++'           { Lexer.Append           }
     '@'            { Lexer.At               }
     Bool           { Lexer.Bool             }
     '>'            { Lexer.CloseAngle       }
@@ -104,8 +105,14 @@ OrExpression
         { $1 }
 
 AndExpression
-    : AndExpression '&&' ApplicationExpression
+    : AndExpression '&&' AppendExpression
         { Syntax.And $1 $3 }
+    | AppendExpression
+        { $1 }
+
+AppendExpression
+    : AppendExpression '++' ApplicationExpression
+        { Syntax.Append $1 $3 }
     | ApplicationExpression
         { $1 }
 

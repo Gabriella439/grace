@@ -109,6 +109,10 @@ data Syntax a
     -- ^
     --   >>> pretty @(Syntax Void) (Text "a\n")
     --   "a\n"
+    | Append (Syntax a) (Syntax a)
+    -- ^
+    --   >>> pretty @(Syntax Void) (Append "x" "y")
+    --   x ++ y
     | Embed a
     deriving stock (Functor, Show)
 
@@ -156,8 +160,14 @@ prettyOrExpression other =
 
 prettyAndExpression :: Pretty a => Syntax a -> Doc b
 prettyAndExpression (And left right) =
-    prettyAndExpression left <> " && " <> prettyApplicationExpression right
+    prettyAndExpression left <> " && " <> prettyAppendExpression right
 prettyAndExpression other =
+    prettyAppendExpression other
+
+prettyAppendExpression :: Pretty a => Syntax a -> Doc b
+prettyAppendExpression (Append left right) =
+    prettyAppendExpression left <> " ++ " <> prettyApplicationExpression right
+prettyAppendExpression other =
     prettyApplicationExpression other
 
 prettyApplicationExpression :: Pretty a => Syntax a -> Doc b

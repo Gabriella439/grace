@@ -90,6 +90,7 @@ data Value
     | Plus Value Value
     | NaturalFold
     | Text Text
+    | Append Value Value
     deriving (Show)
 
 instance IsString Value where

@@ -75,6 +75,7 @@ token :-
   \(                                  { emit OpenParenthesis                }
   \|\|                                { emit Or                             }
   \+                                  { emit Plus                           }
+  \+\+                                { emit Append                         }
   then                                { emit Then                           }
   \*                                  { emit Times                          }
   Text                                { emit Text                           }
@@ -215,6 +216,7 @@ monadScan = do
 data Token
     = And
     | Arrow
+    | Append
     | At
     | Bool
     | CloseAngle

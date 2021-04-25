@@ -128,6 +128,12 @@ resolve _ Syntax.NaturalFold = do
 resolve _ (Syntax.Text text) = do
     return (Syntax.Text text)
 
+resolve here (Syntax.Append left₀ right₀) = do
+    left₁  <- resolve here left₀
+    right₁ <- resolve here right₀
+
+    return (Syntax.Append left₁ right₁)
+
 resolve here (Syntax.Embed file) = do
     let there = FilePath.takeDirectory here </> file
 

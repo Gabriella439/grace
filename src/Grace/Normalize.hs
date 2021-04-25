@@ -206,6 +206,16 @@ evaluate env syntax =
         Syntax.Text text ->
             Value.Text text
 
+        Syntax.Append left right ->
+            case (left', right') of
+                (Value.Text "", _            ) -> right'
+                (_            , Value.Text "") -> left'
+                (Value.Text l , Value.Text r ) -> Value.Text (l <> r)
+                _                              -> Value.Append left' right'
+          where
+            left'  = evaluate env left
+            right' = evaluate env right
+
         Syntax.Embed (_, value) ->
             value
 
@@ -308,6 +318,9 @@ quote names value =
 
         Value.Text text ->
             Syntax.Text text
+
+        Value.Append left right ->
+            Syntax.Append (quote names left) (quote names right)
 
 {-| Evaluate an expression
 
