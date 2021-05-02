@@ -9,13 +9,14 @@ import Grace.Type (Type)
 import Grace.Value (Value)
 import System.FilePath ((</>))
 
-import qualified Data.ByteString.Lazy as ByteString
-import qualified Data.Text            as Text
-import qualified Grace.Infer          as Infer
-import qualified Grace.Normalize      as Normalize
-import qualified Grace.Parser         as Parser
-import qualified Grace.Syntax         as Syntax
-import qualified System.FilePath      as FilePath
+import qualified Data.Text.IO    as Text.IO
+import qualified Grace.Infer     as Infer
+import qualified Grace.Normalize as Normalize
+import qualified Grace.Parser    as Parser
+import qualified Grace.Syntax    as Syntax
+import qualified System.Exit     as Exit
+import qualified System.FilePath as FilePath
+import qualified System.IO       as IO
 
 {-| Resolve all imports, replacing each import with its inferred type and normal
     form
@@ -136,18 +137,20 @@ resolve here (Syntax.Append left₀ right₀) = do
 resolve here (Syntax.Embed file) = do
     let there = FilePath.takeDirectory here </> file
 
-    bytes <- ByteString.readFile there
+    text <- Text.IO.readFile there
 
-    expression <- case Parser.parseExpression there bytes of
-        Left string -> do
-            fail string
+    expression <- case Parser.parseExpression there text of
+        Left message -> do
+            IO.hPutStrLn IO.stderr message
+            Exit.exitFailure
         Right expression -> do
             return expression
 
     resolvedExpression <- resolve there expression
 
     case Infer.typeOf resolvedExpression of
-        Left text -> do
-            fail (Text.unpack text)
+        Left message -> do
+            Text.IO.hPutStrLn IO.stderr message
+            Exit.exitFailure
         Right inferred -> do
             return (Syntax.Embed (inferred, Normalize.evaluate [] resolvedExpression))

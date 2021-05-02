@@ -5,18 +5,20 @@ import Prettyprinter (Pretty)
 import System.FilePath ((</>))
 import Test.Tasty (TestTree)
 
-import qualified Data.ByteString.Lazy      as ByteString
 import qualified Data.Text                 as Text
+import qualified Data.Text.IO              as Text.IO
 import qualified Grace.Import              as Import
 import qualified Grace.Infer               as Infer
 import qualified Grace.Normalize           as Normalize
 import qualified Grace.Parser              as Parser
-import qualified System.Directory          as Directory
-import qualified System.FilePath           as FilePath
 import qualified Prettyprinter             as Pretty
 import qualified Prettyprinter.Render.Text as Pretty.Text
-import qualified Test.Tasty.Silver         as Silver
+import qualified System.Directory          as Directory
+import qualified System.Exit               as Exit
+import qualified System.FilePath           as FilePath
+import qualified System.IO                 as IO
 import qualified Test.Tasty                as Tasty
+import qualified Test.Tasty.Silver         as Silver
 
 pretty_ :: Pretty a => a -> Text
 pretty_ x = Pretty.Text.renderStrict stream
@@ -33,17 +35,22 @@ fileToTestTree prefix = do
 
     let name = FilePath.takeBaseName input
 
-    bytes <- ByteString.readFile input
+    bytes <- Text.IO.readFile input
 
     expression <- case Parser.parseExpression input bytes of
-        Left  string     -> do fail string
-        Right expression -> do return expression
+        Left message -> do
+            IO.hPutStrLn IO.stderr message
+            Exit.exitFailure
+        Right expression -> do
+            return expression
 
     resolvedExpression <- Import.resolve input expression
 
     let generateTypeFile = do
             case Infer.typeOf resolvedExpression of
-                Left text -> fail (Text.unpack text)
+                Left message -> do
+                    Text.IO.hPutStrLn IO.stderr message
+                    Exit.exitFailure
                 Right inferred -> return (pretty_ inferred)
 
     let generateOutputFile = do

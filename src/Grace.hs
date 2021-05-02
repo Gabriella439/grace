@@ -8,7 +8,6 @@ module Grace
 
 import Data.Text.Prettyprint.Doc (Pretty(..))
 
-import qualified Data.ByteString.Lazy                  as ByteString.Lazy
 import qualified Data.Text.IO                          as Text.IO
 import qualified Data.Text.Prettyprint.Doc             as Pretty
 import qualified Data.Text.Prettyprint.Doc.Render.Text as Pretty.Text
@@ -17,6 +16,7 @@ import qualified Grace.Infer                           as Infer
 import qualified Grace.Normalize                       as Normalize
 import qualified Grace.Parser                          as Parser
 import qualified System.Exit                           as Exit
+import qualified System.IO                             as IO
 
 pretty_ :: Pretty a => a -> IO ()
 pretty_ x = Pretty.Text.putDoc (Pretty.pretty x <> Pretty.hardline)
@@ -24,11 +24,11 @@ pretty_ x = Pretty.Text.putDoc (Pretty.pretty x <> Pretty.hardline)
 -- | Command-line entrypoint
 main :: IO ()
 main = do
-    bytes <- ByteString.Lazy.getContents
+    text <- Text.IO.getContents
 
-    expression <- case Parser.parseExpression "(input)" bytes of
-        Left string -> do
-            putStrLn string
+    expression <- case Parser.parseExpression "(input)" text of
+        Left message -> do
+            IO.hPutStrLn IO.stderr message
 
             Exit.exitFailure
         Right expression -> do
@@ -37,8 +37,8 @@ main = do
     resolvedExpression <- Import.resolve "." expression
 
     case Infer.typeOf resolvedExpression of
-        Left text -> do
-            Text.IO.putStrLn text
+        Left message -> do
+            Text.IO.hPutStrLn IO.stderr message
         Right inferred -> do
             pretty_ inferred
 

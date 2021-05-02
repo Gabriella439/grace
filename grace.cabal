@@ -9,19 +9,16 @@ build-type:          Simple
 library
   hs-source-dirs:      src
   build-depends:       base
-                     , array
-                     , bytestring
-                     , bytestring-lexing
                      , containers
                      , Earley
                      , filepath
+                     , megaparsec
                      , mtl
                      , parser-combinators
                      , prettyprinter
                      , string-interpolate
                      , text
-  build-tools:         alex
-                     , doctest
+  build-tools:         doctest
   exposed-modules:     Grace
                      , Grace.Context
                      , Grace.Existential
@@ -64,7 +61,6 @@ test-suite tasty
   type:                exitcode-stdio-1.0
   main-is:             Main.hs
   build-depends:       base
-                     , bytestring
                      , directory
                      , filepath
                      , grace

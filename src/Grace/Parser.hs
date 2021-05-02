@@ -13,7 +13,6 @@ module Grace.Parser
 import Control.Applicative (many, (<|>))
 import Control.Applicative.Combinators.NonEmpty (sepBy1)
 import Control.Applicative.Combinators (sepBy)
-import Data.ByteString.Lazy (ByteString)
 import Data.Functor (void)
 import Data.List.NonEmpty (some1)
 import Data.String.Interpolate (__i)
@@ -21,12 +20,14 @@ import Data.Text (Text)
 import Grace.Syntax (Syntax)
 import Text.Earley (Grammar, Prod, Report(..), rule, terminal, (<?>))
 
+import qualified Data.List          as List
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Text          as Text
 import qualified Grace.Lexer        as Lexer
 import qualified Grace.Syntax       as Syntax
 import qualified Grace.Type         as Type
 import qualified Text.Earley        as Earley
+import qualified Text.Megaparsec    as Megaparsec
 
 type Parser r = Prod r Text Lexer.Token
 
@@ -104,7 +105,6 @@ render t = case t of
     Lexer.Then             -> "then"
     Lexer.Times            -> "*"
     Lexer.True_            -> "True"
-    Lexer.EndOfFile        -> "end of file"
 
 grammar :: Grammar r (Parser r (Syntax FilePath))
 grammar = mdo
@@ -272,22 +272,21 @@ grammar = mdo
         t <- type_
         return (a, t)
 
-    completeExpression <- rule do
-        e <- expression
-        token Lexer.EndOfFile
-        return e
+    return expression
 
-    return completeExpression
-
-parseExpression :: String -> ByteString -> Either String (Syntax FilePath)
+parseExpression :: String -> Text -> Either String (Syntax FilePath)
 parseExpression inputName bytes = do
-    tokens <- Lexer.runAlex bytes getTokens
+    tokens <- case Megaparsec.parse Lexer.tokens inputName bytes of
+        Left parseErrorBundle -> do
+            Left (Megaparsec.errorBundlePretty parseErrorBundle)
+        Right tokens -> do
+            return tokens
 
     case Earley.fullParses (Earley.parser grammar) tokens of
         ([], Report{..}) -> do
             let toExpectedToken t = "• " <> t <> "\n"
 
-            let expectedTokens = Text.concat (map toExpectedToken expected)
+            let expectedTokens = Text.concat (map toExpectedToken (List.nub expected))
 
             let message =
                     [__i|
@@ -300,14 +299,3 @@ parseExpression inputName bytes = do
             Left (Text.unpack message)
         (result : _, _) -> do
             return result
-  where
-    getTokens = do
-        token_ <- Lexer.monadScan
-
-        case token_ of
-            Lexer.EndOfFile -> do
-                return [token_]
-
-            _ -> do
-                tokens <- getTokens
-                return (token_ : tokens)
