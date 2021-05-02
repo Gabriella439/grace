@@ -19,21 +19,23 @@ import Control.Applicative.Combinators.NonEmpty (sepBy1)
 import Control.Applicative.Combinators (sepBy)
 import Data.Functor (void)
 import Data.List.NonEmpty (some1)
-import Data.String.Interpolate (__i)
 import Data.Text (Text)
 import Grace.Lexer (Token)
 import Grace.Syntax (Syntax)
-import Text.Earley (Grammar, Prod, Report(..), rule, terminal, (<?>))
+import Text.Earley (Grammar, Prod, Report(..), rule, (<?>))
 
-import qualified Data.List          as List
-import qualified Data.List.NonEmpty as NonEmpty
-import qualified Data.Text          as Text
-import qualified Grace.Lexer        as Lexer
-import qualified Grace.Syntax       as Syntax
-import qualified Grace.Type         as Type
-import qualified Text.Earley        as Earley
+import qualified Data.List.NonEmpty     as NonEmpty
+import qualified Grace.Lexer            as Lexer
+import qualified Grace.Syntax           as Syntax
+import qualified Grace.Type             as Type
+import qualified Text.Earley            as Earley
 
-type Parser r = Prod r Text Lexer.Token
+type Parser r = Prod r Text Lexer.LocatedToken
+
+terminal :: (Token -> Maybe a) -> Parser r a
+terminal match = Earley.terminal match'
+  where
+    match' locatedToken = match (Lexer.token locatedToken)
 
 label :: Parser r Text
 label = terminal match
@@ -66,7 +68,9 @@ file = terminal match
     match  _             = Nothing
 
 token :: Lexer.Token -> Parser r ()
-token t = void (Earley.token t <?> render t)
+token t = void (Earley.satisfy predicate <?> render t)
+  where
+    predicate locatedToken = Lexer.token locatedToken == t
 
 render :: Lexer.Token -> Text
 render t = case t of
@@ -282,25 +286,20 @@ grammar = mdo
 parse
     :: String
     -- ^ Name of the input (used for error messages)
-    -> [Token]
+    -> Text
     -- ^ Tokens lexed from source code
     -> Either Text (Syntax FilePath)
-parse inputName tokens =
+parse inputName code = do
+    tokens <- Lexer.lex inputName code
+
     case Earley.fullParses (Earley.parser grammar) tokens of
         ([], Report{..}) -> do
-            let toExpectedToken t = "• " <> t <> "\n"
+            let maybeOffset =
+                    case unconsumed of
+                        []               -> Nothing
+                        locatedToken : _ -> Just (Lexer.offset locatedToken)
 
-            let expectedTokens = Text.concat (map toExpectedToken (List.nub expected))
+            Left (Lexer.renderError inputName code maybeOffset)
 
-            let message =
-                    [__i|
-                    Parsing failed
-
-                    #{inputName} Token \##{show position}: Expected one of the following tokens:
-
-                    #{expectedTokens}
-                    |]
-
-            Left message
         (result : _, _) -> do
             return result

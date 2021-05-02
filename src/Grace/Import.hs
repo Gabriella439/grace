@@ -11,7 +11,6 @@ import System.FilePath ((</>))
 
 import qualified Data.Text.IO    as Text.IO
 import qualified Grace.Infer     as Infer
-import qualified Grace.Lexer     as Lexer
 import qualified Grace.Normalize as Normalize
 import qualified Grace.Parser    as Parser
 import qualified Grace.Syntax    as Syntax
@@ -140,14 +139,7 @@ resolve here (Syntax.Embed file) = do
 
     text <- Text.IO.readFile there
 
-    tokens <- case Lexer.lex there text of
-        Left message -> do
-            Text.IO.hPutStrLn IO.stderr message
-            Exit.exitFailure
-        Right tokens -> do
-            return tokens
-
-    expression <- case Parser.parse there tokens of
+    expression <- case Parser.parse there text of
         Left message -> do
             Text.IO.hPutStrLn IO.stderr message
             Exit.exitFailure

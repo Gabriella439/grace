@@ -14,7 +14,9 @@
 module Grace.Lexer
     ( -- * Lexer
       Token(..)
+    , LocatedToken(..)
     , lex
+    , renderError
     ) where
 
 import Control.Applicative (empty, many, (<|>))
@@ -23,7 +25,8 @@ import Data.String.Interpolate (__i)
 import Data.Text (Text)
 import Data.Void (Void)
 import Prelude hiding (lex)
-import Text.Megaparsec ((<?>))
+import Text.Megaparsec (ParseErrorBundle(..), PosState(..), (<?>))
+import Text.Megaparsec.Pos (SourcePos(..))
 
 import qualified Control.Monad.Combinators  as Combinators
 import qualified Data.Char                  as Char
@@ -33,6 +36,8 @@ import qualified Data.Text.Read             as Read
 import qualified Text.Megaparsec            as Megaparsec
 import qualified Text.Megaparsec.Char       as Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as Lexer
+import qualified Text.Megaparsec.Pos        as Megaparsec.Pos
+import qualified Text.Megaparsec.Stream     as Megaparsec.Stream
 
 -- | Short-hand type synonym used by lexing utilities
 type Parser = Megaparsec.Parsec Void Text
@@ -46,8 +51,8 @@ symbol = Lexer.symbol space
 lexeme :: Parser a -> Parser a
 lexeme = Lexer.lexeme space
 
-token :: Parser Token
-token =
+parseToken :: Parser Token
+parseToken =
     Combinators.choice
         [ -- `file` has to come before the lexer for `.` so that a file
           -- prefix of `.` or `..` is not lexed as a field access
@@ -107,23 +112,93 @@ token =
         , alternative
         ]
 
-tokens :: Parser [Token]
-tokens = do
+parseLocatedToken :: Parser LocatedToken
+parseLocatedToken = do
+    offset <- Megaparsec.getOffset
+    token  <- parseToken
+    return LocatedToken{..}
+
+parseLocatedTokens :: Parser [LocatedToken]
+parseLocatedTokens = do
     space
-    ts <- many token
+    ts <- many parseLocatedToken
     Megaparsec.eof
     return ts
+
+{-| This error rendering logic is shared between the lexer and parser in
+    order to promote uniform error messages
+-}
+renderError :: String -> Text -> Maybe Int -> Text
+renderError inputName code maybeOffset = prefix <> suffix
+  where
+    (maybeLocation, suffix) =
+        case maybeOffset of
+            Nothing ->
+                (Nothing, "")
+
+            Just offset ->
+                let initialState =
+                        PosState
+                            { pstateInput = code
+                            , pstateOffset = 0
+                            , pstateSourcePos =
+                                Megaparsec.Pos.initialPos inputName
+                            , pstateTabWidth =
+                                Megaparsec.Pos.defaultTabWidth
+                            , pstateLinePrefix = ""
+                            }
+
+                    (h, state) =
+                        Megaparsec.Stream.reachOffset offset initialState
+
+                    pos = pstateSourcePos state
+
+                    line = Megaparsec.Pos.unPos (sourceLine pos)
+
+                    column = Megaparsec.Pos.unPos (sourceColumn pos)
+
+                    s =
+                        case h of
+                            Just string ->
+                                let lineText = Text.pack (show line)
+
+                                    inner = lineText <> " │"
+
+                                    outer = Text.replicate (Text.length lineText) " " <> " │"
+
+                                    caret = Text.replicate (column - 1) " " <> "↑"
+
+                                in  [__i|
+                                    #{outer}
+                                    #{inner} #{string}
+                                    #{outer} #{caret}
+                                    |]
+                            Nothing ->
+                                ""
+
+                in  (Just (line, column), "\n\n" <> s)
+
+    location :: Text
+    location =
+        case maybeLocation of
+            Nothing -> "end of input"
+            Just (line, column) -> [__i|#{line}:#{column}|]
+
+    prefix =
+        [__i|
+        #{inputName}:#{location}: Invalid input
+        |]
 
 -- | Lex a complete expression
 lex :: String
     -- ^ Name of the input (used for error messages)
     -> Text
     -- ^ Source code
-    -> Either Text [Token]
+    -> Either Text [LocatedToken]
 lex inputName code =
-    case Megaparsec.parse tokens inputName code of
+    case Megaparsec.parse parseLocatedTokens inputName code of
         Left parseErrorBundle -> do
-            Left (Text.pack (Megaparsec.errorBundlePretty parseErrorBundle))
+            Left (renderError inputName code (Just (pstateOffset (bundlePosState parseErrorBundle))))
         Right ts -> do
             return ts
 
@@ -257,3 +332,9 @@ data Token
     | Times
     | True_
     deriving (Eq, Show)
+
+{-| A token with offset information attached, used for reporting line and
+    column numbers in error messages
+-}
+data LocatedToken = LocatedToken { offset :: Int, token :: Token }
+    deriving (Show)
