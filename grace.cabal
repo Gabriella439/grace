@@ -13,14 +13,15 @@ library
                      , bytestring
                      , bytestring-lexing
                      , containers
+                     , Earley
                      , filepath
                      , mtl
+                     , parser-combinators
                      , prettyprinter
                      , string-interpolate
                      , text
   build-tools:         alex
                      , doctest
-                     , happy
   exposed-modules:     Grace
                      , Grace.Context
                      , Grace.Existential
@@ -33,7 +34,9 @@ library
                      , Grace.Syntax
                      , Grace.Type
                      , Grace.Value
-  default-extensions:  BangPatterns
+  default-extensions:  ApplicativeDo
+                     , BangPatterns
+                     , BlockArguments
                      , DeriveFunctor
                      , DerivingStrategies
                      , DuplicateRecordFields
@@ -45,6 +48,7 @@ library
                      , OverloadedStrings
                      , QuasiQuotes
                      , RecordWildCards
+                     , RecursiveDo
                      , TypeApplications
                      , ViewPatterns
   default-language:    Haskell2010

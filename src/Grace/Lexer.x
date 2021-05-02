@@ -214,7 +214,8 @@ monadScan = do
 
 -- | Tokens produced by lexing
 data Token
-    = And
+    = Alternative Text
+    | And
     | Arrow
     | Append
     | At
@@ -225,7 +226,6 @@ data Token
     | CloseParenthesis
     | Colon
     | Comma
-    | Alternative Text
     | Dot
     | Else
     | Equals
@@ -254,5 +254,5 @@ data Token
     | Times
     | True_
     | EndOfFile
-    deriving (Show)
+    deriving (Eq, Show)
 }

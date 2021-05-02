@@ -9,7 +9,6 @@ import qualified Data.ByteString.Lazy      as ByteString
 import qualified Data.Text                 as Text
 import qualified Grace.Import              as Import
 import qualified Grace.Infer               as Infer
-import qualified Grace.Lexer               as Lexer
 import qualified Grace.Normalize           as Normalize
 import qualified Grace.Parser              as Parser
 import qualified System.Directory          as Directory
@@ -36,7 +35,7 @@ fileToTestTree prefix = do
 
     bytes <- ByteString.readFile input
 
-    expression <- case Lexer.runAlex bytes Parser.parseExpression of
+    expression <- case Parser.parseExpression input bytes of
         Left  string     -> do fail string
         Right expression -> do return expression
 

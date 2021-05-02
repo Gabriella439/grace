@@ -14,7 +14,6 @@ import qualified Data.Text.Prettyprint.Doc             as Pretty
 import qualified Data.Text.Prettyprint.Doc.Render.Text as Pretty.Text
 import qualified Grace.Import                          as Import
 import qualified Grace.Infer                           as Infer
-import qualified Grace.Lexer                           as Lexer
 import qualified Grace.Normalize                       as Normalize
 import qualified Grace.Parser                          as Parser
 import qualified System.Exit                           as Exit
@@ -27,7 +26,7 @@ main :: IO ()
 main = do
     bytes <- ByteString.Lazy.getContents
 
-    expression <- case Lexer.runAlex bytes Parser.parseExpression of
+    expression <- case Parser.parseExpression "(input)" bytes of
         Left string -> do
             putStrLn string
 

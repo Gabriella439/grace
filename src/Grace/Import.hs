@@ -12,7 +12,6 @@ import System.FilePath ((</>))
 import qualified Data.ByteString.Lazy as ByteString
 import qualified Data.Text            as Text
 import qualified Grace.Infer          as Infer
-import qualified Grace.Lexer          as Lexer
 import qualified Grace.Normalize      as Normalize
 import qualified Grace.Parser         as Parser
 import qualified Grace.Syntax         as Syntax
@@ -139,7 +138,7 @@ resolve here (Syntax.Embed file) = do
 
     bytes <- ByteString.readFile there
 
-    expression <- case Lexer.runAlex bytes Parser.parseExpression of
+    expression <- case Parser.parseExpression there bytes of
         Left string -> do
             fail string
         Right expression -> do
