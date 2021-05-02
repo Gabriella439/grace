@@ -39,7 +39,7 @@ data Closure = Closure Text [(Text, Value)] (Syntax (Type, Value))
 -}
 data Value
     = Variable Text Int
-      -- ^ The `Text` field is the variable's name (i.e. \"x\")
+      -- ^ The `Data.Text.Text` field is the variable's name (i.e. \"x\")
       --
       -- The `Int` field disambiguates variables with the same name if there are
       -- multiple bound variables of the same name in scope.  Zero refers to the

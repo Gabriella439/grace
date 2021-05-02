@@ -13,6 +13,7 @@ import qualified Data.Text.Prettyprint.Doc             as Pretty
 import qualified Data.Text.Prettyprint.Doc.Render.Text as Pretty.Text
 import qualified Grace.Import                          as Import
 import qualified Grace.Infer                           as Infer
+import qualified Grace.Lexer                           as Lexer
 import qualified Grace.Normalize                       as Normalize
 import qualified Grace.Parser                          as Parser
 import qualified System.Exit                           as Exit
@@ -26,9 +27,17 @@ main :: IO ()
 main = do
     text <- Text.IO.getContents
 
-    expression <- case Parser.parseExpression "(input)" text of
+    tokens <- case Lexer.lex "(input)" text of
         Left message -> do
-            IO.hPutStrLn IO.stderr message
+            Text.IO.hPutStrLn IO.stderr message
+
+            Exit.exitFailure
+        Right tokens -> do
+            return tokens
+
+    expression <- case Parser.parse "(input)" tokens of
+        Left message -> do
+            Text.IO.hPutStrLn IO.stderr message
 
             Exit.exitFailure
         Right expression -> do

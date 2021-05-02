@@ -3,11 +3,15 @@
     The main reason for not using @attoparsec@ or @megaparsec@ is because
     LR parsers are easier to maintain due to not needing to left-factor the
     grammar.
+
+    The main reason for not using @happy@ is because it uses a separate
+    code generation step, which leads to worse error messages and poor
+    support for interactive type-checking.
 -}
 
 module Grace.Parser
     ( -- * Parsing
-      parseExpression
+      parse
     ) where
 
 import Control.Applicative (many, (<|>))
@@ -17,6 +21,7 @@ import Data.Functor (void)
 import Data.List.NonEmpty (some1)
 import Data.String.Interpolate (__i)
 import Data.Text (Text)
+import Grace.Lexer (Token)
 import Grace.Syntax (Syntax)
 import Text.Earley (Grammar, Prod, Report(..), rule, terminal, (<?>))
 
@@ -27,7 +32,6 @@ import qualified Grace.Lexer        as Lexer
 import qualified Grace.Syntax       as Syntax
 import qualified Grace.Type         as Type
 import qualified Text.Earley        as Earley
-import qualified Text.Megaparsec    as Megaparsec
 
 type Parser r = Prod r Text Lexer.Token
 
@@ -274,14 +278,14 @@ grammar = mdo
 
     return expression
 
-parseExpression :: String -> Text -> Either String (Syntax FilePath)
-parseExpression inputName bytes = do
-    tokens <- case Megaparsec.parse Lexer.tokens inputName bytes of
-        Left parseErrorBundle -> do
-            Left (Megaparsec.errorBundlePretty parseErrorBundle)
-        Right tokens -> do
-            return tokens
-
+-- | Parse a complete expression
+parse
+    :: String
+    -- ^ Name of the input (used for error messages)
+    -> [Token]
+    -- ^ Tokens lexed from source code
+    -> Either Text (Syntax FilePath)
+parse inputName tokens =
     case Earley.fullParses (Earley.parser grammar) tokens of
         ([], Report{..}) -> do
             let toExpectedToken t = "• " <> t <> "\n"
@@ -296,6 +300,7 @@ parseExpression inputName bytes = do
 
                     #{expectedTokens}
                     |]
-            Left (Text.unpack message)
+
+            Left message
         (result : _, _) -> do
             return result

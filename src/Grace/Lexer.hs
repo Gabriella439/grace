@@ -2,15 +2,19 @@
 
     The main reason for a separate lexing step using is because we would like
     to use @Earley@ for LR parsing, but @Earley@ is not fast enough to handle
-    character-by-character parsing.  Instead, we delegate lexing to a faster
-    but lower-level parsing library (@megaparsec@ in this case).
+    character-by-character parsing.  Instead, we delegate lexing to a
+    lower-level parsing library that supports efficient bulk parsing
+    (@megaparsec@ in this case).
+
+    The main reason for not using @alex@ is because it uses a separate
+    code generation step, which leads to worse error messages and poor
+    support for interactive type-checking.
 -}
 
 module Grace.Lexer
     ( -- * Lexer
       Token(..)
-    , token
-    , tokens
+    , lex
     ) where
 
 import Control.Applicative (empty, many, (<|>))
@@ -18,6 +22,7 @@ import Control.Monad.Combinators (sepBy1)
 import Data.String.Interpolate (__i)
 import Data.Text (Text)
 import Data.Void (Void)
+import Prelude hiding (lex)
 import Text.Megaparsec ((<?>))
 
 import qualified Control.Monad.Combinators  as Combinators
@@ -29,6 +34,7 @@ import qualified Text.Megaparsec            as Megaparsec
 import qualified Text.Megaparsec.Char       as Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as Lexer
 
+-- | Short-hand type synonym used by lexing utilities
 type Parser = Megaparsec.Parsec Void Text
 
 space :: Parser ()
@@ -107,6 +113,19 @@ tokens = do
     ts <- many token
     Megaparsec.eof
     return ts
+
+-- | Lex a complete expression
+lex :: String
+    -- ^ Name of the input (used for error messages)
+    -> Text
+    -- ^ Source code
+    -> Either Text [Token]
+lex inputName code =
+    case Megaparsec.parse tokens inputName code of
+        Left parseErrorBundle -> do
+            Left (Text.pack (Megaparsec.errorBundlePretty parseErrorBundle))
+        Right ts -> do
+            return ts
 
 int :: Parser Token
 int = lexeme (fmap Int Lexer.decimal)
