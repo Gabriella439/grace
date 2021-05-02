@@ -207,7 +207,7 @@ int = lexeme (fmap Int Lexer.decimal)
 
 file :: Parser Token
 file = lexeme do
-    prefix <- ("../" <|> "./" <|> "/") <?> "path character"
+    prefix <- ("../" <|> ("" <$ "./") <|> "/") <?> "path character"
 
     let isPath c =
                  '\x21' == c
