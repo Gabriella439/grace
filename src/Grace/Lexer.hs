@@ -114,8 +114,9 @@ parseToken =
 
 parseLocatedToken :: Parser LocatedToken
 parseLocatedToken = do
-    offset <- Megaparsec.getOffset
-    token  <- parseToken
+    start <- Megaparsec.getOffset
+    token <- parseToken
+    end   <- Megaparsec.getOffset
     return LocatedToken{..}
 
 parseLocatedTokens :: Parser [LocatedToken]
@@ -336,5 +337,5 @@ data Token
 {-| A token with offset information attached, used for reporting line and
     column numbers in error messages
 -}
-data LocatedToken = LocatedToken { offset :: Int, token :: Token }
+data LocatedToken = LocatedToken { token :: Token, start :: Int, end :: Int }
     deriving (Show)

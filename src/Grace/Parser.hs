@@ -297,7 +297,7 @@ parse inputName code = do
             let maybeOffset =
                     case unconsumed of
                         []               -> Nothing
-                        locatedToken : _ -> Just (Lexer.offset locatedToken)
+                        locatedToken : _ -> Just (Lexer.start locatedToken)
 
             Left (Lexer.renderError inputName code maybeOffset)
 
