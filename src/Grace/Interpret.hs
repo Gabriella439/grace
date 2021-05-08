@@ -34,6 +34,11 @@ data Input
     | Code Text
     -- ^ Source code
 
+{-| Interpret Grace source code, return the inferred type and the evaluated
+    result
+
+    This is the top-level function for the Grace interpreter
+-}
 interpret :: Input -> IO (Type, Value)
 interpret  input = do
     text <- case input of
