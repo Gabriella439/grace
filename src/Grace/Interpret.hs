@@ -1,9 +1,13 @@
 -- | This module implements support for file-based imports
-module Grace.Import
-    ( -- * Resolve
-      resolve
+module Grace.Interpret
+    ( -- * Interpret
+      Input(..)
+    , interpret
+      -- * Resolve
+    , resolve
     ) where
 
+import Data.Text (Text)
 import Grace.Syntax (Syntax)
 import Grace.Type (Type)
 import Grace.Value (Value)
@@ -17,6 +21,48 @@ import qualified Grace.Syntax    as Syntax
 import qualified System.Exit     as Exit
 import qualified System.FilePath as FilePath
 import qualified System.IO       as IO
+
+{-| Input to the `interpret` function
+
+    You should prefer to use `Path` if possible (for better error messages and
+    correctly handling transitive imports).  The `Code` constructor is intended
+    for cases like interpreting code read from standard input.
+-}
+data Input
+    = Path FilePath
+    -- ^ The path to the code
+    | Code Text
+    -- ^ Source code
+
+interpret :: Input -> IO (Type, Value)
+interpret  input = do
+    text <- case input of
+        Path file -> Text.IO.readFile file
+        Code text -> return text
+
+    let name = case input of
+            Path file -> file
+            Code _    -> "(input)"
+
+    expression <- case Parser.parse name text of
+        Left message -> do
+            Text.IO.hPutStrLn IO.stderr message
+            Exit.exitFailure
+        Right expression -> do
+            return expression
+
+    let here = case input of
+            Path file -> file
+            Code _    -> "./."
+
+    resolvedExpression <- resolve here expression
+
+    case Infer.typeOf resolvedExpression of
+        Left message -> do
+            Text.IO.hPutStrLn IO.stderr message
+            Exit.exitFailure
+        Right inferred -> do
+            return (inferred, Normalize.evaluate [] resolvedExpression)
 
 {-| Resolve all imports, replacing each import with its inferred type and normal
     form
@@ -137,20 +183,6 @@ resolve here (Syntax.Append left₀ right₀) = do
 resolve here (Syntax.Embed file) = do
     let there = FilePath.takeDirectory here </> file
 
-    text <- Text.IO.readFile there
+    result <- interpret (Path there)
 
-    expression <- case Parser.parse there text of
-        Left message -> do
-            Text.IO.hPutStrLn IO.stderr message
-            Exit.exitFailure
-        Right expression -> do
-            return expression
-
-    resolvedExpression <- resolve there expression
-
-    case Infer.typeOf resolvedExpression of
-        Left message -> do
-            Text.IO.hPutStrLn IO.stderr message
-            Exit.exitFailure
-        Right inferred -> do
-            return (Syntax.Embed (inferred, Normalize.evaluate [] resolvedExpression))
+    return (Syntax.Embed result)

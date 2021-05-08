@@ -1,22 +1,18 @@
 module Main where
 
 import Data.Text (Text)
+import Grace.Interpret (Input(..))
 import Prettyprinter (Pretty)
 import System.FilePath ((</>))
 import Test.Tasty (TestTree)
 
 import qualified Data.Text                 as Text
-import qualified Data.Text.IO              as Text.IO
-import qualified Grace.Import              as Import
-import qualified Grace.Infer               as Infer
+import qualified Grace.Interpret           as Interpret
 import qualified Grace.Normalize           as Normalize
-import qualified Grace.Parser              as Parser
 import qualified Prettyprinter             as Pretty
 import qualified Prettyprinter.Render.Text as Pretty.Text
 import qualified System.Directory          as Directory
-import qualified System.Exit               as Exit
 import qualified System.FilePath           as FilePath
-import qualified System.IO                 as IO
 import qualified Test.Tasty                as Tasty
 import qualified Test.Tasty.Silver         as Silver
 
@@ -35,26 +31,11 @@ fileToTestTree prefix = do
 
     let name = FilePath.takeBaseName input
 
-    text <- Text.IO.readFile input
+    (inferred, value) <- Interpret.interpret (Path input)
 
-    expression <- case Parser.parse input text of
-        Left message -> do
-            Text.IO.hPutStrLn IO.stderr message
-            Exit.exitFailure
-        Right expression -> do
-            return expression
+    let generateTypeFile = return (pretty_ inferred)
 
-    resolvedExpression <- Import.resolve input expression
-
-    let generateTypeFile = do
-            case Infer.typeOf resolvedExpression of
-                Left message -> do
-                    Text.IO.hPutStrLn IO.stderr message
-                    Exit.exitFailure
-                Right inferred -> return (pretty_ inferred)
-
-    let generateOutputFile = do
-            return (pretty_ (Normalize.normalize resolvedExpression))
+    let generateOutputFile = return (pretty_ (Normalize.quote [] value))
 
     return
         (Tasty.testGroup name

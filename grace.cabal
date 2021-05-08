@@ -22,7 +22,7 @@ library
   exposed-modules:     Grace
                      , Grace.Context
                      , Grace.Existential
-                     , Grace.Import
+                     , Grace.Interpret
                      , Grace.Infer
                      , Grace.Lexer
                      , Grace.Monotype
