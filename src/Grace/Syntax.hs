@@ -114,7 +114,7 @@ data Syntax a
     --   >>> pretty @(Syntax Void) (Append "x" "y")
     --   x ++ y
     | Embed a
-    deriving stock (Functor, Show)
+    deriving stock (Foldable, Functor, Show, Traversable)
 
 instance IsString (Syntax a) where
     fromString string = Variable (fromString string) 0
@@ -243,7 +243,7 @@ prettyPrimitiveExpression other =
     let x : X = y
 -}
 data Binding a = Binding Text (Maybe Type) (Syntax a)
-    deriving stock (Functor, Show)
+    deriving stock (Foldable, Functor, Show, Traversable)
 
 instance Pretty a => Pretty (Binding a) where
     pretty (Binding name Nothing assignment) =

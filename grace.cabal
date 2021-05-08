@@ -35,6 +35,8 @@ library
                      , BangPatterns
                      , BlockArguments
                      , DeriveFunctor
+                     , DeriveFoldable
+                     , DeriveTraversable
                      , DerivingStrategies
                      , DuplicateRecordFields
                      , FlexibleContexts
