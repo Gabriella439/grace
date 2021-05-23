@@ -19,8 +19,9 @@ module Grace.Lexer
     , renderError
     ) where
 
-import Control.Applicative (empty, many, (<|>))
-import Control.Monad.Combinators (sepBy1)
+import Control.Applicative (empty, (<|>))
+import Control.Monad.Combinators (many, manyTill, sepBy1)
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.String.Interpolate (__i)
 import Data.Text (Text)
 import Data.Void (Void)
@@ -36,8 +37,9 @@ import qualified Data.Text.Read             as Read
 import qualified Text.Megaparsec            as Megaparsec
 import qualified Text.Megaparsec.Char       as Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as Lexer
-import qualified Text.Megaparsec.Pos        as Megaparsec.Pos
-import qualified Text.Megaparsec.Stream     as Megaparsec.Stream
+import qualified Text.Megaparsec.Error      as Error
+import qualified Text.Megaparsec.Pos        as Pos
+import qualified Text.Megaparsec.Stream     as Stream
 
 -- | Short-hand type synonym used by lexing utilities
 type Parser = Megaparsec.Parsec Void Text
@@ -122,9 +124,7 @@ parseLocatedToken = do
 parseLocatedTokens :: Parser [LocatedToken]
 parseLocatedTokens = do
     space
-    ts <- many parseLocatedToken
-    Megaparsec.eof
-    return ts
+    manyTill parseLocatedToken Megaparsec.eof
 
 {-| This error rendering logic is shared between the lexer and parser in
     order to promote uniform error messages
@@ -140,23 +140,20 @@ renderError inputName code maybeOffset = prefix <> suffix
             Just offset ->
                 let initialState =
                         PosState
-                            { pstateInput = code
-                            , pstateOffset = 0
-                            , pstateSourcePos =
-                                Megaparsec.Pos.initialPos inputName
-                            , pstateTabWidth =
-                                Megaparsec.Pos.defaultTabWidth
+                            { pstateInput      = code
+                            , pstateOffset     = 0
+                            , pstateSourcePos  = Pos.initialPos inputName
+                            , pstateTabWidth   = Pos.defaultTabWidth
                             , pstateLinePrefix = ""
                             }
 
-                    (h, state) =
-                        Megaparsec.Stream.reachOffset offset initialState
+                    (h, state) = Stream.reachOffset offset initialState
 
                     pos = pstateSourcePos state
 
-                    line = Megaparsec.Pos.unPos (sourceLine pos)
+                    line = Pos.unPos (sourceLine pos)
 
-                    column = Megaparsec.Pos.unPos (sourceColumn pos)
+                    column = Pos.unPos (sourceColumn pos)
 
                     s =
                         case h of
@@ -198,10 +195,12 @@ lex :: String
     -> Either Text [LocatedToken]
 lex inputName code =
     case Megaparsec.parse parseLocatedTokens inputName code of
-        Left parseErrorBundle -> do
-            Left (renderError inputName code (Just (pstateOffset (bundlePosState parseErrorBundle))))
-        Right ts -> do
-            return ts
+        Left ParseErrorBundle{..} -> do
+            let bundleError :| _ = bundleErrors
+
+            Left (renderError inputName code (Just (Error.errorOffset bundleError)))
+        Right tokens -> do
+            return tokens
 
 int :: Parser Token
 int = lexeme (fmap Int Lexer.decimal)
