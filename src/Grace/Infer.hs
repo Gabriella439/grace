@@ -722,8 +722,8 @@ instantiateL α _A₀ = do
         #{listToText _Γ₀}
         |]
 
-    let instLSolve _A τ = do
-            wellFormedType _Γ _A
+    let instLSolve τ = do
+            wellFormedType _Γ _A₀
 
             set (_Γ' <> (Context.Solved α τ : _Γ))
 
@@ -736,15 +736,15 @@ instantiateL α _A₀ = do
 
         -- InstLSolve
         Type.Unsolved β -> do
-            instLSolve (Type.Unsolved β) (Monotype.Unsolved β)
+            instLSolve (Monotype.Unsolved β)
         Type.Variable β -> do
-            instLSolve (Type.Variable β) (Monotype.Variable β)
+            instLSolve (Monotype.Variable β)
         Type.Bool -> do
-            instLSolve Type.Bool Monotype.Bool
+            instLSolve Monotype.Bool
         Type.Natural -> do
-            instLSolve Type.Natural Monotype.Natural
+            instLSolve Monotype.Natural
         Type.Text -> do
-            instLSolve Type.Text Monotype.Text
+            instLSolve Monotype.Text
 
         -- InstLArr
         Type.Function _A₁ _A₂ -> do
@@ -826,8 +826,8 @@ instantiateR _A₀ α = do
         #{listToText _Γ₀}
         |]
 
-    let instRSolve _A τ = do
-            wellFormedType _Γ _A
+    let instRSolve τ = do
+            wellFormedType _Γ _A₀
 
             set (_Γ' <> (Context.Solved α τ : _Γ))
 
@@ -840,15 +840,15 @@ instantiateR _A₀ α = do
 
         -- InstRSolve
         Type.Unsolved β -> do
-            instRSolve (Type.Unsolved β) (Monotype.Unsolved β)
+            instRSolve (Monotype.Unsolved β)
         Type.Variable β -> do
-            instRSolve (Type.Variable β) (Monotype.Variable β)
+            instRSolve (Monotype.Variable β)
         Type.Bool -> do
-            instRSolve Type.Bool Monotype.Bool
+            instRSolve Monotype.Bool
         Type.Natural -> do
-            instRSolve Type.Natural Monotype.Natural
+            instRSolve Monotype.Natural
         Type.Text -> do
-            instRSolve Type.Text Monotype.Text
+            instRSolve Monotype.Text
 
         -- InstRArr
         Type.Function _A₁ _A₂ -> do
