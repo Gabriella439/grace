@@ -50,7 +50,7 @@ data Node s
     -- ^ A placeholder variable whose type has not yet been inferred
     --
     -- >>> pretty @(Node ()) (Unsolved 0)
-    -- a?
+    -- a
     | Forall s Text (Type s)
     -- ^ Universally quantified type
     --
@@ -374,7 +374,7 @@ prettyApplicationType  other    = prettyPrimitiveType other
 
 prettyPrimitiveType :: Node s -> Doc a
 prettyPrimitiveType (Variable α) = Pretty.pretty α
-prettyPrimitiveType (Unsolved α) = Pretty.pretty α <> "?"
+prettyPrimitiveType (Unsolved α) = Pretty.pretty α
 prettyPrimitiveType (Record r)   = prettyRecordType r
 prettyPrimitiveType (Union u)    = prettyUnionType u
 prettyPrimitiveType  Bool        = "Bool"
