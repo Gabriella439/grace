@@ -15,6 +15,7 @@
 module Grace.Infer
     ( -- * Type inference
       typeOf
+    , Input(..)
 
     , -- * Internal implementation
       Status(..)
@@ -31,23 +32,27 @@ import Data.Text (Text)
 
 import Control.Applicative ((<|>))
 import Control.Monad.Except (MonadError(..))
+import Control.Monad.Reader (MonadReader(..))
 import Control.Monad.State.Strict (MonadState)
 import Data.Foldable (traverse_)
+import Data.Functor (void)
 import Data.String.Interpolate (__i)
 import Grace.Context (Context, Entry)
 import Grace.Existential (Existential)
 import Grace.Monotype (Monotype)
-import Grace.Syntax (Syntax)
-import Grace.Type (Type)
+import Grace.Syntax (Location, Syntax(Syntax))
+import Grace.Type (Type(..))
 import Grace.Value (Value)
 import Prettyprinter (Pretty)
 
 import qualified Control.Monad             as Monad
 import qualified Control.Monad.Except      as Except
+import qualified Control.Monad.Reader      as Reader
 import qualified Control.Monad.State       as State
 import qualified Data.Map                  as Map
 import qualified Data.Text                 as Text
 import qualified Grace.Context             as Context
+import qualified Grace.Lexer               as Lexer
 import qualified Grace.Monotype            as Monotype
 import qualified Grace.Syntax              as Syntax
 import qualified Grace.Type                as Type
@@ -58,10 +63,15 @@ import qualified Prettyprinter.Render.Text as Pretty.Text
 data Status = Status
     { count :: !Int
       -- ^ Used to generate fresh unsolved variables (e.g. α̂, β̂)
-    , context :: Context
+    , context :: Context Location
       -- ^ The type-checking context (e.g. Γ, Δ, Θ)
     }
     deriving (Show)
+
+data Input = Input
+    { name :: String
+    , code :: Text
+    }
 
 orDie :: MonadError Text m => Maybe a -> Text -> m a
 Just x  `orDie` _       = return x
@@ -75,16 +85,16 @@ fresh = do
 
     return (fromIntegral n)
 
-push :: MonadState Status m => Entry -> m ()
+push :: MonadState Status m => Entry Location -> m ()
 push entry = State.modify (\s -> s { context = entry : context s })
 
-get :: MonadState Status m => m Context
+get :: MonadState Status m => m (Context Location)
 get = fmap context State.get
 
-set :: MonadState Status m => Context -> m ()
+set :: MonadState Status m => Context Location -> m ()
 set context = State.modify (\s -> s{ context })
 
-discardUpTo :: MonadState Status m => Entry -> m ()
+discardUpTo :: MonadState Status m => Entry Location -> m ()
 discardUpTo entry =
     State.modify (\s -> s { context = Context.discardUpTo entry (context s) })
 
@@ -98,109 +108,135 @@ listToText :: Pretty a => [a] -> Text
 listToText elements =
     Text.intercalate "\n" (map (\entry -> "• " <> prettyToText entry) elements)
 
+locationToText :: MonadReader Input m => Text -> Location -> m Text
+locationToText message location = do
+    Input{..} <- Reader.ask
+
+    return (Lexer.renderError message name code (Just location))
+
 {-| This corresponds to the judgment:
 
     > Γ ⊢ A
 
     … which checks that under context Γ, type A is well-formed
 -}
-wellFormedType :: MonadError Text m => Context -> Type -> m ()
--- UvarWF
-wellFormedType _Γ (Type.Variable α)
-    | Context.Variable α `elem` _Γ = do
-        return ()
-    | otherwise = do
-        Except.throwError [__i|
-        Unbound type variable: #{α}
-        |]
+wellFormedType
+    :: (MonadReader Input m, MonadError Text m)
+    => Context Location -> Type Location -> m ()
+wellFormedType _Γ Type{..} =
+    case node of
+        -- UvarWF
+        Type.Variable α
+            | Context.Variable α `elem` _Γ -> do
+                return ()
+            | otherwise -> do
+                loc <- locationToText "" location
 
--- ArrowWF
-wellFormedType _Γ (Type.Function _A _B) = do
-    wellFormedType _Γ _A
-    wellFormedType _Γ _B
+                Except.throwError [__i|
+                Unbound type variable: #{α}
 
--- ForallWF
-wellFormedType _Γ (Type.Forall α _A) = do
-    wellFormedType (Context.Variable α : _Γ) _A
+                #{loc}
+                |]
 
--- EvarWF / SolvedEvarWF
-wellFormedType _Γ _A@(Type.Unsolved α₀)
-    | any predicate _Γ = do
-        return ()
-    | otherwise = do
-        Except.throwError [__i|
-        Internal error: Invalid context
+        -- ArrowWF
+        Type.Function _A _B -> do
+            wellFormedType _Γ _A
+            wellFormedType _Γ _B
 
-        The following type:
+        -- ForallWF
+        Type.Forall _ α _A -> do
+            wellFormedType (Context.Variable α : _Γ) _A
 
-        ↳ #{prettyToText _A}
+        -- EvarWF / SolvedEvarWF
+        _A@(Type.Unsolved α₀)
+            | any predicate _Γ -> do
+                return ()
+            | otherwise -> do
+                loc <- locationToText "" location
 
-        … is not well-formed within the following context:
+                Except.throwError [__i|
+                Internal error: Invalid context
 
-        #{listToText _Γ}
-        |]
-  where
-    predicate (Context.Unsolved α₁  ) = α₀ == α₁
-    predicate (Context.Solved   α₁ _) = α₀ == α₁
-    predicate  _                      = False
+                The following type:
 
-wellFormedType _Γ (Type.List _A) = do
-    wellFormedType _Γ _A
+                ↳ #{prettyToText _A}
 
-wellFormedType _Γ (Type.Record (Type.Fields kAs Nothing)) = do
-    traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
+                … is not well-formed within the following context:
 
-wellFormedType _Γ (Type.Record (Type.Fields kAs (Just α₀)))
-    | any predicate _Γ = do
-        traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
-    | otherwise = do
-        Except.throwError [__i|
-        Internal error: Invalid context
+                #{listToText _Γ}
 
-        The following row type variable:
+                #{loc}
+                |]
+          where
+            predicate (Context.Unsolved α₁  ) = α₀ == α₁
+            predicate (Context.Solved   α₁ _) = α₀ == α₁
+            predicate  _                      = False
 
-        ↳ #{prettyToText (Context.UnsolvedRow α₀)}
+        Type.List _A -> do
+            wellFormedType _Γ _A
 
-        … is not well-formed within the following context:
+        Type.Record (Type.Fields kAs Nothing) -> do
+            traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
 
-        #{listToText _Γ}
-        |]
-  where
-    predicate (Context.UnsolvedRow α₁  ) = α₀ == α₁
-    predicate (Context.SolvedRow   α₁ _) = α₀ == α₁
-    predicate  _                         = False
+        Type.Record (Type.Fields kAs (Just α₀))
+            | any predicate _Γ -> do
+                traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
+            | otherwise -> do
+                loc <- locationToText "" location
 
-wellFormedType _Γ (Type.Union (Type.Alternatives kAs Nothing)) = do
-    traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
+                Except.throwError [__i|
+                Internal error: Invalid context
 
-wellFormedType _Γ (Type.Union (Type.Alternatives kAs (Just α₀)))
-    | any predicate _Γ = do
-        traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
-    | otherwise = do
-        Except.throwError [__i|
-        Internal error: Invalid context
+                The following row type variable:
 
-        The following variant type variable:
+                ↳ #{prettyToText (Context.UnsolvedRow α₀)}
 
-        ↳ #{prettyToText (Context.UnsolvedVariant α₀)}
+                … is not well-formed within the following context:
 
-        … is not well-formed within the following context:
+                #{listToText _Γ}
 
-        #{listToText _Γ}
-        |]
-  where
-    predicate (Context.UnsolvedVariant α₁  ) = α₀ == α₁
-    predicate (Context.SolvedVariant   α₁ _) = α₀ == α₁
-    predicate  _                             = False
+                #{loc}
+                |]
+          where
+            predicate (Context.UnsolvedRow α₁  ) = α₀ == α₁
+            predicate (Context.SolvedRow   α₁ _) = α₀ == α₁
+            predicate  _                         = False
 
-wellFormedType _Γ Type.Bool = do
-    return ()
+        Type.Union (Type.Alternatives kAs Nothing) -> do
+            traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
 
-wellFormedType _Γ Type.Natural = do
-    return ()
+        Type.Union (Type.Alternatives kAs (Just α₀))
+            | any predicate _Γ -> do
+                traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
+            | otherwise -> do
+                loc <- locationToText "" location
 
-wellFormedType _Γ Type.Text = do
-    return ()
+                Except.throwError [__i|
+                Internal error: Invalid context
+
+                The following variant type variable:
+
+                ↳ #{prettyToText (Context.UnsolvedVariant α₀)}
+
+                … is not well-formed within the following context:
+
+                #{listToText _Γ}
+
+                #{loc}
+                |]
+          where
+            predicate (Context.UnsolvedVariant α₁  ) = α₀ == α₁
+            predicate (Context.SolvedVariant   α₁ _) = α₀ == α₁
+            predicate  _                             = False
+
+        Type.Bool -> do
+            return ()
+
+        Type.Natural -> do
+            return ()
+
+        Type.Text -> do
+            return ()
 
 {-| This corresponds to the judgment:
 
@@ -209,11 +245,16 @@ wellFormedType _Γ Type.Text = do
     … which updates the context Γ to produce the new context Δ, given that the
     type A is a subtype of type B.
 -}
-subtype :: (MonadState Status m, MonadError Text m) => Type -> Type -> m ()
+subtype
+    :: (MonadReader Input m, MonadState Status m, MonadError Text m)
+    => Type Location -> Type Location -> m ()
 subtype _A₀ _B₀ = do
     _Γ <- get
 
-    case (_A₀, _B₀) of
+    locA₀ <- locationToText "" (Type.location _A₀)
+    locB₀ <- locationToText "" (Type.location _B₀)
+
+    case (Type.node _A₀, Type.node _B₀) of
         -- <:Var
         (Type.Variable α₀, Type.Variable α₁)
             | α₀ == α₁ && Context.Variable α₀ `elem` _Γ -> do
@@ -225,14 +266,14 @@ subtype _A₀ _B₀ = do
                 return ()
 
         -- InstantiateL
-        (Type.Unsolved α, _A)
-            | not (α `Type.typeFreeIn` _A) && elem (Context.Unsolved α) _Γ -> do
-                instantiateL α _A
+        (Type.Unsolved α, _)
+            | not (α `Type.typeFreeIn` _B₀) && elem (Context.Unsolved α) _Γ -> do
+                instantiateL α _B₀
 
         -- InstantiateR
-        (_A, Type.Unsolved α)
-            | not (α `Type.typeFreeIn` _A) && elem (Context.Unsolved α) _Γ -> do
-                instantiateR _A α
+        (_, Type.Unsolved α)
+            | not (α `Type.typeFreeIn` _A₀) && elem (Context.Unsolved α) _Γ -> do
+                instantiateR _A₀ α
 
         -- <:→
         (Type.Function _A₁ _A₂, Type.Function _B₁ _B₂) -> do
@@ -241,21 +282,22 @@ subtype _A₀ _B₀ = do
             subtype (Context.solve _Θ _A₂) (Context.solve _Θ _B₂)
 
         -- <:∀L
-        (Type.Forall α₀ _A, _B) -> do
+        (Type.Forall nameLocation α₀ _A, _) -> do
             α₁ <- fresh
 
             push (Context.Marker   α₁)
             push (Context.Unsolved α₁)
 
-            subtype (Type.substitute α₀ 0 (Type.Unsolved α₁) _A) _B
+            let α₁' = Type{ location = nameLocation, node = Type.Unsolved α₁ }
+            subtype (Type.substitute α₀ 0 α₁' _A) _B₀
 
             discardUpTo (Context.Marker α₁)
 
         -- <:∀R
-        (_A, Type.Forall α _B) -> do
+        (_, Type.Forall _ α _B) -> do
             push (Context.Variable α)
 
-            subtype _A _B
+            subtype _A₀ _B
 
             discardUpTo (Context.Variable α)
 
@@ -291,9 +333,13 @@ subtype _A₀ _B₀ = do
 
                 ↳ #{prettyToText _A₀}
 
-                … is not a subtype of:
+                #{locA₀}
+
+                … is not a subtype of the following record type:
 
                 ↳ #{prettyToText _B₀}
+
+                #{locB₀}
 
                 The former record has the following extra fields:
 
@@ -312,9 +358,13 @@ subtype _A₀ _B₀ = do
 
                 ↳ #{prettyToText _A₀}
 
-                … is not a subtype of:
+                #{locA₀}
+
+                … is not a subtype of the following record type:
 
                 ↳ #{prettyToText _B₀}
+
+                #{locB₀}
 
                 The former record has the following extra fields:
 
@@ -329,9 +379,13 @@ subtype _A₀ _B₀ = do
 
                 ↳ #{prettyToText _A₀}
 
-                … is not a subtype of:
+                #{locA₀}
+
+                … is not a subtype of the following record type:
 
                 ↳ #{prettyToText _B₀}
+
+                #{locB₀}
 
                 The latter record has the following extra fields:
 
@@ -364,9 +418,13 @@ subtype _A₀ _B₀ = do
 
                 ↳ #{prettyToText _A₀}
 
-                … is not a subtype of:
+                #{locA₀}
+
+                … is not a subtype of the following record type:
 
                 ↳ #{prettyToText _B₀}
+
+                #{locB₀}
 
                 The former record has the following extra fields:
 
@@ -381,7 +439,7 @@ subtype _A₀ _B₀ = do
                 _ <- traverse process both
 
                 _Θ <- get
-                instantiateRowL ρ (Context.solveRecord _Θ (Type.Fields (Map.toList extraB) Nothing))
+                instantiateRowL ρ (Type.location _B₀) (Context.solveRecord _Θ (Type.Fields (Map.toList extraB) Nothing))
 
         (Type.Record (Type.Fields kAs₀ Nothing), Type.Record (Type.Fields kBs₀ (Just ρ))) -> do
             let mapA = Map.fromList kAs₀
@@ -400,9 +458,13 @@ subtype _A₀ _B₀ = do
 
                 ↳ #{prettyToText _A₀}
 
-                … is not a subtype of:
+                #{locA₀}
+
+                … is not a subtype of the following record type:
 
                 ↳ #{prettyToText _B₀}
+
+                #{locB₀}
 
                 The latter record has the following extra fields:
 
@@ -417,7 +479,7 @@ subtype _A₀ _B₀ = do
                 _ <- traverse process both
 
                 _Θ <- get
-                instantiateRowR (Context.solveRecord _Θ (Type.Fields (Map.toList extraA) Nothing)) ρ
+                instantiateRowR (Type.location _A₀) (Context.solveRecord _Θ (Type.Fields (Map.toList extraA) Nothing)) ρ
 
         (Type.Record (Type.Fields kAs₀ (Just ρ₀)), Type.Record (Type.Fields kBs₀ (Just ρ₁))) -> do
             let mapA = Map.fromList kAs₀
@@ -464,6 +526,10 @@ subtype _A₀ _B₀ = do
                     … is missing from the following context:
 
                     #{listToText _Γ}
+
+                    #{locA₀}
+
+                    #{locB₀}
                     |]
 
                 Just setContext -> do
@@ -471,11 +537,11 @@ subtype _A₀ _B₀ = do
 
             _Θ <- get
 
-            instantiateRowL ρ₀ (Context.solveRecord _Θ (Type.Fields (Map.toList extraB) (Just ρ₂)))
+            instantiateRowL ρ₀ (Type.location _B₀) (Context.solveRecord _Θ (Type.Fields (Map.toList extraB) (Just ρ₂)))
 
             _Δ <- get
 
-            instantiateRowR (Context.solveRecord _Δ (Type.Fields (Map.toList extraA) (Just ρ₂))) ρ₁
+            instantiateRowR (Type.location _A₀) (Context.solveRecord _Δ (Type.Fields (Map.toList extraA) (Just ρ₂))) ρ₁
 
         (Type.Union (Type.Alternatives kAs₀ Nothing), Type.Union (Type.Alternatives kBs₀ Nothing)) -> do
             let mapA = Map.fromList kAs₀
@@ -497,9 +563,13 @@ subtype _A₀ _B₀ = do
 
                 ↳ #{prettyToText _A₀}
 
-                … is not a subtype of:
+                #{locA₀}
+
+                … is not a subtype of the following union type:
 
                 ↳ #{prettyToText _B₀}
+
+                #{locB₀}
 
                 The former union has the following extra alternatives:
 
@@ -518,9 +588,13 @@ subtype _A₀ _B₀ = do
 
                 ↳ #{prettyToText _A₀}
 
-                … is not a subtype of:
+                #{locA₀}
+
+                … is not a subtype of the following union type:
 
                 ↳ #{prettyToText _B₀}
+
+                #{locB₀}
 
                 The former union has the following extra alternatives:
 
@@ -535,9 +609,13 @@ subtype _A₀ _B₀ = do
 
                 ↳ #{prettyToText _A₀}
 
-                … is not a subtype of:
+                #{locA₀}
+
+                … is not a subtype of the following union type:
 
                 ↳ #{prettyToText _B₀}
+
+                #{locB₀}
 
                 The latter union has the following extra alternatives:
 
@@ -570,9 +648,13 @@ subtype _A₀ _B₀ = do
 
                 ↳ #{prettyToText _A₀}
 
-                … is not a subtype of:
+                #{locA₀}
+
+                … is not a subtype of the following union type:
 
                 ↳ #{prettyToText _B₀}
+
+                #{locB₀}
 
                 The former union has the following extra alternatives:
 
@@ -587,7 +669,7 @@ subtype _A₀ _B₀ = do
                 _ <- traverse process both
 
                 _Θ <- get
-                instantiateVariantL ρ (Context.solveUnion _Θ (Type.Alternatives (Map.toList extraB) Nothing))
+                instantiateVariantL ρ (Type.location _B₀) (Context.solveUnion _Θ (Type.Alternatives (Map.toList extraB) Nothing))
 
         (Type.Union (Type.Alternatives kAs₀ Nothing), Type.Union (Type.Alternatives kBs₀ (Just ρ))) -> do
             let mapA = Map.fromList kAs₀
@@ -606,9 +688,13 @@ subtype _A₀ _B₀ = do
 
                 ↳ #{prettyToText _A₀}
 
-                … is not a subtype of:
+                #{locA₀}
+
+                … is not a subtype of the following union type:
 
                 ↳ #{prettyToText _B₀}
+
+                #{locB₀}
 
                 The latter union has the following extra alternatives:
 
@@ -623,7 +709,7 @@ subtype _A₀ _B₀ = do
                 _ <- traverse process both
 
                 _Θ <- get
-                instantiateVariantR (Context.solveUnion _Θ (Type.Alternatives (Map.toList extraA) Nothing)) ρ
+                instantiateVariantR (Type.location _A₀) (Context.solveUnion _Θ (Type.Alternatives (Map.toList extraA) Nothing)) ρ
 
         (Type.Union (Type.Alternatives kAs₀ (Just ρ₀)), Type.Union (Type.Alternatives kBs₀ (Just ρ₁))) -> do
             let mapA = Map.fromList kAs₀
@@ -670,6 +756,10 @@ subtype _A₀ _B₀ = do
                     … is missing from the following context:
 
                     #{listToText _Γ}
+
+                    #{locA₀}
+
+                    #{locB₀}
                     |]
 
                 Just setContext -> do
@@ -677,23 +767,27 @@ subtype _A₀ _B₀ = do
 
             _Θ <- get
 
-            instantiateVariantL ρ₀ (Context.solveUnion _Θ (Type.Alternatives (Map.toList extraB) (Just ρ₂)))
+            instantiateVariantL ρ₀ (Type.location _B₀) (Context.solveUnion _Θ (Type.Alternatives (Map.toList extraB) (Just ρ₂)))
 
             _Δ <- get
 
-            instantiateVariantR (Context.solveUnion _Δ (Type.Alternatives (Map.toList extraA) (Just ρ₂))) ρ₁
+            instantiateVariantR (Type.location _A₀) (Context.solveUnion _Δ (Type.Alternatives (Map.toList extraA) (Just ρ₂))) ρ₁
 
         (_A, _B) -> do
             Except.throwError [__i|
             Not a subtype
-        
+
             The following type:
-        
+
             ↳ #{prettyToText _A}
-        
+
+            #{locA₀}
+
             … cannot be a subtype of:
-        
+
             ↳ #{prettyToText _B}
+
+            #{locB₀}
             |]
 
 {-| This corresponds to the judgment:
@@ -704,8 +798,8 @@ subtype _A₀ _B₀ = do
     α̂ such that α̂ <: A.
 -}
 instantiateL
-    :: (MonadState Status m, MonadError Text m)
-    => Existential Monotype -> Type -> m ()
+    :: (MonadReader Input m, MonadState Status m, MonadError Text m)
+    => Existential Monotype -> Type Location -> m ()
 instantiateL α _A₀ = do
     _Γ₀ <- get
 
@@ -727,7 +821,7 @@ instantiateL α _A₀ = do
 
             set (_Γ' <> (Context.Solved α τ : _Γ))
 
-    case _A₀ of
+    case Type.node _A₀ of
         -- InstLReach
         Type.Unsolved β
             | let _ΓL = _Γ
@@ -763,7 +857,7 @@ instantiateL α _A₀ = do
             instantiateL α₂ (Context.solve _Θ _A₂)
 
         -- InstLAllR
-        Type.Forall β _B -> do
+        Type.Forall _ β _B -> do
             push (Context.Variable β)
 
             instantiateL α _B
@@ -788,7 +882,7 @@ instantiateL α _A₀ = do
 
             set (_ΓR <> (Context.Solved α (Monotype.Record (Monotype.Fields [] (Just ρ))) : Context.UnsolvedRow ρ : _ΓL))
 
-            instantiateRowL ρ r
+            instantiateRowL ρ (Type.location _A₀) r
 
         Type.Union u -> do
             let _ΓL = _Γ
@@ -798,7 +892,7 @@ instantiateL α _A₀ = do
 
             set (_ΓR <> (Context.Solved α (Monotype.Union (Monotype.Alternatives [] (Just ρ))) : Context.UnsolvedVariant ρ : _ΓL))
 
-            instantiateVariantL ρ u
+            instantiateVariantL ρ (Type.location _A₀) u
 
 {-| This corresponds to the judgment:
 
@@ -808,21 +902,21 @@ instantiateL α _A₀ = do
     α̂ such that A :< α̂.
 -}
 instantiateR
-    :: (MonadState Status m, MonadError Text m)
-    => Type -> Existential Monotype -> m ()
+    :: (MonadReader Input m, MonadState Status m, MonadError Text m)
+    => Type Location -> Existential Monotype -> m ()
 instantiateR _A₀ α = do
     _Γ₀ <- get
 
     (_Γ', _Γ) <- Context.splitOnUnsolved α _Γ₀ `orDie`
         [__i|
         Internal error: Invalid context
-        
+
         The following unsolved variable:
-        
+
         ↳ #{prettyToText (Context.Unsolved α)}}
-        
+
         … cannot be instantiated because the variable is missing from the context:
-        
+
         #{listToText _Γ₀}
         |]
 
@@ -831,7 +925,7 @@ instantiateR _A₀ α = do
 
             set (_Γ' <> (Context.Solved α τ : _Γ))
 
-    case _A₀ of
+    case Type.node _A₀ of
         -- InstRReach
         Type.Unsolved β
             | let _ΓL = _Γ
@@ -867,13 +961,14 @@ instantiateR _A₀ α = do
             instantiateR (Context.solve _Θ _A₂) α₂
 
         -- InstRAllL
-        Type.Forall β₀ _B -> do
+        Type.Forall nameLocation β₀ _B -> do
             β₁ <- fresh
 
             push (Context.Marker β₁)
             push (Context.Unsolved β₁)
 
-            instantiateR (Type.substitute β₀ 0 (Type.Unsolved β₁) _B) α
+            let β₁' = Type{ location = nameLocation, node = Type.Unsolved β₁ }
+            instantiateR (Type.substitute β₀ 0 β₁' _B) α
 
             discardUpTo (Context.Marker β₁)
 
@@ -895,7 +990,7 @@ instantiateR _A₀ α = do
 
             set (_ΓR <> (Context.Solved α (Monotype.Record (Monotype.Fields [] (Just ρ))) : Context.UnsolvedRow ρ : _ΓL))
 
-            instantiateRowR r ρ
+            instantiateRowR (Type.location _A₀) r ρ
 
         Type.Union u -> do
             let _ΓL = _Γ
@@ -905,7 +1000,7 @@ instantiateR _A₀ α = do
 
             set (_ΓR <> (Context.Solved α (Monotype.Union (Monotype.Alternatives [] (Just ρ))) : Context.UnsolvedVariant ρ : _ΓL))
 
-            instantiateVariantR u ρ
+            instantiateVariantR (Type.location _A₀) u ρ
 
 {- The following `equateRows` / `instantiateRowL` / `instantiateRowR`,
    `equateVariants` / `instantiateVariantL` / `instantiateVariantR` judgments
@@ -951,10 +1046,12 @@ equateRows ρ₀ ρ₁ = do
             setContext
 
 instantiateRowL
-    :: (MonadState Status m, MonadError Text m)
-    => Existential Monotype.Record -> Type.Record -> m ()
-instantiateRowL ρ₀ r@(Type.Fields kAs rest) = do
-    if ρ₀ `Type.rowFreeIn` Type.Record r
+    :: (MonadReader Input m, MonadState Status m, MonadError Text m)
+    => Existential Monotype.Record -> Location -> Type.Record Location -> m ()
+instantiateRowL ρ₀ location r@(Type.Fields kAs rest) = do
+    loc <- locationToText "" location
+
+    if ρ₀ `Type.rowFreeIn` Type{ node = Type.Record r, .. }
         then do
             Except.throwError [__i|
             Not a subtype
@@ -966,6 +1063,8 @@ instantiateRowL ρ₀ r@(Type.Fields kAs rest) = do
             … cannot be instantiated to the following record type:
 
             ↳ #{Pretty.pretty (Type.Record r)}
+
+            #{loc}
 
             … because the same row variable appears within that record type.
             |]
@@ -986,13 +1085,13 @@ instantiateRowL ρ₀ r@(Type.Fields kAs rest) = do
     (_ΓR, _ΓL) <- Context.splitOnUnsolvedRow ρ₀ _Γ `orDie`
         [__i|
         Internal error: Invalid context
-        
+
         The following unsolved row variable:
-        
+
         ↳ #{prettyToText (Context.UnsolvedRow ρ₀)}}
-        
+
         … cannot be instantiated because the row variable is missing from the context:
-        
+
         #{listToText _Γ}
         |]
 
@@ -1015,10 +1114,12 @@ instantiateRowL ρ₀ r@(Type.Fields kAs rest) = do
     traverse_ instantiate kAβs
 
 instantiateRowR
-    :: (MonadState Status m, MonadError Text m)
-    => Type.Record -> Existential Monotype.Record -> m ()
-instantiateRowR r@(Type.Fields kAs rest) ρ₀ = do
-    if ρ₀ `Type.rowFreeIn` Type.Record r
+    :: (MonadReader Input m, MonadState Status m, MonadError Text m)
+    => Location -> Type.Record Location -> Existential Monotype.Record -> m ()
+instantiateRowR location r@(Type.Fields kAs rest) ρ₀ = do
+    loc <- locationToText "" location
+
+    if ρ₀ `Type.rowFreeIn` Type{ node = Type.Record r, .. }
         then do
             Except.throwError [__i|
             Not a subtype
@@ -1030,6 +1131,8 @@ instantiateRowR r@(Type.Fields kAs rest) ρ₀ = do
             … cannot be instantiated to the following record type:
 
             ↳ #{Pretty.pretty (Type.Record r)}
+
+            #{loc}
 
             … because the same row variable appears within that record type.
             |]
@@ -1050,13 +1153,13 @@ instantiateRowR r@(Type.Fields kAs rest) ρ₀ = do
     (_ΓR, _ΓL) <- Context.splitOnUnsolvedRow ρ₀ _Γ `orDie`
         [__i|
         Internal error: Invalid context
-        
+
         The following unsolved row variable:
-        
+
         ↳ #{prettyToText (Context.UnsolvedRow ρ₀)}}
-        
+
         … cannot be instantiated because the row variable is missing from the context:
-        
+
         #{listToText _Γ}
         |]
 
@@ -1116,10 +1219,12 @@ equateVariants ρ₀ ρ₁ = do
             setContext
 
 instantiateVariantL
-    :: (MonadState Status m, MonadError Text m)
-    => Existential Monotype.Union -> Type.Union-> m ()
-instantiateVariantL ρ₀ u@(Type.Alternatives kAs rest) = do
-    if ρ₀ `Type.variantFreeIn` Type.Union u
+    :: (MonadReader Input m, MonadState Status m, MonadError Text m)
+    => Existential Monotype.Union -> Location -> Type.Union Location -> m ()
+instantiateVariantL ρ₀ location u@(Type.Alternatives kAs rest) = do
+    loc <- locationToText "" location
+
+    if ρ₀ `Type.variantFreeIn` Type{ node = Type.Union u, .. }
         then do
             Except.throwError [__i|
             Not a subtype
@@ -1131,6 +1236,8 @@ instantiateVariantL ρ₀ u@(Type.Alternatives kAs rest) = do
             … cannot be instantiated to the following union type:
 
             ↳ #{Pretty.pretty (Type.Union u)}
+
+            #{loc}
 
             … because the same variant variable appears within that record type.
             |]
@@ -1151,14 +1258,14 @@ instantiateVariantL ρ₀ u@(Type.Alternatives kAs rest) = do
     (_ΓR, _ΓL) <- Context.splitOnUnsolvedVariant ρ₀ _Γ `orDie`
         [__i|
         Internal error: Invalid context
-        
+
         The following unsolved variant variable:
-        
+
         ↳ #{prettyToText (Context.UnsolvedVariant ρ₀)}}
-        
+
         … cannot be instantiated because the variant variable is missing from the
         context:
-        
+
         #{listToText _Γ}
         |]
 
@@ -1181,10 +1288,12 @@ instantiateVariantL ρ₀ u@(Type.Alternatives kAs rest) = do
     traverse_ instantiate kAβs
 
 instantiateVariantR
-    :: (MonadState Status m, MonadError Text m)
-    => Type.Union -> Existential Monotype.Union -> m ()
-instantiateVariantR u@(Type.Alternatives kAs rest) ρ₀ = do
-    if ρ₀ `Type.variantFreeIn` Type.Union u
+    :: (MonadReader Input m, MonadState Status m, MonadError Text m)
+    => Location -> Type.Union Location -> Existential Monotype.Union -> m ()
+instantiateVariantR location u@(Type.Alternatives kAs rest) ρ₀ = do
+    loc <- locationToText "" location
+
+    if ρ₀ `Type.variantFreeIn` Type{ node = Type.Union u, .. }
         then do
             Except.throwError [__i|
             Not a subtype
@@ -1196,6 +1305,8 @@ instantiateVariantR u@(Type.Alternatives kAs rest) ρ₀ = do
             … cannot be instantiated to the following union type:
 
             ↳ #{Pretty.pretty (Type.Union u)}
+
+            #{loc}
 
             … because the same variant variable appears within that union type.
             |]
@@ -1216,14 +1327,14 @@ instantiateVariantR u@(Type.Alternatives kAs rest) ρ₀ = do
     (_ΓR, _ΓL) <- Context.splitOnUnsolvedVariant ρ₀ _Γ `orDie`
         [__i|
         Internal error: Invalid context
-        
+
         The following unsolved variant variable:
-        
+
         ↳ #{prettyToText (Context.UnsolvedVariant ρ₀)}}
-        
+
         … cannot be instantiated because the variant variable is missing from the
         context:
-        
+
         #{listToText _Γ}
         |]
 
@@ -1253,237 +1364,302 @@ instantiateVariantR u@(Type.Alternatives kAs rest) ρ₀ = do
     type of A and an updated context Δ.
 -}
 infer
-    :: (MonadState Status m, MonadError Text m) => Syntax (Type, Value)
-    -> m Type
--- Var
-infer _A@(Syntax.Variable x₀ n) = do
-    _Γ <- get
+    :: (MonadReader Input m, MonadState Status m, MonadError Text m)
+    => Syntax Location (Type Location, Value)
+    -> m (Type Location)
+infer e₀ = do
+    let _Type :: Type Location
+        _Type = Type
+            { location = Syntax.location e₀
+            , node = error "_Type: Uninitialized node field"
+            }
 
-    Context.lookup x₀ n _Γ `orDie`
-        [__i|
-        Unbound variable: #{prettyToText (fmap (\_ -> ()) _A)}
-        |]
+    let a ~> b = _Type{ node = Type.Function a b }
 
--- →I⇒ 
-infer (Syntax.Lambda x e) = do
-    α <- fresh
-    β <- fresh
+    case Syntax.node e₀ of
+        -- Var
+        _A@(Syntax.Variable x₀ n) -> do
+            _Γ <- get
 
-    push (Context.Unsolved α)
-    push (Context.Unsolved β)
-    push (Context.Annotation x (Type.Unsolved α))
+            loc <- locationToText "" (Syntax.location e₀)
 
-    check e (Type.Unsolved β)
+            Context.lookup x₀ n _Γ `orDie`
+                [__i|
+                Unbound variable: #{prettyToText (void _A)}
 
-    discardUpTo (Context.Annotation x (Type.Unsolved α))
+                #{loc}
+                |]
 
-    return (Type.Function (Type.Unsolved α) (Type.Unsolved β))
-
--- →E
-infer (Syntax.Application e₁ e₂) = do
-    _A <- infer e₁
-
-    _Θ <- get
-
-    inferApplication (Context.solve _Θ _A) e₂
-
--- Anno
-infer (Syntax.Annotation e _A) = do
-    _Γ <- get
-
-    wellFormedType _Γ _A
-
-    check e _A
-
-    return _A
-
-infer (Syntax.Let bindings b) = do
-    let process (Syntax.Binding x Nothing a) = do
-            _A <- infer a
-
-            push (Context.Annotation x _A)
-        process (Syntax.Binding x (Just _A) a) = do
-            check a _A
-
-            push (Context.Annotation x _A)
-
-    traverse_ process bindings
-
-    infer b
-
-infer (Syntax.List xs) = do
-    case xs of
-        [] -> do
+        -- →I⇒ 
+        Syntax.Lambda nameLocation x e -> do
             α <- fresh
-
-            push (Context.Unsolved α)
-
-            return (Type.List (Type.Unsolved α))
-        y : ys -> do
-            _A <- infer y
-
-            traverse_ (`check` _A) ys
-
-            return (Type.List _A)
-
-infer (Syntax.Record kvs) = do
-    let process (k, v) = do
-            _A <- infer v
-
-            return (k, _A)
-
-    kAs <- traverse process kvs
-
-    return (Type.Record (Type.Fields kAs Nothing))
-
-infer (Syntax.Alternative k) = do
-    α <- fresh
-    ρ <- fresh
-
-    push (Context.Unsolved α)
-    push (Context.UnsolvedVariant ρ)
-
-    return
-        (Type.Function
-            (Type.Unsolved α)
-            (Type.Union (Type.Alternatives [(k, (Type.Unsolved α))] (Just ρ)))
-        )
-
-infer (Syntax.Merge record) = do
-    _R <- infer record
-
-    case _R of
-        Type.Record (Type.Fields keyTypes Nothing) -> do
             β <- fresh
 
+            let _A = Type{ location = nameLocation, node = Type.Unsolved α }
+
+            let _B =
+                    Type{ location = Syntax.location e, node = Type.Unsolved β }
+
+            push (Context.Unsolved α)
             push (Context.Unsolved β)
+            push (Context.Annotation x _A)
 
-            let process (key, Type.Function _A _B) = do
-                    _ϴ <- get
+            check e _B
 
-                    subtype (Context.solve _ϴ _B) (Context.solve _ϴ (Type.Unsolved β))
+            discardUpTo (Context.Annotation x _A)
 
-                    return (key, _A)
-                process (_, _A) = do
+            return _Type{ node = Type.Function _A _B }
+
+        -- →E
+        Syntax.Application e₁ e₂ -> do
+            _A <- infer e₁
+
+            _Θ <- get
+
+            inferApplication (Context.solve _Θ _A) e₂
+
+        -- Anno
+        Syntax.Annotation e _A -> do
+            _Γ <- get
+
+            wellFormedType _Γ _A
+
+            check e _A
+
+            return _A
+
+        Syntax.Let bindings b -> do
+            let process Syntax.Binding{ name, annotation = Nothing, assignment } = do
+                    _A <- infer assignment
+
+                    push (Context.Annotation name _A)
+                process Syntax.Binding{ name, annotation = Just _A,  assignment } = do
+                    check assignment _A
+
+                    push (Context.Annotation name _A)
+
+            traverse_ process bindings
+
+            infer b
+
+        Syntax.List xs -> do
+            case xs of
+                [] -> do
+                    α <- fresh
+
+                    push (Context.Unsolved α)
+
+                    return _Type
+                        { node = Type.List _Type{ node = Type.Unsolved α }
+                        }
+                y : ys -> do
+                    _A <- infer y
+
+                    traverse_ (`check` _A) ys
+
+                    return _Type{ node = Type.List _A }
+
+        Syntax.Record kvs -> do
+            let process (k, v) = do
+                    _A <- infer v
+
+                    return (k, _A)
+
+            kAs <- traverse process kvs
+
+            return _Type{ node = Type.Record (Type.Fields kAs Nothing) }
+
+        Syntax.Alternative k -> do
+            α <- fresh
+            ρ <- fresh
+
+            push (Context.Unsolved α)
+            push (Context.UnsolvedVariant ρ)
+
+            return _Type
+                { node =
+                    Type.Function
+                        _Type{ node = Type.Unsolved α }
+                        _Type
+                            { node =
+                                Type.Union
+                                    (Type.Alternatives
+                                        [(k, _Type{ node = Type.Unsolved α })]
+                                        (Just ρ)
+                                    )
+                            }
+                }
+
+        Syntax.Merge record -> do
+            _R <- infer record
+
+            case Type.node _R of
+                Type.Record (Type.Fields keyTypes Nothing) -> do
+                    β <- fresh
+
+                    push (Context.Unsolved β)
+
+                    let process (key, Type{ node = Type.Function _A _B }) = do
+                            _ϴ <- get
+
+                            let β' = Type
+                                    { location = Type.location _B
+                                    , node = Type.Unsolved β
+                                    }
+                            subtype (Context.solve _ϴ _B) (Context.solve _ϴ β')
+
+                            return (key, _A)
+                        process (_, _A) = do
+                            loc <- locationToText "" (Type.location _A)
+
+                            Except.throwError [__i|
+                                Invalid handler
+
+                                The merge keyword expects a record of handlers where all handlers are functions,
+                                but you provided a handler of the following type:
+
+                                ↳ #{prettyToText _A}
+
+                                #{loc}
+
+                                … which is not a function type.
+                            |]
+
+                    keyTypes' <- traverse process keyTypes
+
+                    return _Type
+                        { node =
+                            Type.Function
+                                _Type
+                                    { node =
+                                        Type.Union
+                                            (Type.Alternatives
+                                                keyTypes'
+                                                Nothing
+                                            )
+                                    }
+                                _Type{ node = Type.Unsolved β }
+                        }
+
+                Type.Record (Type.Fields _ (Just _)) -> do
+                    loc <- locationToText "" (Type.location _R)
+
                     Except.throwError [__i|
-                        Invalid handler
+                        Must merge a concrete record
 
-                        The merge keyword expects a record of handlers where all handlers are functions,
-                        but you provided a handler of the following type:
+                        The first argument to a merge expression must be a record where all fields are
+                        statically known.  However, you provided an argument of type:
 
-                        ↳ #{prettyToText _A}
+                        ↳ #{prettyToText _R}
 
-                        … which is not a function type.
+                        #{loc}
+
+                        … where not all fields could be inferred.
                     |]
-                    
-            keyTypes' <- traverse process keyTypes
 
-            let unionType =
-                    Type.Union (Type.Alternatives keyTypes'  Nothing)
+                _ -> do
+                    loc <- locationToText "" (Type.location _R)
 
-            return (Type.Function unionType (Type.Unsolved β))
+                    Except.throwError [__i|
+                        Must merge a record
 
-        Type.Record (Type.Fields _ (Just _)) -> do
-            Except.throwError [__i|
-                Must merge a concrete record
+                        The first argument to a merge expression must be a record, but you provided an
+                        expression of the following type:
 
-                The first argument to a merge expression must be a record where all fields are
-                statically known.  However, you provided an argument of type:
+                        ↳ #{prettyToText _R}
 
-                ↳ #{prettyToText _R}
+                        #{loc}
 
-                … where not all fields could be inferred.
-            |]
+                        … which is not a record type.
+                    |]
 
-        _ -> do
-            Except.throwError [__i|
-                Must merge a record
+        Syntax.Field record location key -> do
+            α <- fresh
+            ρ <- fresh
 
-                The first argument to a merge expression must be a record, but you provided an
-                expression of the following type:
+            push (Context.Unsolved α)
+            push (Context.UnsolvedRow ρ)
 
-                ↳ #{prettyToText _R}
+            check record Type
+                { location
+                , node =
+                    Type.Record
+                        (Type.Fields
+                            [(key, Type{ location , node = Type.Unsolved α })]
+                            (Just ρ)
+                        )
+                }
 
-                … which is not a record type.
-            |]
+            return Type{ location, node = Type.Unsolved α }
 
-infer (Syntax.Field record key) = do
-    α <- fresh
-    ρ <- fresh
+        Syntax.True -> do
+            return _Type{ node = Type.Bool }
 
-    push (Context.Unsolved α)
-    push (Context.UnsolvedRow ρ)
+        Syntax.False -> do
+            return _Type{ node = Type.Bool }
 
-    check record (Type.Record (Type.Fields [(key, Type.Unsolved α)] (Just ρ)))
+        Syntax.And l location r -> do
+            check l Type{ location, node = Type.Bool }
+            check r Type{ location, node = Type.Bool }
 
-    return (Type.Unsolved α)
+            return Type{ location, node = Type.Bool }
 
-infer Syntax.True = do
-    return Type.Bool
+        Syntax.Or l location r -> do
+            check l Type{ location, node = Type.Bool }
+            check r Type{ location, node = Type.Bool }
 
-infer Syntax.False = do
-    return Type.Bool
+            return Type{ location, node = Type.Bool }
 
-infer (Syntax.And l r) = do
-    check l Type.Bool
-    check r Type.Bool
+        Syntax.If predicate l r -> do
+            check predicate _Type{ node = Type.Bool }
 
-    return Type.Bool
+            _L₀ <- infer l
 
-infer (Syntax.Or l r) = do
-    check l Type.Bool
-    check r Type.Bool
+            _Γ  <- get
 
-    return Type.Bool
+            let _L₁ = Context.solve _Γ _L₀
 
-infer (Syntax.If predicate l r) = do
-    check predicate Type.Bool
+            check r _L₁
 
-    _L₀ <- infer l
+            return _L₁
 
-    _Γ  <- get
+        Syntax.Natural _ -> do
+            return _Type{ node = Type.Natural }
 
-    let _L₁ = Context.solve _Γ _L₀
+        Syntax.Times l location r -> do
+            check l Type{ location, node = Type.Natural }
+            check r Type{ location, node = Type.Natural }
 
-    check r _L₁
+            return Type{ location = Syntax.location e₀, node = Type.Natural }
 
-    return _L₁
+        Syntax.Plus l location r -> do
+            check l Type{ location, node = Type.Natural }
+            check r Type{ location, node = Type.Natural }
 
-infer (Syntax.Natural _) = do
-    return Type.Natural
+            return Type{ location, node = Type.Natural }
 
-infer (Syntax.Times l r) = do
-    check l Type.Natural
-    check r Type.Natural
+        Syntax.NaturalFold -> do
+            return _Type
+                { node =
+                    Type.Forall (Syntax.location e₀) "a"
+                        (   _Type{ node = Type.Natural }
+                        ~>  (  (_Type{ node = "a" } ~> _Type{ node = "a" })
+                            ~> (_Type{ node = "a" } ~> _Type{ node = "a" })
+                            )
+                        )
+                }
 
-    return Type.Natural
+        Syntax.Text _ -> do
+            return _Type{ node = Type.Text }
 
-infer (Syntax.Plus l r) = do
-    check l Type.Natural
-    check r Type.Natural
+        Syntax.Append l location r -> do
+            check l Type{ location, node = Type.Text }
+            check r Type{ location, node = Type.Text }
 
-    return Type.Natural
+            return Type{ location, node = Type.Text }
 
-infer Syntax.NaturalFold = do
-    return
-        (Type.Forall "a"
-            (Type.Function
-                Type.Natural
-                (Type.Function (Type.Function "a" "a") (Type.Function "a" "a"))
-            )
-        )
-
-infer (Syntax.Text _) = do
-    return Type.Text
-
-infer (Syntax.Append l r) = do
-    check l Type.Text
-    check r Type.Text
-
-    return Type.Text
-
-infer (Syntax.Embed (type_, _)) = do
-    return type_
+        Syntax.Embed (type_, _) -> do
+            return type_
 
 {-| This corresponds to the judgment:
 
@@ -1493,10 +1669,10 @@ infer (Syntax.Embed (type_, _)) = do
     context Δ.
 -}
 check
-    :: (MonadState Status m, MonadError Text m)
-    => Syntax (Type, Value) -> Type -> m ()
+    :: (MonadReader Input m, MonadState Status m, MonadError Text m)
+    => Syntax Location (Type Location, Value) -> Type Location -> m ()
 -- →I
-check (Syntax.Lambda x e) (Type.Function _A _B) = do
+check Syntax{ node = Syntax.Lambda _ x e } Type{ node = Type.Function _A _B } = do
     push (Context.Annotation x _A)
 
     check e _B
@@ -1504,7 +1680,7 @@ check (Syntax.Lambda x e) (Type.Function _A _B) = do
     discardUpTo (Context.Annotation x _A)
 
 -- ∀I
-check e (Type.Forall α _A) = do
+check e Type{ node = Type.Forall _ α _A } = do
     push (Context.Variable α)
 
     check e _A
@@ -1527,18 +1703,22 @@ check e _B = do
     input argument e, under input context Γ, producing an updated context Δ.
 -}
 inferApplication
-    :: (MonadState Status m, MonadError Text m)
-    => Type -> Syntax (Type, Value) -> m Type
+    :: (MonadReader Input m, MonadState Status m, MonadError Text m)
+    => Type Location
+    -> Syntax Location (Type Location, Value)
+    -> m (Type Location)
 -- ∀App
-inferApplication (Type.Forall α₀ _A) e = do
+inferApplication _A₀@Type{ node = Type.Forall nameLocation α₀ _A } e = do
     α₁ <- fresh
 
     push (Context.Unsolved α₁)
 
-    inferApplication (Type.substitute α₀ 0 (Type.Unsolved α₁) _A) e
+    let α₁' = Type{ location = nameLocation, node = Type.Unsolved α₁ }
+
+    inferApplication (Type.substitute α₀ 0 α₁' _A) e
 
 -- αApp
-inferApplication (Type.Unsolved α) e = do
+inferApplication Type{ node = Type.Unsolved α, .. } e = do
     _Γ <- get
 
     (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ `orDie`
@@ -1546,11 +1726,11 @@ inferApplication (Type.Unsolved α) e = do
         Internal error: Invalid context
 
         The following unsolved variable:
-        
+
         ↳ #{prettyToText (Context.Unsolved α)}}
-        
+
         … cannot be solved because the variable is missing from the context:
-        
+
         #{listToText _Γ}
         |]
 
@@ -1559,14 +1739,16 @@ inferApplication (Type.Unsolved α) e = do
 
     set (_ΓR <> (Context.Solved α (Monotype.Function (Monotype.Unsolved α₁) (Monotype.Unsolved α₂)) : Context.Unsolved α₁ : Context.Unsolved α₂ : _ΓL))
 
-    check e (Type.Unsolved α₁)
+    check e Type{ node = Type.Unsolved α₁, .. }
 
-    return (Type.Unsolved α₂)
-inferApplication (Type.Function _A _C) e = do
+    return Type{ node = Type.Unsolved α₂, .. }
+inferApplication Type{ node = Type.Function _A _C } e = do
     check e _A
 
     return _C
-inferApplication (Type.Variable α) _ = do
+inferApplication Type{ node = Type.Variable α, ..} _ = do
+    loc <- locationToText "" location
+
     Except.throwError [__i|
     Internal error: Unexpected type variable in function type
 
@@ -1574,10 +1756,13 @@ inferApplication (Type.Variable α) _ = do
 
     ↳ #{α}
 
-    … should have been replaced with an unsolved variable when type-checking a
-    function application.
+    … should have been replaced with an unsolved variable.
+
+    #{loc}
     |]
-inferApplication _A _ = do
+inferApplication _A@Type{..} _ = do
+    loc <- locationToText "" location
+
     Except.throwError [__i|
     Not a function type
 
@@ -1585,15 +1770,20 @@ inferApplication _A _ = do
 
     ↳ #{prettyToText _A}
 
+    #{loc}
+
     … was invoked as if it were a function, but the above type is not a function
     type.
     |]
 
 -- | Infer the `Type` of the given `Syntax` tree
-typeOf :: Syntax (Type, Value) -> Either Text Type
-typeOf syntax = do
+typeOf
+    :: Input
+    -> Syntax Location (Type Location, Value)
+    -> Either Text (Type Location)
+typeOf input syntax = do
     let initialStatus = Status{ count = 0, context = [] }
 
-    (_A, Status{ context = _Δ }) <- State.runStateT (infer syntax) initialStatus
+    (_A, Status{ context = _Δ }) <- Reader.runReaderT (State.runStateT (infer syntax) initialStatus) input
 
     return (Context.complete _Δ _A)

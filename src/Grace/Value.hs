@@ -10,7 +10,7 @@ module Grace.Value
 import Data.String (IsString(..))
 import Data.Text (Text)
 import Numeric.Natural (Natural)
-import Grace.Syntax (Syntax)
+import Grace.Syntax (Location, Syntax)
 import Grace.Type (Type)
 
 {-| A `Closure` captures the current evaluation environment in order to defer
@@ -24,7 +24,8 @@ import Grace.Type (Type)
     This provides efficiency comparable to a higher-order abstract syntax
     tree, except using a first-order representation.
 -}
-data Closure = Closure Text [(Text, Value)] (Syntax (Type, Value))
+data Closure =
+    Closure Text [(Text, Value)] (Syntax Location (Type Location, Value))
     deriving (Show)
 
 {-| This type represents a fully evaluated expression with no reducible

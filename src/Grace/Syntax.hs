@@ -5,7 +5,9 @@
 module Grace.Syntax
     ( -- * Syntax
       Syntax(..)
+    , Node(..)
     , Binding(..)
+    , Location
     ) where
 
 import Data.List.NonEmpty (NonEmpty(..))
@@ -22,172 +24,196 @@ import qualified Data.Text as Text
 -}
 
 -- | The surface syntax for the language
-data Syntax a
+data Syntax s a = Syntax { location :: s, node :: Node s a }
+    deriving stock (Foldable, Functor, Show, Traversable)
+
+instance IsString (Syntax () a) where
+    fromString string = Syntax { location = (), node = fromString string }
+
+instance Pretty a => Pretty (Syntax s a) where
+    pretty = prettySyntax prettyExpression
+
+prettySyntax :: Pretty a => (Node s a -> Doc b) -> Syntax s a -> Doc b
+prettySyntax prettyNode Syntax{ node } = prettyNode node
+
+data Node s a
     = Variable Text Int
     -- ^
-    --   >>> pretty @(Syntax Void) (Variable "x" 0)
+    --   >>> pretty @(Node () Void) (Variable "x" 0)
     --   x
-    --   >>> pretty @(Syntax Void) (Variable "x" 1)
+    --   >>> pretty @(Node () Void) (Variable "x" 1)
     --   x@1
-    | Lambda Text (Syntax a)
+    | Lambda s Text (Syntax s a)
     -- ^
-    --   >>> pretty @(Syntax Void) (Lambda "x" "x")
+    --   >>> pretty @(Node () Void) (Lambda () "x" "x")
     --   \x -> x
-    | Application (Syntax a) (Syntax a)
+    | Application (Syntax s a) (Syntax s a)
     -- ^
-    --   >>> pretty @(Syntax Void) (Application "f" "x")
+    --   >>> pretty @(Node () Void) (Application "f" "x")
     --   f x
-    | Annotation (Syntax a) Type
+    | Annotation (Syntax s a) (Type s)
     -- ^
-    --   >>> pretty @(Syntax Void) (Annotation "x" "A")
+    --   >>> pretty @(Node () Void) (Annotation "x" "A")
     --   x : A
-    | Let (NonEmpty (Binding a)) (Syntax a)
+    | Let (NonEmpty (Binding s a)) (Syntax s a)
     -- ^
-    --   >>> pretty @(Syntax Void) (Let (Binding "x" Nothing "y" :| []) "z")
+    --   >>> pretty @(Node () Void) (Let (Binding () "x" Nothing "y" :| []) "z")
     --   let x = y in z
-    --   >>> pretty @(Syntax Void) (Let (Binding "x" (Just "X") "y" :| []) "z")
+    --   >>> pretty @(Node () Void) (Let (Binding () "x" (Just "X") "y" :| []) "z")
     --   let x : X = y in z
-    --   >>> pretty @(Syntax Void) (Let (Binding "a" Nothing "b" :| [ Binding "c" Nothing "d" ]) "e")
+    --   >>> pretty @(Node () Void) (Let (Binding () "a" Nothing "b" :| [ Binding () "c" Nothing "d" ]) "e")
     --   let a = b let c = d in e
-    | List [Syntax a]
+    | List [Syntax s a]
     -- ^
-    --   >>> pretty @(Syntax Void) (List [ "x", "y", "z" ])
+    --   >>> pretty @(Node () Void) (List [ "x", "y", "z" ])
     --   [ x, y, z ]
-    | Record [(Text, Syntax a)]
+    | Record [(Text, Syntax s a)]
     -- ^
-    --   >>> pretty @(Syntax Void) (Record [ ("x", "a"), ("y", "b") ])
+    --   >>> pretty @(Node () Void) (Record [ ("x", "a"), ("y", "b") ])
     --   { x = a, y = b }
-    | Field (Syntax a) Text
+    | Field (Syntax s a) s Text
     -- ^
-    --   >>> pretty @(Syntax Void) (Field "x" "a")
+    --   >>> pretty @(Node () Void) (Field "x" () "a")
     --   x.a
     | Alternative Text
     -- ^
-    --   >>> pretty @(Syntax Void) (Alternative "Nil")
+    --   >>> pretty @(Node () Void) (Alternative "Nil")
     --   Nil
-    | Merge (Syntax a)
+    | Merge (Syntax s a)
     -- ^
-    --   >>> pretty @(Syntax Void) (Merge "x")
+    --   >>> pretty @(Node () Void) (Merge "x")
     --   merge x
     | True
     -- ^
-    --   >>> pretty @(Syntax Void) Grace.Syntax.True
+    --   >>> pretty @(Node () Void) Grace.Syntax.True
     --   True
     | False
     -- ^
-    --   >>> pretty @(Syntax Void) Grace.Syntax.False
+    --   >>> pretty @(Node () Void) Grace.Syntax.False
     --   False
-    | And (Syntax a) (Syntax a)
+    | And (Syntax s a) s (Syntax s a)
     -- ^
-    --   >>> pretty @(Syntax Void) (And "x" "y")
+    --   >>> pretty @(Node () Void) (And "x" () "y")
     --   x && y
-    | Or (Syntax a) (Syntax a)
+    | Or (Syntax s a) s (Syntax s a)
     -- ^
-    --   >>> pretty @(Syntax Void) (Or "x" "y")
+    --   >>> pretty @(Node () Void) (Or "x" () "y")
     --   x || y
-    | If (Syntax a) (Syntax a) (Syntax a)
+    | If (Syntax s a) (Syntax s a) (Syntax s a)
     -- ^
-    --   >>> pretty @(Syntax Void) (If "x" "y" "z")
+    --   >>> pretty @(Node () Void) (If "x" "y" "z")
     --   if x then y else z
     | Natural Natural
     -- ^
-    --   >>> pretty @(Syntax Void) (Natural 1)
+    --   >>> pretty @(Node () Void) (Natural 1)
     --   1
-    | Times (Syntax a) (Syntax a)
+    | Times (Syntax s a) s (Syntax s a)
     -- ^
-    --   >>> pretty @(Syntax Void) (Times "x" "y")
+    --   >>> pretty @(Node () Void) (Times "x" () "y")
     --   x * y
-    | Plus (Syntax a) (Syntax a)
+    | Plus (Syntax s a) s (Syntax s a)
     -- ^
-    --   >>> pretty @(Syntax Void) (Plus "x" "y")
+    --   >>> pretty @(Node () Void) (Plus "x" () "y")
     --   x + y
     | NaturalFold
     -- ^
-    --   >>> pretty @(Syntax Void) NaturalFold
+    --   >>> pretty @(Node () Void) NaturalFold
     --   Natural/fold
     | Text Text
     -- ^
-    --   >>> pretty @(Syntax Void) (Text "a\n")
+    --   >>> pretty @(Node () Void) (Text "a\n")
     --   "a\n"
-    | Append (Syntax a) (Syntax a)
+    | Append (Syntax s a) s (Syntax s a)
     -- ^
-    --   >>> pretty @(Syntax Void) (Append "x" "y")
+    --   >>> pretty @(Node () Void) (Append "x" () "y")
     --   x ++ y
     | Embed a
     deriving stock (Foldable, Functor, Show, Traversable)
 
-instance IsString (Syntax a) where
+instance IsString (Node s a) where
     fromString string = Variable (fromString string) 0
 
-instance Pretty a => Pretty (Syntax a) where
+instance Pretty a => Pretty (Node s a) where
     pretty = prettyExpression
 
 -- | Pretty-print an expression
-prettyExpression :: Pretty a => Syntax a -> Doc b
-prettyExpression (Lambda name body) =
-    "\\" <> pretty name <> " -> " <> prettyExpression body
+prettyExpression :: Pretty a => Node s a -> Doc b
+prettyExpression (Lambda _ name body) =
+    "\\" <> pretty name <> " -> " <> prettySyntax prettyExpression body
 prettyExpression (Let bindings body) =
-    foldMap pretty bindings <> "in " <> prettyExpression body
+    foldMap pretty bindings <> "in " <> prettySyntax prettyExpression body
 prettyExpression (If predicate ifTrue ifFalse) =
         "if "
-    <>  prettyExpression predicate
+    <>  prettySyntax prettyExpression predicate
     <>  " then "
-    <>  prettyExpression ifTrue
+    <>  prettySyntax prettyExpression ifTrue
     <>  " else "
-    <>  prettyExpression ifFalse
+    <>  prettySyntax prettyExpression ifFalse
 prettyExpression (Annotation annotated annotation) =
-        prettyTimesExpression annotated <> " : " <> pretty annotation
+        prettySyntax prettyTimesExpression annotated
+    <>  " : "
+    <>  pretty annotation
 prettyExpression other =
     prettyTimesExpression other
 
-prettyTimesExpression :: Pretty a => Syntax a -> Doc b
-prettyTimesExpression (Times left right) =
-    prettyTimesExpression left <> " * " <> prettyPlusExpression right
+prettyTimesExpression :: Pretty a => Node s a -> Doc b
+prettyTimesExpression (Times left _ right) =
+        prettySyntax prettyTimesExpression left
+    <>  " * "
+    <>  prettySyntax prettyPlusExpression right
 prettyTimesExpression other =
     prettyPlusExpression other
 
-prettyPlusExpression :: Pretty a => Syntax a -> Doc b
-prettyPlusExpression (Plus left right) =
-    prettyPlusExpression left <> " + " <> prettyOrExpression right
+prettyPlusExpression :: Pretty a => Node s a -> Doc b
+prettyPlusExpression (Plus left _ right) =
+        prettySyntax prettyPlusExpression left
+    <>  " + "
+    <>  prettySyntax prettyOrExpression right
 prettyPlusExpression other =
     prettyOrExpression other
 
-prettyOrExpression :: Pretty a => Syntax a -> Doc b
-prettyOrExpression (Or left right) =
-    prettyOrExpression left <> " || " <> prettyAndExpression right
+prettyOrExpression :: Pretty a => Node s a -> Doc b
+prettyOrExpression (Or left _ right) =
+        prettySyntax prettyOrExpression left
+    <>  " || "
+    <>  prettySyntax prettyAndExpression right
 prettyOrExpression other =
     prettyAndExpression other
 
-prettyAndExpression :: Pretty a => Syntax a -> Doc b
-prettyAndExpression (And left right) =
-    prettyAndExpression left <> " && " <> prettyAppendExpression right
+prettyAndExpression :: Pretty a => Node s a -> Doc b
+prettyAndExpression (And left _ right) =
+        prettySyntax prettyAndExpression left
+    <>  " && "
+    <>  prettySyntax prettyAppendExpression right
 prettyAndExpression other =
     prettyAppendExpression other
 
-prettyAppendExpression :: Pretty a => Syntax a -> Doc b
-prettyAppendExpression (Append left right) =
-    prettyAppendExpression left <> " ++ " <> prettyApplicationExpression right
+prettyAppendExpression :: Pretty a => Node s a -> Doc b
+prettyAppendExpression (Append left _ right) =
+        prettySyntax prettyAppendExpression left
+    <>  " ++ "
+    <>  prettySyntax prettyApplicationExpression right
 prettyAppendExpression other =
     prettyApplicationExpression other
 
-prettyApplicationExpression :: Pretty a => Syntax a -> Doc b
+prettyApplicationExpression :: Pretty a => Node s a -> Doc b
 prettyApplicationExpression (Application function argument) =
-        prettyApplicationExpression function
+        prettySyntax prettyApplicationExpression function
     <>  " "
-    <>  prettyFieldExpression argument
+    <>  prettySyntax prettyFieldExpression argument
 prettyApplicationExpression (Merge record) =
         "merge "
-    <>  prettyFieldExpression record
+    <>  prettySyntax prettyFieldExpression record
 prettyApplicationExpression other =
     prettyFieldExpression other
 
-prettyFieldExpression :: Pretty a => Syntax a -> Doc b
-prettyFieldExpression (Field record key) =
-    prettyFieldExpression record <> "." <> pretty key
+prettyFieldExpression :: Pretty a => Node s a -> Doc b
+prettyFieldExpression (Field record _ key) =
+    prettySyntax prettyFieldExpression record <> "." <> pretty key
 prettyFieldExpression other =
     prettyPrimitiveExpression other
 
-prettyPrimitiveExpression :: Pretty a => Syntax a -> Doc b
+prettyPrimitiveExpression :: Pretty a => Node s a -> Doc b
 prettyPrimitiveExpression (Variable name index)
     | index == 0 = pretty name
     | otherwise  = pretty name <> "@" <> pretty index
@@ -196,20 +222,24 @@ prettyPrimitiveExpression (Alternative name) =
 prettyPrimitiveExpression (List []) =
     "[ ]"
 prettyPrimitiveExpression (List (element₀ : elements)) =
-    "[ " <> prettyExpression element₀ <> foldMap prettyElement elements <> " ]"
+        "[ "
+    <>  prettySyntax prettyExpression element₀
+    <>  foldMap prettyElement elements
+    <>  " ]"
   where
-    prettyElement element = ", " <> prettyExpression element
+    prettyElement element = ", " <> prettySyntax prettyExpression element
 prettyPrimitiveExpression (Record []) =
     "{ }"
 prettyPrimitiveExpression (Record ((key₀, value₀) : keyValues)) =
         "{ "
     <>  pretty key₀
     <>  " = "
-    <>  prettyExpression value₀
+    <>  prettySyntax prettyExpression value₀
     <>  foldMap prettyKeyValue keyValues
     <>  " }"
   where
-    prettyKeyValue (key, value) = ", " <> pretty key <> " = " <> pretty value
+    prettyKeyValue (key, value) =
+        ", " <> pretty key <> " = " <> prettySyntax prettyExpression value
 prettyPrimitiveExpression Grace.Syntax.True =
     "True"
 prettyPrimitiveExpression Grace.Syntax.False =
@@ -237,26 +267,32 @@ prettyPrimitiveExpression other =
 
 {-| The assignment part of a @let@ binding
 
-    >>> pretty @(Binding Void) (Binding "x" Nothing "y")
+    >>> pretty @(Binding () Void) (Binding () "x" Nothing "y")
     let x = y
-    >>> pretty @(Binding Void) (Binding "x" (Just "X") "y")
+    >>> pretty @(Binding () Void) (Binding () "x" (Just "X") "y")
     let x : X = y
 -}
-data Binding a = Binding Text (Maybe Type) (Syntax a)
-    deriving stock (Foldable, Functor, Show, Traversable)
+data Binding s a = Binding
+    { nameLocation :: s
+    , name :: Text
+    , annotation :: Maybe (Type s)
+    , assignment :: Syntax s a
+    } deriving stock (Foldable, Functor, Show, Traversable)
 
-instance Pretty a => Pretty (Binding a) where
-    pretty (Binding name Nothing assignment) =
+instance Pretty a => Pretty (Binding s a) where
+    pretty Binding{ annotation = Nothing, .. } =
             "let "
         <>  pretty name
         <>  " = "
-        <>  prettyExpression assignment
+        <>  prettySyntax prettyExpression assignment
         <>  " "
-    pretty (Binding name (Just type_) assignment) =
+    pretty Binding{ annotation = Just type_, .. } =
             "let "
         <>  pretty name
         <>  " : "
         <>  pretty type_
         <>  " = "
-        <>  prettyExpression assignment
+        <>  prettySyntax prettyExpression assignment
         <>  " "
+
+type Location = Int

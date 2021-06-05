@@ -21,7 +21,7 @@ module Grace.Context
 import Data.Text (Text)
 import Grace.Existential (Existential)
 import Grace.Monotype (Monotype)
-import Grace.Type (Type)
+import Grace.Type (Type(..))
 import Prelude hiding (lookup)
 import Prettyprinter (Doc, Pretty(..))
 
@@ -33,60 +33,60 @@ import qualified Grace.Type                 as Type
 import qualified Prettyprinter              as Pretty
 
 -- | An element of the `Context` list
-data Entry
+data Entry s
     = Variable Text
     -- ^ Type variable
     --
-    -- >>> pretty (Variable "a")
+    -- >>> pretty @(Entry ()) (Variable "a")
     -- a
-    | Annotation Text Type
+    | Annotation Text (Type s)
     -- ^ A bound variable whose type is known
     --
-    -- >>> pretty (Annotation "x" "a")
+    -- >>> pretty @(Entry ()) (Annotation "x" "a")
     -- x : a
     | Unsolved (Existential Monotype)
     -- ^ A placeholder type variable whose type has not yet been inferred
     --
-    -- >>> pretty (Unsolved 0)
+    -- >>> pretty @(Entry ()) (Unsolved 0)
     -- a?
     | UnsolvedRow (Existential Monotype.Record)
     -- ^ A placeholder row variable whose type has not yet been inferred
     --
-    -- >>> pretty (UnsolvedRow 0)
+    -- >>> pretty @(Entry ()) (UnsolvedRow 0)
     -- |a?
     | UnsolvedVariant (Existential Monotype.Union)
     -- ^ A placeholder variant variable whose type has not yet been inferred
     --
-    -- >>> pretty (UnsolvedVariant 0)
+    -- >>> pretty @(Entry ()) (UnsolvedVariant 0)
     -- |a?
     | Solved (Existential Monotype) Monotype
     -- ^ A placeholder type variable whose type has been (at least partially)
     --   inferred
     --
-    -- >>> pretty (Solved 0 Monotype.Bool)
+    -- >>> pretty @(Entry ()) (Solved 0 Monotype.Bool)
     -- a = Bool
     | SolvedRow (Existential Monotype.Record) Monotype.Record
     -- ^ A placeholder row variable whose type has been (at least partially)
     --   inferred
     --
-    -- >>> pretty (SolvedRow 0 (Monotype.Fields [("x", "X")] (Just 1)))
+    -- >>> pretty @(Entry ()) (SolvedRow 0 (Monotype.Fields [("x", "X")] (Just 1)))
     -- a = x : X | b
     | SolvedVariant (Existential Monotype.Union) Monotype.Union
     -- ^ A placeholder variant variable whose type has been (at least partially)
     --   inferred
     --
-    -- >>> pretty (SolvedVariant 0 (Monotype.Alternatives [("x", "X")] (Just 1)))
+    -- >>> pretty @(Entry ()) (SolvedVariant 0 (Monotype.Alternatives [("x", "X")] (Just 1)))
     -- a = x : X | b
     | Marker (Existential Monotype)
     -- ^ This is used by the bidirectional type-checking algorithm to separate
     --   context entries introduced before and after type-checking a universally
     --   quantified type
     --
-    -- >>> pretty (Marker 0)
+    -- >>> pretty @(Entry ()) (Marker 0)
     -- ➤a
     deriving (Eq, Show)
 
-instance Pretty Entry where
+instance Pretty (Entry s) where
     pretty = prettyEntry
 
 {-| A `Context` is an ordered list of `Entry`s
@@ -116,9 +116,9 @@ instance Pretty Entry where
       in the context past a certain entry to reflect the end of their
       \"lifetime\"
 -}
-type Context = [Entry]
+type Context s = [Entry s]
 
-prettyEntry :: Entry -> Doc a
+prettyEntry :: Entry s -> Doc a
 prettyEntry (Variable α) =
     Pretty.pretty α
 prettyEntry (Unsolved α) =
@@ -183,10 +183,10 @@ prettyVariantType (k, τ) = "| " <> Pretty.pretty k <> " : " <> Pretty.pretty τ
 {-| Substitute a `Type` using the `Solved`, `SolvedRow`, and `SolvedVariant`
     entries of a `Context`
 
-    >>> solve [ Unsolved 1, Solved 0 Monotype.Bool ] (Type.Function (Type.Unsolved 0) (Type.Unsolved 0))
-    Function Bool Bool
+    >>> solve [ Unsolved 1, Solved 0 Monotype.Bool ] Type{ location = (), node = Type.Unsolved 0 }
+    Type {location = (), node = Bool}
 -}
-solve :: Context -> Type -> Type
+solve :: Context s -> Type s -> Type s
 solve context type_ = foldl snoc type_ context
   where
     snoc t (Solved        α τ) = Type.solve        α τ t
@@ -196,26 +196,34 @@ solve context type_ = foldl snoc type_ context
 
 {-| Substitute a t`Type.Record` using the solved entries of a `Context`
 
-    >>> solveRecord [ SolvedRow 0 (Monotype.Fields [] Nothing) ] (Type.Fields [("a", Type.Bool)] (Just 0))
-    Fields [("a",Bool)] Nothing
+    >>> solveRecord [ SolvedRow 0 (Monotype.Fields [] Nothing) ] (Type.Fields [("a", Type{ location = (), node = Type.Bool })] (Just 0))
+    Fields [("a",Type {location = (), node = Bool})] Nothing
 -}
-solveRecord :: Context -> Type.Record -> Type.Record
+solveRecord :: Context s -> Type.Record s -> Type.Record s
 solveRecord context record = record'
   where
     -- TODO: Come up with total solution
-    Type.Record record' = solve context (Type.Record record)
+    Type.Type{ node = Type.Record record' } =
+        solve context Type.Type
+            { location = error "Grace.Context.solveRecord: Internal error - Missing location field"
+            , node = Type.Record record
+            }
 
 {-| Substitute a t`Type.Union` using the solved entries of a `Context`
     `Context`
 
-    >>> solveUnion [ SolvedVariant 0 (Monotype.Alternatives [] Nothing) ] (Type.Alternatives [("a", Type.Bool)] (Just 0))
-    Alternatives [("a",Bool)] Nothing
+    >>> solveUnion [ SolvedVariant 0 (Monotype.Alternatives [] Nothing) ] (Type.Alternatives [("a", Type{ location = (), node = Type.Bool })] (Just 0))
+    Alternatives [("a",Type {location = (), node = Bool})] Nothing
 -}
-solveUnion :: Context -> Type.Union -> Type.Union
+solveUnion :: Context s -> Type.Union s -> Type.Union s
 solveUnion context union = union'
   where
     -- TODO: Come up with total solution
-    Type.Union union' = solve context (Type.Union union)
+    Type.Type{ node = Type.Union union' }=
+        solve context Type.Type
+            { location = error "Grace.Context.solveUnion: Internal error - Missing location field"
+            , node = Type.Union union
+            }
 
 {-| This function is used at the end of the bidirectional type-checking
     algorithm to complete the inferred type by:
@@ -225,10 +233,10 @@ solveUnion context union = union'
 
     * Adding universal quantifiers for all `Unsolved` entries in the `Context`
 
-    >>> complete [ Unsolved 1, Solved 0 Monotype.Bool ] (Type.Function (Type.Unsolved 1) (Type.Unsolved 0))
-    Forall "a" (Function (Variable "a") Bool)
+    >>> complete [ Unsolved 1, Solved 0 Monotype.Bool ] Type{ location = (), node = Type.Function Type{ location = (), node = Type.Unsolved 1 } Type{ location = (), node = Type.Unsolved 0 } }
+    Type {location = (), node = Forall () "a" (Type {location = (), node = Function (Type {location = (), node = Variable "a"}) (Type {location = (), node = Bool})})}
 -}
-complete :: Context -> Type -> Type
+complete :: Context s -> Type s -> Type s
 complete context type_ = do
     State.evalState (Monad.foldM snoc type_ context) 0
   where
@@ -242,7 +250,12 @@ complete context type_ = do
 
         let a = Existential.toVariable n
 
-        return (Type.Forall a (Type.solve α (Monotype.Variable a) t))
+        let node =
+                Type.Forall (Type.location t) a (Type.solve α (Monotype.Variable a) t)
+
+        let Type{ location } = t
+
+        return Type.Type{..}
 -- TODO: Allow for user-visible row and variant polymorphism so that these can
 -- be implemented
 {-
@@ -280,8 +293,8 @@ complete context type_ = do
 splitOnUnsolved
     :: Existential Monotype
     -- ^ `Unsolved` variable to split on
-    -> Context
-    -> Maybe (Context, Context)
+    -> Context s
+    -> Maybe (Context s, Context s)
 splitOnUnsolved α₀ (Unsolved α₁ : entries)
     | α₀ == α₁ = return ([], entries)
 splitOnUnsolved α (entry : entries) = do
@@ -303,8 +316,8 @@ splitOnUnsolved _ [] = Nothing
 splitOnUnsolvedRow
     :: Existential Monotype.Record
     -- ^ `UnsolvedRow` variable to split on
-    -> Context
-    -> Maybe (Context, Context)
+    -> Context s
+    -> Maybe (Context s, Context s)
 splitOnUnsolvedRow ρ₀ (UnsolvedRow ρ₁ : entries)
     | ρ₀ == ρ₁ = return ([], entries)
 splitOnUnsolvedRow ρ (entry : entries) = do
@@ -326,8 +339,8 @@ splitOnUnsolvedRow _ [] = Nothing
 splitOnUnsolvedVariant
     :: Existential Monotype.Union
     -- ^ `UnsolvedVariant` variable to split on
-    -> Context
-    -> Maybe (Context, Context)
+    -> Context s
+    -> Maybe (Context s, Context s)
 splitOnUnsolvedVariant ρ₀ (UnsolvedVariant ρ₁ : entries)
     | ρ₀ == ρ₁ = return ([], entries)
 splitOnUnsolvedVariant ρ (entry : entries) = do
@@ -338,16 +351,16 @@ splitOnUnsolvedVariant _ [] = Nothing
 {-| Retrieve a variable's annotated type from a `Context`, given the variable's
     label and index
 
-    >>> lookup "x" 0 [ Annotation "x" Type.Bool, Annotation "y" (Type.Function Type.Bool Type.Bool) ]
-    Just Bool
+    >>> lookup "x" 0 [ Annotation "x" Type{ location = (), node = Type.Bool }, Annotation "y" Type{ location = (), node = Type.Natural } ]
+    Just (Type {location = (), node = Bool})
 -}
 lookup
     :: Text
     -- ^ Variable label
     -> Int
     -- ^ Variable index (See the documentation of `Value.Variable`)
-    -> Context
-    -> Maybe Type
+    -> Context s
+    -> Maybe (Type s)
 lookup _ _ [] =
     Nothing
 lookup x₀ n (Annotation x₁ _A : _Γ) =
@@ -372,7 +385,7 @@ lookup x n (_ : _Γ) =
     >>> discardUpTo (Marker 1) [ Unsolved 1, Marker 1, Unsolved 0 ]
     [Unsolved 0]
 -}
-discardUpTo :: Entry -> Context -> Context
+discardUpTo :: Eq s => Entry s -> Context s -> Context s
 discardUpTo entry₀ (entry₁ : _Γ)
     | entry₀ == entry₁ = _Γ
     | otherwise = discardUpTo entry₀ _Γ

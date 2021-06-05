@@ -6,6 +6,7 @@ module Grace.Interpret
     ) where
 
 import Data.Text (Text)
+import Grace.Syntax (Location)
 import Grace.Type (Type)
 import Grace.Value (Value)
 import System.FilePath ((</>))
@@ -35,9 +36,9 @@ data Input
 
     This is the top-level function for the Grace interpreter
 -}
-interpret :: Input -> IO (Type, Value)
+interpret :: Input -> IO (Type Location, Value)
 interpret  input = do
-    text <- case input of
+    code <- case input of
         Path file -> Text.IO.readFile file
         Code text -> return text
 
@@ -45,7 +46,7 @@ interpret  input = do
             Path file -> file
             Code _    -> "(input)"
 
-    expression <- case Parser.parse name text of
+    expression <- case Parser.parse name code of
         Left message -> do
             Text.IO.hPutStrLn IO.stderr message
             Exit.exitFailure
@@ -60,7 +61,7 @@ interpret  input = do
 
     resolvedExpression <- traverse resolve expression
 
-    case Infer.typeOf resolvedExpression of
+    case Infer.typeOf Infer.Input{ code, name } resolvedExpression of
         Left message -> do
             Text.IO.hPutStrLn IO.stderr message
             Exit.exitFailure

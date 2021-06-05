@@ -14,7 +14,7 @@ module Grace.Normalize
 import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Value (Closure(..), Value)
-import Grace.Syntax (Syntax)
+import Grace.Syntax (Location, Syntax)
 import Grace.Type (Type)
 import Prelude hiding (succ)
 
@@ -70,12 +70,12 @@ instantiate (Closure name env syntax) value =
 evaluate
     :: [(Text, Value)]
     -- ^ Evaluation environment (starting at @[]@ for a top-level expression)
-    -> Syntax (Type, Value)
+    -> Syntax Location (Type Location, Value)
     -- ^ Surface syntax
     -> Value
     -- ^ Result, free of reducible sub-expressions
-evaluate env syntax =
-    case syntax of
+evaluate env Syntax.Syntax{..} =
+    case node of
         Syntax.Variable name index ->
             lookupVariable name index env
 
@@ -101,7 +101,7 @@ evaluate env syntax =
             function' = evaluate env function
             argument' = evaluate env argument
 
-        Syntax.Lambda name body ->
+        Syntax.Lambda _ name body ->
             Value.Lambda (Closure name env body)
 
         Syntax.Annotation annotated _ ->
@@ -110,7 +110,7 @@ evaluate env syntax =
         Syntax.Let bindings body ->
             evaluate (foldl snoc env bindings) body
           where
-            snoc environment (Syntax.Binding name _ assignment) =
+            snoc environment Syntax.Binding{ name, assignment} =
                 (name, evaluate environment assignment) : environment
 
         Syntax.List elements ->
@@ -121,7 +121,7 @@ evaluate env syntax =
           where
             adapt (key, value) = (key, evaluate env value)
 
-        Syntax.Field record key ->
+        Syntax.Field record _ key ->
             case evaluate env record of
                 Value.Record keyValues
                     | Just value <- lookup key keyValues ->
@@ -141,7 +141,7 @@ evaluate env syntax =
         Syntax.False ->
             Value.False
 
-        Syntax.And left right ->
+        Syntax.And left _ right ->
             case left' of
                 Value.True -> right'
                 Value.False -> Value.False
@@ -153,7 +153,7 @@ evaluate env syntax =
             left'  = evaluate env left
             right' = evaluate env right
 
-        Syntax.Or left right ->
+        Syntax.Or left _ right ->
             case left' of
                 Value.True -> Value.True
                 Value.False -> right'
@@ -178,7 +178,7 @@ evaluate env syntax =
         Syntax.Natural n ->
             Value.Natural n
 
-        Syntax.Times left right ->
+        Syntax.Times left _ right ->
             case (left', right') of
                 (Value.Natural 1, _              ) -> right'
                 (Value.Natural 0, _              ) -> Value.Natural 0
@@ -190,7 +190,7 @@ evaluate env syntax =
             left'  = evaluate env left
             right' = evaluate env right
 
-        Syntax.Plus left right ->
+        Syntax.Plus left _ right ->
             case (left', right') of
                 (Value.Natural 0, _              ) -> right'
                 (_              , Value.Natural 0) -> left'
@@ -206,7 +206,7 @@ evaluate env syntax =
         Syntax.Text text ->
             Value.Text text
 
-        Syntax.Append left right ->
+        Syntax.Append left _ right ->
             case (left', right') of
                 (Value.Text "", _            ) -> right'
                 (_            , Value.Text "") -> left'
@@ -253,79 +253,83 @@ quote
     -- ^ Variable names currently in scope (starting at @[]@ for a top-level
     --   expression)
     -> Value
-    -> Syntax Void
-quote names value =
-    case value of
-        Value.Variable name index ->
-            Syntax.Variable name (countNames name names - index - 1)
+    -> Syntax () Void
+quote names value = Syntax.Syntax{..}
+  where
+    location = ()
 
-        Value.Lambda closure@(Closure name _ _) ->
-            Syntax.Lambda name body
-          where
-            variable = fresh name names
+    node =
+        case value of
+            Value.Variable name index ->
+                Syntax.Variable name (countNames name names - index - 1)
 
-            body = quote (name : names) (instantiate closure variable)
+            Value.Lambda closure@(Closure name _ _) ->
+                Syntax.Lambda () name body
+              where
+                variable = fresh name names
 
-        Value.Application function argument ->
-            Syntax.Application (quote names function) (quote names argument)
+                body = quote (name : names) (instantiate closure variable)
 
-        Value.List elements ->
-            Syntax.List (map (quote names) elements)
+            Value.Application function argument ->
+                Syntax.Application (quote names function) (quote names argument)
 
-        Value.Record keyValues ->
-            Syntax.Record (map adapt keyValues)
-          where
-            adapt (key, value_) = (key, quote names value_)
+            Value.List elements ->
+                Syntax.List (map (quote names) elements)
 
-        Value.Field record key ->
-            Syntax.Field (quote names record) key
+            Value.Record keyValues ->
+                Syntax.Record (map adapt keyValues)
+              where
+                adapt (key, value_) = (key, quote names value_)
 
-        Value.Alternative name ->
-            Syntax.Alternative name
+            Value.Field record key ->
+                Syntax.Field (quote names record) () key
 
-        Value.Merge record ->
-            Syntax.Merge (quote names record)
+            Value.Alternative name ->
+                Syntax.Alternative name
 
-        Value.True ->
-            Syntax.True
+            Value.Merge record ->
+                Syntax.Merge (quote names record)
 
-        Value.False ->
-            Syntax.False
+            Value.True ->
+                Syntax.True
 
-        Value.And left right ->
-            Syntax.And (quote names left) (quote names right)
+            Value.False ->
+                Syntax.False
 
-        Value.Or left right ->
-            Syntax.Or (quote names left) (quote names right)
+            Value.And left right ->
+                Syntax.And (quote names left) () (quote names right)
 
-        Value.If predicate ifTrue ifFalse ->
-            Syntax.If
-                (quote names predicate)
-                (quote names ifTrue)
-                (quote names ifFalse)
+            Value.Or left right ->
+                Syntax.Or (quote names left) () (quote names right)
 
-        Value.Natural n ->
-            Syntax.Natural n
+            Value.If predicate ifTrue ifFalse ->
+                Syntax.If
+                    (quote names predicate)
+                    (quote names ifTrue)
+                    (quote names ifFalse)
 
-        Value.Times left right ->
-            Syntax.Times (quote names left ) (quote names right)
+            Value.Natural n ->
+                Syntax.Natural n
 
-        Value.Plus left right ->
-            Syntax.Plus (quote names left ) (quote names right)
+            Value.Times left right ->
+                Syntax.Times (quote names left) () (quote names right)
 
-        Value.NaturalFold ->
-            Syntax.NaturalFold
+            Value.Plus left right ->
+                Syntax.Plus (quote names left) () (quote names right)
 
-        Value.Text text ->
-            Syntax.Text text
+            Value.NaturalFold ->
+                Syntax.NaturalFold
 
-        Value.Append left right ->
-            Syntax.Append (quote names left) (quote names right)
+            Value.Text text ->
+                Syntax.Text text
+
+            Value.Append left right ->
+                Syntax.Append (quote names left) () (quote names right)
 
 {-| Evaluate an expression
 
     This is a convenient wrapper around `evaluate` and `quote` in order to
     evaluate a top-level expression
 -}
-normalize :: Syntax (Type, Value) -> Syntax Void
+normalize :: Syntax Location (Type Location, Value) -> Syntax () Void
 normalize = quote [] . evaluate []

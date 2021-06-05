@@ -118,7 +118,6 @@ parseLocatedToken :: Parser LocatedToken
 parseLocatedToken = do
     start <- Megaparsec.getOffset
     token <- parseToken
-    end   <- Megaparsec.getOffset
     return LocatedToken{..}
 
 parseLocatedTokens :: Parser [LocatedToken]
@@ -126,11 +125,11 @@ parseLocatedTokens = do
     space
     manyTill parseLocatedToken Megaparsec.eof
 
-{-| This error rendering logic is shared between the lexer and parser in
-    order to promote uniform error messages
+{-| This error rendering logic is shared between the lexer, parser, and type
+    checker in order to promote uniform error messages
 -}
-renderError :: String -> Text -> Maybe Int -> Text
-renderError inputName code maybeOffset = prefix <> suffix
+renderError :: Text -> String -> Text -> Maybe Int -> Text
+renderError message inputName code maybeOffset = prefix <> suffix
   where
     (maybeLocation, suffix) =
         case maybeOffset of
@@ -184,7 +183,7 @@ renderError inputName code maybeOffset = prefix <> suffix
 
     prefix =
         [__i|
-        #{inputName}:#{location}: Invalid input
+        #{inputName}:#{location}: #{message}
         |]
 
 -- | Lex a complete expression
@@ -198,7 +197,7 @@ lex inputName code =
         Left ParseErrorBundle{..} -> do
             let bundleError :| _ = bundleErrors
 
-            Left (renderError inputName code (Just (Error.errorOffset bundleError)))
+            Left (renderError "Invalid input - Lexing failed" inputName code (Just (Error.errorOffset bundleError)))
         Right tokens -> do
             return tokens
 
@@ -336,5 +335,5 @@ data Token
 {-| A token with offset information attached, used for reporting line and
     column numbers in error messages
 -}
-data LocatedToken = LocatedToken { token :: Token, start :: Int, end :: Int }
+data LocatedToken = LocatedToken { token :: Token, start :: Int }
     deriving (Show)
