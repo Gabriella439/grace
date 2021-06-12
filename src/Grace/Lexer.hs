@@ -154,8 +154,7 @@ renderError message inputName code maybeOffset = prefix <> suffix
 
                     column = Pos.unPos (sourceColumn pos)
 
-                    s =
-                        case h of
+                    s = case h of
                             Just string ->
                                 let lineText = Text.pack (show line)
 
@@ -173,7 +172,7 @@ renderError message inputName code maybeOffset = prefix <> suffix
                             Nothing ->
                                 ""
 
-                in  (Just (line, column), "\n\n" <> s)
+                in  (Just (line, column), "\n" <> s)
 
     location :: Text
     location =
