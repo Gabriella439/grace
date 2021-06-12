@@ -44,6 +44,7 @@ instance Pretty a => Pretty (Syntax s a) where
 prettySyntax :: Pretty a => (Node s a -> Doc b) -> Syntax s a -> Doc b
 prettySyntax prettyNode Syntax{ node } = prettyNode node
 
+-- | The constructors for `Syntax`
 data Node s a
     = Variable Text Int
     -- ^
@@ -363,7 +364,16 @@ instance Pretty a => Pretty (Binding s a) where
         <>  prettySyntax prettyExpression assignment
         <>  " "
 
+-- | Offsets are stored in characters (0-indexed)
 type Offset = Int
 
-data Location = Location { name :: String, code :: Text, offset :: Offset }
+-- | This type stores the location of each subexpression
+data Location = Location
+    { name :: String
+    -- ^ The file or name describing where the code came from
+    , code :: Text
+    -- ^ The original source code
+    , offset :: Offset
+    -- ^ The offset (in characters) within the code
+    }
     deriving (Eq, Show)

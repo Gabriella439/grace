@@ -40,6 +40,7 @@ instance Pretty (Type s) where
 prettyType :: (Node s -> Doc b) -> Type s -> Doc b
 prettyType prettyNode Type{ node } = prettyNode node
 
+-- | The constructors for `Type`
 data Node s
     = Variable Text
     -- ^ Type variable

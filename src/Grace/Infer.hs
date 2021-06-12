@@ -15,7 +15,6 @@
 module Grace.Infer
     ( -- * Type inference
       typeOf
-    , Input(..)
 
     , -- * Internal implementation
       Status(..)
@@ -65,11 +64,6 @@ data Status = Status
       -- ^ The type-checking context (e.g. Γ, Δ, Θ)
     }
     deriving (Show)
-
-data Input = Input
-    { name :: String
-    , code :: Text
-    }
 
 orDie :: MonadError Text m => Maybe a -> Text -> m a
 Just x  `orDie` _       = return x
