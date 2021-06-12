@@ -21,7 +21,7 @@ import Data.Functor (void)
 import Data.List.NonEmpty (NonEmpty(..), some1)
 import Data.Text (Text)
 import Grace.Lexer (LocatedToken(LocatedToken), Token)
-import Grace.Syntax (Binding(..), Location, Syntax(..))
+import Grace.Syntax (Binding(..), Offset, Syntax(..))
 import Grace.Type (Type(..))
 import Text.Earley (Grammar, Prod, Report(..), rule, (<?>))
 
@@ -72,29 +72,29 @@ token t = void (Earley.satisfy predicate <?> render t)
   where
     predicate locatedToken_ = Lexer.token locatedToken_ == t
 
-locatedTerminal :: (Token -> Maybe a) -> Parser r (Location, a)
+locatedTerminal :: (Token -> Maybe a) -> Parser r (Offset, a)
 locatedTerminal match = Earley.terminal match'
   where
     match' locatedToken_@LocatedToken{ start }  = do
       a <- match (Lexer.token locatedToken_)
       return (start, a)
 
-locatedLabel :: Parser r (Location, Text)
+locatedLabel :: Parser r (Offset, Text)
 locatedLabel = locatedTerminal matchLabel
 
-locatedAlternative :: Parser r (Location, Text)
+locatedAlternative :: Parser r (Offset, Text)
 locatedAlternative = locatedTerminal matchAlternative
 
-locatedInt :: Parser r (Location, Int)
+locatedInt :: Parser r (Offset, Int)
 locatedInt = locatedTerminal matchInt
 
-locatedText :: Parser r (Location, Text)
+locatedText :: Parser r (Offset, Text)
 locatedText = locatedTerminal matchText
 
-locatedFile :: Parser r (Location, FilePath)
+locatedFile :: Parser r (Offset, FilePath)
 locatedFile = locatedTerminal matchFile
 
-locatedToken :: Token -> Parser r Location
+locatedToken :: Token -> Parser r Offset
 locatedToken expectedToken =
     Earley.terminal capture <?> render expectedToken
   where
@@ -144,18 +144,18 @@ render t = case t of
     Lexer.Times            -> "*"
     Lexer.True_            -> "True"
 
-grammar :: Grammar r (Parser r (Syntax Location FilePath))
+grammar :: Grammar r (Parser r (Syntax Offset FilePath))
 grammar = mdo
     expression <- rule
         (   do  let f location (nameLocation, name) body = Syntax{..}
                       where
                         node = Syntax.Lambda nameLocation name body
 
-                lambdaLocation <- locatedToken Lexer.Lambda
+                lambdaOffset <- locatedToken Lexer.Lambda
                 locatedName <- locatedLabel 
                 token Lexer.Arrow
                 body <- expression
-                return (f lambdaLocation locatedName body)
+                return (f lambdaOffset locatedName body)
 
         <|> do  let f bindings body = Syntax{..}
                       where
@@ -172,14 +172,14 @@ grammar = mdo
                       where
                         node = Syntax.If predicate ifTrue ifFalse
 
-                ifLocation <- locatedToken Lexer.If
+                ifOffset <- locatedToken Lexer.If
                 predicate <- expression
                 token Lexer.Then
                 ifTrue <- expression
                 token Lexer.Else
                 ifFalse <- expression
 
-                return (f ifLocation predicate ifTrue ifFalse)
+                return (f ifOffset predicate ifTrue ifFalse)
 
         <|> do  let f annotated@Syntax{ location } annotation = Syntax{..}
                       where
@@ -237,9 +237,9 @@ grammar = mdo
         )
 
     fieldExpression <- rule do
-        let field Syntax{ location } l (fieldLocation, r) = Syntax{..}
+        let field Syntax{ location } l (fieldOffset, r) = Syntax{..}
               where
-                node = Syntax.Field l fieldLocation r
+                node = Syntax.Field l fieldOffset r
 
         record <- primitiveExpression
         fields <- many (do token Lexer.Dot; l <- locatedLabel; return l)
@@ -368,10 +368,10 @@ grammar = mdo
         return (field, value)
 
     quantifiedType <- rule do
-        let forall (location, (typeVariableLocation, typeVariable)) type_ =
+        let forall (location, (typeVariableOffset, typeVariable)) type_ =
                 Type{..}
               where
-                node = Type.Forall typeVariableLocation typeVariable type_
+                node = Type.Forall typeVariableOffset typeVariable type_
 
         locatedTypeVariables <- many do
             locatedForall <- locatedToken Lexer.Forall
@@ -456,7 +456,7 @@ parse
     -- ^ Name of the input (used for error messages)
     -> Text
     -- ^ Tokens lexed from source code
-    -> Either Text (Syntax Location FilePath)
+    -> Either Text (Syntax Offset FilePath)
 parse inputName code = do
     tokens <- Lexer.lex inputName code
 

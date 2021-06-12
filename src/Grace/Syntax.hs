@@ -7,9 +7,11 @@ module Grace.Syntax
       Syntax(..)
     , Node(..)
     , Binding(..)
-    , Location
+    , Location(..)
+    , Offset
     ) where
 
+import Data.Bifunctor (Bifunctor(..))
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.String (IsString(..))
 import Data.Text (Text)
@@ -26,6 +28,12 @@ import qualified Data.Text as Text
 -- | The surface syntax for the language
 data Syntax s a = Syntax { location :: s, node :: Node s a }
     deriving stock (Foldable, Functor, Show, Traversable)
+
+instance Bifunctor Syntax where
+    first f Syntax{ location, node } =
+        Syntax{ location = f location, node = first f node }
+
+    second = fmap
 
 instance IsString (Syntax () a) where
     fromString string = Syntax { location = (), node = fromString string }
@@ -129,6 +137,56 @@ data Node s a
     --   x ++ y
     | Embed a
     deriving stock (Foldable, Functor, Show, Traversable)
+
+instance Bifunctor Node where
+    first _ (Variable name index) =
+        Variable name index
+    first f (Lambda location name body) =
+        Lambda (f location) name (first f body)
+    first f (Application function argument) =
+        Application (first f function) (first f argument)
+    first f (Annotation annotated annotation) =
+        Annotation (first f annotated) (fmap f annotation)
+    first f (Let bindings body) =
+        Let (fmap (first f) bindings) (first f body)
+    first f (List elements) =
+        List (fmap (first f) elements)
+    first f (Record keyValues) =
+        Record (fmap adapt keyValues)
+      where
+        adapt (key, value) = (key, first f value)
+    first f (Field record location key) =
+        Field (first f record) (f location) key
+    first _ (Alternative name) =
+        Alternative name
+    first f (Merge record) =
+        Merge (first f record)
+    first _ Grace.Syntax.True =
+        Grace.Syntax.True
+    first _ Grace.Syntax.False =
+        Grace.Syntax.False
+    first f (And left location right) =
+        And (first f left) (f location) (first f right)
+    first f (Or left location right) =
+        Or (first f left) (f location) (first f right)
+    first f (If predicate ifTrue ifFalse) =
+        If (first f predicate) (first f ifTrue) (first f ifFalse)
+    first _ (Natural number) =
+        Natural number
+    first f (Times left location right) =
+        Times (first f left) (f location) (first f right)
+    first f (Plus left location right) =
+        Plus (first f left) (f location) (first f right)
+    first _ NaturalFold =
+        NaturalFold
+    first _ (Text text) =
+        Text text
+    first f (Append left location right) =
+        Append (first f left) (f location) (first f right)
+    first _ (Embed a) =
+        Embed a
+
+    second = fmap
 
 instance IsString (Node s a) where
     fromString string = Variable (fromString string) 0
@@ -279,6 +337,16 @@ data Binding s a = Binding
     , assignment :: Syntax s a
     } deriving stock (Foldable, Functor, Show, Traversable)
 
+instance Bifunctor Binding where
+    first f Binding{ nameLocation, annotation, assignment, .. } =
+        Binding
+            { nameLocation = f nameLocation
+            , annotation = fmap (fmap f) annotation
+            , assignment = first f assignment
+            , ..
+            }
+    second = fmap
+
 instance Pretty a => Pretty (Binding s a) where
     pretty Binding{ annotation = Nothing, .. } =
             "let "
@@ -295,4 +363,7 @@ instance Pretty a => Pretty (Binding s a) where
         <>  prettySyntax prettyExpression assignment
         <>  " "
 
-type Location = Int
+type Offset = Int
+
+data Location = Location { name :: String, code :: Text, offset :: Offset }
+    deriving (Eq, Show)

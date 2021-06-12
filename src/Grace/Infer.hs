@@ -32,7 +32,6 @@ import Data.Text (Text)
 
 import Control.Applicative ((<|>))
 import Control.Monad.Except (MonadError(..))
-import Control.Monad.Reader (MonadReader(..))
 import Control.Monad.State.Strict (MonadState)
 import Data.Foldable (traverse_)
 import Data.Functor (void)
@@ -40,14 +39,13 @@ import Data.String.Interpolate (__i)
 import Grace.Context (Context, Entry)
 import Grace.Existential (Existential)
 import Grace.Monotype (Monotype)
-import Grace.Syntax (Location, Syntax(Syntax))
+import Grace.Syntax (Location(..), Syntax(Syntax))
 import Grace.Type (Type(..))
 import Grace.Value (Value)
 import Prettyprinter (Pretty)
 
 import qualified Control.Monad             as Monad
 import qualified Control.Monad.Except      as Except
-import qualified Control.Monad.Reader      as Reader
 import qualified Control.Monad.State       as State
 import qualified Data.Map                  as Map
 import qualified Data.Text                 as Text
@@ -108,11 +106,9 @@ listToText :: Pretty a => [a] -> Text
 listToText elements =
     Text.intercalate "\n" (map (\entry -> "• " <> prettyToText entry) elements)
 
-locationToText :: MonadReader Input m => Text -> Location -> m Text
-locationToText message location = do
-    Input{..} <- Reader.ask
-
-    return (Lexer.renderError message name code (Just location))
+locationToText :: Text -> Location -> Text
+locationToText message Location{..} =
+    Lexer.renderError message name code (Just offset)
 
 {-| This corresponds to the judgment:
 
@@ -120,9 +116,7 @@ locationToText message location = do
 
     … which checks that under context Γ, type A is well-formed
 -}
-wellFormedType
-    :: (MonadReader Input m, MonadError Text m)
-    => Context Location -> Type Location -> m ()
+wellFormedType :: MonadError Text m => Context Location -> Type Location -> m ()
 wellFormedType _Γ Type{..} =
     case node of
         -- UvarWF
@@ -130,12 +124,10 @@ wellFormedType _Γ Type{..} =
             | Context.Variable α `elem` _Γ -> do
                 return ()
             | otherwise -> do
-                loc <- locationToText "" location
-
                 Except.throwError [__i|
                 Unbound type variable: #{α}
 
-                #{loc}
+                #{locationToText "" location}
                 |]
 
         -- ArrowWF
@@ -152,8 +144,6 @@ wellFormedType _Γ Type{..} =
             | any predicate _Γ -> do
                 return ()
             | otherwise -> do
-                loc <- locationToText "" location
-
                 Except.throwError [__i|
                 Internal error: Invalid context
 
@@ -165,7 +155,7 @@ wellFormedType _Γ Type{..} =
 
                 #{listToText _Γ}
 
-                #{loc}
+                #{locationToText "" location}
                 |]
           where
             predicate (Context.Unsolved α₁  ) = α₀ == α₁
@@ -182,8 +172,6 @@ wellFormedType _Γ Type{..} =
             | any predicate _Γ -> do
                 traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
             | otherwise -> do
-                loc <- locationToText "" location
-
                 Except.throwError [__i|
                 Internal error: Invalid context
 
@@ -195,7 +183,7 @@ wellFormedType _Γ Type{..} =
 
                 #{listToText _Γ}
 
-                #{loc}
+                #{locationToText "" location}
                 |]
           where
             predicate (Context.UnsolvedRow α₁  ) = α₀ == α₁
@@ -209,8 +197,6 @@ wellFormedType _Γ Type{..} =
             | any predicate _Γ -> do
                 traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
             | otherwise -> do
-                loc <- locationToText "" location
-
                 Except.throwError [__i|
                 Internal error: Invalid context
 
@@ -222,7 +208,7 @@ wellFormedType _Γ Type{..} =
 
                 #{listToText _Γ}
 
-                #{loc}
+                #{locationToText "" location}
                 |]
           where
             predicate (Context.UnsolvedVariant α₁  ) = α₀ == α₁
@@ -246,13 +232,13 @@ wellFormedType _Γ Type{..} =
     type A is a subtype of type B.
 -}
 subtype
-    :: (MonadReader Input m, MonadState Status m, MonadError Text m)
+    :: (MonadState Status m, MonadError Text m)
     => Type Location -> Type Location -> m ()
 subtype _A₀ _B₀ = do
     _Γ <- get
 
-    locA₀ <- locationToText "" (Type.location _A₀)
-    locB₀ <- locationToText "" (Type.location _B₀)
+    let locA₀ = locationToText "" (Type.location _A₀)
+    let locB₀ = locationToText "" (Type.location _B₀)
 
     case (Type.node _A₀, Type.node _B₀) of
         -- <:Var
@@ -798,7 +784,7 @@ subtype _A₀ _B₀ = do
     α̂ such that α̂ <: A.
 -}
 instantiateL
-    :: (MonadReader Input m, MonadState Status m, MonadError Text m)
+    :: (MonadState Status m, MonadError Text m)
     => Existential Monotype -> Type Location -> m ()
 instantiateL α _A₀ = do
     _Γ₀ <- get
@@ -902,7 +888,7 @@ instantiateL α _A₀ = do
     α̂ such that A :< α̂.
 -}
 instantiateR
-    :: (MonadReader Input m, MonadState Status m, MonadError Text m)
+    :: (MonadState Status m, MonadError Text m)
     => Type Location -> Existential Monotype -> m ()
 instantiateR _A₀ α = do
     _Γ₀ <- get
@@ -1046,11 +1032,9 @@ equateRows ρ₀ ρ₁ = do
             setContext
 
 instantiateRowL
-    :: (MonadReader Input m, MonadState Status m, MonadError Text m)
+    :: (MonadState Status m, MonadError Text m)
     => Existential Monotype.Record -> Location -> Type.Record Location -> m ()
 instantiateRowL ρ₀ location r@(Type.Fields kAs rest) = do
-    loc <- locationToText "" location
-
     if ρ₀ `Type.rowFreeIn` Type{ node = Type.Record r, .. }
         then do
             Except.throwError [__i|
@@ -1064,7 +1048,7 @@ instantiateRowL ρ₀ location r@(Type.Fields kAs rest) = do
 
             ↳ #{Pretty.pretty (Type.Record r)}
 
-            #{loc}
+            #{locationToText "" location}
 
             … because the same row variable appears within that record type.
             |]
@@ -1114,11 +1098,9 @@ instantiateRowL ρ₀ location r@(Type.Fields kAs rest) = do
     traverse_ instantiate kAβs
 
 instantiateRowR
-    :: (MonadReader Input m, MonadState Status m, MonadError Text m)
+    :: (MonadState Status m, MonadError Text m)
     => Location -> Type.Record Location -> Existential Monotype.Record -> m ()
 instantiateRowR location r@(Type.Fields kAs rest) ρ₀ = do
-    loc <- locationToText "" location
-
     if ρ₀ `Type.rowFreeIn` Type{ node = Type.Record r, .. }
         then do
             Except.throwError [__i|
@@ -1132,7 +1114,7 @@ instantiateRowR location r@(Type.Fields kAs rest) ρ₀ = do
 
             ↳ #{Pretty.pretty (Type.Record r)}
 
-            #{loc}
+            #{locationToText "" location}
 
             … because the same row variable appears within that record type.
             |]
@@ -1219,11 +1201,9 @@ equateVariants ρ₀ ρ₁ = do
             setContext
 
 instantiateVariantL
-    :: (MonadReader Input m, MonadState Status m, MonadError Text m)
+    :: (MonadState Status m, MonadError Text m)
     => Existential Monotype.Union -> Location -> Type.Union Location -> m ()
 instantiateVariantL ρ₀ location u@(Type.Alternatives kAs rest) = do
-    loc <- locationToText "" location
-
     if ρ₀ `Type.variantFreeIn` Type{ node = Type.Union u, .. }
         then do
             Except.throwError [__i|
@@ -1237,7 +1217,7 @@ instantiateVariantL ρ₀ location u@(Type.Alternatives kAs rest) = do
 
             ↳ #{Pretty.pretty (Type.Union u)}
 
-            #{loc}
+            #{locationToText "" location}
 
             … because the same variant variable appears within that record type.
             |]
@@ -1288,11 +1268,9 @@ instantiateVariantL ρ₀ location u@(Type.Alternatives kAs rest) = do
     traverse_ instantiate kAβs
 
 instantiateVariantR
-    :: (MonadReader Input m, MonadState Status m, MonadError Text m)
+    :: (MonadState Status m, MonadError Text m)
     => Location -> Type.Union Location -> Existential Monotype.Union -> m ()
 instantiateVariantR location u@(Type.Alternatives kAs rest) ρ₀ = do
-    loc <- locationToText "" location
-
     if ρ₀ `Type.variantFreeIn` Type{ node = Type.Union u, .. }
         then do
             Except.throwError [__i|
@@ -1306,7 +1284,7 @@ instantiateVariantR location u@(Type.Alternatives kAs rest) ρ₀ = do
 
             ↳ #{Pretty.pretty (Type.Union u)}
 
-            #{loc}
+            #{locationToText "" location}
 
             … because the same variant variable appears within that union type.
             |]
@@ -1364,7 +1342,7 @@ instantiateVariantR location u@(Type.Alternatives kAs rest) ρ₀ = do
     type of A and an updated context Δ.
 -}
 infer
-    :: (MonadReader Input m, MonadState Status m, MonadError Text m)
+    :: (MonadState Status m, MonadError Text m)
     => Syntax Location (Type Location, Value)
     -> m (Type Location)
 infer e₀ = do
@@ -1381,13 +1359,11 @@ infer e₀ = do
         _A@(Syntax.Variable x₀ n) -> do
             _Γ <- get
 
-            loc <- locationToText "" (Syntax.location e₀)
-
             Context.lookup x₀ n _Γ `orDie`
                 [__i|
                 Unbound variable: #{prettyToText (void _A)}
 
-                #{loc}
+                #{locationToText "" (Syntax.location e₀)}
                 |]
 
         -- →I⇒ 
@@ -1510,8 +1486,6 @@ infer e₀ = do
 
                             return (key, _A)
                         process (_, _A) = do
-                            loc <- locationToText "" (Type.location _A)
-
                             Except.throwError [__i|
                                 Invalid handler
 
@@ -1520,7 +1494,7 @@ infer e₀ = do
 
                                 ↳ #{prettyToText _A}
 
-                                #{loc}
+                                #{locationToText "" (Type.location _A)}
 
                                 … which is not a function type.
                             |]
@@ -1542,8 +1516,6 @@ infer e₀ = do
                         }
 
                 Type.Record (Type.Fields _ (Just _)) -> do
-                    loc <- locationToText "" (Type.location _R)
-
                     Except.throwError [__i|
                         Must merge a concrete record
 
@@ -1552,14 +1524,12 @@ infer e₀ = do
 
                         ↳ #{prettyToText _R}
 
-                        #{loc}
+                        #{locationToText "" (Type.location _R)}
 
                         … where not all fields could be inferred.
                     |]
 
                 _ -> do
-                    loc <- locationToText "" (Type.location _R)
-
                     Except.throwError [__i|
                         Must merge a record
 
@@ -1568,7 +1538,7 @@ infer e₀ = do
 
                         ↳ #{prettyToText _R}
 
-                        #{loc}
+                        #{locationToText "" (Type.location _R)}
 
                         … which is not a record type.
                     |]
@@ -1669,7 +1639,7 @@ infer e₀ = do
     context Δ.
 -}
 check
-    :: (MonadReader Input m, MonadState Status m, MonadError Text m)
+    :: (MonadState Status m, MonadError Text m)
     => Syntax Location (Type Location, Value) -> Type Location -> m ()
 -- →I
 check Syntax{ node = Syntax.Lambda _ x e } Type{ node = Type.Function _A _B } = do
@@ -1703,7 +1673,7 @@ check e _B = do
     input argument e, under input context Γ, producing an updated context Δ.
 -}
 inferApplication
-    :: (MonadReader Input m, MonadState Status m, MonadError Text m)
+    :: (MonadState Status m, MonadError Text m)
     => Type Location
     -> Syntax Location (Type Location, Value)
     -> m (Type Location)
@@ -1747,8 +1717,6 @@ inferApplication Type{ node = Type.Function _A _C } e = do
 
     return _C
 inferApplication Type{ node = Type.Variable α, ..} _ = do
-    loc <- locationToText "" location
-
     Except.throwError [__i|
     Internal error: Unexpected type variable in function type
 
@@ -1758,11 +1726,9 @@ inferApplication Type{ node = Type.Variable α, ..} _ = do
 
     … should have been replaced with an unsolved variable.
 
-    #{loc}
+    #{locationToText "" location}
     |]
 inferApplication _A@Type{..} _ = do
-    loc <- locationToText "" location
-
     Except.throwError [__i|
     Not a function type
 
@@ -1770,7 +1736,7 @@ inferApplication _A@Type{..} _ = do
 
     ↳ #{prettyToText _A}
 
-    #{loc}
+    #{locationToText "" location}
 
     … was invoked as if it were a function, but the above type is not a function
     type.
@@ -1778,12 +1744,11 @@ inferApplication _A@Type{..} _ = do
 
 -- | Infer the `Type` of the given `Syntax` tree
 typeOf
-    :: Input
-    -> Syntax Location (Type Location, Value)
+    :: Syntax Location (Type Location, Value)
     -> Either Text (Type Location)
-typeOf input syntax = do
+typeOf syntax = do
     let initialStatus = Status{ count = 0, context = [] }
 
-    (_A, Status{ context = _Δ }) <- Reader.runReaderT (State.runStateT (infer syntax) initialStatus) input
+    (_A, Status{ context = _Δ }) <- State.runStateT (infer syntax) initialStatus
 
     return (Context.complete _Δ _A)

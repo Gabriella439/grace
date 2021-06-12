@@ -5,8 +5,9 @@ module Grace.Interpret
     , interpret
     ) where
 
+import Data.Bifunctor (Bifunctor(..))
 import Data.Text (Text)
-import Grace.Syntax (Location)
+import Grace.Syntax (Location(..))
 import Grace.Type (Type)
 import Grace.Value (Value)
 import System.FilePath ((</>))
@@ -37,7 +38,7 @@ data Input
     This is the top-level function for the Grace interpreter
 -}
 interpret :: Input -> IO (Type Location, Value)
-interpret  input = do
+interpret input = do
     code <- case input of
         Path file -> Text.IO.readFile file
         Code text -> return text
@@ -51,17 +52,19 @@ interpret  input = do
             Text.IO.hPutStrLn IO.stderr message
             Exit.exitFailure
         Right expression -> do
-            return expression
+            let locate offset = Location{..}
 
-    let here = case input of
-            Path file -> file
-            Code _    -> "./."
+            return (first locate expression)
 
-    let resolve file = interpret (Path (FilePath.takeDirectory here </> file))
+    let resolve file = interpret (Path path)
+          where
+            path = case input of
+                Path parent -> FilePath.takeDirectory parent </> file
+                Code _      -> file
 
     resolvedExpression <- traverse resolve expression
 
-    case Infer.typeOf Infer.Input{ code, name } resolvedExpression of
+    case Infer.typeOf resolvedExpression of
         Left message -> do
             Text.IO.hPutStrLn IO.stderr message
             Exit.exitFailure
