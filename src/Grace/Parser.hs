@@ -21,11 +21,12 @@ import Data.Functor (void)
 import Data.List.NonEmpty (NonEmpty(..), some1)
 import Data.Text (Text)
 import Grace.Lexer (LocatedToken(LocatedToken), Token)
-import Grace.Syntax (Binding(..), Offset, Syntax(..))
+import Grace.Syntax (Binding(..), Location(..), Offset, Syntax(..))
 import Grace.Type (Type(..))
 import Text.Earley (Grammar, Prod, Report(..), rule, (<?>))
 
 import qualified Data.List.NonEmpty     as NonEmpty
+import qualified Data.Text              as Text
 import qualified Grace.Lexer            as Lexer
 import qualified Grace.Syntax           as Syntax
 import qualified Grace.Type             as Type
@@ -457,17 +458,17 @@ parse
     -> Text
     -- ^ Tokens lexed from source code
     -> Either Text (Syntax Offset FilePath)
-parse inputName code = do
-    tokens <- Lexer.lex inputName code
+parse name code = do
+    tokens <- Lexer.lex name code
 
     case Earley.fullParses (Earley.parser grammar) tokens of
         ([], Report{..}) -> do
-            let maybeOffset =
+            let offset =
                     case unconsumed of
-                        []                -> Nothing
-                        locatedToken_ : _ -> Just (Lexer.start locatedToken_)
+                        []                -> Text.length code
+                        locatedToken_ : _ -> Lexer.start locatedToken_
 
-            Left (Lexer.renderError "Invalid input - Parsing failed" inputName code maybeOffset)
+            Left (Lexer.renderError "Invalid input - Parsing failed" Location{..})
 
         (result : _, _) -> do
             return result

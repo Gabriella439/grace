@@ -25,6 +25,7 @@ import Data.List.NonEmpty (NonEmpty(..))
 import Data.String.Interpolate (__i)
 import Data.Text (Text)
 import Data.Void (Void)
+import Grace.Syntax (Location(..))
 import Prelude hiding (lex)
 import Text.Megaparsec (ParseErrorBundle(..), PosState(..), (<?>))
 import Text.Megaparsec.Pos (SourcePos(..))
@@ -128,61 +129,47 @@ parseLocatedTokens = do
 {-| This error rendering logic is shared between the lexer, parser, and type
     checker in order to promote uniform error messages
 -}
-renderError :: Text -> String -> Text -> Maybe Int -> Text
-renderError message inputName code maybeOffset = prefix <> suffix
+renderError :: Text -> Location -> Text
+renderError message Location{..} = prefix <> "\n" <> suffix
   where
-    (maybeLocation, suffix) =
-        case maybeOffset of
-            Nothing ->
-                (Nothing, "")
+    initialState =
+        PosState
+            { pstateInput      = code
+            , pstateOffset     = 0
+            , pstateSourcePos  = Pos.initialPos name
+            , pstateTabWidth   = Pos.defaultTabWidth
+            , pstateLinePrefix = ""
+            }
 
-            Just offset ->
-                let initialState =
-                        PosState
-                            { pstateInput      = code
-                            , pstateOffset     = 0
-                            , pstateSourcePos  = Pos.initialPos inputName
-                            , pstateTabWidth   = Pos.defaultTabWidth
-                            , pstateLinePrefix = ""
-                            }
+    (h, state) = Stream.reachOffset offset initialState
 
-                    (h, state) = Stream.reachOffset offset initialState
+    pos = pstateSourcePos state
 
-                    pos = pstateSourcePos state
+    line = Pos.unPos (sourceLine pos)
 
-                    line = Pos.unPos (sourceLine pos)
+    column = Pos.unPos (sourceColumn pos)
 
-                    column = Pos.unPos (sourceColumn pos)
+    suffix = case h of
+        Just string ->
+            let lineText = Text.pack (show line)
 
-                    s = case h of
-                            Just string ->
-                                let lineText = Text.pack (show line)
+                inner = lineText <> " │"
 
-                                    inner = lineText <> " │"
+                outer = Text.replicate (Text.length lineText) " " <> " │"
 
-                                    outer = Text.replicate (Text.length lineText) " " <> " │"
+                caret = Text.replicate (column - 1) " " <> "↑"
 
-                                    caret = Text.replicate (column - 1) " " <> "↑"
-
-                                in  [__i|
-                                    #{outer}
-                                    #{inner} #{string}
-                                    #{outer} #{caret}
-                                    |]
-                            Nothing ->
-                                ""
-
-                in  (Just (line, column), "\n" <> s)
-
-    location :: Text
-    location =
-        case maybeLocation of
-            Nothing -> "end of input"
-            Just (line, column) -> [__i|#{line}:#{column}|]
+            in  [__i|
+                #{outer}
+                #{inner} #{string}
+                #{outer} #{caret}
+                |]
+        Nothing ->
+            ""
 
     prefix =
         [__i|
-        #{inputName}:#{location}: #{message}
+        #{name}:#{line}:#{column}: #{message}
         |]
 
 -- | Lex a complete expression
@@ -191,12 +178,14 @@ lex :: String
     -> Text
     -- ^ Source code
     -> Either Text [LocatedToken]
-lex inputName code =
-    case Megaparsec.parse parseLocatedTokens inputName code of
+lex name code =
+    case Megaparsec.parse parseLocatedTokens name code of
         Left ParseErrorBundle{..} -> do
             let bundleError :| _ = bundleErrors
 
-            Left (renderError "Invalid input - Lexing failed" inputName code (Just (Error.errorOffset bundleError)))
+            let offset = Error.errorOffset bundleError
+
+            Left (renderError "Invalid input - Lexing failed" Location{..})
         Right tokens -> do
             return tokens
 
