@@ -62,7 +62,7 @@ data Status = Status
     , context :: Context Location
       -- ^ The type-checking context (e.g. Γ, Δ, Θ)
     }
-    deriving (Show)
+    deriving stock (Show)
 
 orDie :: MonadError Text m => Maybe a -> Text -> m a
 Just x  `orDie` _       = return x

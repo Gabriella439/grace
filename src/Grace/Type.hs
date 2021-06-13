@@ -29,7 +29,7 @@ import qualified Grace.Monotype as Monotype
 
 -- | A potentially polymorphic type
 data Type s = Type { location :: s, node :: Node s }
-    deriving (Eq, Functor, Ord, Show)
+    deriving stock (Eq, Functor, Ord, Show)
 
 instance IsString (Type ()) where
     fromString string = Type{ location = (), node = fromString string }
@@ -96,7 +96,7 @@ data Node s
     --
     -- >>> pretty @(Node ()) Text
     -- Text
-    deriving (Eq, Functor, Ord, Show)
+    deriving stock (Eq, Functor, Ord, Show)
 
 instance IsString (Node s) where
     fromString string = Variable (fromString string)
@@ -106,12 +106,12 @@ instance Pretty (Node s) where
 
 -- | A potentially polymorphic record type
 data Record s = Fields [(Text, Type s)] (Maybe (Existential Monotype.Record))
-    deriving (Eq, Functor, Ord, Show)
+    deriving stock (Eq, Functor, Ord, Show)
 
 -- | A potentially polymorphic union type
 data Union s =
     Alternatives [(Text, Type s)] (Maybe (Existential Monotype.Union))
-    deriving (Eq, Functor, Ord, Show)
+    deriving stock (Eq, Functor, Ord, Show)
 
 {-| This function should not be exported or generally used.  It is only really
     safe to use within one of the @solve*@ functions

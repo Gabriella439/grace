@@ -64,7 +64,7 @@ data Monotype
     --
     -- >>> pretty Text
     -- Text
-    deriving (Eq, Show)
+    deriving stock (Eq, Show)
 
 instance IsString Monotype where
     fromString string = Variable (fromString string)
@@ -74,11 +74,11 @@ instance Pretty Monotype where
 
 -- | A monomorphic record type
 data Record = Fields [(Text, Monotype)] (Maybe (Existential Record))
-    deriving (Eq, Show)
+    deriving stock (Eq, Show)
 
 -- | A monomorphic union type
 data Union = Alternatives [(Text, Monotype)] (Maybe (Existential Union))
-    deriving (Eq, Show)
+    deriving stock (Eq, Show)
 
 prettyMonotype :: Monotype -> Doc a
 prettyMonotype (Function _A _B) =

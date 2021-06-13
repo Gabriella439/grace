@@ -84,7 +84,7 @@ data Entry s
     --
     -- >>> pretty @(Entry ()) (Marker 0)
     -- ➤a
-    deriving (Eq, Show)
+    deriving stock (Eq, Show)
 
 instance Pretty (Entry s) where
     pretty = prettyEntry

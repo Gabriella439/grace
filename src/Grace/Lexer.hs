@@ -269,10 +269,10 @@ data Token
     | Then
     | Times
     | True_
-    deriving (Eq, Show)
+    deriving stock (Eq, Show)
 
 {-| A token with offset information attached, used for reporting line and
     column numbers in error messages
 -}
 data LocatedToken = LocatedToken { token :: Token, start :: Offset }
-    deriving (Show)
+    deriving stock (Show)

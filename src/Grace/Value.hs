@@ -26,7 +26,7 @@ import Grace.Type (Type)
 -}
 data Closure =
     Closure Text [(Text, Value)] (Syntax Location (Type Location, Value))
-    deriving (Show)
+    deriving stock (Show)
 
 {-| This type represents a fully evaluated expression with no reducible
     sub-expressions
@@ -92,7 +92,7 @@ data Value
     | NaturalFold
     | Text Text
     | Append Value Value
-    deriving (Show)
+    deriving stock (Show)
 
 instance IsString Value where
     fromString string = Variable (fromString string) 0
