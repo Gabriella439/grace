@@ -24,7 +24,7 @@ import Data.List.NonEmpty (NonEmpty(..))
 import Data.String.Interpolate (__i)
 import Data.Text (Text)
 import Data.Void (Void)
-import Grace.Syntax (Location(..))
+import Grace.Syntax (Location(..), Offset(..))
 import Prelude hiding (lex)
 import Text.Megaparsec (ParseErrorBundle(..), (<?>))
 
@@ -114,7 +114,7 @@ parseToken =
 
 parseLocatedToken :: Parser LocatedToken
 parseLocatedToken = do
-    start <- Megaparsec.getOffset
+    start <- fmap Offset (Megaparsec.getOffset)
     token <- parseToken
     return LocatedToken{..}
 
@@ -134,7 +134,7 @@ lex name code =
         Left ParseErrorBundle{..} -> do
             let bundleError :| _ = bundleErrors
 
-            let offset = Error.errorOffset bundleError
+            let offset = Offset (Error.errorOffset bundleError)
 
             Left (Syntax.renderError "Invalid input - Lexing failed" Location{..})
         Right tokens -> do
@@ -274,5 +274,5 @@ data Token
 {-| A token with offset information attached, used for reporting line and
     column numbers in error messages
 -}
-data LocatedToken = LocatedToken { token :: Token, start :: Int }
+data LocatedToken = LocatedToken { token :: Token, start :: Offset }
     deriving (Show)

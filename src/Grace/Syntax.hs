@@ -10,7 +10,7 @@ module Grace.Syntax
 
       -- * Location
     , Location(..)
-    , Offset
+    , Offset(..)
     , renderError
     ) where
 
@@ -372,7 +372,8 @@ instance Pretty a => Pretty (Binding s a) where
         <>  " "
 
 -- | Offsets are stored in characters (0-indexed)
-type Offset = Int
+newtype Offset = Offset { getOffset :: Int }
+    deriving newtype (Eq, Num, Show)
 
 -- | This type stores the location of each subexpression
 data Location = Location
@@ -383,7 +384,7 @@ data Location = Location
     , offset :: Offset
     -- ^ The offset (in characters) within the code
     }
-    deriving (Eq, Show)
+    deriving stock (Eq, Show)
 
 -- | Render an error message, given a `Location` for the error
 renderError
@@ -403,7 +404,7 @@ renderError message Location{..} = prefix <> "\n" <> suffix
             , pstateLinePrefix = ""
             }
 
-    (h, state) = Stream.reachOffset offset initialState
+    (h, state) = Stream.reachOffset (getOffset offset) initialState
 
     pos = pstateSourcePos state
 
