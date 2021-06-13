@@ -7,7 +7,7 @@ module Grace.Interpret
 
 import Data.Bifunctor (Bifunctor(..))
 import Data.Text (Text)
-import Grace.Syntax (Location(..))
+import Grace.Location (Location(..))
 import Grace.Type (Type)
 import Grace.Value (Value)
 import System.FilePath ((</>))

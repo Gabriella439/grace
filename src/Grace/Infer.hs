@@ -37,8 +37,9 @@ import Data.Functor (void)
 import Data.String.Interpolate (__i)
 import Grace.Context (Context, Entry)
 import Grace.Existential (Existential)
+import Grace.Location (Location(..))
 import Grace.Monotype (Monotype)
-import Grace.Syntax (Location(..), Syntax(Syntax))
+import Grace.Syntax (Syntax(Syntax))
 import Grace.Type (Type(..))
 import Grace.Value (Value)
 import Prettyprinter (Pretty)
@@ -49,6 +50,7 @@ import qualified Control.Monad.State       as State
 import qualified Data.Map                  as Map
 import qualified Data.Text                 as Text
 import qualified Grace.Context             as Context
+import qualified Grace.Location            as Location
 import qualified Grace.Monotype            as Monotype
 import qualified Grace.Syntax              as Syntax
 import qualified Grace.Type                as Type
@@ -116,7 +118,7 @@ wellFormedType _Γ Type{..} =
                 Except.throwError [__i|
                 Unbound type variable: #{α}
 
-                #{Syntax.renderError "" location}
+                #{Location.renderError "" location}
                 |]
 
         -- ArrowWF
@@ -144,7 +146,7 @@ wellFormedType _Γ Type{..} =
 
                 #{listToText _Γ}
 
-                #{Syntax.renderError "" location}
+                #{Location.renderError "" location}
                 |]
           where
             predicate (Context.Unsolved α₁  ) = α₀ == α₁
@@ -172,7 +174,7 @@ wellFormedType _Γ Type{..} =
 
                 #{listToText _Γ}
 
-                #{Syntax.renderError "" location}
+                #{Location.renderError "" location}
                 |]
           where
             predicate (Context.UnsolvedRow α₁  ) = α₀ == α₁
@@ -197,7 +199,7 @@ wellFormedType _Γ Type{..} =
 
                 #{listToText _Γ}
 
-                #{Syntax.renderError "" location}
+                #{Location.renderError "" location}
                 |]
           where
             predicate (Context.UnsolvedVariant α₁  ) = α₀ == α₁
@@ -226,8 +228,8 @@ subtype
 subtype _A₀ _B₀ = do
     _Γ <- get
 
-    let locA₀ = Syntax.renderError "" (Type.location _A₀)
-    let locB₀ = Syntax.renderError "" (Type.location _B₀)
+    let locA₀ = Location.renderError "" (Type.location _A₀)
+    let locB₀ = Location.renderError "" (Type.location _B₀)
 
     case (Type.node _A₀, Type.node _B₀) of
         -- <:Var
@@ -1037,7 +1039,7 @@ instantiateRowL ρ₀ location r@(Type.Fields kAs rest) = do
 
             ↳ #{Pretty.pretty (Type.Record r)}
 
-            #{Syntax.renderError "" location}
+            #{Location.renderError "" location}
 
             … because the same row variable appears within that record type.
             |]
@@ -1103,7 +1105,7 @@ instantiateRowR location r@(Type.Fields kAs rest) ρ₀ = do
 
             ↳ #{Pretty.pretty (Type.Record r)}
 
-            #{Syntax.renderError "" location}
+            #{Location.renderError "" location}
 
             … because the same row variable appears within that record type.
             |]
@@ -1206,7 +1208,7 @@ instantiateVariantL ρ₀ location u@(Type.Alternatives kAs rest) = do
 
             ↳ #{Pretty.pretty (Type.Union u)}
 
-            #{Syntax.renderError "" location}
+            #{Location.renderError "" location}
 
             … because the same variant variable appears within that record type.
             |]
@@ -1273,7 +1275,7 @@ instantiateVariantR location u@(Type.Alternatives kAs rest) ρ₀ = do
 
             ↳ #{Pretty.pretty (Type.Union u)}
 
-            #{Syntax.renderError "" location}
+            #{Location.renderError "" location}
 
             … because the same variant variable appears within that union type.
             |]
@@ -1352,7 +1354,7 @@ infer e₀ = do
                 [__i|
                 Unbound variable: #{prettyToText (void _A)}
 
-                #{Syntax.renderError "" (Syntax.location e₀)}
+                #{Location.renderError "" (Syntax.location e₀)}
                 |]
 
         -- →I⇒ 
@@ -1483,7 +1485,7 @@ infer e₀ = do
 
                                 ↳ #{prettyToText _A}
 
-                                #{Syntax.renderError "" (Type.location _A)}
+                                #{Location.renderError "" (Type.location _A)}
 
                                 … which is not a function type.
                             |]
@@ -1513,7 +1515,7 @@ infer e₀ = do
 
                         ↳ #{prettyToText _R}
 
-                        #{Syntax.renderError "" (Type.location _R)}
+                        #{Location.renderError "" (Type.location _R)}
 
                         … where not all fields could be inferred.
                     |]
@@ -1527,7 +1529,7 @@ infer e₀ = do
 
                         ↳ #{prettyToText _R}
 
-                        #{Syntax.renderError "" (Type.location _R)}
+                        #{Location.renderError "" (Type.location _R)}
 
                         … which is not a record type.
                     |]
@@ -1715,7 +1717,7 @@ inferApplication Type{ node = Type.Variable α, ..} _ = do
 
     … should have been replaced with an unsolved variable.
 
-    #{Syntax.renderError "" location}
+    #{Location.renderError "" location}
     |]
 inferApplication _A@Type{..} _ = do
     Except.throwError [__i|
@@ -1725,7 +1727,7 @@ inferApplication _A@Type{..} _ = do
 
     ↳ #{prettyToText _A}
 
-    #{Syntax.renderError "" location}
+    #{Location.renderError "" location}
 
     … was invoked as if it were a function, but the above type is not a function
     type.

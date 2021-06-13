@@ -25,6 +25,7 @@ library
                      , Grace.Interpret
                      , Grace.Infer
                      , Grace.Lexer
+                     , Grace.Location
                      , Grace.Monotype
                      , Grace.Normalize
                      , Grace.Parser

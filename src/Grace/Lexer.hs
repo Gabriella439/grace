@@ -24,7 +24,7 @@ import Data.List.NonEmpty (NonEmpty(..))
 import Data.String.Interpolate (__i)
 import Data.Text (Text)
 import Data.Void (Void)
-import Grace.Syntax (Location(..), Offset(..))
+import Grace.Location (Location(..), Offset(..))
 import Prelude hiding (lex)
 import Text.Megaparsec (ParseErrorBundle(..), (<?>))
 
@@ -33,7 +33,7 @@ import qualified Data.Char                  as Char
 import qualified Data.List                  as List
 import qualified Data.Text                  as Text
 import qualified Data.Text.Read             as Read
-import qualified Grace.Syntax               as Syntax
+import qualified Grace.Location             as Location
 import qualified Text.Megaparsec            as Megaparsec
 import qualified Text.Megaparsec.Char       as Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as Lexer
@@ -136,7 +136,7 @@ lex name code =
 
             let offset = Offset (Error.errorOffset bundleError)
 
-            Left (Syntax.renderError "Invalid input - Lexing failed" Location{..})
+            Left (Location.renderError "Invalid input - Lexing failed" Location{..})
         Right tokens -> do
             return tokens
 

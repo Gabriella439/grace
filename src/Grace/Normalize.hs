@@ -13,9 +13,10 @@ module Grace.Normalize
 
 import Data.Text (Text)
 import Data.Void (Void)
-import Grace.Value (Closure(..), Value)
-import Grace.Syntax (Location, Syntax)
+import Grace.Location (Location)
+import Grace.Syntax (Syntax)
 import Grace.Type (Type)
+import Grace.Value (Closure(..), Value)
 import Prelude hiding (succ)
 
 import qualified Grace.Value  as Value

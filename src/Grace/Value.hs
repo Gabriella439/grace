@@ -10,7 +10,8 @@ module Grace.Value
 import Data.String (IsString(..))
 import Data.Text (Text)
 import Numeric.Natural (Natural)
-import Grace.Syntax (Location, Syntax)
+import Grace.Location (Location)
+import Grace.Syntax (Syntax)
 import Grace.Type (Type)
 
 {-| A `Closure` captures the current evaluation environment in order to defer

@@ -21,13 +21,15 @@ import Data.Functor (void)
 import Data.List.NonEmpty (NonEmpty(..), some1)
 import Data.Text (Text)
 import Grace.Lexer (LocatedToken(LocatedToken), Token)
-import Grace.Syntax (Binding(..), Location(..), Offset(..), Syntax(..))
+import Grace.Location (Location(..), Offset(..))
+import Grace.Syntax (Binding(..), Syntax(..))
 import Grace.Type (Type(..))
 import Text.Earley (Grammar, Prod, Report(..), rule, (<?>))
 
 import qualified Data.List.NonEmpty     as NonEmpty
 import qualified Data.Text              as Text
 import qualified Grace.Lexer            as Lexer
+import qualified Grace.Location         as Location
 import qualified Grace.Syntax           as Syntax
 import qualified Grace.Type             as Type
 import qualified Text.Earley            as Earley
@@ -468,7 +470,7 @@ parse name code = do
                         []                -> Offset (Text.length code)
                         locatedToken_ : _ -> Lexer.start locatedToken_
 
-            Left (Syntax.renderError "Invalid input - Parsing failed" Location{..})
+            Left (Location.renderError "Invalid input - Parsing failed" Location{..})
 
         (result : _, _) -> do
             return result
