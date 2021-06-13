@@ -49,7 +49,6 @@ import qualified Control.Monad.State       as State
 import qualified Data.Map                  as Map
 import qualified Data.Text                 as Text
 import qualified Grace.Context             as Context
-import qualified Grace.Lexer               as Lexer
 import qualified Grace.Monotype            as Monotype
 import qualified Grace.Syntax              as Syntax
 import qualified Grace.Type                as Type
@@ -117,7 +116,7 @@ wellFormedType _Γ Type{..} =
                 Except.throwError [__i|
                 Unbound type variable: #{α}
 
-                #{Lexer.renderError "" location}
+                #{Syntax.renderError "" location}
                 |]
 
         -- ArrowWF
@@ -145,7 +144,7 @@ wellFormedType _Γ Type{..} =
 
                 #{listToText _Γ}
 
-                #{Lexer.renderError "" location}
+                #{Syntax.renderError "" location}
                 |]
           where
             predicate (Context.Unsolved α₁  ) = α₀ == α₁
@@ -173,7 +172,7 @@ wellFormedType _Γ Type{..} =
 
                 #{listToText _Γ}
 
-                #{Lexer.renderError "" location}
+                #{Syntax.renderError "" location}
                 |]
           where
             predicate (Context.UnsolvedRow α₁  ) = α₀ == α₁
@@ -198,7 +197,7 @@ wellFormedType _Γ Type{..} =
 
                 #{listToText _Γ}
 
-                #{Lexer.renderError "" location}
+                #{Syntax.renderError "" location}
                 |]
           where
             predicate (Context.UnsolvedVariant α₁  ) = α₀ == α₁
@@ -227,8 +226,8 @@ subtype
 subtype _A₀ _B₀ = do
     _Γ <- get
 
-    let locA₀ = Lexer.renderError "" (Type.location _A₀)
-    let locB₀ = Lexer.renderError "" (Type.location _B₀)
+    let locA₀ = Syntax.renderError "" (Type.location _A₀)
+    let locB₀ = Syntax.renderError "" (Type.location _B₀)
 
     case (Type.node _A₀, Type.node _B₀) of
         -- <:Var
@@ -1038,7 +1037,7 @@ instantiateRowL ρ₀ location r@(Type.Fields kAs rest) = do
 
             ↳ #{Pretty.pretty (Type.Record r)}
 
-            #{Lexer.renderError "" location}
+            #{Syntax.renderError "" location}
 
             … because the same row variable appears within that record type.
             |]
@@ -1104,7 +1103,7 @@ instantiateRowR location r@(Type.Fields kAs rest) ρ₀ = do
 
             ↳ #{Pretty.pretty (Type.Record r)}
 
-            #{Lexer.renderError "" location}
+            #{Syntax.renderError "" location}
 
             … because the same row variable appears within that record type.
             |]
@@ -1207,7 +1206,7 @@ instantiateVariantL ρ₀ location u@(Type.Alternatives kAs rest) = do
 
             ↳ #{Pretty.pretty (Type.Union u)}
 
-            #{Lexer.renderError "" location}
+            #{Syntax.renderError "" location}
 
             … because the same variant variable appears within that record type.
             |]
@@ -1274,7 +1273,7 @@ instantiateVariantR location u@(Type.Alternatives kAs rest) ρ₀ = do
 
             ↳ #{Pretty.pretty (Type.Union u)}
 
-            #{Lexer.renderError "" location}
+            #{Syntax.renderError "" location}
 
             … because the same variant variable appears within that union type.
             |]
@@ -1353,7 +1352,7 @@ infer e₀ = do
                 [__i|
                 Unbound variable: #{prettyToText (void _A)}
 
-                #{Lexer.renderError "" (Syntax.location e₀)}
+                #{Syntax.renderError "" (Syntax.location e₀)}
                 |]
 
         -- →I⇒ 
@@ -1484,7 +1483,7 @@ infer e₀ = do
 
                                 ↳ #{prettyToText _A}
 
-                                #{Lexer.renderError "" (Type.location _A)}
+                                #{Syntax.renderError "" (Type.location _A)}
 
                                 … which is not a function type.
                             |]
@@ -1514,7 +1513,7 @@ infer e₀ = do
 
                         ↳ #{prettyToText _R}
 
-                        #{Lexer.renderError "" (Type.location _R)}
+                        #{Syntax.renderError "" (Type.location _R)}
 
                         … where not all fields could be inferred.
                     |]
@@ -1528,7 +1527,7 @@ infer e₀ = do
 
                         ↳ #{prettyToText _R}
 
-                        #{Lexer.renderError "" (Type.location _R)}
+                        #{Syntax.renderError "" (Type.location _R)}
 
                         … which is not a record type.
                     |]
@@ -1716,7 +1715,7 @@ inferApplication Type{ node = Type.Variable α, ..} _ = do
 
     … should have been replaced with an unsolved variable.
 
-    #{Lexer.renderError "" location}
+    #{Syntax.renderError "" location}
     |]
 inferApplication _A@Type{..} _ = do
     Except.throwError [__i|
@@ -1726,7 +1725,7 @@ inferApplication _A@Type{..} _ = do
 
     ↳ #{prettyToText _A}
 
-    #{Lexer.renderError "" location}
+    #{Syntax.renderError "" location}
 
     … was invoked as if it were a function, but the above type is not a function
     type.

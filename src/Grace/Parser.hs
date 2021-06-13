@@ -468,7 +468,7 @@ parse name code = do
                         []                -> Text.length code
                         locatedToken_ : _ -> Lexer.start locatedToken_
 
-            Left (Lexer.renderError "Invalid input - Parsing failed" Location{..})
+            Left (Syntax.renderError "Invalid input - Parsing failed" Location{..})
 
         (result : _, _) -> do
             return result

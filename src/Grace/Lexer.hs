@@ -16,7 +16,6 @@ module Grace.Lexer
       Token(..)
     , LocatedToken(..)
     , lex
-    , renderError
     ) where
 
 import Control.Applicative (empty, (<|>))
@@ -27,20 +26,18 @@ import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Syntax (Location(..))
 import Prelude hiding (lex)
-import Text.Megaparsec (ParseErrorBundle(..), PosState(..), (<?>))
-import Text.Megaparsec.Pos (SourcePos(..))
+import Text.Megaparsec (ParseErrorBundle(..), (<?>))
 
 import qualified Control.Monad.Combinators  as Combinators
 import qualified Data.Char                  as Char
 import qualified Data.List                  as List
 import qualified Data.Text                  as Text
 import qualified Data.Text.Read             as Read
+import qualified Grace.Syntax               as Syntax
 import qualified Text.Megaparsec            as Megaparsec
 import qualified Text.Megaparsec.Char       as Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as Lexer
 import qualified Text.Megaparsec.Error      as Error
-import qualified Text.Megaparsec.Pos        as Pos
-import qualified Text.Megaparsec.Stream     as Stream
 
 -- | Short-hand type synonym used by lexing utilities
 type Parser = Megaparsec.Parsec Void Text
@@ -126,52 +123,6 @@ parseLocatedTokens = do
     space
     manyTill parseLocatedToken Megaparsec.eof
 
-{-| This error rendering logic is shared between the lexer, parser, and type
-    checker in order to promote uniform error messages
--}
-renderError :: Text -> Location -> Text
-renderError message Location{..} = prefix <> "\n" <> suffix
-  where
-    initialState =
-        PosState
-            { pstateInput      = code
-            , pstateOffset     = 0
-            , pstateSourcePos  = Pos.initialPos name
-            , pstateTabWidth   = Pos.defaultTabWidth
-            , pstateLinePrefix = ""
-            }
-
-    (h, state) = Stream.reachOffset offset initialState
-
-    pos = pstateSourcePos state
-
-    line = Pos.unPos (sourceLine pos)
-
-    column = Pos.unPos (sourceColumn pos)
-
-    suffix = case h of
-        Just string ->
-            let lineText = Text.pack (show line)
-
-                inner = lineText <> " │"
-
-                outer = Text.replicate (Text.length lineText) " " <> " │"
-
-                caret = Text.replicate (column - 1) " " <> "↑"
-
-            in  [__i|
-                #{outer}
-                #{inner} #{string}
-                #{outer} #{caret}
-                |]
-        Nothing ->
-            ""
-
-    prefix =
-        [__i|
-        #{name}:#{line}:#{column}: #{message}
-        |]
-
 -- | Lex a complete expression
 lex :: String
     -- ^ Name of the input (used for error messages)
@@ -185,7 +136,7 @@ lex name code =
 
             let offset = Error.errorOffset bundleError
 
-            Left (renderError "Invalid input - Lexing failed" Location{..})
+            Left (Syntax.renderError "Invalid input - Lexing failed" Location{..})
         Right tokens -> do
             return tokens
 

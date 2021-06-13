@@ -7,19 +7,26 @@ module Grace.Syntax
       Syntax(..)
     , Node(..)
     , Binding(..)
+
+      -- * Location
     , Location(..)
     , Offset
+    , renderError
     ) where
 
 import Data.Bifunctor (Bifunctor(..))
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.String (IsString(..))
+import Data.String.Interpolate (__i)
 import Data.Text (Text)
 import Data.Text.Prettyprint.Doc (Doc, Pretty(..))
 import Grace.Type (Type)
 import Numeric.Natural (Natural)
+import Text.Megaparsec (PosState(..), SourcePos(..))
 
-import qualified Data.Text as Text
+import qualified Data.Text              as Text
+import qualified Text.Megaparsec.Pos    as Pos
+import qualified Text.Megaparsec.Stream as Stream
 
 {- $setup
    >>> import Data.Void (Void)
@@ -377,3 +384,52 @@ data Location = Location
     -- ^ The offset (in characters) within the code
     }
     deriving (Eq, Show)
+
+-- | Render an error message, given a `Location` for the error
+renderError
+    :: Text
+    -- ^ Error message
+    -> Location
+    -- ^ Location of the error
+    -> Text
+renderError message Location{..} = prefix <> "\n" <> suffix
+  where
+    initialState =
+        PosState
+            { pstateInput      = code
+            , pstateOffset     = 0
+            , pstateSourcePos  = Pos.initialPos name
+            , pstateTabWidth   = Pos.defaultTabWidth
+            , pstateLinePrefix = ""
+            }
+
+    (h, state) = Stream.reachOffset offset initialState
+
+    pos = pstateSourcePos state
+
+    line = Pos.unPos (sourceLine pos)
+
+    column = Pos.unPos (sourceColumn pos)
+
+    suffix = case h of
+        Just string ->
+            let lineText = Text.pack (show line)
+
+                inner = lineText <> " │"
+
+                outer = Text.replicate (Text.length lineText) " " <> " │"
+
+                caret = Text.replicate (column - 1) " " <> "↑"
+
+            in  [__i|
+                #{outer}
+                #{inner} #{string}
+                #{outer} #{caret}
+                |]
+        Nothing ->
+            ""
+
+    prefix =
+        [__i|
+        #{name}:#{line}:#{column}: #{message}
+        |]
