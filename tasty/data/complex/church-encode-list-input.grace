@@ -7,7 +7,7 @@ let cons
         .   a
         ->  (forall list . (a -> list -> list) -> list -> list)
         ->  (forall list . (a -> list -> list) -> list -> list)
-        = \x -> \list_ -> \cons -> \nil -> cons x (list_ cons nil)
+        = \x -> \list -> \cons -> \nil -> cons x (list cons nil)
 
 let and : (forall list . (Bool -> list -> list) -> list -> list) -> Bool
        = \list -> list (\x -> \y -> x && y) True

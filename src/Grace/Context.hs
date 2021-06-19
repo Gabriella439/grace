@@ -370,13 +370,6 @@ lookup x₀ n (Annotation x₁ _A : _Γ) =
        then Just _A
        else lookup x₀ (n - 1) _Γ
     else lookup x₀ n _Γ
-lookup x₀ n (Variable x₁ : _Γ) =
-    if x₀ == x₁
-    then
-        if n <= 0
-        then Nothing
-        else lookup x₀ (n - 1) _Γ
-    else lookup x₀ n _Γ
 lookup x n (_ : _Γ) =
     lookup x n _Γ
 
