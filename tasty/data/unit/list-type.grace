@@ -1,1 +1,1 @@
-forall a . List a
+forall (a : Type) . List a

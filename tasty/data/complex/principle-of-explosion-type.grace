@@ -1,1 +1,1 @@
-forall a . < > -> a
+forall (a : Type) . < > -> a

@@ -1,1 +1,1 @@
-forall c . forall b . forall a . (b -> c) -> { a : List a -> b, b : a, c : a | n0 } -> c
+forall (d : Type) . forall (c : Type) . forall (b : Type) . forall (a : Fields) . (c -> d) -> { a : List b -> c, b : b, c : b | a } -> d

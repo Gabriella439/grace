@@ -1,1 +1,1 @@
-< C : Natural | b >
+forall (a : Alternatives) . < C : Natural | a >

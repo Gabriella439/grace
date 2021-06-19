@@ -1,1 +1,1 @@
-forall b . forall a . b -> a -> b
+forall (b : Type) . forall (a : Type) . b -> a -> b

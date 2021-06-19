@@ -1,1 +1,1 @@
-merge { } : forall a . < > -> a
+merge { } : forall (a : Type) . < > -> a

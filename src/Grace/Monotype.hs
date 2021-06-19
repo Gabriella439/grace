@@ -5,13 +5,19 @@ module Grace.Monotype
     ( -- * Types
       Monotype(..)
     , Record(..)
+    , Row(..)
     , Union(..)
+    , Variant(..)
     ) where
 
 import Data.String (IsString(..))
 import Data.Text (Text)
 import Data.Text.Prettyprint.Doc (Doc, Pretty(..))
 import Grace.Existential (Existential)
+
+-- $setup
+--
+-- >>> import qualified Grace.Monotype as Monotype
 
 -- | A monomorphic type
 data Monotype
@@ -38,17 +44,17 @@ data Monotype
     | Record Record
     -- ^ Record type
     --
-    -- >>> pretty (Record (Fields [("x", "X"), ("y", "Y")] Nothing))
+    -- >>> pretty (Record (Fields [("x", "X"), ("y", "Y")] Monotype.EmptyRow))
     -- { x : X, y : Y }
-    -- >>> pretty (Record (Fields [("x", "X"), ("y", "Y")] (Just 0)))
-    -- { x : X, y : Y | a }
+    -- >>> pretty (Record (Fields [("x", "X"), ("y", "Y")] (Monotype.UnsolvedRow 0)))
+    -- { x : X, y : Y | a? }
     | Union Union
     -- ^ Union type
     --
-    -- >>> pretty (Union (Alternatives [("x", "X"), ("y", "Y")] Nothing))
+    -- >>> pretty (Union (Alternatives [("x", "X"), ("y", "Y")] Monotype.EmptyVariant))
     -- < x : X, y : Y >
-    -- >>> pretty (Union (Alternatives [("x", "X"), ("y", "Y")] (Just 0)))
-    -- < x : X, y : Y | a >
+    -- >>> pretty (Union (Alternatives [("x", "X"), ("y", "Y")] (Monotype.UnsolvedVariant 0)))
+    -- < x : X, y : Y | a? >
     | Bool
     -- ^ Boolean type
     --
@@ -73,12 +79,24 @@ instance Pretty Monotype where
     pretty = prettyMonotype
 
 -- | A monomorphic record type
-data Record = Fields [(Text, Monotype)] (Maybe (Existential Record))
+data Record = Fields [(Text, Monotype)] Row
     deriving stock (Eq, Show)
 
+data Row
+    = EmptyRow
+    | UnsolvedRow (Existential Record)
+    | VariableRow Text
+    deriving stock (Eq, Ord, Show)
+
 -- | A monomorphic union type
-data Union = Alternatives [(Text, Monotype)] (Maybe (Existential Union))
+data Union = Alternatives [(Text, Monotype)] Variant
     deriving stock (Eq, Show)
+
+data Variant
+    = EmptyVariant
+    | UnsolvedVariant (Existential Union)
+    | VariableVariant Text
+    deriving stock (Eq, Ord, Show)
 
 prettyMonotype :: Monotype -> Doc a
 prettyMonotype (Function _A _B) =
@@ -109,48 +127,40 @@ prettyPrimitiveType other =
     "(" <> prettyMonotype other <> ")"
 
 prettyRecordType :: Record -> Doc a
-prettyRecordType (Fields [] Nothing) =
+prettyRecordType (Fields [] EmptyRow) =
     "{ }"
-prettyRecordType (Fields [] (Just ρ)) =
+prettyRecordType (Fields [] (UnsolvedRow ρ)) =
+    "{ " <> pretty ρ <> "? }"
+prettyRecordType (Fields [] (VariableRow ρ)) =
     "{ " <> pretty ρ <> " }"
-prettyRecordType (Fields ((key₀, type₀) : keyTypes) Nothing) =
+prettyRecordType (Fields ((key₀, type₀) : keyTypes) row) =
         "{ "
     <>  pretty key₀
     <>  " : "
     <>  prettyMonotype type₀
     <>  foldMap prettyKeyType keyTypes
-    <>  " }"
-prettyRecordType (Fields ((key₀, type₀) : keyTypes) (Just ρ)) =
-        "{ "
-    <>  pretty key₀
-    <>  " : "
-    <>  prettyMonotype type₀
-    <>  foldMap prettyKeyType keyTypes
-    <>  " | "
-    <>  pretty ρ
-    <>  " }"
+    <>  case row of
+            EmptyRow      -> " }"
+            UnsolvedRow ρ -> " | " <> pretty ρ <> "? }"
+            VariableRow ρ -> " | " <> pretty ρ <> " }"
 
 prettyUnionType :: Union -> Doc a
-prettyUnionType (Alternatives [] Nothing) =
+prettyUnionType (Alternatives [] EmptyVariant) =
     "< >"
-prettyUnionType (Alternatives [] (Just ρ)) =
-    "< " <> pretty ρ <> " >"
-prettyUnionType (Alternatives ((key₀, type₀) : keyTypes) Nothing) =
+prettyUnionType (Alternatives [] (UnsolvedVariant ρ)) =
+    "< " <> pretty ρ <> "?  >"
+prettyUnionType (Alternatives [] (VariableVariant ρ)) =
+    "< " <> pretty ρ <> "  >"
+prettyUnionType (Alternatives ((key₀, type₀) : keyTypes) row) =
         "< "
     <>  pretty key₀
     <>  " : "
     <>  prettyMonotype type₀
     <>  foldMap prettyKeyType keyTypes
-    <>  " >"
-prettyUnionType (Alternatives ((key₀, type₀) : keyTypes) (Just ρ)) =
-        "< "
-    <>  pretty key₀
-    <>  " : "
-    <>  prettyMonotype type₀
-    <>  foldMap prettyKeyType keyTypes
-    <>  " | "
-    <>  pretty ρ
-    <>  " >"
+    <>  case row of
+            EmptyVariant      -> " >"
+            UnsolvedVariant ρ -> " | " <> pretty ρ <> "? >"
+            VariableVariant ρ -> " | " <> pretty ρ <> " >"
 
 prettyKeyType :: (Text, Monotype) -> Doc a
 prettyKeyType (key, monotype) =

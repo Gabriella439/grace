@@ -1,1 +1,1 @@
-forall a . Bool -> a -> a -> a
+forall (a : Type) . Bool -> a -> a -> a

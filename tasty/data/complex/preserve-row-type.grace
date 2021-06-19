@@ -1,1 +1,1 @@
-{ a : Bool, b : Bool | j } -> { a : Bool, b : Bool | j }
+forall (a : Fields) . { a : Bool, b : Bool | a } -> { a : Bool, b : Bool | a }

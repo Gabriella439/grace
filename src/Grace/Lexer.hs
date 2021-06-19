@@ -67,13 +67,16 @@ parseToken =
             ] <?> "operator"
 
         , Combinators.choice
-            [ Forall <$ symbol "forall"
-            , Let    <$ symbol "let"
-            , In     <$ symbol "in"
-            , If     <$ symbol "if"
-            , Then   <$ symbol "then"
-            , Else   <$ symbol "else"
-            , Merge  <$ symbol "merge"
+            [ Forall       <$ symbol "forall"
+            , Let          <$ symbol "let"
+            , In           <$ symbol "in"
+            , If           <$ symbol "if"
+            , Then         <$ symbol "then"
+            , Else         <$ symbol "else"
+            , Merge        <$ symbol "merge"
+            , Fields       <$ symbol "Fields"
+            , Type         <$ symbol "Type"
+            , Alternatives <$ symbol "Alternatives"
             ] <?> "keyword"
 
         , Combinators.choice
@@ -100,6 +103,7 @@ parseToken =
 
         , Arrow            <$ symbol "->"
         , At               <$ symbol "@"
+        , Bar              <$ symbol "|"
         , Colon            <$ symbol ":"
         , Comma            <$ symbol ","
         , Dot              <$ symbol "."
@@ -234,7 +238,9 @@ data Token
     | And
     | Arrow
     | Append
+    | Alternatives
     | At
+    | Bar
     | Bool
     | CloseAngle
     | CloseBrace
@@ -246,6 +252,7 @@ data Token
     | Else
     | Equals
     | False_
+    | Fields
     | File FilePath
     | Forall
     | If
@@ -269,6 +276,7 @@ data Token
     | Then
     | Times
     | True_
+    | Type
     deriving stock (Eq, Show)
 
 {-| A token with offset information attached, used for reporting line and

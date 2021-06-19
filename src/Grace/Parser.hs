@@ -23,13 +23,14 @@ import Data.Text (Text)
 import Grace.Lexer (LocatedToken(LocatedToken), Token)
 import Grace.Location (Location(..), Offset(..))
 import Grace.Syntax (Binding(..), Syntax(..))
-import Grace.Type (Type(..))
+import Grace.Type (Domain(..), Type(..))
 import Text.Earley (Grammar, Prod, Report(..), rule, (<?>))
 
 import qualified Data.List.NonEmpty     as NonEmpty
 import qualified Data.Text              as Text
 import qualified Grace.Lexer            as Lexer
 import qualified Grace.Location         as Location
+import qualified Grace.Monotype         as Monotype
 import qualified Grace.Syntax           as Syntax
 import qualified Grace.Type             as Type
 import qualified Text.Earley            as Earley
@@ -108,10 +109,12 @@ locatedToken expectedToken =
 render :: Token -> Text
 render t = case t of
     Lexer.Alternative _    -> "an alternative"
+    Lexer.Alternatives     -> "Alternatives"
     Lexer.And              -> "&&"
     Lexer.Append           -> "++"
     Lexer.Arrow            -> "->"
     Lexer.At               -> "@"
+    Lexer.Bar              -> "|"
     Lexer.Bool             -> "Bool"
     Lexer.CloseAngle       -> ">"
     Lexer.CloseBrace       -> "}"
@@ -123,6 +126,7 @@ render t = case t of
     Lexer.Else             -> "else"
     Lexer.Equals           -> "="
     Lexer.False_           -> "False"
+    Lexer.Fields           -> "Fields"
     Lexer.File _           -> "a file"
     Lexer.Forall           -> "forall"
     Lexer.If               -> "if"
@@ -144,6 +148,7 @@ render t = case t of
     Lexer.Text             -> "Text"
     Lexer.TextLiteral _    -> "a text literal"
     Lexer.Then             -> "then"
+    Lexer.Type             -> "Type"
     Lexer.Times            -> "*"
     Lexer.True_            -> "True"
 
@@ -370,17 +375,30 @@ grammar = mdo
         value <- expression
         return (field, value)
 
+    domain <- rule
+        (   do  token Lexer.Type
+                return Types
+        <|> do  token Lexer.Fields
+                return Rows
+        <|> do  token Lexer.Alternatives
+                return Variants
+        )
+
     quantifiedType <- rule do
-        let forall (location, (typeVariableOffset, typeVariable)) type_ =
+        let forall (location, (typeVariableOffset, typeVariable), domain_) type_ =
                 Type{..}
               where
-                node = Type.Forall typeVariableOffset typeVariable type_
+                node = Type.Forall typeVariableOffset typeVariable domain_ type_
 
         locatedTypeVariables <- many do
             locatedForall <- locatedToken Lexer.Forall
+            token Lexer.OpenParenthesis
             locatedTypeVariable <- locatedLabel
+            token Lexer.Colon
+            domain_ <- domain
+            token Lexer.CloseParenthesis
             token Lexer.Dot
-            return (locatedForall, locatedTypeVariable)
+            return (locatedForall, locatedTypeVariable, domain_)
         t <- functionType
         return (foldr forall t locatedTypeVariables)
 
@@ -416,23 +434,36 @@ grammar = mdo
 
                 located <- locatedLabel
                 return (variable located)
-        <|> do  let record location fieldTypes = Type{..}
+        <|> do  let record location fieldTypes row = Type{..}
                       where
-                        node = Type.Record (Type.Fields fieldTypes Nothing)
+                        node =
+                            Type.Record (Type.Fields fieldTypes row)
 
                 locatedOpenBrace <- locatedToken Lexer.OpenBrace
                 fieldTypes <- fieldType `sepBy` token Lexer.Comma
+                row <-
+                    (   do  token Lexer.Bar
+                            text <- label
+                            return (Monotype.VariableRow text)
+                    <|> do  pure Monotype.EmptyRow
+                    )
                 token Lexer.CloseBrace
-                return (record locatedOpenBrace fieldTypes)
-        <|> do  let union location alternativeTypes = Type{..}
+                return (record locatedOpenBrace fieldTypes row)
+        <|> do  let union location alternativeTypes variant = Type{..}
                       where
                         node =
-                            Type.Union (Type.Alternatives alternativeTypes Nothing)
+                            Type.Union (Type.Alternatives alternativeTypes variant)
 
                 locatedOpenAngle <- locatedToken Lexer.OpenAngle
                 alternativeTypes <- alternativeType `sepBy` token Lexer.Comma
+                variant <-
+                    (   do  token Lexer.Bar
+                            text <- label
+                            return (Monotype.VariableVariant text)
+                    <|> do  pure Monotype.EmptyVariant
+                    )
                 token Lexer.CloseAngle
-                return (union locatedOpenAngle alternativeTypes)
+                return (union locatedOpenAngle alternativeTypes variant)
         <|> do  token Lexer.OpenParenthesis
                 t <- quantifiedType
                 token Lexer.CloseParenthesis

@@ -21,7 +21,7 @@ module Grace.Context
 import Data.Text (Text)
 import Grace.Existential (Existential)
 import Grace.Monotype (Monotype)
-import Grace.Type (Type(..))
+import Grace.Type (Domain(..), Type(..))
 import Prelude hiding (lookup)
 import Prettyprinter (Doc, Pretty(..))
 
@@ -34,10 +34,10 @@ import qualified Prettyprinter              as Pretty
 
 -- | An element of the `Context` list
 data Entry s
-    = Variable Text
+    = Variable Domain Text
     -- ^ Type variable
     --
-    -- >>> pretty @(Entry ()) (Variable "a")
+    -- >>> pretty @(Entry ()) (Variable Types "a")
     -- a
     | Annotation Text (Type s)
     -- ^ A bound variable whose type is known
@@ -69,21 +69,35 @@ data Entry s
     -- ^ A placeholder row variable whose type has been (at least partially)
     --   inferred
     --
-    -- >>> pretty @(Entry ()) (SolvedRow 0 (Monotype.Fields [("x", "X")] (Just 1)))
-    -- a = x : X | b
+    -- >>> pretty @(Entry ()) (SolvedRow 0 (Monotype.Fields [("x", "X")] (Monotype.UnsolvedRow 1)))
+    -- a = x : X | b?
     | SolvedVariant (Existential Monotype.Union) Monotype.Union
     -- ^ A placeholder variant variable whose type has been (at least partially)
     --   inferred
     --
-    -- >>> pretty @(Entry ()) (SolvedVariant 0 (Monotype.Alternatives [("x", "X")] (Just 1)))
-    -- a = x : X | b
+    -- >>> pretty @(Entry ()) (SolvedVariant 0 (Monotype.Alternatives [("x", "X")] (Monotype.UnsolvedVariant 1)))
+    -- a = x : X | b?
     | Marker (Existential Monotype)
     -- ^ This is used by the bidirectional type-checking algorithm to separate
     --   context entries introduced before and after type-checking a universally
     --   quantified type
     --
     -- >>> pretty @(Entry ()) (Marker 0)
-    -- ➤a
+    -- ➤a : Type
+    | MarkerRow (Existential Monotype.Record)
+    -- ^ This is used by the bidirectional type-checking algorithm to separate
+    --   context entries introduced before and after type-checking a universally
+    --   quantified row
+    --
+    -- >>> pretty @(Entry ()) (MarkerRow 0)
+    -- ➤a : Fields
+    | MarkerVariant (Existential Monotype.Union)
+    -- ^ This is used by the bidirectional type-checking algorithm to separate
+    --   context entries introduced before and after type-checking a universally
+    --   quantified variant
+    --
+    -- >>> pretty @(Entry ()) (MarkerVariant 0)
+    -- ➤a : Alternatives
     deriving stock (Eq, Show)
 
 instance Pretty (Entry s) where
@@ -119,7 +133,7 @@ instance Pretty (Entry s) where
 type Context s = [Entry s]
 
 prettyEntry :: Entry s -> Doc a
-prettyEntry (Variable α) =
+prettyEntry (Variable _ α) =
     Pretty.pretty α
 prettyEntry (Unsolved α) =
     Pretty.pretty α <> "?"
@@ -129,38 +143,30 @@ prettyEntry (UnsolvedVariant ρ) =
     "|" <> Pretty.pretty ρ <> "?"
 prettyEntry (Solved α τ) =
     Pretty.pretty α <> " = " <> Pretty.pretty τ
-prettyEntry (SolvedRow ρ (Monotype.Fields [] Nothing)) =
+prettyEntry (SolvedRow ρ (Monotype.Fields [] Monotype.EmptyRow)) =
     Pretty.pretty ρ <> " = •"
-prettyEntry (SolvedRow ρ₀ (Monotype.Fields [] (Just ρ₁))) =
+prettyEntry (SolvedRow ρ₀ (Monotype.Fields [] (Monotype.UnsolvedRow ρ₁))) =
+    Pretty.pretty ρ₀ <> " = • | " <>  Pretty.pretty ρ₁ <> "?"
+prettyEntry (SolvedRow ρ₀ (Monotype.Fields [] (Monotype.VariableRow ρ₁))) =
     Pretty.pretty ρ₀ <> " = • | " <>  Pretty.pretty ρ₁
-prettyEntry (SolvedRow ρ (Monotype.Fields ((k₀, τ₀) : kτs) Nothing)) =
+prettyEntry (SolvedRow ρ (Monotype.Fields ((k₀, τ₀) : kτs) row)) =
         Pretty.pretty ρ
     <>  " = "
     <>  Pretty.pretty k₀
     <>  " : "
     <>  Pretty.pretty τ₀
     <>  foldMap prettyRowType kτs
-prettyEntry (SolvedRow ρ₀ (Monotype.Fields ((k₀, τ₀) : kτs) (Just ρ₁))) =
-        Pretty.pretty ρ₀
-    <>  " = "
-    <>  Pretty.pretty k₀
-    <>  " : "
-    <>  Pretty.pretty τ₀
-    <>  foldMap prettyRowType kτs
-    <>  " | "
-    <>  Pretty.pretty ρ₁
-prettyEntry (SolvedVariant ρ (Monotype.Alternatives [] Nothing)) =
+    <>  case row of
+            Monotype.EmptyRow       -> ""
+            Monotype.UnsolvedRow ρ₁ -> " | " <> Pretty.pretty ρ₁ <> "?"
+            Monotype.VariableRow ρ₁ -> " | " <> Pretty.pretty ρ₁
+prettyEntry (SolvedVariant ρ (Monotype.Alternatives [] Monotype.EmptyVariant)) =
     Pretty.pretty ρ <> " = •"
-prettyEntry (SolvedVariant ρ₀ (Monotype.Alternatives [] (Just ρ₁))) =
+prettyEntry (SolvedVariant ρ₀ (Monotype.Alternatives [] (Monotype.UnsolvedVariant ρ₁))) =
+    Pretty.pretty ρ₀ <> " = • | " <>  Pretty.pretty ρ₁ <> "?"
+prettyEntry (SolvedVariant ρ₀ (Monotype.Alternatives [] (Monotype.VariableVariant ρ₁))) =
     Pretty.pretty ρ₀ <> " = • | " <>  Pretty.pretty ρ₁
-prettyEntry (SolvedVariant ρ (Monotype.Alternatives ((k₀, τ₀) : kτs) Nothing)) =
-        Pretty.pretty ρ
-    <>  " = "
-    <>  Pretty.pretty k₀
-    <>  " : "
-    <>  Pretty.pretty τ₀
-    <>  foldMap prettyVariantType kτs
-prettyEntry (SolvedVariant ρ₀ (Monotype.Alternatives ((k₀, τ₀) : kτs) (Just ρ₁))) =
+prettyEntry (SolvedVariant ρ₀ (Monotype.Alternatives ((k₀, τ₀) : kτs) row)) =
         Pretty.pretty ρ₀
     <>  " = "
     <>  Pretty.pretty k₀
@@ -168,11 +174,18 @@ prettyEntry (SolvedVariant ρ₀ (Monotype.Alternatives ((k₀, τ₀) : kτs) (
     <>  Pretty.pretty τ₀
     <>  foldMap prettyVariantType kτs
     <>  " | "
-    <>  Pretty.pretty ρ₁
+    <>  case row of
+            Monotype.EmptyVariant       -> ""
+            Monotype.UnsolvedVariant ρ₁ -> Pretty.pretty ρ₁ <> "?"
+            Monotype.VariableVariant ρ₁ -> Pretty.pretty ρ₁
 prettyEntry (Annotation x α) =
     Pretty.pretty x <> " : " <> Pretty.pretty α
 prettyEntry (Marker α) =
-    "➤" <> Pretty.pretty α
+    "➤" <> Pretty.pretty α <> " : Type"
+prettyEntry (MarkerRow α) =
+    "➤" <> Pretty.pretty α <> " : Fields"
+prettyEntry (MarkerVariant α) =
+    "➤" <> Pretty.pretty α <> " : Alternatives"
 
 prettyRowType :: (Text, Monotype) -> Doc a
 prettyRowType (k, τ) = ", " <> Pretty.pretty k <> " : " <> Pretty.pretty τ
@@ -196,8 +209,8 @@ solve context type_ = foldl snoc type_ context
 
 {-| Substitute a t`Type.Record` using the solved entries of a `Context`
 
-    >>> solveRecord [ SolvedRow 0 (Monotype.Fields [] Nothing) ] (Type.Fields [("a", Type{ location = (), node = Type.Bool })] (Just 0))
-    Fields [("a",Type {location = (), node = Bool})] Nothing
+    >>> solveRecord [ SolvedRow 0 (Monotype.Fields [] Monotype.EmptyRow) ] (Type.Fields [("a", Type{ location = (), node = Type.Bool })] (Monotype.UnsolvedRow 0))
+    Fields [("a",Type {location = (), node = Bool})] EmptyRow
 -}
 solveRecord :: Context s -> Type.Record s -> Type.Record s
 solveRecord context record = record'
@@ -212,8 +225,8 @@ solveRecord context record = record'
 {-| Substitute a t`Type.Union` using the solved entries of a `Context`
     `Context`
 
-    >>> solveUnion [ SolvedVariant 0 (Monotype.Alternatives [] Nothing) ] (Type.Alternatives [("a", Type{ location = (), node = Type.Bool })] (Just 0))
-    Alternatives [("a",Type {location = (), node = Bool})] Nothing
+    >>> solveUnion [ SolvedVariant 0 (Monotype.Alternatives [] Monotype.EmptyVariant) ] (Type.Alternatives [("a", Type{ location = (), node = Type.Bool })] (Monotype.UnsolvedVariant 0))
+    Alternatives [("a",Type {location = (), node = Bool})] EmptyVariant
 -}
 solveUnion :: Context s -> Type.Union s -> Type.Union s
 solveUnion context union = union'
@@ -234,7 +247,7 @@ solveUnion context union = union'
     * Adding universal quantifiers for all `Unsolved` entries in the `Context`
 
     >>> complete [ Unsolved 1, Solved 0 Monotype.Bool ] Type{ location = (), node = Type.Function Type{ location = (), node = Type.Unsolved 1 } Type{ location = (), node = Type.Unsolved 0 } }
-    Type {location = (), node = Forall () "a" (Type {location = (), node = Function (Type {location = (), node = Variable "a"}) (Type {location = (), node = Bool})})}
+    Type {location = (), node = Forall () "a" Types (Type {location = (), node = Function (Type {location = (), node = Variable "a"}) (Type {location = (), node = Bool})})}
 -}
 complete :: Context s -> Type s -> Type s
 complete context type_ = do
@@ -251,14 +264,11 @@ complete context type_ = do
         let a = Existential.toVariable n
 
         let node =
-                Type.Forall (Type.location t) a (Type.solve α (Monotype.Variable a) t)
+                Type.Forall (Type.location t) a Types (Type.solve α (Monotype.Variable a) t)
 
         let Type{ location } = t
 
         return Type.Type{..}
--- TODO: Allow for user-visible row and variant polymorphism so that these can
--- be implemented
-{-
     snoc t (UnsolvedRow ρ) = do
         n <- State.get
 
@@ -266,17 +276,26 @@ complete context type_ = do
 
         let a = Existential.toVariable n
 
-        return (Type.Forall a (Type.solveRow ρ (Monotype.Fields [] (Just a)) t))
-   snoc t (UnsolvedVariant ρ) = do
+        let node =
+                Type.Forall (Type.location t) a Rows (Type.solveRow ρ (Monotype.Fields [] (Monotype.VariableRow a)) t)
+
+        let Type{ location } = t
+
+        return Type.Type{..}
+    snoc t (UnsolvedVariant ρ) = do
         n <- State.get
 
         State.put $! n + 1
 
         let a = Existential.toVariable n
 
-        return (Type.Forall a (Type.solveVariant ρ (Monotype.Alternatives [] (Just a)) t))
--}
-    snoc t  _           = do
+        let node =
+                Type.Forall (Type.location t) a Variants (Type.solveVariant ρ (Monotype.Alternatives [] (Monotype.VariableVariant a)) t)
+
+        let Type{ location } = t
+
+        return Type.Type{..}
+    snoc t _ = do
         return t
 
 {-| Split a `Context` into two `Context`s before and after the given

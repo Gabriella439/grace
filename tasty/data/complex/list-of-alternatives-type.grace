@@ -1,1 +1,1 @@
-List < Left : Natural, Right : Bool | e >
+forall (a : Alternatives) . List < Left : Natural, Right : Bool | a >
