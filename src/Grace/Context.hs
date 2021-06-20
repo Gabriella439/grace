@@ -55,13 +55,13 @@ data Entry s
     -- ^ A placeholder fields variable whose type has not yet been inferred
     --
     -- >>> pretty @(Entry ()) (UnsolvedFields 0)
-    -- |a?
+    -- a?
     | UnsolvedAlternatives (Existential Monotype.Union)
     -- ^ A placeholder alternatives variable whose type has not yet been
     -- inferred
     --
     -- >>> pretty @(Entry ()) (UnsolvedAlternatives 0)
-    -- |a?
+    -- a?
     | Solved (Existential Monotype) Monotype
     -- ^ A placeholder type variable whose type has been (at least partially)
     --   inferred
@@ -112,7 +112,7 @@ instance Pretty (Entry s) where
     order, meaning that the beginning of the list represents the entries that
     were added last.  For example, this context:
 
-    > ·, a : Bool, b, c?, d = c?, ➤e
+    > •, a : Bool, b, c?, d = c?, ➤e : Type
 
     … corresponds to this Haskell representation:
 
@@ -141,9 +141,9 @@ prettyEntry (Variable _ α) =
 prettyEntry (Unsolved α) =
     Pretty.pretty α <> "?"
 prettyEntry (UnsolvedFields ρ) =
-    "|" <> Pretty.pretty ρ <> "?"
+    Pretty.pretty ρ <> "?"
 prettyEntry (UnsolvedAlternatives ρ) =
-    "|" <> Pretty.pretty ρ <> "?"
+    Pretty.pretty ρ <> "?"
 prettyEntry (Solved α τ) =
     Pretty.pretty α <> " = " <> Pretty.pretty τ
 prettyEntry (SolvedFields ρ (Monotype.Fields [] Monotype.EmptyFields)) =
@@ -197,11 +197,14 @@ prettyAlternativeType :: (Text, Monotype) -> Doc a
 prettyAlternativeType (k, τ) =
     ", " <> Pretty.pretty k <> " : " <> Pretty.pretty τ
 
-{-| Substitute a `Type` using the `Solved`, `SolvedFields`, and
-    `SolvedAlternatives` entries of a `Context`
+{-| Substitute a `Type` using the solved entries of a `Context`
 
-    >>> solve [ Unsolved 1, Solved 0 Monotype.Bool ] Type{ location = (), node = Type.Unsolved 0 }
-    Type {location = (), node = Bool}
+    >>> original = Type{ location = (), node = Type.Unsolved 0 }
+    >>> pretty original
+    a?
+
+    >>> pretty (solve [ Unsolved 1, Solved 0 Monotype.Bool ] original)
+    Bool
 -}
 solve :: Context s -> Type s -> Type s
 solve context type_ = foldl snoc type_ context
@@ -213,8 +216,16 @@ solve context type_ = foldl snoc type_ context
 
 {-| Substitute a t`Type.Record` using the solved entries of a `Context`
 
-    >>> solveRecord [ SolvedFields 0 (Monotype.Fields [] Monotype.EmptyFields) ] (Type.Fields [("a", Type{ location = (), node = Type.Bool })] (Monotype.UnsolvedFields 0))
-    Fields [("a",Type {location = (), node = Bool})] EmptyFields
+    >>> original = Type.Fields [("x", Type{ location = (), node = Type.Bool })] (Monotype.UnsolvedFields 0)
+    >>> pretty original
+    { x = Bool | a? }
+
+    >>> entry = SolvedFields 0 (Monotype.Fields [] Monotype.EmptyFields)
+    >>> pretty entry
+    a = {}
+
+    >>> pretty (solveRecord [ entry ] original)
+    { x = Bool }
 -}
 solveRecord :: Context s -> Type.Record s -> Type.Record s
 solveRecord context record = record'
@@ -229,8 +240,16 @@ solveRecord context record = record'
 {-| Substitute a t`Type.Union` using the solved entries of a `Context`
     `Context`
 
-    >>> solveUnion [ SolvedAlternatives 0 (Monotype.Alternatives [] Monotype.EmptyAlternatives) ] (Type.Alternatives [("a", Type{ location = (), node = Type.Bool })] (Monotype.UnsolvedAlternatives 0))
-    Alternatives [("a",Type {location = (), node = Bool})] EmptyAlternatives
+    >>> original = Type.Alternatives [("A", Type{ location = (), node = Type.Bool })] (Monotype.UnsolvedAlternatives 0)
+    >>> pretty original
+    < A : Bool | a? >
+
+    >>> entry = SolvedAlternatives 0 (Monotype.Alternatives [] Monotype.EmptyAlternatives)
+    >>> pretty entry
+    a = •
+
+    >>> pretty (solveUnion [ entry ] original)
+    < A : Bool >
 -}
 solveUnion :: Context s -> Type.Union s -> Type.Union s
 solveUnion context union = union'
@@ -245,13 +264,16 @@ solveUnion context union = union'
 {-| This function is used at the end of the bidirectional type-checking
     algorithm to complete the inferred type by:
 
-    * Substituting the type with all `Solved` / `SolvedFields` entries in the
-      `Context`
+    * Substituting the type with the solved entries in the `Context`
 
     * Adding universal quantifiers for all `Unsolved` entries in the `Context`
 
-    >>> complete [ Unsolved 1, Solved 0 Monotype.Bool ] Type{ location = (), node = Type.Function Type{ location = (), node = Type.Unsolved 1 } Type{ location = (), node = Type.Unsolved 0 } }
-    Type {location = (), node = Forall () "a" Type (Type {location = (), node = Function (Type {location = (), node = Variable "a"}) (Type {location = (), node = Bool})})}
+    >>> original = Type{ location = (), node = Type.Function Type{ location = (), node = Type.Unsolved 1 } Type{ location = (), node = Type.Unsolved 0 } }
+    >>> pretty original
+    b? -> a?
+
+    >>> pretty (complete [ Unsolved 1, Solved 0 Monotype.Bool ] original)
+    forall (a : Type) . a -> Bool
 -}
 complete :: Context s -> Type s -> Type s
 complete context type_ = do

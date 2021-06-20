@@ -55,7 +55,7 @@ data Node s
     -- ^ A placeholder variable whose type has not yet been inferred
     --
     -- >>> pretty @(Node ()) (Unsolved 0)
-    -- a
+    -- a?
     | Forall s Text Domain (Type s)
     -- ^ Universally quantified type
     --
@@ -112,9 +112,15 @@ instance Pretty (Node s) where
 data Record s = Fields [(Text, Type s)] RemainingFields
     deriving stock (Eq, Functor, Ord, Show)
 
+instance Pretty (Record s) where
+    pretty = prettyRecordType
+
 -- | A potentially polymorphic union type
 data Union s = Alternatives [(Text, Type s)] RemainingAlternatives
     deriving stock (Eq, Functor, Ord, Show)
+
+instance Pretty (Union s) where
+    pretty = prettyUnionType
 
 {-| This function should not be exported or generally used.  It is only really
     safe to use within one of the @solve*@ functions
@@ -463,9 +469,9 @@ prettyApplicationType  other    = prettyPrimitiveType other
 
 prettyPrimitiveType :: Node s -> Doc a
 prettyPrimitiveType (Variable α) = Pretty.pretty α
-prettyPrimitiveType (Unsolved α) = Pretty.pretty α
-prettyPrimitiveType (Record r)   = prettyRecordType r
-prettyPrimitiveType (Union u)    = prettyUnionType u
+prettyPrimitiveType (Unsolved α) = Pretty.pretty α <> "?"
+prettyPrimitiveType (Record r)   = Pretty.pretty r
+prettyPrimitiveType (Union u)    = Pretty.pretty u
 prettyPrimitiveType  Bool        = "Bool"
 prettyPrimitiveType  Natural     = "Natural"
 prettyPrimitiveType  Text        = "Text"
