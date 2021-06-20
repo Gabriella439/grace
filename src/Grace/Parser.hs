@@ -431,7 +431,7 @@ grammar = mdo
                 return Type{ node = Type.Text, .. }
         <|> do  let variable (location, name) = Type{..}
                       where
-                        node = Type.Variable name
+                        node = Type.VariableType name
 
                 located <- locatedLabel
                 return (variable located)

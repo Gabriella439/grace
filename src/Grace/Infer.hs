@@ -20,8 +20,8 @@ module Grace.Infer
       Status(..)
     , wellFormedType
     , subtype
-    , instantiateL
-    , instantiateR
+    , instantiateTypeL
+    , instantiateTypeR
     , infer
     , check
     , inferApplication
@@ -112,7 +112,7 @@ wellFormedType :: MonadError Text m => Context Location -> Type Location -> m ()
 wellFormedType _Γ Type{..} =
     case node of
         -- UvarWF
-        Type.Variable α
+        Type.VariableType α
             | Context.Variable Domain.Type α `elem` _Γ -> do
                 return ()
             | otherwise -> do
@@ -132,7 +132,7 @@ wellFormedType _Γ Type{..} =
             wellFormedType (Context.Variable domain α : _Γ) _A
 
         -- EvarWF / SolvedEvarWF
-        _A@(Type.Unsolved α₀)
+        _A@(Type.UnsolvedType α₀)
             | any predicate _Γ -> do
                 return ()
             | otherwise -> do
@@ -150,9 +150,9 @@ wellFormedType _Γ Type{..} =
                 #{Location.renderError "" location}
                 |]
           where
-            predicate (Context.Unsolved α₁  ) = α₀ == α₁
-            predicate (Context.Solved   α₁ _) = α₀ == α₁
-            predicate  _                      = False
+            predicate (Context.UnsolvedType α₁  ) = α₀ == α₁
+            predicate (Context.SolvedType   α₁ _) = α₀ == α₁
+            predicate  _                          = False
 
         Type.List _A -> do
             wellFormedType _Γ _A
@@ -276,42 +276,42 @@ subtype _A₀ _B₀ = do
 
     case (Type.node _A₀, Type.node _B₀) of
         -- <:Var
-        (Type.Variable α₀, Type.Variable α₁)
+        (Type.VariableType α₀, Type.VariableType α₁)
             | α₀ == α₁ && Context.Variable Domain.Type α₀ `elem` _Γ -> do
                 return ()
 
         -- <:Exvar
-        (Type.Unsolved α₀, Type.Unsolved α₁)
-            | α₀ == α₁ && Context.Unsolved α₀ `elem` _Γ -> do
+        (Type.UnsolvedType α₀, Type.UnsolvedType α₁)
+            | α₀ == α₁ && Context.UnsolvedType α₀ `elem` _Γ -> do
                 return ()
 
         -- InstantiateL
-        (Type.Unsolved α, _)
-            | not (α `Type.typeFreeIn` _B₀) && elem (Context.Unsolved α) _Γ -> do
-                instantiateL α _B₀
+        (Type.UnsolvedType α, _)
+            | not (α `Type.typeFreeIn` _B₀) && elem (Context.UnsolvedType α) _Γ -> do
+                instantiateTypeL α _B₀
 
         -- InstantiateR
-        (_, Type.Unsolved α)
-            | not (α `Type.typeFreeIn` _A₀) && elem (Context.Unsolved α) _Γ -> do
-                instantiateR _A₀ α
+        (_, Type.UnsolvedType α)
+            | not (α `Type.typeFreeIn` _A₀) && elem (Context.UnsolvedType α) _Γ -> do
+                instantiateTypeR _A₀ α
 
         -- <:→
         (Type.Function _A₁ _A₂, Type.Function _B₁ _B₂) -> do
             subtype _B₁ _A₁
             _Θ <- get
-            subtype (Context.solve _Θ _A₂) (Context.solve _Θ _B₂)
+            subtype (Context.solveType _Θ _A₂) (Context.solveType _Θ _B₂)
 
         -- <:∀L
         (Type.Forall nameLocation α₀ Domain.Type _A, _) -> do
             α₁ <- fresh
 
-            push (Context.Marker   α₁)
-            push (Context.Unsolved α₁)
+            push (Context.MarkerType α₁)
+            push (Context.UnsolvedType α₁)
 
-            let α₁' = Type{ location = nameLocation, node = Type.Unsolved α₁ }
-            subtype (Type.substitute α₀ 0 α₁' _A) _B₀
+            let α₁' = Type{ location = nameLocation, node = Type.UnsolvedType α₁ }
+            subtype (Type.substituteType α₀ 0 α₁' _A) _B₀
 
-            discardUpTo (Context.Marker α₁)
+            discardUpTo (Context.MarkerType α₁)
         (Type.Forall _ α₀ Domain.Fields _A, _) -> do
             α₁ <- fresh
 
@@ -437,7 +437,7 @@ subtype _A₀ _B₀ = do
 
             let process (_A₁, _B₁) = do
                     _Θ <- get
-                    subtype (Context.solve _Θ _A₁) (Context.solve _Θ _B₁)
+                    subtype (Context.solveType _Θ _A₁) (Context.solveType _Θ _B₁)
 
             _ <- traverse process both
 
@@ -607,7 +607,7 @@ subtype _A₀ _B₀ = do
 
             let process (_A₁, _B₁) = do
                     _Θ <- get
-                    subtype (Context.solve _Θ _A₁) (Context.solve _Θ _B₁)
+                    subtype (Context.solveType _Θ _A₁) (Context.solveType _Θ _B₁)
 
             _ <- traverse process both
 
@@ -718,19 +718,19 @@ subtype _A₀ _B₀ = do
     … which updates the context Γ to produce the new context Δ, by instantiating
     α̂ such that α̂ <: A.
 -}
-instantiateL
+instantiateTypeL
     :: (MonadState Status m, MonadError Text m)
     => Existential Monotype -> Type Location -> m ()
-instantiateL α _A₀ = do
+instantiateTypeL α _A₀ = do
     _Γ₀ <- get
 
-    (_Γ', _Γ) <- Context.splitOnUnsolved α _Γ₀ `orDie`
+    (_Γ', _Γ) <- Context.splitOnUnsolvedType α _Γ₀ `orDie`
         [__i|
         Internal error: Invalid context
 
         The following unsolved variable:
 
-        ↳ #{prettyToText (Context.Unsolved α)}}
+        ↳ #{prettyToText (Context.UnsolvedType α)}}
 
         … cannot be instantiated because the variable is missing from the context:
 
@@ -740,20 +740,20 @@ instantiateL α _A₀ = do
     let instLSolve τ = do
             wellFormedType _Γ _A₀
 
-            set (_Γ' <> (Context.Solved α τ : _Γ))
+            set (_Γ' <> (Context.SolvedType α τ : _Γ))
 
     case Type.node _A₀ of
         -- InstLReach
-        Type.Unsolved β
+        Type.UnsolvedType β
             | let _ΓL = _Γ
-            , Just (_ΓR, _ΓM) <- Context.splitOnUnsolved β _Γ' -> do
-                set (_ΓR <> (Context.Solved β (Monotype.Unsolved α) : _ΓM) <> (Context.Unsolved α : _ΓL))
+            , Just (_ΓR, _ΓM) <- Context.splitOnUnsolvedType β _Γ' -> do
+                set (_ΓR <> (Context.SolvedType β (Monotype.UnsolvedType α) : _ΓM) <> (Context.UnsolvedType α : _ΓL))
 
         -- InstLSolve
-        Type.Unsolved β -> do
-            instLSolve (Monotype.Unsolved β)
-        Type.Variable β -> do
-            instLSolve (Monotype.Variable β)
+        Type.UnsolvedType β -> do
+            instLSolve (Monotype.UnsolvedType β)
+        Type.VariableType β -> do
+            instLSolve (Monotype.VariableType β)
         Type.Bool -> do
             instLSolve Monotype.Bool
         Type.Natural -> do
@@ -769,19 +769,19 @@ instantiateL α _A₀ = do
             α₁ <- fresh
             α₂ <- fresh
 
-            set (_ΓR <> (Context.Solved α (Monotype.Function (Monotype.Unsolved α₁) (Monotype.Unsolved α₂)) : Context.Unsolved α₁ : Context.Unsolved α₂ : _ΓL))
+            set (_ΓR <> (Context.SolvedType α (Monotype.Function (Monotype.UnsolvedType α₁) (Monotype.UnsolvedType α₂)) : Context.UnsolvedType α₁ : Context.UnsolvedType α₂ : _ΓL))
 
-            instantiateR _A₁ α₁
+            instantiateTypeR _A₁ α₁
 
             _Θ <- get
 
-            instantiateL α₂ (Context.solve _Θ _A₂)
+            instantiateTypeL α₂ (Context.solveType _Θ _A₂)
 
         -- InstLAllR
         Type.Forall _ β domain _B -> do
             push (Context.Variable domain β)
 
-            instantiateL α _B
+            instantiateTypeL α _B
 
             discardUpTo (Context.Variable domain β)
 
@@ -791,9 +791,9 @@ instantiateL α _A₀ = do
 
             α₁ <- fresh
 
-            set (_ΓR <> (Context.Solved α (Monotype.List (Monotype.Unsolved α₁)) : Context.Unsolved α₁ : _ΓL))
+            set (_ΓR <> (Context.SolvedType α (Monotype.List (Monotype.UnsolvedType α₁)) : Context.UnsolvedType α₁ : _ΓL))
 
-            instantiateL α₁ _A
+            instantiateTypeL α₁ _A
 
         Type.Record r -> do
             let _ΓL = _Γ
@@ -801,7 +801,7 @@ instantiateL α _A₀ = do
 
             ρ <- fresh
 
-            set (_ΓR <> (Context.Solved α (Monotype.Record (Monotype.Fields [] (Monotype.UnsolvedFields ρ))) : Context.UnsolvedFields ρ : _ΓL))
+            set (_ΓR <> (Context.SolvedType α (Monotype.Record (Monotype.Fields [] (Monotype.UnsolvedFields ρ))) : Context.UnsolvedFields ρ : _ΓL))
 
             instantiateFieldsL ρ (Type.location _A₀) r
 
@@ -811,7 +811,7 @@ instantiateL α _A₀ = do
 
             ρ <- fresh
 
-            set (_ΓR <> (Context.Solved α (Monotype.Union (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives ρ))) : Context.UnsolvedAlternatives ρ : _ΓL))
+            set (_ΓR <> (Context.SolvedType α (Monotype.Union (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives ρ))) : Context.UnsolvedAlternatives ρ : _ΓL))
 
             instantiateAlternativesL ρ (Type.location _A₀) u
 
@@ -822,19 +822,19 @@ instantiateL α _A₀ = do
     … which updates the context Γ to produce the new context Δ, by instantiating
     α̂ such that A :< α̂.
 -}
-instantiateR
+instantiateTypeR
     :: (MonadState Status m, MonadError Text m)
     => Type Location -> Existential Monotype -> m ()
-instantiateR _A₀ α = do
+instantiateTypeR _A₀ α = do
     _Γ₀ <- get
 
-    (_Γ', _Γ) <- Context.splitOnUnsolved α _Γ₀ `orDie`
+    (_Γ', _Γ) <- Context.splitOnUnsolvedType α _Γ₀ `orDie`
         [__i|
         Internal error: Invalid context
 
         The following unsolved variable:
 
-        ↳ #{prettyToText (Context.Unsolved α)}}
+        ↳ #{prettyToText (Context.UnsolvedType α)}}
 
         … cannot be instantiated because the variable is missing from the context:
 
@@ -844,20 +844,20 @@ instantiateR _A₀ α = do
     let instRSolve τ = do
             wellFormedType _Γ _A₀
 
-            set (_Γ' <> (Context.Solved α τ : _Γ))
+            set (_Γ' <> (Context.SolvedType α τ : _Γ))
 
     case Type.node _A₀ of
         -- InstRReach
-        Type.Unsolved β
+        Type.UnsolvedType β
             | let _ΓL = _Γ
-            , Just (_ΓR, _ΓM) <- Context.splitOnUnsolved β _Γ' -> do
-                set (_ΓR <> (Context.Solved β (Monotype.Unsolved α) : _ΓM) <> (Context.Unsolved α : _ΓL))
+            , Just (_ΓR, _ΓM) <- Context.splitOnUnsolvedType β _Γ' -> do
+                set (_ΓR <> (Context.SolvedType β (Monotype.UnsolvedType α) : _ΓM) <> (Context.UnsolvedType α : _ΓL))
 
         -- InstRSolve
-        Type.Unsolved β -> do
-            instRSolve (Monotype.Unsolved β)
-        Type.Variable β -> do
-            instRSolve (Monotype.Variable β)
+        Type.UnsolvedType β -> do
+            instRSolve (Monotype.UnsolvedType β)
+        Type.VariableType β -> do
+            instRSolve (Monotype.VariableType β)
         Type.Bool -> do
             instRSolve Monotype.Bool
         Type.Natural -> do
@@ -873,25 +873,25 @@ instantiateR _A₀ α = do
             α₁ <- fresh
             α₂ <- fresh
 
-            set (_ΓR <> (Context.Solved α (Monotype.Function (Monotype.Unsolved α₁) (Monotype.Unsolved α₂)) : Context.Unsolved α₁ : Context.Unsolved α₂ : _ΓL))
+            set (_ΓR <> (Context.SolvedType α (Monotype.Function (Monotype.UnsolvedType α₁) (Monotype.UnsolvedType α₂)) : Context.UnsolvedType α₁ : Context.UnsolvedType α₂ : _ΓL))
 
-            instantiateL α₁ _A₁
+            instantiateTypeL α₁ _A₁
 
             _Θ <- get
 
-            instantiateR (Context.solve _Θ _A₂) α₂
+            instantiateTypeR (Context.solveType _Θ _A₂) α₂
 
         -- InstRAllL
         Type.Forall nameLocation β₀ Domain.Type _B -> do
             β₁ <- fresh
 
-            push (Context.Marker β₁)
-            push (Context.Unsolved β₁)
+            push (Context.MarkerType β₁)
+            push (Context.UnsolvedType β₁)
 
-            let β₁' = Type{ location = nameLocation, node = Type.Unsolved β₁ }
-            instantiateR (Type.substitute β₀ 0 β₁' _B) α
+            let β₁' = Type{ location = nameLocation, node = Type.UnsolvedType β₁ }
+            instantiateTypeR (Type.substituteType β₀ 0 β₁' _B) α
 
-            discardUpTo (Context.Marker β₁)
+            discardUpTo (Context.MarkerType β₁)
         Type.Forall _ β₀ Domain.Fields _B -> do
             β₁ <- fresh
 
@@ -899,7 +899,7 @@ instantiateR _A₀ α = do
             push (Context.UnsolvedFields β₁)
 
             let β₁' = Type.Fields [] (Monotype.UnsolvedFields β₁)
-            instantiateR (Type.substituteFields β₀ 0 β₁' _B) α
+            instantiateTypeR (Type.substituteFields β₀ 0 β₁' _B) α
 
             discardUpTo (Context.MarkerFields β₁)
         Type.Forall _ β₀ Domain.Alternatives _B -> do
@@ -909,7 +909,7 @@ instantiateR _A₀ α = do
             push (Context.UnsolvedAlternatives β₁)
 
             let β₁' = Type.Alternatives [] (Monotype.UnsolvedAlternatives β₁)
-            instantiateR (Type.substituteAlternatives β₀ 0 β₁' _B) α
+            instantiateTypeR (Type.substituteAlternatives β₀ 0 β₁' _B) α
 
             discardUpTo (Context.MarkerAlternatives β₁)
 
@@ -919,9 +919,9 @@ instantiateR _A₀ α = do
 
             α₁ <- fresh
 
-            set (_ΓR <> (Context.Solved α (Monotype.List (Monotype.Unsolved α₁)) : Context.Unsolved α₁ : _ΓL))
+            set (_ΓR <> (Context.SolvedType α (Monotype.List (Monotype.UnsolvedType α₁)) : Context.UnsolvedType α₁ : _ΓL))
 
-            instantiateR _A α₁
+            instantiateTypeR _A α₁
 
         Type.Record r -> do
             let _ΓL = _Γ
@@ -929,7 +929,7 @@ instantiateR _A₀ α = do
 
             ρ <- fresh
 
-            set (_ΓR <> (Context.Solved α (Monotype.Record (Monotype.Fields [] (Monotype.UnsolvedFields ρ))) : Context.UnsolvedFields ρ : _ΓL))
+            set (_ΓR <> (Context.SolvedType α (Monotype.Record (Monotype.Fields [] (Monotype.UnsolvedFields ρ))) : Context.UnsolvedFields ρ : _ΓL))
 
             instantiateFieldsR (Type.location _A₀) r ρ
 
@@ -939,7 +939,7 @@ instantiateR _A₀ α = do
 
             ρ <- fresh
 
-            set (_ΓR <> (Context.Solved α (Monotype.Union (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives ρ))) : Context.UnsolvedAlternatives ρ : _ΓL))
+            set (_ΓR <> (Context.SolvedType α (Monotype.Union (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives ρ))) : Context.UnsolvedAlternatives ρ : _ΓL))
 
             instantiateAlternativesR (Type.location _A₀) u ρ
 
@@ -1019,8 +1019,8 @@ instantiateFieldsL ρ₀ location r@(Type.Fields kAs rest) = do
 
     kAβs <- traverse process kAs
 
-    let βs  = map (\(_, _, β) -> Context.Unsolved β      ) kAβs
-    let kβs = map (\(k, _, β) -> (k, Monotype.Unsolved β)) kAβs
+    let βs  = map (\(_, _, β) -> Context.UnsolvedType β      ) kAβs
+    let kβs = map (\(k, _, β) -> (k, Monotype.UnsolvedType β)) kAβs
 
     _Γ <- get
 
@@ -1052,7 +1052,7 @@ instantiateFieldsL ρ₀ location r@(Type.Fields kAs rest) = do
     let instantiate (_, _A, β) = do
             _Θ <- get
 
-            instantiateL β (Context.solve _Θ _A)
+            instantiateTypeL β (Context.solveType _Θ _A)
 
     traverse_ instantiate kAβs
 
@@ -1086,8 +1086,8 @@ instantiateFieldsR location r@(Type.Fields kAs rest) ρ₀ = do
 
     kAβs <- traverse process kAs
 
-    let βs  = map (\(_, _, β) -> Context.Unsolved β      ) kAβs
-    let kβs = map (\(k, _, β) -> (k, Monotype.Unsolved β)) kAβs
+    let βs  = map (\(_, _, β) -> Context.UnsolvedType β      ) kAβs
+    let kβs = map (\(k, _, β) -> (k, Monotype.UnsolvedType β)) kAβs
 
     _Γ <- get
 
@@ -1119,7 +1119,7 @@ instantiateFieldsR location r@(Type.Fields kAs rest) ρ₀ = do
     let instantiate (_, _A, β) = do
             _Θ <- get
 
-            instantiateR (Context.solve _Θ _A) β
+            instantiateTypeR (Context.solveType _Θ _A) β
 
     traverse_ instantiate kAβs
 
@@ -1190,8 +1190,8 @@ instantiateAlternativesL ρ₀ location u@(Type.Alternatives kAs rest) = do
 
     kAβs <- traverse process kAs
 
-    let βs  = map (\(_, _, β) -> Context.Unsolved β      ) kAβs
-    let kβs = map (\(k, _, β) -> (k, Monotype.Unsolved β)) kAβs
+    let βs  = map (\(_, _, β) -> Context.UnsolvedType β      ) kAβs
+    let kβs = map (\(k, _, β) -> (k, Monotype.UnsolvedType β)) kAβs
 
     _Γ <- get
 
@@ -1223,7 +1223,7 @@ instantiateAlternativesL ρ₀ location u@(Type.Alternatives kAs rest) = do
     let instantiate (_, _A, β) = do
             _Θ <- get
 
-            instantiateL β (Context.solve _Θ _A)
+            instantiateTypeL β (Context.solveType _Θ _A)
 
     traverse_ instantiate kAβs
 
@@ -1257,8 +1257,8 @@ instantiateAlternativesR location u@(Type.Alternatives kAs rest) ρ₀ = do
 
     kAβs <- traverse process kAs
 
-    let βs  = map (\(_, _, β) -> Context.Unsolved β      ) kAβs
-    let kβs = map (\(k, _, β) -> (k, Monotype.Unsolved β)) kAβs
+    let βs  = map (\(_, _, β) -> Context.UnsolvedType β      ) kAβs
+    let kβs = map (\(k, _, β) -> (k, Monotype.UnsolvedType β)) kAβs
 
     _Γ <- get
 
@@ -1290,7 +1290,7 @@ instantiateAlternativesR location u@(Type.Alternatives kAs rest) ρ₀ = do
     let instantiate (_, _A, β) = do
             _Θ <- get
 
-            instantiateR (Context.solve _Θ _A) β
+            instantiateTypeR (Context.solveType _Θ _A) β
 
     traverse_ instantiate kAβs
 
@@ -1331,13 +1331,13 @@ infer e₀ = do
             α <- fresh
             β <- fresh
 
-            let _A = Type{ location = nameLocation, node = Type.Unsolved α }
+            let _A = Type{ location = nameLocation, node = Type.UnsolvedType α }
 
             let _B =
-                    Type{ location = Syntax.location e, node = Type.Unsolved β }
+                    Type{ location = Syntax.location e, node = Type.UnsolvedType β }
 
-            push (Context.Unsolved α)
-            push (Context.Unsolved β)
+            push (Context.UnsolvedType α)
+            push (Context.UnsolvedType β)
             push (Context.Annotation x _A)
 
             check e _B
@@ -1352,7 +1352,7 @@ infer e₀ = do
 
             _Θ <- get
 
-            inferApplication (Context.solve _Θ _A) e₂
+            inferApplication (Context.solveType _Θ _A) e₂
 
         -- Anno
         Syntax.Annotation e _A -> do
@@ -1383,10 +1383,10 @@ infer e₀ = do
                 [] -> do
                     α <- fresh
 
-                    push (Context.Unsolved α)
+                    push (Context.UnsolvedType α)
 
                     return _Type
-                        { node = Type.List _Type{ node = Type.Unsolved α }
+                        { node = Type.List _Type{ node = Type.UnsolvedType α }
                         }
                 y : ys -> do
                     _A <- infer y
@@ -1409,18 +1409,21 @@ infer e₀ = do
             α <- fresh
             ρ <- fresh
 
-            push (Context.Unsolved α)
+            push (Context.UnsolvedType α)
             push (Context.UnsolvedAlternatives ρ)
 
             return _Type
                 { node =
                     Type.Function
-                        _Type{ node = Type.Unsolved α }
+                        _Type{ node = Type.UnsolvedType α }
                         _Type
                             { node =
                                 Type.Union
                                     (Type.Alternatives
-                                        [(k, _Type{ node = Type.Unsolved α })]
+                                        [ ( k
+                                          , _Type{ node = Type.UnsolvedType α }
+                                          )
+                                        ]
                                         (Monotype.UnsolvedAlternatives ρ)
                                     )
                             }
@@ -1433,16 +1436,16 @@ infer e₀ = do
                 Type.Record (Type.Fields keyTypes Monotype.EmptyFields) -> do
                     β <- fresh
 
-                    push (Context.Unsolved β)
+                    push (Context.UnsolvedType β)
 
                     let process (key, Type{ node = Type.Function _A _B }) = do
                             _ϴ <- get
 
                             let β' = Type
                                     { location = Type.location _B
-                                    , node = Type.Unsolved β
+                                    , node = Type.UnsolvedType β
                                     }
-                            subtype (Context.solve _ϴ _B) (Context.solve _ϴ β')
+                            subtype (Context.solveType _ϴ _B) (Context.solveType _ϴ β')
 
                             return (key, _A)
                         process (_, _A) = do
@@ -1472,7 +1475,7 @@ infer e₀ = do
                                                 Monotype.EmptyAlternatives
                                             )
                                     }
-                                _Type{ node = Type.Unsolved β }
+                                _Type{ node = Type.UnsolvedType β }
                         }
 
                 Type.Record (Type.Fields _ _) -> do
@@ -1507,7 +1510,7 @@ infer e₀ = do
             α <- fresh
             ρ <- fresh
 
-            push (Context.Unsolved α)
+            push (Context.UnsolvedType α)
             push (Context.UnsolvedFields ρ)
 
             check record Type
@@ -1515,12 +1518,15 @@ infer e₀ = do
                 , node =
                     Type.Record
                         (Type.Fields
-                            [(key, Type{ location , node = Type.Unsolved α })]
+                            [ ( key
+                              , Type{ location , node = Type.UnsolvedType α }
+                              )
+                            ]
                             (Monotype.UnsolvedFields ρ)
                         )
                 }
 
-            return Type{ location, node = Type.Unsolved α }
+            return Type{ location, node = Type.UnsolvedType α }
 
         Syntax.True -> do
             return _Type{ node = Type.Bool }
@@ -1547,7 +1553,7 @@ infer e₀ = do
 
             _Γ  <- get
 
-            let _L₁ = Context.solve _Γ _L₀
+            let _L₁ = Context.solveType _Γ _L₀
 
             check r _L₁
 
@@ -1623,7 +1629,7 @@ check e _B = do
 
     _Θ <- get
 
-    subtype (Context.solve _Θ _A) (Context.solve _Θ _B)
+    subtype (Context.solveType _Θ _A) (Context.solveType _Θ _B)
 
 {-| This corresponds to the judgment:
 
@@ -1641,11 +1647,11 @@ inferApplication
 inferApplication _A₀@Type{ node = Type.Forall nameLocation α₀ Domain.Type _A } e = do
     α₁ <- fresh
 
-    push (Context.Unsolved α₁)
+    push (Context.UnsolvedType α₁)
 
-    let α₁' = Type{ location = nameLocation, node = Type.Unsolved α₁ }
+    let α₁' = Type{ location = nameLocation, node = Type.UnsolvedType α₁ }
 
-    inferApplication (Type.substitute α₀ 0 α₁' _A) e
+    inferApplication (Type.substituteType α₀ 0 α₁' _A) e
 inferApplication _A₀@Type{ node = Type.Forall _ α₀ Domain.Fields _A } e = do
     α₁ <- fresh
 
@@ -1664,16 +1670,16 @@ inferApplication _A₀@Type{ node = Type.Forall _ α₀ Domain.Alternatives _A }
     inferApplication (Type.substituteAlternatives α₀ 0 α₁' _A) e
 
 -- αApp
-inferApplication Type{ node = Type.Unsolved α, .. } e = do
+inferApplication Type{ node = Type.UnsolvedType α, .. } e = do
     _Γ <- get
 
-    (_ΓR, _ΓL) <- Context.splitOnUnsolved α _Γ `orDie`
+    (_ΓR, _ΓL) <- Context.splitOnUnsolvedType α _Γ `orDie`
         [__i|
         Internal error: Invalid context
 
         The following unsolved variable:
 
-        ↳ #{prettyToText (Context.Unsolved α)}}
+        ↳ #{prettyToText (Context.UnsolvedType α)}}
 
         … cannot be solved because the variable is missing from the context:
 
@@ -1683,16 +1689,16 @@ inferApplication Type{ node = Type.Unsolved α, .. } e = do
     α₁ <- fresh
     α₂ <- fresh
 
-    set (_ΓR <> (Context.Solved α (Monotype.Function (Monotype.Unsolved α₁) (Monotype.Unsolved α₂)) : Context.Unsolved α₁ : Context.Unsolved α₂ : _ΓL))
+    set (_ΓR <> (Context.SolvedType α (Monotype.Function (Monotype.UnsolvedType α₁) (Monotype.UnsolvedType α₂)) : Context.UnsolvedType α₁ : Context.UnsolvedType α₂ : _ΓL))
 
-    check e Type{ node = Type.Unsolved α₁, .. }
+    check e Type{ node = Type.UnsolvedType α₁, .. }
 
-    return Type{ node = Type.Unsolved α₂, .. }
+    return Type{ node = Type.UnsolvedType α₂, .. }
 inferApplication Type{ node = Type.Function _A _C } e = do
     check e _A
 
     return _C
-inferApplication Type{ node = Type.Variable α, ..} _ = do
+inferApplication Type{ node = Type.VariableType α, ..} _ = do
     Except.throwError [__i|
     Internal error: Unexpected type variable in function type
 

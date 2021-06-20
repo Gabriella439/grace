@@ -21,15 +21,15 @@ import Grace.Existential (Existential)
 
 -- | A monomorphic type
 data Monotype
-    = Variable Text
+    = VariableType Text
     -- ^ Type variable
     --
-    -- >>> pretty (Variable "a")
+    -- >>> pretty (VariableType "a")
     -- a
-    | Unsolved (Existential Monotype)
+    | UnsolvedType (Existential Monotype)
     -- ^ A placeholder variable whose type has not yet been inferred
     --
-    -- >>> pretty (Unsolved 0)
+    -- >>> pretty (UnsolvedType 0)
     -- a?
     | Function Monotype Monotype
     -- ^ Function type
@@ -73,7 +73,7 @@ data Monotype
     deriving stock (Eq, Show)
 
 instance IsString Monotype where
-    fromString string = Variable (fromString string)
+    fromString string = VariableType (fromString string)
 
 instance Pretty Monotype where
     pretty = prettyMonotype
@@ -123,9 +123,9 @@ prettyApplicationType (List _A) = "List " <> prettyPrimitiveType _A
 prettyApplicationType  other    =  prettyPrimitiveType other
 
 prettyPrimitiveType :: Monotype -> Doc a
-prettyPrimitiveType (Variable α) =
+prettyPrimitiveType (VariableType α) =
     pretty α
-prettyPrimitiveType (Unsolved α) =
+prettyPrimitiveType (UnsolvedType α) =
     pretty α <> "?"
 prettyPrimitiveType (Record r) =
     prettyRecordType r
