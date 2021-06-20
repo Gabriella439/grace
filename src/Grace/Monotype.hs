@@ -82,20 +82,34 @@ instance Pretty Monotype where
 data Record = Fields [(Text, Monotype)] RemainingFields
     deriving stock (Eq, Show)
 
+-- | This represents whether or not the record type is open or closed
 data RemainingFields
     = EmptyFields
+    -- ^ The record type is closed, meaning that all fields are known
     | UnsolvedFields (Existential Record)
+    -- ^ The record type is open, meaning that some fields are known and there
+    --   is an unsolved fields variable that is a placeholder for other fields
+    --   that may or may not be present
     | VariableFields Text
+    -- ^ Same as `UnsolvedFields`, except that the user has given the fields
+    --   variable an explicit name in the source code
     deriving stock (Eq, Ord, Show)
 
 -- | A monomorphic union type
 data Union = Alternatives [(Text, Monotype)] RemainingAlternatives
     deriving stock (Eq, Show)
 
+-- | This represents whether or not the union type is open or closed
 data RemainingAlternatives
     = EmptyAlternatives
+    -- ^ The union type is closed, meaning that all alternatives are known
     | UnsolvedAlternatives (Existential Union)
+    -- ^ The union type is open, meaning that some alternatives are known and
+    --   there is an unsolved alternatives variable that is a placeholder for
+    --   other alternatives that may or may not be present
     | VariableAlternatives Text
+    -- ^ Same as `UnsolvedAlternatives`, except that the user has given the
+    --   alternatives variable an explicit name in the source code
     deriving stock (Eq, Ord, Show)
 
 prettyMonotype :: Monotype -> Doc a
