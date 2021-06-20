@@ -18,9 +18,7 @@ import Prettyprinter (Pretty(..))
 import qualified Data.Char as Char
 import qualified Data.Text as Text
 
-{-| An unsolved existential variable (e.g. an existential type variable or an
-    existential row variable)
--}
+-- | An unsolved existential variable
 newtype Existential a = UnsafeExistential Int
     deriving newtype (Eq, Ord, Num, Show)
 

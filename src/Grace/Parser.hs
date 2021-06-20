@@ -23,11 +23,12 @@ import Data.Text (Text)
 import Grace.Lexer (LocatedToken(LocatedToken), Token)
 import Grace.Location (Location(..), Offset(..))
 import Grace.Syntax (Binding(..), Syntax(..))
-import Grace.Type (Domain(..), Type(..))
+import Grace.Type (Type(..))
 import Text.Earley (Grammar, Prod, Report(..), rule, (<?>))
 
 import qualified Data.List.NonEmpty     as NonEmpty
 import qualified Data.Text              as Text
+import qualified Grace.Domain           as Domain
 import qualified Grace.Lexer            as Lexer
 import qualified Grace.Location         as Location
 import qualified Grace.Monotype         as Monotype
@@ -377,11 +378,11 @@ grammar = mdo
 
     domain <- rule
         (   do  token Lexer.Type
-                return Types
+                return Domain.Type
         <|> do  token Lexer.Fields
-                return Rows
+                return Domain.Fields
         <|> do  token Lexer.Alternatives
-                return Variants
+                return Domain.Alternatives
         )
 
     quantifiedType <- rule do
@@ -434,36 +435,36 @@ grammar = mdo
 
                 located <- locatedLabel
                 return (variable located)
-        <|> do  let record location fieldTypes row = Type{..}
+        <|> do  let record location fieldTypes fields = Type{..}
                       where
                         node =
-                            Type.Record (Type.Fields fieldTypes row)
+                            Type.Record (Type.Fields fieldTypes fields)
 
                 locatedOpenBrace <- locatedToken Lexer.OpenBrace
                 fieldTypes <- fieldType `sepBy` token Lexer.Comma
-                row <-
+                fields <-
                     (   do  token Lexer.Bar
                             text <- label
-                            return (Monotype.VariableRow text)
-                    <|> do  pure Monotype.EmptyRow
+                            return (Monotype.VariableFields text)
+                    <|> do  pure Monotype.EmptyFields
                     )
                 token Lexer.CloseBrace
-                return (record locatedOpenBrace fieldTypes row)
-        <|> do  let union location alternativeTypes variant = Type{..}
+                return (record locatedOpenBrace fieldTypes fields)
+        <|> do  let union location alternativeTypes alternatives = Type{..}
                       where
                         node =
-                            Type.Union (Type.Alternatives alternativeTypes variant)
+                            Type.Union (Type.Alternatives alternativeTypes alternatives)
 
                 locatedOpenAngle <- locatedToken Lexer.OpenAngle
                 alternativeTypes <- alternativeType `sepBy` token Lexer.Comma
-                variant <-
+                alternatives <-
                     (   do  token Lexer.Bar
                             text <- label
-                            return (Monotype.VariableVariant text)
-                    <|> do  pure Monotype.EmptyVariant
+                            return (Monotype.VariableAlternatives text)
+                    <|> do  pure Monotype.EmptyAlternatives
                     )
                 token Lexer.CloseAngle
-                return (union locatedOpenAngle alternativeTypes variant)
+                return (union locatedOpenAngle alternativeTypes alternatives)
         <|> do  token Lexer.OpenParenthesis
                 t <- quantifiedType
                 token Lexer.CloseParenthesis

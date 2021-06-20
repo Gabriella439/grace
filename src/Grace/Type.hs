@@ -5,30 +5,31 @@ module Grace.Type
     ( -- * Types
       Type(..)
     , Node(..)
-    , Domain(..)
     , Record(..)
     , Union(..)
 
       -- * Utilities
     , solve
-    , solveRow
-    , solveVariant
+    , solveFields
+    , solveAlternatives
     , typeFreeIn
-    , rowFreeIn
-    , variantFreeIn
+    , fieldsFreeIn
+    , alternativesFreeIn
     , substitute
-    , substituteRow
-    , substituteVariant
+    , substituteFields
+    , substituteAlternatives
     ) where
 
 import Data.String (IsString(..))
 import Data.Text (Text)
 import Data.Text.Prettyprint.Doc (Doc, Pretty(..))
+import Grace.Domain (Domain)
 import Grace.Existential (Existential)
-import Grace.Monotype (Monotype, Row(..), Variant(..))
+import Grace.Monotype (Monotype, RemainingAlternatives(..), RemainingFields(..))
 
 import qualified Data.Text.Prettyprint.Doc as Pretty
-import qualified Grace.Monotype as Monotype
+import qualified Grace.Domain              as Domain
+import qualified Grace.Monotype            as Monotype
 
 -- | A potentially polymorphic type
 data Type s = Type { location :: s, node :: Node s }
@@ -58,7 +59,7 @@ data Node s
     | Forall s Text Domain (Type s)
     -- ^ Universally quantified type
     --
-    -- >>> pretty @(Node ()) (Forall () "a" Types "a")
+    -- >>> pretty @(Node ()) (Forall () "a" Domain.Type "a")
     -- forall (a : Type) . a
     | Function (Type s) (Type s)
     -- ^ Function type
@@ -73,16 +74,16 @@ data Node s
     | Record (Record s)
     -- ^ Record type
     --
-    -- >>> pretty @(Node ()) (Record (Fields [("x", "X"), ("y", "Y")] Monotype.EmptyRow))
+    -- >>> pretty @(Node ()) (Record (Fields [("x", "X"), ("y", "Y")] Monotype.EmptyFields))
     -- { x : X, y : Y }
-    -- >>> pretty @(Node ()) (Record (Fields [("x", "X"), ("y", "Y")] (Monotype.UnsolvedRow 0)))
+    -- >>> pretty @(Node ()) (Record (Fields [("x", "X"), ("y", "Y")] (Monotype.UnsolvedFields 0)))
     -- { x : X, y : Y | a? }
     | Union (Union s)
     -- ^ Union type
     --
-    -- >>> pretty @(Node ()) (Union (Alternatives [("x", "X"), ("y", "Y")] Monotype.EmptyVariant))
+    -- >>> pretty @(Node ()) (Union (Alternatives [("x", "X"), ("y", "Y")] Monotype.EmptyAlternatives))
     -- < x : X, y : Y >
-    -- >>> pretty @(Node ()) (Union (Alternatives [("x", "X"), ("y", "Y")] (Monotype.UnsolvedVariant 0)))
+    -- >>> pretty @(Node ()) (Union (Alternatives [("x", "X"), ("y", "Y")] (Monotype.UnsolvedAlternatives 0)))
     -- < x : X, y : Y | a? >
     | Bool
     -- ^ Boolean type
@@ -107,16 +108,12 @@ instance IsString (Node s) where
 instance Pretty (Node s) where
     pretty = prettyQuantifiedType
 
--- | The domain over which a ∀ is quantified
-data Domain = Types | Rows | Variants
-    deriving stock (Eq, Ord, Show)
-
 -- | A potentially polymorphic record type
-data Record s = Fields [(Text, Type s)] Row
+data Record s = Fields [(Text, Type s)] RemainingFields
     deriving stock (Eq, Functor, Ord, Show)
 
 -- | A potentially polymorphic union type
-data Union s = Alternatives [(Text, Type s)] Variant
+data Union s = Alternatives [(Text, Type s)] RemainingAlternatives
     deriving stock (Eq, Functor, Ord, Show)
 
 {-| This function should not be exported or generally used.  It is only really
@@ -175,10 +172,11 @@ solve α₀ τ Type{ node = old, .. } = Type{ node = new, .. }
             Text
 
 {-| Substitute a `Type` by replacing all occurrences of the given unsolved
-    row variable with a t`Monotype.Record`
+    fields variable with a t`Monotype.Record`
 -}
-solveRow :: Existential Monotype.Record -> Monotype.Record -> Type s -> Type s
-solveRow ρ₀ r@(Monotype.Fields kτs ρ₁) Type{ node = old, .. } =
+solveFields
+    :: Existential Monotype.Record -> Monotype.Record -> Type s -> Type s
+solveFields ρ₀ r@(Monotype.Fields kτs ρ₁) Type{ node = old, .. } =
     Type{ node = new, .. }
   where
     new = case old of
@@ -187,22 +185,22 @@ solveRow ρ₀ r@(Monotype.Fields kτs ρ₁) Type{ node = old, .. } =
         Unsolved α ->
             Unsolved α
         Forall s α domain _A ->
-            Forall s α domain (solveRow ρ₀ r _A)
+            Forall s α domain (solveFields ρ₀ r _A)
         Function _A _B ->
-            Function (solveRow ρ₀ r _A) (solveRow ρ₀ r _B)
+            Function (solveFields ρ₀ r _A) (solveFields ρ₀ r _B)
         List _A ->
-            List (solveRow ρ₀ r _A)
+            List (solveFields ρ₀ r _A)
         Record (Fields kAs₀ ρ)
-            | UnsolvedRow ρ₀ == ρ ->
-                Record (Fields (map (\(k, _A) -> (k, solveRow ρ₀ r _A)) kAs₁) ρ₁)
+            | UnsolvedFields ρ₀ == ρ ->
+                Record (Fields (map (\(k, _A) -> (k, solveFields ρ₀ r _A)) kAs₁) ρ₁)
             | otherwise ->
-                Record (Fields (map (\(k, _A) -> (k, solveRow ρ₀ r _A)) kAs₀) ρ)
+                Record (Fields (map (\(k, _A) -> (k, solveFields ρ₀ r _A)) kAs₀) ρ)
           where
             kAs₁ = kAs₀ <> map (\(k, τ) -> (k, fmap (\_ -> location) (fromMonotype τ))) kτs
         Union (Alternatives kAs ρ) ->
             Union (Alternatives (map adapt kAs) ρ)
           where
-            adapt (k, _A) = (k, solveRow ρ₀ r _A)
+            adapt (k, _A) = (k, solveFields ρ₀ r _A)
         Bool ->
             Bool
         Natural ->
@@ -211,11 +209,11 @@ solveRow ρ₀ r@(Monotype.Fields kτs ρ₁) Type{ node = old, .. } =
             Text
 
 {-| Substitute a `Type` by replacing all occurrences of the given unsolved
-    variant variable with a t`Monotype.Union`
+    alternatives variable with a t`Monotype.Union`
 -}
-solveVariant
+solveAlternatives
     :: Existential Monotype.Union -> Monotype.Union -> Type s -> Type s
-solveVariant ρ₀ r@(Monotype.Alternatives kτs ρ₁) Type{ node = old, .. } =
+solveAlternatives ρ₀ r@(Monotype.Alternatives kτs ρ₁) Type{ node = old, .. } =
     Type{ node = new, .. }
   where
     new = case old of
@@ -224,20 +222,20 @@ solveVariant ρ₀ r@(Monotype.Alternatives kτs ρ₁) Type{ node = old, .. } =
         Unsolved α ->
             Unsolved α
         Forall s α domain _A ->
-            Forall s α domain (solveVariant ρ₀ r _A)
+            Forall s α domain (solveAlternatives ρ₀ r _A)
         Function _A _B ->
-            Function (solveVariant ρ₀ r _A) (solveVariant ρ₀ r _B)
+            Function (solveAlternatives ρ₀ r _A) (solveAlternatives ρ₀ r _B)
         List _A ->
-            List (solveVariant ρ₀ r _A)
+            List (solveAlternatives ρ₀ r _A)
         Record (Fields kAs ρ) ->
             Record (Fields (map adapt kAs) ρ)
           where
-            adapt (k, _A) = (k, solveVariant ρ₀ r _A)
+            adapt (k, _A) = (k, solveAlternatives ρ₀ r _A)
         Union (Alternatives kAs₀ ρ)
-            | UnsolvedVariant ρ₀ == ρ ->
-                Union (Alternatives (map (\(k, _A) -> (k, solveVariant ρ₀ r _A)) kAs₁) ρ₁)
+            | UnsolvedAlternatives ρ₀ == ρ ->
+                Union (Alternatives (map (\(k, _A) -> (k, solveAlternatives ρ₀ r _A)) kAs₁) ρ₁)
             | otherwise ->
-                Union (Alternatives (map (\(k, _A) -> (k, solveVariant ρ₀ r _A)) kAs₀) ρ)
+                Union (Alternatives (map (\(k, _A) -> (k, solveAlternatives ρ₀ r _A)) kAs₀) ρ)
           where
             kAs₁ = kAs₀ <> map (\(k, τ) -> (k, fmap (\_ -> location) (fromMonotype τ))) kτs
         Bool ->
@@ -260,7 +258,7 @@ substitute α₀ n _A₀ Type{ node = old, .. } = Type{ node = new, .. }
         Unsolved α ->
             Unsolved α
         Forall s α₁ domain _A₁ ->
-            if α₀ == α₁ && domain == Types
+            if α₀ == α₁ && domain == Domain.Type
             then
                 if n <= 0
                 then Forall s α₁ domain _A₁
@@ -284,8 +282,8 @@ substitute α₀ n _A₀ Type{ node = old, .. } = Type{ node = new, .. }
 {-| Replace all occurrences of a variable within one `Type` with another `Type`,
     given the variable's label and index
 -}
-substituteRow :: Text -> Int -> Record s -> Type s -> Type s
-substituteRow ρ₀ n r@(Fields kτs ρ₁) Type{ node = old, .. } =
+substituteFields :: Text -> Int -> Record s -> Type s -> Type s
+substituteFields ρ₀ n r@(Fields kτs ρ₁) Type{ node = old, .. } =
     Type{ node = new, .. }
   where
     new = case old of
@@ -294,25 +292,25 @@ substituteRow ρ₀ n r@(Fields kτs ρ₁) Type{ node = old, .. } =
         Unsolved α ->
             Unsolved α
         Forall s α₁ domain _A ->
-            if ρ₀ == α₁ && domain == Rows
+            if ρ₀ == α₁ && domain == Domain.Fields
             then
                 if n <= 0
                 then Forall s α₁ domain _A
-                else Forall s α₁ domain (substituteRow ρ₀ (n - 1) r _A)
-            else Forall s α₁ domain (substituteRow ρ₀ n r _A)
+                else Forall s α₁ domain (substituteFields ρ₀ (n - 1) r _A)
+            else Forall s α₁ domain (substituteFields ρ₀ n r _A)
         Function _A _B ->
-            Function (substituteRow ρ₀ n r _A) (substituteRow ρ₀ n r _B)
+            Function (substituteFields ρ₀ n r _A) (substituteFields ρ₀ n r _B)
         List _A ->
-            List (substituteRow ρ₀ n r _A)
+            List (substituteFields ρ₀ n r _A)
         Record (Fields kAs₀ ρ)
-            | Monotype.VariableRow ρ₀ == ρ && n == 0 ->
-                Record (Fields (map (\(k, _A) -> (k, substituteRow ρ₀ n r _A)) kAs₁) ρ₁)
+            | VariableFields ρ₀ == ρ && n == 0 ->
+                Record (Fields (map (\(k, _A) -> (k, substituteFields ρ₀ n r _A)) kAs₁) ρ₁)
             | otherwise ->
-                Record (Fields (map (\(k, _A) -> (k, substituteRow ρ₀ n r _A)) kAs₀) ρ)
+                Record (Fields (map (\(k, _A) -> (k, substituteFields ρ₀ n r _A)) kAs₀) ρ)
           where
             kAs₁ = kAs₀ <> map (\(k, τ) -> (k, fmap (\_ -> location) τ)) kτs
         Union (Alternatives kAs ρ) ->
-            Union (Alternatives (map (\(k, _A) -> (k, substituteRow ρ₀ n r _A)) kAs) ρ)
+            Union (Alternatives (map (\(k, _A) -> (k, substituteFields ρ₀ n r _A)) kAs) ρ)
         Bool ->
             Bool
         Natural ->
@@ -323,8 +321,8 @@ substituteRow ρ₀ n r@(Fields kτs ρ₁) Type{ node = old, .. } =
 {-| Replace all occurrences of a variable within one `Type` with another `Type`,
     given the variable's label and index
 -}
-substituteVariant :: Text -> Int -> Union s -> Type s -> Type s
-substituteVariant ρ₀ n r@(Alternatives kτs ρ₁) Type{ node = old, .. } =
+substituteAlternatives :: Text -> Int -> Union s -> Type s -> Type s
+substituteAlternatives ρ₀ n r@(Alternatives kτs ρ₁) Type{ node = old, .. } =
     Type{ node = new, .. }
   where
     new = case old of
@@ -333,23 +331,23 @@ substituteVariant ρ₀ n r@(Alternatives kτs ρ₁) Type{ node = old, .. } =
         Unsolved α ->
             Unsolved α
         Forall s α₁ domain _A ->
-            if ρ₀ == α₁ && domain == Variants
+            if ρ₀ == α₁ && domain == Domain.Alternatives
             then
                 if n <= 0
                 then Forall s α₁ domain _A
-                else Forall s α₁ domain (substituteVariant ρ₀ (n - 1) r _A)
-            else Forall s α₁ domain (substituteVariant ρ₀ n r _A)
+                else Forall s α₁ domain (substituteAlternatives ρ₀ (n - 1) r _A)
+            else Forall s α₁ domain (substituteAlternatives ρ₀ n r _A)
         Function _A _B ->
-            Function (substituteVariant ρ₀ n r _A) (substituteVariant ρ₀ n r _B)
+            Function (substituteAlternatives ρ₀ n r _A) (substituteAlternatives ρ₀ n r _B)
         List _A ->
-            List (substituteVariant ρ₀ n r _A)
+            List (substituteAlternatives ρ₀ n r _A)
         Record (Fields kAs ρ) ->
-            Record (Fields (map (\(k, _A) -> (k, substituteVariant ρ₀ n r _A)) kAs) ρ)
+            Record (Fields (map (\(k, _A) -> (k, substituteAlternatives ρ₀ n r _A)) kAs) ρ)
         Union (Alternatives kAs₀ ρ)
-            | Monotype.VariableVariant ρ₀ == ρ && n == 0 ->
-                Union (Alternatives (map (\(k, _A) -> (k, substituteVariant ρ₀ n r _A)) kAs₁) ρ₁)
+            | Monotype.VariableAlternatives ρ₀ == ρ && n == 0 ->
+                Union (Alternatives (map (\(k, _A) -> (k, substituteAlternatives ρ₀ n r _A)) kAs₁) ρ₁)
             | otherwise ->
-                Union (Alternatives (map (\(k, _A) -> (k, substituteVariant ρ₀ n r _A)) kAs₀) ρ)
+                Union (Alternatives (map (\(k, _A) -> (k, substituteAlternatives ρ₀ n r _A)) kAs₀) ρ)
           where
             kAs₁ = kAs₀ <> map (\(k, τ) -> (k, fmap (\_ -> location) τ)) kτs
         Bool ->
@@ -389,19 +387,19 @@ typeFreeIn :: Existential Monotype -> Type s-> Bool
 {-| Count how many times the given `Existential` t`Monotype.Record` variable
     appears within a `Type`
 -}
-rowFreeIn :: Existential Monotype.Record -> Type s -> Bool
-ρ₀ `rowFreeIn` Type{ node } =
+fieldsFreeIn :: Existential Monotype.Record -> Type s -> Bool
+ρ₀ `fieldsFreeIn` Type{ node } =
     case node of
         Variable _ ->
             False
         Unsolved _ ->
             False
         Forall _ _ _ _A ->
-            ρ₀ `rowFreeIn` _A
+            ρ₀ `fieldsFreeIn` _A
         Function _A _B ->
-            ρ₀ `rowFreeIn` _A || ρ₀ `rowFreeIn` _B
+            ρ₀ `fieldsFreeIn` _A || ρ₀ `fieldsFreeIn` _B
         List _A ->
-            ρ₀ `rowFreeIn` _A
+            ρ₀ `fieldsFreeIn` _A
         Bool ->
             False
         Natural ->
@@ -409,26 +407,27 @@ rowFreeIn :: Existential Monotype.Record -> Type s -> Bool
         Text ->
             False
         Record (Fields kAs ρ₁) ->
-            UnsolvedRow ρ₀ == ρ₁ || any (\(_, _A) -> ρ₀ `rowFreeIn` _A) kAs
+                UnsolvedFields ρ₀ == ρ₁
+            ||  any (\(_, _A) -> ρ₀ `fieldsFreeIn` _A) kAs
         Union (Alternatives kAs _) ->
-            any (\(_, _A) -> ρ₀ `rowFreeIn` _A) kAs
+            any (\(_, _A) -> ρ₀ `fieldsFreeIn` _A) kAs
 
 {-| Count how many times the given `Existential` t`Monotype.Union` variable
     appears within a `Type`
 -}
-variantFreeIn :: Existential Monotype.Union -> Type s -> Bool
-ρ₀ `variantFreeIn` Type{ node } =
+alternativesFreeIn :: Existential Monotype.Union -> Type s -> Bool
+ρ₀ `alternativesFreeIn` Type{ node } =
     case node of
         Variable _ ->
             False
         Unsolved _ ->
             False
         Forall _ _ _ _A ->
-            ρ₀ `variantFreeIn` _A
+            ρ₀ `alternativesFreeIn` _A
         Function _A _B ->
-            ρ₀ `variantFreeIn` _A || ρ₀ `variantFreeIn` _B
+            ρ₀ `alternativesFreeIn` _A || ρ₀ `alternativesFreeIn` _B
         List _A ->
-            ρ₀ `variantFreeIn` _A
+            ρ₀ `alternativesFreeIn` _A
         Bool ->
             False
         Natural ->
@@ -436,16 +435,17 @@ variantFreeIn :: Existential Monotype.Union -> Type s -> Bool
         Text ->
             False
         Record (Fields kAs _) ->
-            any (\(_, _A) -> ρ₀ `variantFreeIn` _A) kAs
+            any (\(_, _A) -> ρ₀ `alternativesFreeIn` _A) kAs
         Union (Alternatives kAs ρ₁) ->
-            UnsolvedVariant ρ₀ == ρ₁ || any (\(_, _A) -> ρ₀ `variantFreeIn` _A) kAs
+                UnsolvedAlternatives ρ₀ == ρ₁
+            ||  any (\(_, _A) -> ρ₀ `alternativesFreeIn` _A) kAs
 
 prettyQuantifiedType :: Node s -> Doc a
-prettyQuantifiedType (Forall _ α Types _A) =
+prettyQuantifiedType (Forall _ α Domain.Type _A) =
     "forall (" <> Pretty.pretty α <> " : Type) . " <> prettyType prettyQuantifiedType _A
-prettyQuantifiedType (Forall _ α Rows _A) =
+prettyQuantifiedType (Forall _ α Domain.Fields _A) =
     "forall (" <> Pretty.pretty α <> " : Fields) . " <> prettyType prettyQuantifiedType _A
-prettyQuantifiedType (Forall _ α Variants _A) =
+prettyQuantifiedType (Forall _ α Domain.Alternatives _A) =
     "forall (" <> Pretty.pretty α <> " : Alternatives) . " <> prettyType prettyQuantifiedType _A
 prettyQuantifiedType other = prettyFunctionType other
 
@@ -472,40 +472,40 @@ prettyPrimitiveType  Text        = "Text"
 prettyPrimitiveType  other       = "(" <> prettyQuantifiedType other <> ")"
 
 prettyRecordType :: Record s -> Doc a
-prettyRecordType (Fields [] EmptyRow) =
+prettyRecordType (Fields [] EmptyFields) =
     "{ }"
-prettyRecordType (Fields [] (UnsolvedRow ρ)) =
+prettyRecordType (Fields [] (UnsolvedFields ρ)) =
     "{ " <> Pretty.pretty ρ <> "? }"
-prettyRecordType (Fields [] (VariableRow ρ)) =
+prettyRecordType (Fields [] (VariableFields ρ)) =
     "{ " <> Pretty.pretty ρ <> " }"
-prettyRecordType (Fields ((key₀, type₀) : keyTypes) row) =
+prettyRecordType (Fields ((key₀, type₀) : keyTypes) fields) =
         "{ "
     <>  Pretty.pretty key₀
     <>  " : "
     <>  prettyType prettyQuantifiedType type₀
     <>  foldMap prettyKeyType keyTypes
-    <>  case row of
-            EmptyRow      -> " }"
-            UnsolvedRow ρ -> " | " <> Pretty.pretty ρ <> "? }"
-            VariableRow ρ -> " | " <> Pretty.pretty ρ <> " }"
+    <>  case fields of
+            EmptyFields      -> " }"
+            UnsolvedFields ρ -> " | " <> Pretty.pretty ρ <> "? }"
+            VariableFields ρ -> " | " <> Pretty.pretty ρ <> " }"
 
 prettyUnionType :: Union s -> Doc a
-prettyUnionType (Alternatives [] EmptyVariant) =
+prettyUnionType (Alternatives [] EmptyAlternatives) =
     "< >"
-prettyUnionType (Alternatives [] (UnsolvedVariant ρ)) =
+prettyUnionType (Alternatives [] (UnsolvedAlternatives ρ)) =
     "< " <> Pretty.pretty ρ <> "? >"
-prettyUnionType (Alternatives [] (VariableVariant ρ)) =
+prettyUnionType (Alternatives [] (VariableAlternatives ρ)) =
     "< " <> Pretty.pretty ρ <> " >"
-prettyUnionType (Alternatives ((key₀, type₀) : keyTypes) variant) =
+prettyUnionType (Alternatives ((key₀, type₀) : keyTypes) alternatives) =
         "< "
     <>  Pretty.pretty key₀
     <>  " : "
     <>  prettyType prettyQuantifiedType type₀
     <>  foldMap prettyKeyType keyTypes
-    <>  case variant of
-            EmptyVariant -> " >"
-            UnsolvedVariant ρ -> " | " <> Pretty.pretty ρ <> "? >"
-            VariableVariant ρ -> " | " <> Pretty.pretty ρ <> " >"
+    <>  case alternatives of
+            EmptyAlternatives      -> " >"
+            UnsolvedAlternatives ρ -> " | " <> Pretty.pretty ρ <> "? >"
+            VariableAlternatives ρ -> " | " <> Pretty.pretty ρ <> " >"
 
 prettyKeyType :: (Text, Type s) -> Doc a
 prettyKeyType (key, type_) =

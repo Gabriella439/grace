@@ -21,6 +21,7 @@ library
   build-tools:         doctest
   exposed-modules:     Grace
                      , Grace.Context
+                     , Grace.Domain
                      , Grace.Existential
                      , Grace.Interpret
                      , Grace.Infer
