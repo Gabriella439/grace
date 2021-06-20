@@ -1,3 +1,5 @@
+# This verifies that the interpret correctly simplifies various abstract
+# arithmetic expressions
 { example0 = \x -> x + 0
 , example1 = \x -> 0 + x
 , example2 = \x -> x * 1

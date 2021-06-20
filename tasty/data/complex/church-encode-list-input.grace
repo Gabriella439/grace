@@ -1,4 +1,4 @@
-# This tests that Church-encoding a list works correctly
+# This tests that Boehm-Berarducci-encoding a list works correctly
 let nil : forall (a : Type)
         . forall (list : Type)
         . (a -> list -> list) -> list -> list

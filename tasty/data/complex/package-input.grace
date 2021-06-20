@@ -1,3 +1,4 @@
+# This checks that anonymous unions work for a realistic example
 [ GitHub
     { repository =
         "https://github.com/Gabriel439/Haskell-Turtle-Library.git"
@@ -17,4 +18,3 @@
     , GitHub : { repository : Text, revision : Text }
     , Hackage : { package : Text, version : Text }
     >
-
