@@ -1475,8 +1475,7 @@ infer e₀ = do
                                 _Type{ node = Type.Unsolved β }
                         }
 
-                -- TODO: Handle the `Monotype.VariableFields` case
-                Type.Record (Type.Fields _ (Monotype.UnsolvedFields _)) -> do
+                Type.Record (Type.Fields _ _) -> do
                     Except.throwError [__i|
                         Must merge a concrete record
 
