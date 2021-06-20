@@ -37,10 +37,10 @@ import qualified Prettyprinter              as Pretty
 -- | An element of the `Context` list
 data Entry s
     = Variable Domain Text
-    -- ^ Type variable
+    -- ^ Universally quantified variable
     --
     -- >>> pretty @(Entry ()) (Variable Domain.Type "a")
-    -- a
+    -- a : Type
     | Annotation Text (Type s)
     -- ^ A bound variable whose type is known
     --
@@ -136,8 +136,12 @@ instance Pretty (Entry s) where
 type Context s = [Entry s]
 
 prettyEntry :: Entry s -> Doc a
-prettyEntry (Variable _ α) =
-    Pretty.pretty α
+prettyEntry (Variable Domain.Type α) =
+    Pretty.pretty α <> " : Type"
+prettyEntry (Variable Domain.Fields α) =
+    Pretty.pretty α <> " : Fields"
+prettyEntry (Variable Domain.Alternatives α) =
+    Pretty.pretty α <> " : Alternatives"
 prettyEntry (Unsolved α) =
     Pretty.pretty α <> "?"
 prettyEntry (UnsolvedFields ρ) =
@@ -218,14 +222,14 @@ solve context type_ = foldl snoc type_ context
 
     >>> original = Type.Fields [("x", Type{ location = (), node = Type.Bool })] (Monotype.UnsolvedFields 0)
     >>> pretty original
-    { x = Bool | a? }
+    { x : Bool | a? }
 
     >>> entry = SolvedFields 0 (Monotype.Fields [] Monotype.EmptyFields)
     >>> pretty entry
-    a = {}
+    a = •
 
     >>> pretty (solveRecord [ entry ] original)
-    { x = Bool }
+    { x : Bool }
 -}
 solveRecord :: Context s -> Type.Record s -> Type.Record s
 solveRecord context record = record'
