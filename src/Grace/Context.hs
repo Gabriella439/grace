@@ -207,7 +207,7 @@ prettyAlternativeType (k, τ) =
     >>> pretty original
     a?
 
-    >>> pretty (solve [ UnsolvedType 1, SolvedType 0 Monotype.Bool ] original)
+    >>> pretty (solveType [ UnsolvedType 1, SolvedType 0 Monotype.Bool ] original)
     Bool
 -}
 solveType :: Context s -> Type s -> Type s
