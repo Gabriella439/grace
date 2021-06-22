@@ -71,9 +71,12 @@ test-suite tasty
                      , mtl
                      , prettyprinter
                      , tasty
+                     , tasty-hunit
                      , tasty-silver
                      , text
   hs-source-dirs:      tasty
   default-extensions:  OverloadedStrings
+                     , BlockArguments
+                     , NamedFieldPuns
   default-language:    Haskell2010
   ghc-options:         -Wall

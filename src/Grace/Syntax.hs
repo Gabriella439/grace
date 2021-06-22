@@ -25,7 +25,7 @@ import qualified Data.Text as Text
 
 -- | The surface syntax for the language
 data Syntax s a = Syntax { location :: s, node :: Node s a }
-    deriving stock (Foldable, Functor, Show, Traversable)
+    deriving stock (Eq, Foldable, Functor, Show, Traversable)
 
 instance Bifunctor Syntax where
     first f Syntax{ location, node } =
@@ -135,7 +135,7 @@ data Node s a
     --   >>> pretty @(Node () Void) (Append "x" () "y")
     --   x ++ y
     | Embed a
-    deriving stock (Foldable, Functor, Show, Traversable)
+    deriving stock (Eq, Foldable, Functor, Show, Traversable)
 
 instance Bifunctor Node where
     first _ (Variable name index) =
@@ -334,7 +334,7 @@ data Binding s a = Binding
     , name :: Text
     , annotation :: Maybe (Type s)
     , assignment :: Syntax s a
-    } deriving stock (Foldable, Functor, Show, Traversable)
+    } deriving stock (Eq, Foldable, Functor, Show, Traversable)
 
 instance Bifunctor Binding where
     first f Binding{ nameLocation, annotation, assignment, .. } =
