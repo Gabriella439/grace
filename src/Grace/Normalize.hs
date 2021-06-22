@@ -1,13 +1,7 @@
 -- | This module contains the logic for efficiently evaluating an expression
 module Grace.Normalize
     ( -- * Normalization
-      normalize
-
-      -- * Internal utilities
-    , evaluate
-    , fresh
-    , lookupVariable
-    , instantiate
+      evaluate
     , quote
     ) where
 
@@ -326,11 +320,3 @@ quote names value = Syntax.Syntax{..}
 
             Value.Append left right ->
                 Syntax.Append (quote names left) () (quote names right)
-
-{-| Evaluate an expression
-
-    This is a convenient wrapper around `evaluate` and `quote` in order to
-    evaluate a top-level expression
--}
-normalize :: Syntax Location (Type Location, Value) -> Syntax () Void
-normalize = quote [] . evaluate []

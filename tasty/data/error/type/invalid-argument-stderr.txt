@@ -1,0 +1,19 @@
+Not a subtype
+
+The following type:
+
+↳ Text
+
+tasty/data/error/type/invalid-argument-input.grace:3:7: 
+  │
+3 │ in  f ""
+  │       ↑
+
+… cannot be a subtype of:
+
+↳ Natural
+
+tasty/data/error/type/invalid-argument-input.grace:1:10: 
+  │
+1 │ let f = \x -> (x : Natural)
+  │          ↑
