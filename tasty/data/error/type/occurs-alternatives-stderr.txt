@@ -1,0 +1,19 @@
+Not a subtype
+
+The following type:
+
+↳ < C : a? | d? >
+
+tasty/data/error/type/occurs-alternatives-input.grace:2:12: 
+  │
+2 │ \x -> [ x, C x ]
+  │            ↑
+
+… cannot be a subtype of:
+
+↳ a?
+
+tasty/data/error/type/occurs-alternatives-input.grace:2:2: 
+  │
+2 │ \x -> [ x, C x ]
+  │  ↑

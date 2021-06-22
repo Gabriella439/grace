@@ -278,11 +278,8 @@ substituteType α₀ n _A₀ Type{ node = old, .. } = Type{ node = new, .. }
             UnsolvedType α
         Forall s α₁ domain _A₁ ->
             if α₀ == α₁ && domain == Domain.Type
-            then
-                if n <= 0
-                then Forall s α₁ domain _A₁
-                else Forall s α₁ domain (substituteType α₀ (n - 1) _A₀ _A₁)
-            else Forall s α₁ domain (substituteType α₀ n _A₀ _A₁)
+            then Forall s α₁ domain (substituteType α₀ (n + 1) _A₀ _A₁)
+            else Forall s α₁ domain (substituteType α₀  n      _A₀ _A₁)
         Function _A₁ _B ->
             Function (substituteType α₀ n _A₀ _A₁) (substituteType α₀ n _A₀ _B)
         List _A₁ ->
@@ -312,11 +309,8 @@ substituteFields ρ₀ n r@(Fields kτs ρ₁) Type{ node = old, .. } =
             UnsolvedType α
         Forall s α₁ domain _A ->
             if ρ₀ == α₁ && domain == Domain.Fields
-            then
-                if n <= 0
-                then Forall s α₁ domain _A
-                else Forall s α₁ domain (substituteFields ρ₀ (n - 1) r _A)
-            else Forall s α₁ domain (substituteFields ρ₀ n r _A)
+            then Forall s α₁ domain (substituteFields ρ₀ (n + 1) r _A)
+            else Forall s α₁ domain (substituteFields ρ₀  n      r _A)
         Function _A _B ->
             Function (substituteFields ρ₀ n r _A) (substituteFields ρ₀ n r _B)
         List _A ->
@@ -351,11 +345,8 @@ substituteAlternatives ρ₀ n r@(Alternatives kτs ρ₁) Type{ node = old, .. 
             UnsolvedType α
         Forall s α₁ domain _A ->
             if ρ₀ == α₁ && domain == Domain.Alternatives
-            then
-                if n <= 0
-                then Forall s α₁ domain _A
-                else Forall s α₁ domain (substituteAlternatives ρ₀ (n - 1) r _A)
-            else Forall s α₁ domain (substituteAlternatives ρ₀ n r _A)
+            then Forall s α₁ domain (substituteAlternatives ρ₀ (n + 1) r _A)
+            else Forall s α₁ domain (substituteAlternatives ρ₀  n      r _A)
         Function _A _B ->
             Function (substituteAlternatives ρ₀ n r _A) (substituteAlternatives ρ₀ n r _B)
         List _A ->

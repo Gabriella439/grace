@@ -1,0 +1,19 @@
+Not a subtype
+
+The following type:
+
+↳ f?
+
+tasty/data/error/type/occurs-fields-input.grace:2:14: 
+  │
+2 │ \x -> [ x, x.a ]
+  │              ↑
+
+… cannot be a subtype of:
+
+↳ { a : f? | g? }
+
+tasty/data/error/type/occurs-fields-input.grace:2:2: 
+  │
+2 │ \x -> [ x, x.a ]
+  │  ↑
