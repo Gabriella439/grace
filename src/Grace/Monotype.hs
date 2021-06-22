@@ -1,3 +1,6 @@
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE OverloadedStrings  #-}
+
 {-| This module stores the `Monotype` type representing monomorphic types and
     utilites for operating on `Monotype`s
 -}
@@ -15,9 +18,11 @@ import Data.Text (Text)
 import Prettyprinter (Doc, Pretty(..))
 import Grace.Existential (Existential)
 
--- $setup
---
--- >>> import qualified Grace.Monotype as Monotype
+{- $setup
+
+   >>> :set -XOverloadedStrings
+   >>> import qualified Grace.Monotype as Monotype
+-}
 
 -- | A monomorphic type
 data Monotype

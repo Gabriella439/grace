@@ -1,3 +1,5 @@
+{-# LANGUAGE DerivingStrategies #-}
+
 {-| This module exists primarily to avoid a name clash with constructors of the
     same name in the "Grace.Type" module
 -}

@@ -1,3 +1,10 @@
+{-# LANGUAGE DeriveTraversable  #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleInstances  #-}
+{-# LANGUAGE NamedFieldPuns     #-}
+{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE RecordWildCards    #-}
+
 {-| This module contains the syntax tree used for the surface syntax (i.e. the
     result of parsing), representing the code as the user wrote it.
 -}
@@ -20,6 +27,9 @@ import Numeric.Natural (Natural)
 import qualified Data.Text as Text
 
 {- $setup
+
+   >>> :set -XOverloadedStrings
+   >>> :set -XTypeApplications
    >>> import Data.Void (Void)
 -}
 

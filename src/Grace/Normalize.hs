@@ -1,3 +1,8 @@
+{-# LANGUAGE BangPatterns      #-}
+{-# LANGUAGE NamedFieldPuns    #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
+
 -- | This module contains the logic for efficiently evaluating an expression
 module Grace.Normalize
     ( -- * Normalization
@@ -15,6 +20,11 @@ import Prelude hiding (succ)
 
 import qualified Grace.Value  as Value
 import qualified Grace.Syntax as Syntax
+
+{- $setup
+
+   >>> :set -XOverloadedStrings
+-}
 
 {-| Lookup a variable from an ordered environment of name-value pairs using the
     variable's name and index

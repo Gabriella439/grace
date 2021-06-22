@@ -1,3 +1,7 @@
+{-# LANGUAGE BlockArguments    #-}
+{-# LANGUAGE NamedFieldPuns    #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 module Main where
 
 import Data.Text (Text)

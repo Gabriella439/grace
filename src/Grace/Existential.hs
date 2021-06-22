@@ -1,3 +1,7 @@
+{-# LANGUAGE DerivingStrategies         #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings          #-}
+
 {-| This module provides newtype wrappers for the different types of
     existential variables used in the type-checking algorithm.
 

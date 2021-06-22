@@ -1,3 +1,6 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RecordWildCards  #-}
+
 -- | This module implements support for file-based imports
 module Grace.Interpret
     ( -- * Interpret

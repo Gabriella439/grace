@@ -1,3 +1,5 @@
+{-# LANGUAGE DerivingStrategies #-}
+
 {-| This module contains the `Value` type used internally for efficient
     evaluation of expressions
 -}

@@ -18,7 +18,6 @@ library
                      , prettyprinter
                      , string-interpolate
                      , text
-  build-tools:         doctest
   exposed-modules:     Grace
                      , Grace.Context
                      , Grace.Domain
@@ -33,25 +32,6 @@ library
                      , Grace.Syntax
                      , Grace.Type
                      , Grace.Value
-  default-extensions:  ApplicativeDo
-                     , BangPatterns
-                     , BlockArguments
-                     , DeriveFunctor
-                     , DeriveFoldable
-                     , DeriveTraversable
-                     , DerivingStrategies
-                     , DuplicateRecordFields
-                     , FlexibleContexts
-                     , FlexibleInstances
-                     , GeneralizedNewtypeDeriving
-                     , MultiWayIf
-                     , NamedFieldPuns
-                     , OverloadedStrings
-                     , QuasiQuotes
-                     , RecordWildCards
-                     , RecursiveDo
-                     , TypeApplications
-                     , ViewPatterns
   default-language:    Haskell2010
   ghc-options:         -Wall
 
@@ -75,8 +55,14 @@ test-suite tasty
                      , tasty-silver
                      , text
   hs-source-dirs:      tasty
-  default-extensions:  OverloadedStrings
-                     , BlockArguments
-                     , NamedFieldPuns
+  default-language:    Haskell2010
+  ghc-options:         -Wall
+
+test-suite doctest
+  type:                exitcode-stdio-1.0
+  main-is:             Main.hs
+  build-depends:       base
+                     , doctest
+  hs-source-dirs:      doctest
   default-language:    Haskell2010
   ghc-options:         -Wall

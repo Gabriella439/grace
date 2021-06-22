@@ -1,3 +1,10 @@
+{-# LANGUAGE DeriveTraversable  #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleInstances  #-}
+{-# LANGUAGE NamedFieldPuns     #-}
+{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE RecordWildCards    #-}
+
 {-| This module stores the `Type` type representing polymorphic types and
     utilities for operating on `Type`s
 -}
@@ -29,6 +36,12 @@ import Grace.Monotype (Monotype, RemainingAlternatives(..), RemainingFields(..))
 
 import qualified Grace.Domain   as Domain
 import qualified Grace.Monotype as Monotype
+
+{- $setup
+
+   >>> :set -XOverloadedStrings
+   >>> :set -XTypeApplications
+-}
 
 -- | A potentially polymorphic type
 data Type s = Type { location :: s, node :: Node s }

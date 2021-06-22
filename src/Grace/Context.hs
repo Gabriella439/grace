@@ -1,3 +1,9 @@
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleContexts   #-}
+{-# LANGUAGE NamedFieldPuns     #-}
+{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE RecordWildCards    #-}
+
 {-| A `Context` is an ordered list of `Entry`s used as the state for the
     bidirectional type-checking algorithm
 -}
@@ -33,6 +39,12 @@ import qualified Grace.Existential          as Existential
 import qualified Grace.Monotype             as Monotype
 import qualified Grace.Type                 as Type
 import qualified Prettyprinter              as Pretty
+
+{- $setup
+
+   >>> :set -XOverloadedStrings
+   >>> :set -XTypeApplications
+-}
 
 -- | An element of the `Context` list
 data Entry s

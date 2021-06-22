@@ -1,3 +1,10 @@
+{-# LANGUAGE ApplicativeDo     #-}
+{-# LANGUAGE BlockArguments    #-}
+{-# LANGUAGE NamedFieldPuns    #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE RecursiveDo       #-}
+
 {-| This module contains the logic for parsing Grace files using @Earley@.
 
     The main reason for not using @attoparsec@ or @megaparsec@ is because

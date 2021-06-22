@@ -1,3 +1,10 @@
+{-# LANGUAGE ApplicativeDo      #-}
+{-# LANGUAGE BlockArguments     #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE QuasiQuotes        #-}
+{-# LANGUAGE RecordWildCards    #-}
+
 {-| This module contains the logic for lexing Grace files.
 
     The main reason for a separate lexing step using is because we would like
