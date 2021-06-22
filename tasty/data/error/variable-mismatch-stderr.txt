@@ -1,0 +1,19 @@
+Not a subtype
+
+The following type:
+
+↳ b
+
+tasty/data/error/variable-mismatch-input.grace:1:54: 
+  │
+1 │ let f : forall (a : Type) . forall (b : Type) . a -> b -> a
+  │                                                      ↑
+
+… cannot be a subtype of:
+
+↳ a
+
+tasty/data/error/variable-mismatch-input.grace:1:59: 
+  │
+1 │ let f : forall (a : Type) . forall (b : Type) . a -> b -> a
+  │                                                           ↑

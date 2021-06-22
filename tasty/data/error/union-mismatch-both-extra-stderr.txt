@@ -1,0 +1,27 @@
+Union type mismatch
+
+The following union type:
+
+↳ < A : { } >
+
+tasty/data/error/union-mismatch-both-extra-input.grace:1:12: 
+  │
+1 │ \x -> (x : < A : { } >) : < B : { } >
+  │            ↑
+
+… is not a subtype of the following union type:
+
+↳ < B : { } >
+
+tasty/data/error/union-mismatch-both-extra-input.grace:1:27: 
+  │
+1 │ \x -> (x : < A : { } >) : < B : { } >
+  │                           ↑
+
+The former union has the following extra alternatives:
+
+• A
+
+… while the latter union has the following extra alternatives:
+
+• B

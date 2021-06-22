@@ -1,0 +1,19 @@
+Not a subtype
+
+The following type:
+
+↳ < b >
+
+tasty/data/error/union-variable-mismatch-input.grace:1:76: 
+  │
+1 │ let f : forall (a : Alternatives) . forall (b : Alternatives) . < | a > -> < | b > -> < | a >
+  │                                                                            ↑
+
+… cannot be a subtype of:
+
+↳ < a >
+
+tasty/data/error/union-variable-mismatch-input.grace:1:87: 
+  │
+1 │ let f : forall (a : Alternatives) . forall (b : Alternatives) . < | a > -> < | b > -> < | a >
+  │                                                                                       ↑

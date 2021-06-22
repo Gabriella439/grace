@@ -207,7 +207,7 @@ wellFormedType _Γ Type{..} =
                 |]
           where
             predicate (Context.Variable Domain.Fields α₁) = α₀ == α₁
-            predicate  _                         = False
+            predicate  _                                  = False
 
         Type.Union (Type.Alternatives kAs Monotype.EmptyAlternatives) -> do
             traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
@@ -283,8 +283,8 @@ subtype _A₀ _B₀ = do
     case (Type.node _A₀, Type.node _B₀) of
         -- <:Var
         (Type.VariableType α₀, Type.VariableType α₁)
-            | α₀ == α₁ && Context.Variable Domain.Type α₀ `elem` _Γ -> do
-                return ()
+            | α₀ == α₁ -> do
+                wellFormedType _Γ _A₀
 
         -- <:Exvar
         (Type.UnsolvedType α₀, Type.UnsolvedType α₁)

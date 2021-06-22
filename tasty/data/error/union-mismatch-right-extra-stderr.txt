@@ -1,0 +1,23 @@
+Union type mismatch
+
+The following union type:
+
+↳ < >
+
+tasty/data/error/union-mismatch-right-extra-input.grace:1:12: 
+  │
+1 │ \x -> (x : < >) : < A : { } >
+  │            ↑
+
+… is not a subtype of the following union type:
+
+↳ < A : { } >
+
+tasty/data/error/union-mismatch-right-extra-input.grace:1:19: 
+  │
+1 │ \x -> (x : < >) : < A : { } >
+  │                   ↑
+
+The latter union has the following extra alternatives:
+
+• A
