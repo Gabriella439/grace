@@ -1,0 +1,19 @@
+Not a subtype
+
+The following type:
+
+↳ c? -> d?
+
+tasty/data/error/type/delta-input.grace:1:2: 
+  │
+1 │ \x -> x x
+  │  ↑
+
+… cannot be a subtype of:
+
+↳ c?
+
+tasty/data/error/type/delta-input.grace:1:2: 
+  │
+1 │ \x -> x x
+  │  ↑

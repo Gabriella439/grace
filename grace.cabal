@@ -68,6 +68,7 @@ test-suite tasty
                      , directory
                      , filepath
                      , grace
+                     , mtl
                      , prettyprinter
                      , tasty
                      , tasty-silver

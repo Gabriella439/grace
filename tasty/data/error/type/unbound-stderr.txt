@@ -1,0 +1,6 @@
+Unbound variable: x
+
+tasty/data/error/type/unbound-input.grace:1:1: 
+  │
+1 │ x
+  │ ↑

@@ -6,6 +6,7 @@ import Prettyprinter (Pretty)
 import System.FilePath ((</>))
 import Test.Tasty (TestTree)
 
+import qualified Control.Monad.Except      as Except
 import qualified Data.Text                 as Text
 import qualified Grace.Interpret           as Interpret
 import qualified Grace.Normalize           as Normalize
@@ -28,29 +29,42 @@ fileToTestTree prefix = do
     let input              = prefix <> "-input.grace"
     let expectedTypeFile   = prefix <> "-type.grace"
     let expectedOutputFile = prefix <> "-output.grace"
+    let expectedStderrFile = prefix <> "-stderr.txt"
 
     let name = FilePath.takeBaseName input
 
-    (inferred, value) <- Interpret.interpret (Path input)
+    eitherResult <- Except.runExceptT (Interpret.interpret (Path input))
 
-    let generateTypeFile = return (pretty_ inferred)
+    case eitherResult of
+        Left message -> do
+            return
+                (Tasty.testGroup name
+                    [ Silver.goldenVsAction
+                        (name <> " - error")
+                        expectedStderrFile
+                        (return message)
+                        id
+                    ]
+                )
+        Right (inferred, value) -> do
+            let generateTypeFile = return (pretty_ inferred)
 
-    let generateOutputFile = return (pretty_ (Normalize.quote [] value))
+            let generateOutputFile = return (pretty_ (Normalize.quote [] value))
 
-    return
-        (Tasty.testGroup name
-            [ Silver.goldenVsAction
-                (name <> " - type")
-                expectedTypeFile
-                generateTypeFile
-                id
-            , Silver.goldenVsAction
-                (name <> " - output")
-                expectedOutputFile
-                generateOutputFile
-                id
-            ]
-        )
+            return
+                (Tasty.testGroup name
+                    [ Silver.goldenVsAction
+                        (name <> " - type")
+                        expectedTypeFile
+                        generateTypeFile
+                        id
+                    , Silver.goldenVsAction
+                        (name <> " - output")
+                        expectedOutputFile
+                        generateOutputFile
+                        id
+                    ]
+                )
 
 inputFileToPrefix :: FilePath -> Maybe FilePath
 inputFileToPrefix inputFile =
@@ -89,6 +103,6 @@ directoryToTestTree directory = do
 
 main :: IO ()
 main = do
-    testTree <- directoryToTestTree ("tasty" </> "data")
+    testTree <- directoryToTestTree "tasty/data"
 
     Tasty.defaultMain testTree

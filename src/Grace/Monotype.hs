@@ -12,7 +12,7 @@ module Grace.Monotype
 
 import Data.String (IsString(..))
 import Data.Text (Text)
-import Data.Text.Prettyprint.Doc (Doc, Pretty(..))
+import Prettyprinter (Doc, Pretty(..))
 import Grace.Existential (Existential)
 
 -- $setup

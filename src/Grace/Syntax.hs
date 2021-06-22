@@ -13,7 +13,7 @@ import Data.Bifunctor (Bifunctor(..))
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.String (IsString(..))
 import Data.Text (Text)
-import Data.Text.Prettyprint.Doc (Doc, Pretty(..))
+import Prettyprinter (Doc, Pretty(..))
 import Grace.Type (Type)
 import Numeric.Natural (Natural)
 

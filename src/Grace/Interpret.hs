@@ -5,6 +5,8 @@ module Grace.Interpret
     , interpret
     ) where
 
+import Control.Monad.Except (MonadError(..))
+import Control.Monad.IO.Class (MonadIO(..))
 import Data.Bifunctor (Bifunctor(..))
 import Data.Text (Text)
 import Grace.Location (Location(..))
@@ -12,13 +14,12 @@ import Grace.Type (Type)
 import Grace.Value (Value)
 import System.FilePath ((</>))
 
-import qualified Data.Text.IO    as Text.IO
-import qualified Grace.Infer     as Infer
-import qualified Grace.Normalize as Normalize
-import qualified Grace.Parser    as Parser
-import qualified System.Exit     as Exit
-import qualified System.FilePath as FilePath
-import qualified System.IO       as IO
+import qualified Control.Monad.Except as Except
+import qualified Data.Text.IO         as Text.IO
+import qualified Grace.Infer          as Infer
+import qualified Grace.Normalize      as Normalize
+import qualified Grace.Parser         as Parser
+import qualified System.FilePath      as FilePath
 
 {-| Input to the `interpret` function
 
@@ -37,10 +38,10 @@ data Input
 
     This is the top-level function for the Grace interpreter
 -}
-interpret :: Input -> IO (Type Location, Value)
+interpret :: (MonadError Text m, MonadIO m) => Input -> m (Type Location, Value)
 interpret input = do
     code <- case input of
-        Path file -> Text.IO.readFile file
+        Path file -> liftIO (Text.IO.readFile file)
         Code text -> return text
 
     let name = case input of
@@ -49,8 +50,8 @@ interpret input = do
 
     expression <- case Parser.parse name code of
         Left message -> do
-            Text.IO.hPutStrLn IO.stderr message
-            Exit.exitFailure
+            Except.throwError message
+
         Right expression -> do
             let locate offset = Location{..}
 
@@ -66,7 +67,7 @@ interpret input = do
 
     case Infer.typeOf resolvedExpression of
         Left message -> do
-            Text.IO.hPutStrLn IO.stderr message
-            Exit.exitFailure
+            Except.throwError message
+
         Right inferred -> do
             return (inferred, Normalize.evaluate [] resolvedExpression)

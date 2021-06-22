@@ -22,14 +22,13 @@ module Grace.Type
 
 import Data.String (IsString(..))
 import Data.Text (Text)
-import Data.Text.Prettyprint.Doc (Doc, Pretty(..))
+import Prettyprinter (Doc, Pretty(..))
 import Grace.Domain (Domain)
 import Grace.Existential (Existential)
 import Grace.Monotype (Monotype, RemainingAlternatives(..), RemainingFields(..))
 
-import qualified Data.Text.Prettyprint.Doc as Pretty
-import qualified Grace.Domain              as Domain
-import qualified Grace.Monotype            as Monotype
+import qualified Grace.Domain   as Domain
+import qualified Grace.Monotype as Monotype
 
 -- | A potentially polymorphic type
 data Type s = Type { location :: s, node :: Node s }
@@ -448,11 +447,11 @@ alternativesFreeIn :: Existential Monotype.Union -> Type s -> Bool
 
 prettyQuantifiedType :: Node s -> Doc a
 prettyQuantifiedType (Forall _ α Domain.Type _A) =
-    "forall (" <> Pretty.pretty α <> " : Type) . " <> prettyType prettyQuantifiedType _A
+    "forall (" <> pretty α <> " : Type) . " <> prettyType prettyQuantifiedType _A
 prettyQuantifiedType (Forall _ α Domain.Fields _A) =
-    "forall (" <> Pretty.pretty α <> " : Fields) . " <> prettyType prettyQuantifiedType _A
+    "forall (" <> pretty α <> " : Fields) . " <> prettyType prettyQuantifiedType _A
 prettyQuantifiedType (Forall _ α Domain.Alternatives _A) =
-    "forall (" <> Pretty.pretty α <> " : Alternatives) . " <> prettyType prettyQuantifiedType _A
+    "forall (" <> pretty α <> " : Alternatives) . " <> prettyType prettyQuantifiedType _A
 prettyQuantifiedType other = prettyFunctionType other
 
 prettyFunctionType :: Node s -> Doc a
@@ -468,10 +467,10 @@ prettyApplicationType (List _A) = "List " <> prettyType prettyPrimitiveType _A
 prettyApplicationType  other    = prettyPrimitiveType other
 
 prettyPrimitiveType :: Node s -> Doc a
-prettyPrimitiveType (VariableType α) = Pretty.pretty α
-prettyPrimitiveType (UnsolvedType α) = Pretty.pretty α <> "?"
-prettyPrimitiveType (Record r)       = Pretty.pretty r
-prettyPrimitiveType (Union u)        = Pretty.pretty u
+prettyPrimitiveType (VariableType α) = pretty α
+prettyPrimitiveType (UnsolvedType α) = pretty α <> "?"
+prettyPrimitiveType (Record r)       = pretty r
+prettyPrimitiveType (Union u)        = pretty u
 prettyPrimitiveType  Bool            = "Bool"
 prettyPrimitiveType  Natural         = "Natural"
 prettyPrimitiveType  Text            = "Text"
@@ -481,38 +480,38 @@ prettyRecordType :: Record s -> Doc a
 prettyRecordType (Fields [] EmptyFields) =
     "{ }"
 prettyRecordType (Fields [] (UnsolvedFields ρ)) =
-    "{ " <> Pretty.pretty ρ <> "? }"
+    "{ " <> pretty ρ <> "? }"
 prettyRecordType (Fields [] (VariableFields ρ)) =
-    "{ " <> Pretty.pretty ρ <> " }"
+    "{ " <> pretty ρ <> " }"
 prettyRecordType (Fields ((key₀, type₀) : keyTypes) fields) =
         "{ "
-    <>  Pretty.pretty key₀
+    <>  pretty key₀
     <>  " : "
     <>  prettyType prettyQuantifiedType type₀
     <>  foldMap prettyKeyType keyTypes
     <>  case fields of
             EmptyFields      -> " }"
-            UnsolvedFields ρ -> " | " <> Pretty.pretty ρ <> "? }"
-            VariableFields ρ -> " | " <> Pretty.pretty ρ <> " }"
+            UnsolvedFields ρ -> " | " <> pretty ρ <> "? }"
+            VariableFields ρ -> " | " <> pretty ρ <> " }"
 
 prettyUnionType :: Union s -> Doc a
 prettyUnionType (Alternatives [] EmptyAlternatives) =
     "< >"
 prettyUnionType (Alternatives [] (UnsolvedAlternatives ρ)) =
-    "< " <> Pretty.pretty ρ <> "? >"
+    "< " <> pretty ρ <> "? >"
 prettyUnionType (Alternatives [] (VariableAlternatives ρ)) =
-    "< " <> Pretty.pretty ρ <> " >"
+    "< " <> pretty ρ <> " >"
 prettyUnionType (Alternatives ((key₀, type₀) : keyTypes) alternatives) =
         "< "
-    <>  Pretty.pretty key₀
+    <>  pretty key₀
     <>  " : "
     <>  prettyType prettyQuantifiedType type₀
     <>  foldMap prettyKeyType keyTypes
     <>  case alternatives of
             EmptyAlternatives      -> " >"
-            UnsolvedAlternatives ρ -> " | " <> Pretty.pretty ρ <> "? >"
-            VariableAlternatives ρ -> " | " <> Pretty.pretty ρ <> " >"
+            UnsolvedAlternatives ρ -> " | " <> pretty ρ <> "? >"
+            VariableAlternatives ρ -> " | " <> pretty ρ <> " >"
 
 prettyKeyType :: (Text, Type s) -> Doc a
 prettyKeyType (key, type_) =
-    ", " <> Pretty.pretty key <> " : " <> prettyType prettyQuantifiedType type_
+    ", " <> pretty key <> " : " <> prettyType prettyQuantifiedType type_
