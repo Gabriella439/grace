@@ -98,7 +98,7 @@ data RemainingFields
     | VariableFields Text
     -- ^ Same as `UnsolvedFields`, except that the user has given the fields
     --   variable an explicit name in the source code
-    deriving stock (Eq, Ord, Show)
+    deriving stock (Eq, Show)
 
 -- | A monomorphic union type
 data Union = Alternatives [(Text, Monotype)] RemainingAlternatives
@@ -115,7 +115,7 @@ data RemainingAlternatives
     | VariableAlternatives Text
     -- ^ Same as `UnsolvedAlternatives`, except that the user has given the
     --   alternatives variable an explicit name in the source code
-    deriving stock (Eq, Ord, Show)
+    deriving stock (Eq, Show)
 
 prettyMonotype :: Monotype -> Doc a
 prettyMonotype (Function _A _B) =

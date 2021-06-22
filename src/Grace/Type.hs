@@ -45,7 +45,7 @@ import qualified Grace.Monotype as Monotype
 
 -- | A potentially polymorphic type
 data Type s = Type { location :: s, node :: Node s }
-    deriving stock (Eq, Functor, Ord, Show)
+    deriving stock (Eq, Functor, Show)
 
 instance IsString (Type ()) where
     fromString string = Type{ location = (), node = fromString string }
@@ -112,7 +112,7 @@ data Node s
     --
     -- >>> pretty @(Node ()) Text
     -- Text
-    deriving stock (Eq, Functor, Ord, Show)
+    deriving stock (Eq, Functor, Show)
 
 instance IsString (Node s) where
     fromString string = VariableType (fromString string)
@@ -122,20 +122,21 @@ instance Pretty (Node s) where
 
 -- | A potentially polymorphic record type
 data Record s = Fields [(Text, Type s)] RemainingFields
-    deriving stock (Eq, Functor, Ord, Show)
+    deriving stock (Eq, Functor, Show)
 
 instance Pretty (Record s) where
     pretty = prettyRecordType
 
 -- | A potentially polymorphic union type
 data Union s = Alternatives [(Text, Type s)] RemainingAlternatives
-    deriving stock (Eq, Functor, Ord, Show)
+    deriving stock (Eq, Functor, Show)
 
 instance Pretty (Union s) where
     pretty = prettyUnionType
 
-{-| This function should not be exported or generally used.  It is only really
-    safe to use within one of the @solve*@ functions
+{-| This function should not be exported or generally used because it does not
+    handle the `location` field correctly.  It is only really safe to use within
+    one of the @solve*@ functions
 -}
 fromMonotype :: Monotype -> Type ()
 fromMonotype monotype = Type{ location = (), node }

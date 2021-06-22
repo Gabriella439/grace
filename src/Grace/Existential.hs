@@ -24,7 +24,7 @@ import qualified Data.Text as Text
 
 -- | An unsolved existential variable
 newtype Existential a = UnsafeExistential Int
-    deriving newtype (Eq, Ord, Num, Show)
+    deriving newtype (Eq, Num, Show)
 
 instance Pretty (Existential a) where
     pretty x = pretty (toVariable x)

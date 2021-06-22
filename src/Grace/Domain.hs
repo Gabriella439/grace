@@ -13,4 +13,4 @@ data Domain
     -- ^ @forall (a : Fields) . …@
     | Alternatives
     -- ^ @forall (a : Alternatives) . …@
-    deriving stock (Eq, Ord, Show)
+    deriving stock (Eq, Show)

@@ -227,7 +227,7 @@ solveType context type_ = foldl snoc type_ context
   where
     snoc t (SolvedType         α τ) = Type.solveType         α τ t
     snoc t (SolvedFields       α r) = Type.solveFields       α r t
-    snoc t (SolvedAlternatives α r) = Type.solveAlternatives α r t
+    snoc t (SolvedAlternatives α u) = Type.solveAlternatives α u t
     snoc t  _                       = t
 
 {-| Substitute a t`Type.Record` using the solved entries of a `Context`
