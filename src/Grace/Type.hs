@@ -89,14 +89,14 @@ data Node s
     -- >>> pretty @(Node ()) (Record (Fields [("x", "X"), ("y", "Y")] Monotype.EmptyFields))
     -- { x : X, y : Y }
     -- >>> pretty @(Node ()) (Record (Fields [("x", "X"), ("y", "Y")] (Monotype.UnsolvedFields 0)))
-    -- { x : X, y : Y | a? }
+    -- { x : X, y : Y, a? }
     | Union (Union s)
     -- ^ Union type
     --
     -- >>> pretty @(Node ()) (Union (Alternatives [("x", "X"), ("y", "Y")] Monotype.EmptyAlternatives))
-    -- < x : X, y : Y >
+    -- < x : X | y : Y >
     -- >>> pretty @(Node ()) (Union (Alternatives [("x", "X"), ("y", "Y")] (Monotype.UnsolvedAlternatives 0)))
-    -- < x : X, y : Y | a? >
+    -- < x : X | y : Y | a? >
     | Bool
     -- ^ Boolean type
     --

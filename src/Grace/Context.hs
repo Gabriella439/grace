@@ -234,7 +234,7 @@ solveType context type_ = foldl snoc type_ context
 
     >>> original = Type.Fields [("x", Type{ location = (), node = Type.Bool })] (Monotype.UnsolvedFields 0)
     >>> pretty original
-    { x : Bool | a? }
+    { x : Bool, a? }
 
     >>> entry = SolvedFields 0 (Monotype.Fields [] Monotype.EmptyFields)
     >>> pretty entry
