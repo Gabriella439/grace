@@ -2,4 +2,4 @@
 # instantiated to multiple types within the same expression
 let id : forall (a : Type) . a -> a = \x -> x
 
-in  { x = id True, y = id { } }
+in  { example0 = id True, example1 = id { } }

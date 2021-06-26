@@ -1,3 +1,4 @@
+# Test defining and using a function
 let exclaim = \t -> t ++ "!"
 
 in  exclaim "Hello, world"

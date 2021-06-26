@@ -1,4 +1,4 @@
-# This verifies that the interpret correctly simplifies various abstract
+# This verifies that the interpreter correctly simplifies various abstract
 # arithmetic expressions
 { example0 = \x -> x + 0
 , example1 = \x -> 0 + x

@@ -5,7 +5,15 @@
 \b ->
 \u ->
 
-{ field0 = [ True, r.x ]
-, field1 = [ r, a ]
-, field2 = [ L 1, b ]
-}
+let # This forces `r`'s type to be instantiated to a record with an unsolved
+    # fields variable
+    field0 = [ True, r.x ]
+
+in  { # This triggers instantiation of `a`'s unsolved type to a record type with
+      # an unsolved fields variable
+      field1 = [ r, a ]
+
+      # This triggers instantiation of `b`'s unsolved type to a union type with
+      # an unsolved alternatives variable
+    , field2 = [ L 1, b ]
+    }

@@ -11,7 +11,11 @@ let f : forall (a : Type)
       -> { | r }
       -> < | u >
       -> List < C : { y : a, t : Text, b : Bool, n : Natural, t : t, r : { | r }, u : < | u > } >
-      = \x -> \t -> \r -> \u -> [ C { y = x, t = "", b = False, n = 0, t = t, r = r, u = u } ]
+      = \x ->
+        \t ->
+        \r ->
+        \u ->
+        [ C { y = x, t = "", b = False, n = 0, t = t, r = r, u = u } ]
 
 let g : forall (a : Fields)
       . forall (a : Alternatives)
@@ -39,7 +43,10 @@ let h : forall (a : Alternatives)
       -> List < C : { y : < | a >, t : Text, b : Bool, n : Natural, t : t, r : { | r }, u : < | u > } >
       = f
 
-in  { field0 = f 1
-    , field1 = g { foo = 1 }
-    , field2 = h (Foo 1)
-    }
+let example0 = f 1
+
+let example1 = g { foo = 1 }
+
+let example2 = h (Foo 1)
+
+in  { }

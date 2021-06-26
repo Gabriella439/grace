@@ -1,1 +1,1 @@
-forall (b : Fields) . forall (a : Alternatives) . { field0 : { a } -> { b }, field1 : < a > -> < a > }
+forall (b : Fields) . forall (a : Alternatives) . { example0 : { a } -> { b }, example1 : < a > -> < a > }

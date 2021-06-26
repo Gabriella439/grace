@@ -1,1 +1,1 @@
-{ field0 = \r -> r, field1 = \u -> u }
+{ example0 = \r -> r, example1 = \u -> u }
