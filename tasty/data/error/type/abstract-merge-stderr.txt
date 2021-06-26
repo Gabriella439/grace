@@ -1,0 +1,13 @@
+Must merge a record
+
+The first argument to a merge expression must be a record, but you provided an
+expression of the following type:
+
+↳ a?
+
+tasty/data/error/type/abstract-merge-input.grace:1:2: 
+  │
+1 │ \x -> merge x
+  │  ↑
+
+… which is not a record type.

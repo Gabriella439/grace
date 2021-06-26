@@ -1,0 +1,13 @@
+Not a function type
+
+An expression of the following type:
+
+↳ Natural
+
+tasty/data/error/type/not-a-function-input.grace:1:1: 
+  │
+1 │ 1 1
+  │ ↑
+
+… was invoked as if it were a function, but the above type is not a function
+type.

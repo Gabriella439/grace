@@ -1,0 +1,19 @@
+Not a subtype
+
+The following type:
+
+↳ Natural
+
+tasty/data/error/type/bad-type-annotation-input.grace:1:1: 
+  │
+1 │ 1 : Text
+  │ ↑
+
+… cannot be a subtype of:
+
+↳ Text
+
+tasty/data/error/type/bad-type-annotation-input.grace:1:5: 
+  │
+1 │ 1 : Text
+  │     ↑
