@@ -1433,9 +1433,19 @@ infer e₀ = do
                 }
 
         Syntax.Merge record -> do
-            _R <- infer record
+            ρ <- fresh
 
-            case Type.node _R of
+            push (Context.UnsolvedFields ρ)
+
+            let _R = Type{ location = Syntax.location record, node = Type.Record (Type.Fields [] (Monotype.UnsolvedFields ρ)) }
+
+            check record _R
+
+            _Γ <- get
+
+            let _R' = Context.solveType _Γ _R
+
+            case Type.node _R' of
                 Type.Record (Type.Fields keyTypes Monotype.EmptyFields) -> do
                     β <- fresh
 
@@ -1481,7 +1491,7 @@ infer e₀ = do
                                 _Type{ node = Type.UnsolvedType β }
                         }
 
-                Type.Record (Type.Fields _ _) -> do
+                Type.Record _ -> do
                     Except.throwError [__i|
                         Must merge a concrete record
 
