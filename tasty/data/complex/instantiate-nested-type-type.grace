@@ -1,1 +1,1 @@
-forall (p : Type) . forall (o : Fields) . forall (n : Type) . forall (m : Fields) . forall (l : Alternatives) . forall (k : Fields) . forall (j : Alternatives) . forall (i : Type) . forall (h : Fields) . forall (g : Alternatives) . forall (f : Alternatives) . forall (e : Type) . forall (d : Alternatives) . forall (c : Type) . forall (b : Fields) . forall (a : Alternatives) . { }
+{ }

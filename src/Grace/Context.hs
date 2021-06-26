@@ -298,7 +298,7 @@ complete context type_ = do
     snoc t (SolvedType         α τ) = do return (Type.solveType         α τ t)
     snoc t (SolvedFields       α r) = do return (Type.solveFields       α r t)
     snoc t (SolvedAlternatives α r) = do return (Type.solveAlternatives α r t)
-    snoc t (UnsolvedType α) = do
+    snoc t (UnsolvedType α) | α `Type.typeFreeIn` t = do
         n <- State.get
 
         State.put $! n + 1
@@ -311,7 +311,7 @@ complete context type_ = do
         let Type{ location } = t
 
         return Type.Type{..}
-    snoc t (UnsolvedFields ρ) = do
+    snoc t (UnsolvedFields ρ) | ρ `Type.fieldsFreeIn` t = do
         n <- State.get
 
         State.put $! n + 1
@@ -324,7 +324,7 @@ complete context type_ = do
         let Type{ location } = t
 
         return Type.Type{..}
-    snoc t (UnsolvedAlternatives ρ) = do
+    snoc t (UnsolvedAlternatives ρ) | ρ `Type.alternativesFreeIn` t = do
         n <- State.get
 
         State.put $! n + 1
