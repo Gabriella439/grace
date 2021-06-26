@@ -8,9 +8,9 @@ let f : forall (a : Type)
       . forall (u : Alternatives)
       .  a
       -> t
-      -> { | r }
-      -> < | u >
-      -> List < C : { y : a, t : Text, b : Bool, n : Natural, t : t, r : { | r }, u : < | u > } >
+      -> { r }
+      -> < u >
+      -> List < C : { y : a, t : Text, b : Bool, n : Natural, t : t, r : { r }, u : < u > } >
       = \x ->
         \t ->
         \r ->
@@ -23,11 +23,11 @@ let g : forall (a : Fields)
       . forall (t : Type)
       . forall (r : Fields)
       . forall (u : Alternatives)
-      .  { | a }
+      .  { a }
       -> t
-      -> { | r }
-      -> < | u >
-      -> List < C : { y : { | a }, t : Text, b : Bool, n : Natural, t : t, r : { | r }, u : < | u > } >
+      -> { r }
+      -> < u >
+      -> List < C : { y : { a }, t : Text, b : Bool, n : Natural, t : t, r : { r }, u : < u > } >
       = f
 
 let h : forall (a : Alternatives)
@@ -36,11 +36,11 @@ let h : forall (a : Alternatives)
       . forall (t : Type)
       . forall (r : Fields)
       . forall (u : Alternatives)
-      .  < | a >
+      .  < a >
       -> t
-      -> { | r }
-      -> < | u >
-      -> List < C : { y : < | a >, t : Text, b : Bool, n : Natural, t : t, r : { | r }, u : < | u > } >
+      -> { r }
+      -> < u >
+      -> List < C : { y : < a >, t : Text, b : Bool, n : Natural, t : t, r : { r }, u : < u > } >
       = f
 
 let example0 = f 1

@@ -11,5 +11,5 @@
       , Right = \x -> merge {} (doubleNegation x)
       }
       noMiddle
-) :     (forall (b : Type) . < Left : b, Right : b -> <> >)
+) :     (forall (b : Type) . < Left : b | Right : b -> <> >)
     ->  (forall (a : Type) . ((a -> <>) -> <>) -> a)

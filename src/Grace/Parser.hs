@@ -23,7 +23,7 @@ module Grace.Parser
 
 import Control.Applicative (many, (<|>))
 import Control.Applicative.Combinators.NonEmpty (sepBy1)
-import Control.Applicative.Combinators (sepBy)
+import Control.Applicative.Combinators (endBy, sepBy)
 import Data.Functor (void)
 import Data.List.NonEmpty (NonEmpty(..), some1)
 import Data.Text (Text)
@@ -442,36 +442,43 @@ grammar = mdo
 
                 located <- locatedLabel
                 return (variable located)
-        <|> do  let record location fieldTypes fields = Type{..}
+        <|> do  let record location fields = Type{..}
                       where
-                        node =
-                            Type.Record (Type.Fields fieldTypes fields)
+                        node = Type.Record fields
 
                 locatedOpenBrace <- locatedToken Lexer.OpenBrace
-                fieldTypes <- fieldType `sepBy` token Lexer.Comma
-                fields <-
-                    (   do  token Lexer.Bar
-                            text <- label
-                            return (Monotype.VariableFields text)
-                    <|> do  pure Monotype.EmptyFields
+
+                fieldTypes <- fieldType `endBy` token Lexer.Comma
+                
+                toFields <-
+                    (   do  text <- label
+                            return (\fs -> Type.Fields fs (Monotype.VariableFields text))
+                    <|> do  pure (\fs -> Type.Fields fs Monotype.EmptyFields)
+                    <|> do  f <- fieldType
+                            return (\fs -> Type.Fields (fs <> [ f ]) Monotype.EmptyFields)
                     )
+
                 token Lexer.CloseBrace
-                return (record locatedOpenBrace fieldTypes fields)
-        <|> do  let union location alternativeTypes alternatives = Type{..}
+
+                return (record locatedOpenBrace (toFields fieldTypes))
+        <|> do  let union location alternatives = Type{..}
                       where
-                        node =
-                            Type.Union (Type.Alternatives alternativeTypes alternatives)
+                        node = Type.Union alternatives
 
                 locatedOpenAngle <- locatedToken Lexer.OpenAngle
-                alternativeTypes <- alternativeType `sepBy` token Lexer.Comma
-                alternatives <-
-                    (   do  token Lexer.Bar
-                            text <- label
-                            return (Monotype.VariableAlternatives text)
-                    <|> do  pure Monotype.EmptyAlternatives
+
+                alternativeTypes <- alternativeType `endBy` token Lexer.Bar
+
+                toAlternatives <-
+                    (   do  text <- label
+                            return (\as -> Type.Alternatives as (Monotype.VariableAlternatives text))
+                    <|> do  pure (\as -> Type.Alternatives as Monotype.EmptyAlternatives)
+                    <|> do  a <- alternativeType
+                            return (\as -> Type.Alternatives (as <> [ a ]) Monotype.EmptyAlternatives)
                     )
+
                 token Lexer.CloseAngle
-                return (union locatedOpenAngle alternativeTypes alternatives)
+                return (union locatedOpenAngle (toAlternatives alternativeTypes))
         <|> do  token Lexer.OpenParenthesis
                 t <- quantifiedType
                 token Lexer.CloseParenthesis

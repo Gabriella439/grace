@@ -4,16 +4,16 @@ The following type:
 
 ↳ < b >
 
-tasty/data/error/type/union-variable-mismatch-input.grace:1:76: 
+tasty/data/error/type/union-variable-mismatch-input.grace:1:74: 
   │
-1 │ let f : forall (a : Alternatives) . forall (b : Alternatives) . < | a > -> < | b > -> < | a >
-  │                                                                            ↑
+1 │ let f : forall (a : Alternatives) . forall (b : Alternatives) . < a > -> < b > -> < a >
+  │                                                                          ↑
 
 … cannot be a subtype of:
 
 ↳ < a >
 
-tasty/data/error/type/union-variable-mismatch-input.grace:1:87: 
+tasty/data/error/type/union-variable-mismatch-input.grace:1:83: 
   │
-1 │ let f : forall (a : Alternatives) . forall (b : Alternatives) . < | a > -> < | b > -> < | a >
-  │                                                                                       ↑
+1 │ let f : forall (a : Alternatives) . forall (b : Alternatives) . < a > -> < b > -> < a >
+  │                                                                                   ↑

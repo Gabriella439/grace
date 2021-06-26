@@ -4,16 +4,16 @@ The following type:
 
 ↳ { b }
 
-tasty/data/error/type/fields-variable-mismatch-input.grace:1:64: 
+tasty/data/error/type/fields-variable-mismatch-input.grace:1:62: 
   │
-1 │ let f : forall (a : Fields) . forall (b : Fields) . { | a } -> { | b } -> { | a }
-  │                                                                ↑
+1 │ let f : forall (a : Fields) . forall (b : Fields) . { a } -> { b } -> { a }
+  │                                                              ↑
 
 … cannot be a subtype of:
 
 ↳ { a }
 
-tasty/data/error/type/fields-variable-mismatch-input.grace:1:75: 
+tasty/data/error/type/fields-variable-mismatch-input.grace:1:71: 
   │
-1 │ let f : forall (a : Fields) . forall (b : Fields) . { | a } -> { | b } -> { | a }
-  │                                                                           ↑
+1 │ let f : forall (a : Fields) . forall (b : Fields) . { a } -> { b } -> { a }
+  │                                                                       ↑

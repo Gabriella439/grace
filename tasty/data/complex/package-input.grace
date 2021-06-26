@@ -15,6 +15,6 @@
 , Hackage { package = "aeson", version = "1.2.3.0" }
 ] : List
     < Local : { relativePath : Text }
-    , GitHub : { repository : Text, revision : Text }
-    , Hackage : { package : Text, version : Text }
+    | GitHub : { repository : Text, revision : Text }
+    | Hackage : { package : Text, version : Text }
     >
