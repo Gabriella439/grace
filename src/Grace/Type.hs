@@ -493,11 +493,11 @@ prettyRecordType (Fields ((key₀, type₀) : keyTypes) fields) =
     <>  pretty key₀
     <>  " : "
     <>  prettyType prettyQuantifiedType type₀
-    <>  foldMap prettyKeyType keyTypes
+    <>  foldMap prettyFieldType keyTypes
     <>  case fields of
             EmptyFields      -> " }"
-            UnsolvedFields ρ -> " | " <> pretty ρ <> "? }"
-            VariableFields ρ -> " | " <> pretty ρ <> " }"
+            UnsolvedFields ρ -> ", " <> pretty ρ <> "? }"
+            VariableFields ρ -> ", " <> pretty ρ <> " }"
 
 prettyUnionType :: Union s -> Doc a
 prettyUnionType (Alternatives [] EmptyAlternatives) =
@@ -511,12 +511,16 @@ prettyUnionType (Alternatives ((key₀, type₀) : keyTypes) alternatives) =
     <>  pretty key₀
     <>  " : "
     <>  prettyType prettyQuantifiedType type₀
-    <>  foldMap prettyKeyType keyTypes
+    <>  foldMap prettyAlternativeType keyTypes
     <>  case alternatives of
             EmptyAlternatives      -> " >"
             UnsolvedAlternatives ρ -> " | " <> pretty ρ <> "? >"
             VariableAlternatives ρ -> " | " <> pretty ρ <> " >"
 
-prettyKeyType :: (Text, Type s) -> Doc a
-prettyKeyType (key, type_) =
+prettyFieldType :: (Text, Type s) -> Doc a
+prettyFieldType (key, type_) =
     ", " <> pretty key <> " : " <> prettyType prettyQuantifiedType type_
+
+prettyAlternativeType :: (Text, Type s) -> Doc a
+prettyAlternativeType (key, type_) =
+    " | " <> pretty key <> " : " <> prettyType prettyQuantifiedType type_

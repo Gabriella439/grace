@@ -1,1 +1,1 @@
-forall (a : Type) . < X : Natural, Y : a > -> Natural
+forall (a : Type) . < X : Natural | Y : a > -> Natural
