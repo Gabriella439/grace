@@ -509,7 +509,7 @@ subtype _A₀ _B₀ = do
                     return ()
 
                 (Monotype.VariableFields ρ₀, Monotype.VariableFields ρ₁)
-                    | ρ₀ == ρ₁ -> do
+                    | ρ₀ == ρ₁ && mapA == mapB -> do
                         return ()
 
                 (_, _) -> do
