@@ -79,6 +79,9 @@ alternative = terminal matchAlternative
 int :: Parser r Int
 int = terminal matchInt
 
+text :: Parser r Text
+text = terminal matchText
+
 token :: Token -> Parser r ()
 token t = void (Earley.satisfy predicate <?> render t)
   where
@@ -258,7 +261,7 @@ grammar = mdo
                 node = Syntax.Field l fieldOffset r
 
         record <- primitiveExpression
-        fields <- many (do token Lexer.Dot; l <- locatedLabel; return l)
+        fields <- many (do token Lexer.Dot; l <- locatedRecordLabel; return l)
 
         return (foldl (field record) record fields)
 
@@ -377,8 +380,12 @@ grammar = mdo
                 return (f locatedLet name annotation assignment)
         )
 
+    recordLabel <- rule (label <|> alternative <|> text)
+
+    locatedRecordLabel <- rule (locatedLabel <|> locatedText)
+
     fieldValue <- rule do
-        field <- label <|> alternative
+        field <- recordLabel
         token Lexer.Colon
         value <- expression
         return (field, value)
@@ -451,8 +458,8 @@ grammar = mdo
                 fieldTypes <- fieldType `endBy` token Lexer.Comma
                 
                 toFields <-
-                    (   do  text <- label
-                            return (\fs -> Type.Fields fs (Monotype.VariableFields text))
+                    (   do  text_ <- recordLabel
+                            return (\fs -> Type.Fields fs (Monotype.VariableFields text_))
                     <|> do  pure (\fs -> Type.Fields fs Monotype.EmptyFields)
                     <|> do  f <- fieldType
                             return (\fs -> Type.Fields (fs <> [ f ]) Monotype.EmptyFields)
@@ -470,8 +477,8 @@ grammar = mdo
                 alternativeTypes <- alternativeType `endBy` token Lexer.Bar
 
                 toAlternatives <-
-                    (   do  text <- label
-                            return (\as -> Type.Alternatives as (Monotype.VariableAlternatives text))
+                    (   do  text_ <- label
+                            return (\as -> Type.Alternatives as (Monotype.VariableAlternatives text_))
                     <|> do  pure (\as -> Type.Alternatives as Monotype.EmptyAlternatives)
                     <|> do  a <- alternativeType
                             return (\as -> Type.Alternatives (as <> [ a ]) Monotype.EmptyAlternatives)
@@ -486,7 +493,7 @@ grammar = mdo
         )
 
     fieldType <- rule do
-        field <- label
+        field <- recordLabel
         token Lexer.Colon
         t <- quantifiedType
         return (field, t)

@@ -24,7 +24,7 @@ import Prettyprinter (Doc, Pretty(..))
 import Grace.Type (Type)
 import Numeric.Natural (Natural)
 
-import qualified Data.Text as Text
+import qualified Grace.Type as Type
 
 {- $setup
 
@@ -276,7 +276,9 @@ prettyApplicationExpression other =
 
 prettyFieldExpression :: Pretty a => Node s a -> Doc b
 prettyFieldExpression (Field record _ key) =
-    prettySyntax prettyFieldExpression record <> "." <> pretty key
+        prettySyntax prettyFieldExpression record
+    <>  "."
+    <>  Type.prettyRecordLabel key
 prettyFieldExpression other =
     prettyPrimitiveExpression other
 
@@ -299,14 +301,17 @@ prettyPrimitiveExpression (Record []) =
     "{ }"
 prettyPrimitiveExpression (Record ((key₀, value₀) : keyValues)) =
         "{ "
-    <>  pretty key₀
+    <>  Type.prettyRecordLabel key₀
     <>  ": "
     <>  prettySyntax prettyExpression value₀
     <>  foldMap prettyKeyValue keyValues
     <>  " }"
   where
     prettyKeyValue (key, value) =
-        ", " <> pretty key <> ": " <> prettySyntax prettyExpression value
+            ", "
+        <>  Type.prettyRecordLabel key
+        <>  ": "
+        <>  prettySyntax prettyExpression value
 prettyPrimitiveExpression Grace.Syntax.True =
     "true"
 prettyPrimitiveExpression Grace.Syntax.False =
@@ -316,17 +321,7 @@ prettyPrimitiveExpression (Natural number) =
 prettyPrimitiveExpression NaturalFold =
     "Natural/fold"
 prettyPrimitiveExpression (Text text) =
-        "\""
-    <>  ( pretty
-        . Text.replace "\"" "\\\""
-        . Text.replace "\b" "\\b"
-        . Text.replace "\f" "\\f"
-        . Text.replace "\n" "\\n"
-        . Text.replace "\r" "\\r"
-        . Text.replace "\t" "\\t"
-        . Text.replace "\\" "\\\\"
-        ) text
-    <>  "\""
+    Type.prettyTextLiteral text
 prettyPrimitiveExpression (Embed a) =
     pretty a
 prettyPrimitiveExpression other =

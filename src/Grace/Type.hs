@@ -25,6 +25,10 @@ module Grace.Type
     , substituteType
     , substituteFields
     , substituteAlternatives
+
+    -- * Miscellaneous
+    , prettyRecordLabel
+    , prettyTextLiteral
     ) where
 
 import Data.String (IsString(..))
@@ -34,6 +38,8 @@ import Grace.Domain (Domain)
 import Grace.Existential (Existential)
 import Grace.Monotype (Monotype, RemainingAlternatives(..), RemainingFields(..))
 
+import qualified Data.Text      as Text
+import qualified Grace.Lexer    as Lexer
 import qualified Grace.Domain   as Domain
 import qualified Grace.Monotype as Monotype
 
@@ -490,7 +496,7 @@ prettyRecordType (Fields [] (VariableFields ρ)) =
     "{ " <> pretty ρ <> " }"
 prettyRecordType (Fields ((key₀, type₀) : keyTypes) fields) =
         "{ "
-    <>  pretty key₀
+    <>  prettyRecordLabel key₀
     <>  " : "
     <>  prettyType prettyQuantifiedType type₀
     <>  foldMap prettyFieldType keyTypes
@@ -519,8 +525,32 @@ prettyUnionType (Alternatives ((key₀, type₀) : keyTypes) alternatives) =
 
 prettyFieldType :: (Text, Type s) -> Doc a
 prettyFieldType (key, type_) =
-    ", " <> pretty key <> " : " <> prettyType prettyQuantifiedType type_
+        ", "
+    <>  prettyRecordLabel key
+    <>  " : "
+    <> prettyType prettyQuantifiedType type_
 
 prettyAlternativeType :: (Text, Type s) -> Doc a
 prettyAlternativeType (key, type_) =
     " | " <> pretty key <> " : " <> prettyType prettyQuantifiedType type_
+
+-- | Pretty-print a @Text@ literal
+prettyTextLiteral :: Text -> Doc b
+prettyTextLiteral text =
+        "\""
+    <>  ( pretty
+        . Text.replace "\"" "\\\""
+        . Text.replace "\b" "\\b"
+        . Text.replace "\f" "\\f"
+        . Text.replace "\n" "\\n"
+        . Text.replace "\r" "\\r"
+        . Text.replace "\t" "\\t"
+        . Text.replace "\\" "\\\\"
+        ) text
+    <>  "\""
+
+-- | Pretty-print a record label (with quotes if necessary)
+prettyRecordLabel :: Text -> Doc b
+prettyRecordLabel label
+    | Lexer.validRecordLabel label = pretty label
+    | otherwise                    = prettyTextLiteral label

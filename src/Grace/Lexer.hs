@@ -23,10 +23,14 @@ module Grace.Lexer
       Token(..)
     , LocatedToken(..)
     , lex
+
+      -- * Miscellaneous
+    , validRecordLabel
     ) where
 
 import Control.Applicative (empty, (<|>))
 import Control.Monad.Combinators (many, manyTill, sepBy1)
+import Data.HashSet (HashSet)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.String.Interpolate (__i)
 import Data.Text (Text)
@@ -38,6 +42,7 @@ import Text.Megaparsec (ParseErrorBundle(..), (<?>))
 import qualified Control.Monad.Combinators  as Combinators
 import qualified Data.Char                  as Char
 import qualified Data.List                  as List
+import qualified Data.HashSet               as HashSet
 import qualified Data.Text                  as Text
 import qualified Data.Text.Read             as Read
 import qualified Grace.Location             as Location
@@ -81,8 +86,8 @@ parseToken =
             , Then         <$ symbol "then"
             , Else         <$ symbol "else"
             , Merge        <$ symbol "merge"
-            , Fields       <$ symbol "Fields"
             , Type         <$ symbol "Type"
+            , Fields       <$ symbol "Fields"
             , Alternatives <$ symbol "Alternatives"
             ] <?> "keyword"
 
@@ -217,13 +222,46 @@ text = lexeme do
 
     return (TextLiteral (Text.concat texts))
 
+isLabel :: Char -> Bool
+isLabel c = Char.isAlphaNum c || c == '_'
+
+-- | Returns `True` if the given label is valid
+validRecordLabel :: Text -> Bool
+validRecordLabel text_  =
+    case Text.uncons text_ of
+        Nothing     -> False
+        Just (h, t) ->
+                (Char.isAlpha h || h == '_')
+            &&  Text.all isLabel t
+            &&  not (HashSet.member text_ reserved)
+
+reserved :: HashSet Text
+reserved =
+    HashSet.fromList
+        [ "forall"
+        , "let"
+        , "in"
+        , "if"
+        , "then"
+        , "else"
+        , "merge"
+        , "Type"
+        , "Fields"
+        , "Alternatives"
+        , "Natural/fold"
+        , "false"
+        , "true"
+        , "List"
+        , "Natural"
+        , "Bool"
+        , "Text"
+        ]
+
 label :: Parser Token
 label = lexeme do
     let isLabel0 c = Char.isLower c || c == '_'
 
     c0 <- Megaparsec.satisfy isLabel0 <?> "label character"
-
-    let isLabel c = Char.isAlphaNum c || c == '_'
 
     cs <- Megaparsec.takeWhileP (Just "label character") isLabel
 
@@ -233,9 +271,7 @@ alternative :: Parser Token
 alternative = lexeme do
     c0 <- Megaparsec.satisfy Char.isUpper <?> "alternative character"
 
-    let isAlternative c = Char.isAlphaNum c || c == '_'
-
-    cs <- Megaparsec.takeWhileP (Just "alternative character") isAlternative
+    cs <- Megaparsec.takeWhileP (Just "alternative character") isLabel
 
     return (Alternative (Text.cons c0 cs))
 

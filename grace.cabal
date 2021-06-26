@@ -18,6 +18,7 @@ library
                      , prettyprinter
                      , string-interpolate
                      , text
+                     , unordered-containers
   exposed-modules:     Grace
                      , Grace.Context
                      , Grace.Domain
