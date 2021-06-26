@@ -1,0 +1,6 @@
+Unbound type variable: a
+
+tasty/data/error/type/impredicative-polymorphism-input.grace:1:41: 
+  │
+1 │ [ \x -> x ] : List (forall (a : Type) . a -> a)
+  │                                         ↑

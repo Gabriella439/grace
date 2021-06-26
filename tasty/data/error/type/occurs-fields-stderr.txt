@@ -1,6 +1,6 @@
-Not a subtype
+Record type mismatch
 
-The following type:
+The following record type:
 
 ↳ { x : Bool | a }
 
@@ -9,7 +9,7 @@ tasty/data/error/type/occurs-fields-input.grace:2:2:
 2 │ \f ->
   │  ↑
 
-… cannot be a subtype of:
+… is not a subtype of the following record type:
 
 ↳ { a }
 
@@ -17,3 +17,7 @@ tasty/data/error/type/occurs-fields-input.grace:2:2:
   │
 2 │ \f ->
   │  ↑
+
+The former record has the following extra fields:
+
+• x

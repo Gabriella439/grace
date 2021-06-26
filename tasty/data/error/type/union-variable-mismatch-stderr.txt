@@ -1,4 +1,4 @@
-Not a subtype
+Not a union subtype
 
 The following type:
 

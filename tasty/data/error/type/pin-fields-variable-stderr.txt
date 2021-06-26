@@ -1,6 +1,6 @@
-Not a subtype
+Record type mismatch
 
-The following type:
+The following record type:
 
 ↳ { a }
 
@@ -9,7 +9,7 @@ tasty/data/error/type/pin-fields-variable-input.grace:3:31:
 3 │ let f : forall (a : Fields) . { | a } -> { x : Bool | a }
   │                               ↑
 
-… cannot be a subtype of:
+… is not a subtype of the following record type:
 
 ↳ { x : Bool | a }
 
@@ -17,3 +17,7 @@ tasty/data/error/type/pin-fields-variable-input.grace:3:42:
   │
 3 │ let f : forall (a : Fields) . { | a } -> { x : Bool | a }
   │                                          ↑
+
+The latter record has the following extra fields:
+
+• x

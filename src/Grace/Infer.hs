@@ -368,8 +368,8 @@ subtype _A₀ _B₀ = do
 
             let both = Map.intersectionWith (,) mapA mapB
 
-            let okayA = Map.null extraA || fields₁ /= Monotype.EmptyFields
-            let okayB = Map.null extraB || fields₀ /= Monotype.EmptyFields
+            let okayA = Map.null extraA || (fields₁ /= Monotype.EmptyFields && fields₀ /= fields₁)
+            let okayB = Map.null extraB || (fields₀ /= Monotype.EmptyFields && fields₀ /= fields₁)
 
             if | not okayA && not okayB -> do
                 Except.throwError [__i|
@@ -448,6 +448,9 @@ subtype _A₀ _B₀ = do
             _ <- traverse process both
 
             case (fields₀, fields₁) of
+                _ | fields₀ == fields₁ -> do
+                        return ()
+
                 (Monotype.UnsolvedFields ρ₀, Monotype.UnsolvedFields ρ₁) -> do
                     ρ₂ <- fresh
 
@@ -505,16 +508,10 @@ subtype _A₀ _B₀ = do
                     _Θ <- get
 
                     instantiateFieldsR (Type.location _A₀) (Context.solveRecord _Θ (Type.Fields (Map.toList extraA) fields₀)) ρ₁
-                (Monotype.EmptyFields, Monotype.EmptyFields) -> do
-                    return ()
-
-                (Monotype.VariableFields ρ₀, Monotype.VariableFields ρ₁)
-                    | ρ₀ == ρ₁ && mapA == mapB -> do
-                        return ()
 
                 (_, _) -> do
                     Except.throwError [__i|
-                    Not a subtype
+                    Not a record subtype
 
                     The following type:
 
@@ -685,7 +682,7 @@ subtype _A₀ _B₀ = do
 
                 (_, _) -> do
                     Except.throwError [__i|
-                    Not a subtype
+                    Not a union subtype
 
                     The following type:
 
@@ -1002,7 +999,7 @@ instantiateFieldsL ρ₀ location r@(Type.Fields kAs rest) = do
     if ρ₀ `Type.fieldsFreeIn` Type{ node = Type.Record r, .. }
         then do
             Except.throwError [__i|
-            Not a subtype
+            Not a fields subtype
 
             The following fields variable:
 
@@ -1069,7 +1066,7 @@ instantiateFieldsR location r@(Type.Fields kAs rest) ρ₀ = do
     if ρ₀ `Type.fieldsFreeIn` Type{ node = Type.Record r, .. }
         then do
             Except.throwError [__i|
-            Not a subtype
+            Not a fields subtype
 
             The following fields variable:
 
@@ -1173,7 +1170,7 @@ instantiateAlternativesL ρ₀ location u@(Type.Alternatives kAs rest) = do
     if ρ₀ `Type.alternativesFreeIn` Type{ node = Type.Union u, .. }
         then do
             Except.throwError [__i|
-            Not a subtype
+            Not an alternatives subtype
 
             The following alternatives variable:
 
@@ -1240,7 +1237,7 @@ instantiateAlternativesR location u@(Type.Alternatives kAs rest) ρ₀ = do
     if ρ₀ `Type.alternativesFreeIn` Type{ node = Type.Union u, .. }
         then do
             Except.throwError [__i|
-            Not a subtype
+            Not an alternatives subtype
 
             The following alternatives variable:
 
