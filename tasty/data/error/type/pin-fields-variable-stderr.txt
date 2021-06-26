@@ -1,0 +1,19 @@
+Not a subtype
+
+The following type:
+
+↳ { a }
+
+tasty/data/error/type/pin-fields-variable-input.grace:3:31: 
+  │
+3 │ let f : forall (a : Fields) . { | a } -> { x : Bool | a }
+  │                               ↑
+
+… cannot be a subtype of:
+
+↳ { x : Bool | a }
+
+tasty/data/error/type/pin-fields-variable-input.grace:3:42: 
+  │
+3 │ let f : forall (a : Fields) . { | a } -> { x : Bool | a }
+  │                                          ↑

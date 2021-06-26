@@ -4,7 +4,7 @@ The following union type:
 
 ↳ < A : { } >
 
-tasty/data/error/union-mismatch-left-extra-input.grace:1:12: 
+tasty/data/error/type/union-mismatch-left-extra-input.grace:1:12: 
   │
 1 │ \x -> (x : < A : { } >) : < >
   │            ↑
@@ -13,7 +13,7 @@ tasty/data/error/union-mismatch-left-extra-input.grace:1:12:
 
 ↳ < >
 
-tasty/data/error/union-mismatch-left-extra-input.grace:1:27: 
+tasty/data/error/type/union-mismatch-left-extra-input.grace:1:27: 
   │
 1 │ \x -> (x : < A : { } >) : < >
   │                           ↑

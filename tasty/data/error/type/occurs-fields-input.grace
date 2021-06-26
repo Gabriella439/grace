@@ -1,2 +1,7 @@
 # This test exercises the occurs check for fields variables
-\x -> [ x, x.a ]
+\f ->
+\r ->
+\s ->
+  [ (f : forall (a : Fields) . { | a } -> { x : Bool | a }) r
+  , f (f r)
+  ]

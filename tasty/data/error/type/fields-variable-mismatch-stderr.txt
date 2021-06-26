@@ -4,7 +4,7 @@ The following type:
 
 ↳ { b }
 
-tasty/data/error/fields-variable-mismatch-input.grace:1:64: 
+tasty/data/error/type/fields-variable-mismatch-input.grace:1:64: 
   │
 1 │ let f : forall (a : Fields) . forall (b : Fields) . { | a } -> { | b } -> { | a }
   │                                                                ↑
@@ -13,7 +13,7 @@ tasty/data/error/fields-variable-mismatch-input.grace:1:64:
 
 ↳ { a }
 
-tasty/data/error/fields-variable-mismatch-input.grace:1:75: 
+tasty/data/error/type/fields-variable-mismatch-input.grace:1:75: 
   │
 1 │ let f : forall (a : Fields) . forall (b : Fields) . { | a } -> { | b } -> { | a }
   │                                                                           ↑

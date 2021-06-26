@@ -1,0 +1,24 @@
+Record type mismatch
+
+The following record type:
+
+↳ { }
+
+tasty/data/error/type/record-mismatch-two-extra-input.grace:1:21: 
+  │
+1 │ [ { x = 1, y = 2 }, { } ]
+  │                     ↑
+
+… is not a subtype of the following record type:
+
+↳ { x : Natural, y : Natural }
+
+tasty/data/error/type/record-mismatch-two-extra-input.grace:1:3: 
+  │
+1 │ [ { x = 1, y = 2 }, { } ]
+  │   ↑
+
+The latter record has the following extra fields:
+
+• x
+• y

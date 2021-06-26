@@ -1,0 +1,19 @@
+Not a subtype
+
+The following type:
+
+↳ f?
+
+tasty/data/error/type/occurs-type-backwards-input.grace:2:2: 
+  │
+2 │ \f -> \x -> [ f, f x ]
+  │  ↑
+
+… cannot be a subtype of:
+
+↳ e? -> f?
+
+tasty/data/error/type/occurs-type-backwards-input.grace:2:2: 
+  │
+2 │ \f -> \x -> [ f, f x ]
+  │  ↑
