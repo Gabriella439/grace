@@ -7,7 +7,7 @@ but you provided a handler of the following type:
 
 tasty/data/error/type/invalid-handler-input.grace:1:7: 
   │
-1 │ merge { x = 1 }
+1 │ merge { x: 1 }
   │       ↑
 
 … which is not a function type.

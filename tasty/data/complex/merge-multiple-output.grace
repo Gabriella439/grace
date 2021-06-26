@@ -1,1 +1,1 @@
-merge { X = \x -> x, Y = \_ -> 2 }
+merge { X: \x -> x, Y: \_ -> 2 }

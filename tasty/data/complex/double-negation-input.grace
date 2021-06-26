@@ -7,8 +7,8 @@
 (   \noMiddle
 ->  \doubleNegation
 ->  merge
-      { Left  = \x -> x
-      , Right = \x -> merge {} (doubleNegation x)
+      { Left: \x -> x
+      , Right: \x -> merge {} (doubleNegation x)
       }
       noMiddle
 ) :     (forall (b : Type) . < Left : b | Right : b -> <> >)

@@ -11,6 +11,6 @@ let c = L 1
 
 let d = R True
 
-in  { example0 = [ r, s ]
-    , example1 = [ d, c ]
+in  { example0: [ r, s ]
+    , example1: [ d, c ]
     }

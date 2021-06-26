@@ -1,1 +1,1 @@
-{ x = True, y = False }
+{ x: True, y: False }

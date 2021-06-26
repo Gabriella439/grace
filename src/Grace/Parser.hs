@@ -379,7 +379,7 @@ grammar = mdo
 
     fieldValue <- rule do
         field <- label <|> alternative
-        token Lexer.Equals
+        token Lexer.Colon
         value <- expression
         return (field, value)
 

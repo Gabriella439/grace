@@ -300,13 +300,13 @@ prettyPrimitiveExpression (Record []) =
 prettyPrimitiveExpression (Record ((key₀, value₀) : keyValues)) =
         "{ "
     <>  pretty key₀
-    <>  " = "
+    <>  ": "
     <>  prettySyntax prettyExpression value₀
     <>  foldMap prettyKeyValue keyValues
     <>  " }"
   where
     prettyKeyValue (key, value) =
-        ", " <> pretty key <> " = " <> prettySyntax prettyExpression value
+        ", " <> pretty key <> ": " <> prettySyntax prettyExpression value
 prettyPrimitiveExpression Grace.Syntax.True =
     "True"
 prettyPrimitiveExpression Grace.Syntax.False =

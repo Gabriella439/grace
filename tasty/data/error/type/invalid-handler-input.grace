@@ -1,1 +1,1 @@
-merge { x = 1 }
+merge { x: 1 }

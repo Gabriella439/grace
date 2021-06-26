@@ -1,1 +1,1 @@
-{ x = True }.x
+{ x: True }.x

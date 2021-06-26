@@ -1,1 +1,1 @@
-merge { X = \x -> x } (X 1)
+merge { X: \x -> x } (X 1)
