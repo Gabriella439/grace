@@ -1,1 +1,1 @@
-{ example0: True, example1: { } }
+{ example0: true, example1: { } }

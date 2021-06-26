@@ -2,4 +2,4 @@
 # instantiating `id` to a very high-order type
 let id : forall (a : Type) . a -> a = \x -> x
 
-in  id id id id id id id id id id id id id id id id id id id id id id id True
+in  id id id id id id id id id id id id id id id id id id id id id id id true

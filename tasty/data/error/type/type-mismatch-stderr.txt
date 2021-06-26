@@ -6,7 +6,7 @@ The following type:
 
 tasty/data/error/type/type-mismatch-input.grace:1:5: 
   │
-1 │ 1 + True
+1 │ 1 + true
   │     ↑
 
 … cannot be a subtype of:
@@ -15,5 +15,5 @@ tasty/data/error/type/type-mismatch-input.grace:1:5:
 
 tasty/data/error/type/type-mismatch-input.grace:1:3: 
   │
-1 │ 1 + True
+1 │ 1 + true
   │   ↑

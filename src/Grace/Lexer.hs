@@ -88,8 +88,8 @@ parseToken =
 
         , Combinators.choice
             [ NaturalFold <$ symbol "Natural/fold"
-            , False_      <$ symbol "False"
-            , True_       <$ symbol "True"
+            , False_      <$ symbol "false"
+            , True_       <$ symbol "true"
             ] <?> "built-in value"
 
         , Combinators.choice

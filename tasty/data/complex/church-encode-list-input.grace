@@ -13,6 +13,6 @@ let cons
 
 let and :   (forall (list : Type) . (Bool -> list -> list) -> list -> list)
         ->  Bool
-        = \list -> list (\x -> \y -> x && y) True
+        = \list -> list (\x -> \y -> x && y) true
 
-in  and (cons True (cons False (cons True nil)))
+in  and (cons true (cons false (cons true nil)))

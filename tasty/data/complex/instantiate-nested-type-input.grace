@@ -15,7 +15,7 @@ let f : forall (a : Type)
         \t ->
         \r ->
         \u ->
-        [ C { y: x, t: "", b: False, n: 0, t: t, r: r, u: u } ]
+        [ C { y: x, t: "", b: false, n: 0, t: t, r: r, u: u } ]
 
 let g : forall (a : Fields)
       . forall (a : Alternatives)

@@ -1,4 +1,4 @@
-let x = True
+let x = true
 
 let y = x
 

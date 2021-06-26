@@ -9,7 +9,7 @@ let b = s.y
 
 let c = L 1
 
-let d = R True
+let d = R true
 
 in  { example0: [ r, s ]
     , example1: [ d, c ]

@@ -7,7 +7,7 @@
 
 let # This forces `r`'s type to be instantiated to a record with an unsolved
     # fields variable
-    field0 = [ True, r.x ]
+    field0 = [ true, r.x ]
 
 in  { # This triggers instantiation of `a`'s unsolved type to a record type with
       # an unsolved fields variable

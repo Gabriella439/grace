@@ -1,1 +1,1 @@
-[ Left 1, Right True ]
+[ Left 1, Right true ]

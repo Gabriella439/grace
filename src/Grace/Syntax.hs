@@ -308,9 +308,9 @@ prettyPrimitiveExpression (Record ((key₀, value₀) : keyValues)) =
     prettyKeyValue (key, value) =
         ", " <> pretty key <> ": " <> prettySyntax prettyExpression value
 prettyPrimitiveExpression Grace.Syntax.True =
-    "True"
+    "true"
 prettyPrimitiveExpression Grace.Syntax.False =
-    "False"
+    "false"
 prettyPrimitiveExpression (Natural number) =
     pretty number
 prettyPrimitiveExpression NaturalFold =
