@@ -13,10 +13,10 @@ tasty/data/error/type/record-mismatch-both-extra-input.grace:1:13:
 
 ↳ { x : Natural }
 
-tasty/data/error/type/record-mismatch-both-extra-input.grace:1:1: 
+tasty/data/error/type/record-mismatch-both-extra-input.grace:1:3: 
   │
 1 │ [ { x: 1 }, { y: 1 } ]
-  │ ↑
+  │   ↑
 
 The former record has the following extra fields:
 

@@ -1382,15 +1382,21 @@ infer e₀ = do
             infer b
 
         Syntax.List xs -> do
-            α <- fresh
+            case xs of
+                [] -> do
+                    α <- fresh
 
-            push (Context.UnsolvedType α)
+                    push (Context.UnsolvedType α)
 
-            let _A = _Type{ node = Type.UnsolvedType α }
+                    return _Type
+                        { node = Type.List _Type{ node = Type.UnsolvedType α }
+                        }
+                y : ys -> do
+                    _A <- infer y
 
-            traverse_ (`check` _A) xs
+                    traverse_ (`check` _A) ys
 
-            return _Type{ node = Type.List _A }
+                    return _Type{ node = Type.List _A }
 
         Syntax.Record kvs -> do
             let process (k, v) = do

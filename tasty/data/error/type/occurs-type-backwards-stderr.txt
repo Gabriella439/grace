@@ -2,7 +2,7 @@ Not a subtype
 
 The following type:
 
-↳ g?
+↳ f?
 
 tasty/data/error/type/occurs-type-backwards-input.grace:2:2: 
   │
@@ -11,9 +11,9 @@ tasty/data/error/type/occurs-type-backwards-input.grace:2:2:
 
 … cannot be a subtype of:
 
-↳ f? -> g?
+↳ e? -> f?
 
-tasty/data/error/type/occurs-type-backwards-input.grace:2:13: 
+tasty/data/error/type/occurs-type-backwards-input.grace:2:2: 
   │
 2 │ \f -> \x -> [ f, f x ]
-  │             ↑
+  │  ↑
