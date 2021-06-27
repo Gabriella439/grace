@@ -185,7 +185,11 @@ instance Pretty a => Pretty (Node s a) where
 
 -- | A scalar value
 data Scalar
-    = Integer Integer
+    = Double Double
+    -- ^
+    --   >>> pretty (Double 1.0)
+    --   1.0
+    | Integer Integer
     -- ^
     --   >>> pretty (Integer 1)
     --   1
@@ -210,6 +214,7 @@ data Scalar
 instance Pretty Scalar where
     pretty Grace.Syntax.True  = "true"
     pretty Grace.Syntax.False = "false"
+    pretty (Double number)    = pretty number
     pretty (Integer number)   = pretty number
     pretty (Natural number)   = pretty number
     pretty (Text text)        = Type.prettyTextLiteral text

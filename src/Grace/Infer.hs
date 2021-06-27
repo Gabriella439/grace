@@ -348,6 +348,12 @@ subtype _A₀ _B₀ = do
         (Type.Scalar Monotype.Natural, Type.Scalar Monotype.Integer) -> do
             return ()
 
+        (Type.Scalar Monotype.Natural, Type.Scalar Monotype.Double) -> do
+            return ()
+
+        (Type.Scalar Monotype.Integer, Type.Scalar Monotype.Double) -> do
+            return ()
+
         (Type.List _A, Type.List _B) -> do
             subtype _A _B
 
@@ -1555,6 +1561,9 @@ infer e₀ = do
             check r _L₁
 
             return _L₁
+
+        Syntax.Scalar (Syntax.Double _) -> do
+            return _Type{ node = Type.Scalar Monotype.Double }
 
         Syntax.Scalar (Syntax.Integer _) -> do
             return _Type{ node = Type.Scalar Monotype.Integer }

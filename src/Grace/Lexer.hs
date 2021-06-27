@@ -37,7 +37,7 @@ import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Location (Location(..), Offset(..))
 import Prelude hiding (lex)
-import Text.Megaparsec (ParseErrorBundle(..), (<?>))
+import Text.Megaparsec (ParseErrorBundle(..), (<?>), try)
 
 import qualified Control.Monad.Combinators  as Combinators
 import qualified Data.Char                  as Char
@@ -99,6 +99,7 @@ parseToken =
 
         , Combinators.choice
             [ List    <$ symbol "List"
+            , Double  <$ symbol "Double"
             , Integer <$ symbol "Integer"
             , Natural <$ symbol "Natural"
             , Bool    <$ symbol "Bool"
@@ -124,6 +125,7 @@ parseToken =
         , Equals           <$ symbol "="
         , Lambda           <$ symbol "\\"
 
+        , double
         , int
         , text
         , label
@@ -159,7 +161,10 @@ lex name code =
             return tokens
 
 int :: Parser Token
-int = lexeme (fmap Int Lexer.decimal)
+int = fmap Int (lexeme Lexer.decimal)
+
+double :: Parser Token
+double = fmap DoubleLiteral (try (lexeme Lexer.float))
 
 file :: Parser Token
 file = lexeme do
@@ -255,6 +260,7 @@ reserved =
         , "true"
         , "List"
         , "Bool"
+        , "Double"
         , "Integer"
         , "Natural"
         , "Text"
@@ -295,7 +301,9 @@ data Token
     | Colon
     | Comma
     | Dash
+    | DoubleLiteral Double
     | Dot
+    | Double
     | Else
     | Equals
     | False_

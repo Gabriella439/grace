@@ -53,6 +53,10 @@ matchAlternative :: Token -> Maybe Text
 matchAlternative (Lexer.Alternative a) = Just a
 matchAlternative  _                    = Nothing
 
+matchDouble :: Token -> Maybe Double
+matchDouble (Lexer.DoubleLiteral n) = Just n
+matchDouble  _                      = Nothing
+
 matchInt :: Token -> Maybe Int
 matchInt (Lexer.Int n) = Just n
 matchInt  _            = Nothing
@@ -100,6 +104,9 @@ locatedLabel = locatedTerminal matchLabel
 locatedAlternative :: Parser r (Offset, Text)
 locatedAlternative = locatedTerminal matchAlternative
 
+locatedDouble :: Parser r (Offset, Double)
+locatedDouble = locatedTerminal matchDouble
+
 locatedInt :: Parser r (Offset, Int)
 locatedInt = locatedTerminal matchInt
 
@@ -135,6 +142,8 @@ render t = case t of
     Lexer.Comma            -> ","
     Lexer.Dash             -> "-"
     Lexer.Dot              -> "."
+    Lexer.Double           -> "Double"
+    Lexer.DoubleLiteral _  -> "a double literal"
     Lexer.Else             -> "else"
     Lexer.Equals           -> "="
     Lexer.False_           -> "False"
@@ -322,6 +331,16 @@ grammar = mdo
 
                 return Syntax{ node = Syntax.Scalar Syntax.False, .. }
 
+        <|> do  let f sign (location, n) = Syntax{..}
+                      where
+                        node = Syntax.Scalar (Syntax.Double (sign n))
+
+                sign <- (token Lexer.Dash *> pure negate) <|> pure id
+
+                located <- locatedDouble
+
+                return (f sign located)
+
         <|> do  let f (location, n) = Syntax{..}
                       where
                         node =
@@ -452,6 +471,8 @@ grammar = mdo
     primitiveType <- rule
         (   do  location <- locatedToken Lexer.Bool
                 return Type{ node = Type.Scalar Monotype.Bool, .. }
+        <|> do  location <- locatedToken Lexer.Double
+                return Type{ node = Type.Scalar Monotype.Double, .. }
         <|> do  location <- locatedToken Lexer.Integer
                 return Type{ node = Type.Scalar Monotype.Integer, .. }
         <|> do  location <- locatedToken Lexer.Natural

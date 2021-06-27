@@ -77,6 +77,11 @@ data Scalar
     --
     -- >>> pretty Bool
     -- Bool
+    | Double
+    -- ^ Double type
+    --
+    -- >>> pretty Double
+    -- Double
     | Integer
     -- ^ Integer number type
     --
@@ -96,6 +101,7 @@ data Scalar
 
 instance Pretty Scalar where
     pretty Bool    = "Bool"
+    pretty Double  = "Double"
     pretty Natural = "Natural"
     pretty Integer = "Integer"
     pretty Text    = "Text"
