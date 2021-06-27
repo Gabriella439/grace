@@ -99,6 +99,7 @@ parseToken =
 
         , Combinators.choice
             [ List    <$ symbol "List"
+            , Integer <$ symbol "Integer"
             , Natural <$ symbol "Natural"
             , Bool    <$ symbol "Bool"
             , Text    <$ symbol "Text"
@@ -118,6 +119,7 @@ parseToken =
         , Bar              <$ symbol "|"
         , Colon            <$ symbol ":"
         , Comma            <$ symbol ","
+        , Dash             <$ symbol "-"
         , Dot              <$ symbol "."
         , Equals           <$ symbol "="
         , Lambda           <$ symbol "\\"
@@ -252,8 +254,9 @@ reserved =
         , "false"
         , "true"
         , "List"
-        , "Natural"
         , "Bool"
+        , "Integer"
+        , "Natural"
         , "Text"
         ]
 
@@ -291,6 +294,7 @@ data Token
     | CloseParenthesis
     | Colon
     | Comma
+    | Dash
     | Dot
     | Else
     | Equals
@@ -301,6 +305,7 @@ data Token
     | If
     | In
     | Int Int
+    | Integer
     | Label Text
     | Lambda
     | Let

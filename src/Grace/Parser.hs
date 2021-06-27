@@ -133,6 +133,7 @@ render t = case t of
     Lexer.CloseParenthesis -> ")"
     Lexer.Colon            -> ":"
     Lexer.Comma            -> ","
+    Lexer.Dash             -> "-"
     Lexer.Dot              -> "."
     Lexer.Else             -> "else"
     Lexer.Equals           -> "="
@@ -143,6 +144,7 @@ render t = case t of
     Lexer.If               -> "if"
     Lexer.In               -> "in"
     Lexer.Int _            -> "an integer literal"
+    Lexer.Integer          -> "Integer"
     Lexer.Label _          -> "a label"
     Lexer.Lambda           -> "\\"
     Lexer.Let              -> "let"
@@ -322,6 +324,16 @@ grammar = mdo
 
         <|> do  let f (location, n) = Syntax{..}
                       where
+                        node = Syntax.Integer (fromIntegral (negate n))
+
+                token Lexer.Dash
+
+                located <- locatedInt
+
+                return (f located)
+
+        <|> do  let f (location, n) = Syntax{..}
+                      where
                         node = Syntax.Natural (fromIntegral n)
 
                 located <- locatedInt
@@ -439,6 +451,8 @@ grammar = mdo
     primitiveType <- rule
         (   do  location <- locatedToken Lexer.Bool
                 return Type{ node = Type.Bool, .. }
+        <|> do  location <- locatedToken Lexer.Integer
+                return Type{ node = Type.Integer, .. }
         <|> do  location <- locatedToken Lexer.Natural
                 return Type{ node = Type.Natural, .. }
         <|> do  location <- locatedToken Lexer.Text

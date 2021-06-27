@@ -120,6 +120,10 @@ data Node s a
     -- ^
     --   >>> pretty @(Node () Void) (If "x" "y" "z")
     --   if x then y else z
+    | Integer Integer
+    -- ^
+    --   >>> pretty @(Node () Void) (Integer 1)
+    --   1
     | Natural Natural
     -- ^
     --   >>> pretty @(Node () Void) (Natural 1)
@@ -180,6 +184,8 @@ instance Bifunctor Node where
         Or (first f left) (f location) (first f right)
     first f (If predicate ifTrue ifFalse) =
         If (first f predicate) (first f ifTrue) (first f ifFalse)
+    first _ (Integer number) =
+        Integer number
     first _ (Natural number) =
         Natural number
     first f (Times left location right) =
@@ -316,6 +322,8 @@ prettyPrimitiveExpression Grace.Syntax.True =
     "true"
 prettyPrimitiveExpression Grace.Syntax.False =
     "false"
+prettyPrimitiveExpression (Integer number) =
+    pretty number
 prettyPrimitiveExpression (Natural number) =
     pretty number
 prettyPrimitiveExpression NaturalFold =

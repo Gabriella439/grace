@@ -65,6 +65,11 @@ data Monotype
     --
     -- >>> pretty Bool
     -- Bool
+    | Integer
+    -- ^ Integer type
+    --
+    -- >>> pretty Integer
+    -- Integer
     | Natural
     -- ^ Natural number type
     --
@@ -138,6 +143,8 @@ prettyPrimitiveType (Union u) =
     prettyUnionType u
 prettyPrimitiveType Bool =
     "Bool"
+prettyPrimitiveType Integer =
+    "Integer"
 prettyPrimitiveType Natural =
     "Natural"
 prettyPrimitiveType Text =

@@ -108,6 +108,11 @@ data Node s
     --
     -- >>> pretty @(Node ()) Bool
     -- Bool
+    | Integer
+    -- ^ Integer number type
+    --
+    -- >>> pretty @(Node ()) Integer
+    -- Integer
     | Natural
     -- ^ Natural number type
     --
@@ -162,6 +167,8 @@ fromMonotype monotype = Type{ location = (), node }
             Union (Alternatives (map (\(k, τ) -> (k, fromMonotype τ)) kτs) ρ)
         Monotype.Bool ->
             Bool
+        Monotype.Integer ->
+            Integer
         Monotype.Natural ->
             Natural
         Monotype.Text ->
@@ -191,6 +198,8 @@ solveType α₀ τ Type{ node = old, .. } = Type{ node = new, .. }
             Union (Alternatives (map (\(k, _A) -> (k, solveType α₀ τ _A)) kAs) ρ)
         Bool ->
             Bool
+        Integer ->
+            Integer
         Natural ->
             Natural
         Text ->
@@ -228,6 +237,8 @@ solveFields ρ₀ r@(Monotype.Fields kτs ρ₁) Type{ node = old, .. } =
             adapt (k, _A) = (k, solveFields ρ₀ r _A)
         Bool ->
             Bool
+        Integer ->
+            Integer
         Natural ->
             Natural
         Text ->
@@ -265,6 +276,8 @@ solveAlternatives ρ₀ r@(Monotype.Alternatives kτs ρ₁) Type{ node = old, .
             kAs₁ = kAs₀ <> map (\(k, τ) -> (k, fmap (\_ -> location) (fromMonotype τ))) kτs
         Bool ->
             Bool
+        Integer ->
+            Integer
         Natural ->
             Natural
         Text ->
@@ -296,6 +309,8 @@ substituteType α₀ n _A₀ Type{ node = old, .. } = Type{ node = new, .. }
             Union (Alternatives (map (\(k, _A₁) -> (k, substituteType α₀ n _A₀ _A₁)) kAs) ρ)
         Bool ->
             Bool
+        Integer ->
+            Integer
         Natural ->
             Natural
         Text ->
@@ -332,6 +347,8 @@ substituteFields ρ₀ n r@(Fields kτs ρ₁) Type{ node = old, .. } =
             Union (Alternatives (map (\(k, _A) -> (k, substituteFields ρ₀ n r _A)) kAs) ρ)
         Bool ->
             Bool
+        Integer ->
+            Integer
         Natural ->
             Natural
         Text ->
@@ -368,6 +385,8 @@ substituteAlternatives ρ₀ n r@(Alternatives kτs ρ₁) Type{ node = old, .. 
             kAs₁ = kAs₀ <> map (\(k, τ) -> (k, fmap (\_ -> location) τ)) kτs
         Bool ->
             Bool
+        Integer ->
+            Integer
         Natural ->
             Natural
         Text ->
@@ -390,6 +409,8 @@ typeFreeIn :: Existential Monotype -> Type s-> Bool
         List _A ->
             α₀ `typeFreeIn` _A
         Bool ->
+            False
+        Integer ->
             False
         Natural ->
             False
@@ -418,6 +439,8 @@ fieldsFreeIn :: Existential Monotype.Record -> Type s -> Bool
             ρ₀ `fieldsFreeIn` _A
         Bool ->
             False
+        Integer ->
+            False
         Natural ->
             False
         Text ->
@@ -445,6 +468,8 @@ alternativesFreeIn :: Existential Monotype.Union -> Type s -> Bool
         List _A ->
             ρ₀ `alternativesFreeIn` _A
         Bool ->
+            False
+        Integer ->
             False
         Natural ->
             False
@@ -484,6 +509,7 @@ prettyPrimitiveType (Record r)       = pretty r
 prettyPrimitiveType (Union u)        = pretty u
 prettyPrimitiveType  Bool            = "Bool"
 prettyPrimitiveType  Natural         = "Natural"
+prettyPrimitiveType  Integer         = "Integer"
 prettyPrimitiveType  Text            = "Text"
 prettyPrimitiveType  other           = "(" <> prettyQuantifiedType other <> ")"
 

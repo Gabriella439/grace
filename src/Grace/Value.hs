@@ -89,6 +89,7 @@ data Value
     | And Value Value
     | Or Value Value
     | If Value Value Value
+    | Integer Integer
     | Natural Natural
     | Times Value Value
     | Plus Value Value

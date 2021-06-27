@@ -258,6 +258,9 @@ wellFormedType _Γ Type{..} =
         Type.Bool -> do
             return ()
 
+        Type.Integer -> do
+            return ()
+
         Type.Natural -> do
             return ()
 
@@ -350,6 +353,9 @@ subtype _A₀ _B₀ = do
         (Type.Bool, Type.Bool) -> do
             return ()
 
+        (Type.Integer, Type.Integer) -> do
+            return ()
+
         (Type.Natural, Type.Natural) -> do
             return ()
 
@@ -358,6 +364,9 @@ subtype _A₀ _B₀ = do
 
         (Type.List _A, Type.List _B) -> do
             subtype _A _B
+
+        (Type.Natural, Type.Integer) -> do
+            return ()
 
         (_A@(Type.Record (Type.Fields kAs₀ fields₀)), _B@(Type.Record (Type.Fields kBs₀ fields₁))) -> do
             let mapA = Map.fromList kAs₀
@@ -759,6 +768,8 @@ instantiateTypeL α _A₀ = do
             instLSolve (Monotype.VariableType β)
         Type.Bool -> do
             instLSolve Monotype.Bool
+        Type.Integer -> do
+            instLSolve Monotype.Integer
         Type.Natural -> do
             instLSolve Monotype.Natural
         Type.Text -> do
@@ -863,6 +874,8 @@ instantiateTypeR _A₀ α = do
             instRSolve (Monotype.VariableType β)
         Type.Bool -> do
             instRSolve Monotype.Bool
+        Type.Integer -> do
+            instRSolve Monotype.Integer
         Type.Natural -> do
             instRSolve Monotype.Natural
         Type.Text -> do
@@ -1572,6 +1585,9 @@ infer e₀ = do
 
             return _L₁
 
+        Syntax.Integer _ -> do
+            return _Type{ node = Type.Integer }
+
         Syntax.Natural _ -> do
             return _Type{ node = Type.Natural }
 
@@ -1635,6 +1651,9 @@ check e Type{ node = Type.Forall _ α domain _A } = do
     check e _A
 
     discardUpTo (Context.Variable domain α)
+
+check Syntax{ node = Syntax.List elements } Type{ node = Type.List α } = do
+    traverse_ (`check` α)  elements
 
 -- Sub
 check e _B = do

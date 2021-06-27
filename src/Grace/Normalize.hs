@@ -180,6 +180,9 @@ evaluate env Syntax.Syntax{..} =
             ifTrue'    = evaluate env ifTrue
             ifFalse'   = evaluate env ifFalse
 
+        Syntax.Integer n ->
+            Value.Integer n
+
         Syntax.Natural n ->
             Value.Natural n
 
@@ -312,6 +315,9 @@ quote names value = Syntax.Syntax{..}
                     (quote names predicate)
                     (quote names ifTrue)
                     (quote names ifFalse)
+
+            Value.Integer n ->
+                Syntax.Integer n
 
             Value.Natural n ->
                 Syntax.Natural n
