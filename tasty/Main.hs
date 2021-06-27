@@ -17,6 +17,7 @@ import qualified Data.Text                 as Text
 import qualified Grace.Interpret           as Interpret
 import qualified Grace.Monotype            as Monotype
 import qualified Grace.Normalize           as Normalize
+import qualified Grace.Syntax              as Syntax
 import qualified Grace.Type                as Type
 import qualified Grace.Value               as Value
 import qualified Prettyprinter             as Pretty
@@ -129,7 +130,8 @@ interpretCodeWithImport :: TestTree
 interpretCodeWithImport = Tasty.HUnit.testCase "interpret code with import" do
     actualValue <- Except.runExceptT (Interpret.interpret (Interpret.Code "./tasty/data/unit/plus-input.grace"))
 
-    let expectedValue = Right (Type{ location, node }, Value.Natural 5)
+    let expectedValue =
+            Right (Type{ location, node }, Value.Scalar (Syntax.Natural 5))
           where
             location = Location{ name = "tasty/data/unit/plus-input.grace", code = "2 + 3\n", offset = 2 }
 
@@ -141,7 +143,8 @@ interpretCode :: TestTree
 interpretCode = Tasty.HUnit.testCase "interpret code with import" do
     actualValue <- Except.runExceptT (Interpret.interpret (Interpret.Code "2 + 2"))
 
-    let expectedValue = Right (Type{ location, node }, Value.Natural 4)
+    let expectedValue =
+            Right (Type{ location, node }, Value.Scalar (Syntax.Natural 4))
           where
             location = Location{ name = "(input)", code = "2 + 2", offset = 2 }
 

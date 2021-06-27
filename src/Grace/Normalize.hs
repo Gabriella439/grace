@@ -92,7 +92,9 @@ evaluate env Syntax.Syntax{..} =
                   | Just f <- lookup alternative alternativeHandlers ->
                       evaluateApplication f x
                 (Value.Application
-                    (Value.Application Value.NaturalFold (Value.Natural n))
+                    (Value.Application Value.NaturalFold
+                        (Value.Scalar (Syntax.Natural n))
+                    )
                     succ
                   , nil
                   ) ->
@@ -140,19 +142,13 @@ evaluate env Syntax.Syntax{..} =
         Syntax.Merge record ->
             Value.Merge (evaluate env record)
 
-        Syntax.True ->
-            Value.True
-
-        Syntax.False ->
-            Value.False
-
         Syntax.And left _ right ->
             case left' of
-                Value.True -> right'
-                Value.False -> Value.False
+                Value.Scalar Syntax.True -> right'
+                Value.Scalar Syntax.False -> Value.Scalar Syntax.False
                 _ -> case right' of
-                    Value.True -> left'
-                    Value.False -> Value.False
+                    Value.Scalar Syntax.True -> left'
+                    Value.Scalar Syntax.False -> Value.Scalar Syntax.False
                     _ -> Value.And left' right'
           where
             left'  = evaluate env left
@@ -160,11 +156,11 @@ evaluate env Syntax.Syntax{..} =
 
         Syntax.Or left _ right ->
             case left' of
-                Value.True -> Value.True
-                Value.False -> right'
+                Value.Scalar Syntax.True -> Value.Scalar Syntax.True
+                Value.Scalar Syntax.False -> right'
                 _ -> case right' of
-                    Value.True -> Value.True
-                    Value.False -> left'
+                    Value.Scalar Syntax.True -> Value.Scalar Syntax.True
+                    Value.Scalar Syntax.False -> left'
                     _ -> Value.Or left' right'
           where
             left'  = evaluate env left
@@ -172,38 +168,42 @@ evaluate env Syntax.Syntax{..} =
 
         Syntax.If predicate ifTrue ifFalse ->
             case predicate' of
-                Value.True  -> ifTrue'
-                Value.False -> ifFalse'
+                Value.Scalar Syntax.True  -> ifTrue'
+                Value.Scalar Syntax.False -> ifFalse'
                 _           -> Value.If predicate' ifTrue' ifFalse'
           where
             predicate' = evaluate env predicate
             ifTrue'    = evaluate env ifTrue
             ifFalse'   = evaluate env ifFalse
 
-        Syntax.Integer n ->
-            Value.Integer n
-
-        Syntax.Natural n ->
-            Value.Natural n
-
         Syntax.Times left _ right ->
             case (left', right') of
-                (Value.Natural 1, _              ) -> right'
-                (Value.Natural 0, _              ) -> Value.Natural 0
-                (_              , Value.Natural 1) -> left'
-                (_              , Value.Natural 0) -> Value.Natural 0
-                (Value.Natural l, Value.Natural r) -> Value.Natural (l * r)
-                _                                  -> Value.Times left' right'
+                (Value.Scalar (Syntax.Natural 1), _) ->
+                    right'
+                (Value.Scalar (Syntax.Natural 0), _) ->
+                    Value.Scalar (Syntax.Natural 0)
+                (_, Value.Scalar (Syntax.Natural 1)) ->
+                    left'
+                (_, Value.Scalar (Syntax.Natural 0)) ->
+                    Value.Scalar (Syntax.Natural 0)
+                (Value.Scalar (Syntax.Natural l), Value.Scalar (Syntax.Natural r)) ->
+                    Value.Scalar (Syntax.Natural (l * r))
+                _ ->
+                    Value.Times left' right'
           where
             left'  = evaluate env left
             right' = evaluate env right
 
         Syntax.Plus left _ right ->
             case (left', right') of
-                (Value.Natural 0, _              ) -> right'
-                (_              , Value.Natural 0) -> left'
-                (Value.Natural l, Value.Natural r) -> Value.Natural (l + r)
-                _                                  -> Value.Plus left' right'
+                (Value.Scalar (Syntax.Natural 0), _) ->
+                    right'
+                (_, Value.Scalar (Syntax.Natural 0)) ->
+                    left'
+                (Value.Scalar (Syntax.Natural l), Value.Scalar (Syntax.Natural r)) ->
+                    Value.Scalar (Syntax.Natural (l + r))
+                _ ->
+                    Value.Plus left' right'
           where
             left'  = evaluate env left
             right' = evaluate env right
@@ -211,19 +211,22 @@ evaluate env Syntax.Syntax{..} =
         Syntax.NaturalFold ->
             Value.NaturalFold
 
-        Syntax.Text text ->
-            Value.Text text
-
         Syntax.Append left _ right ->
             case (left', right') of
-                (Value.Text "", _            ) -> right'
-                (_            , Value.Text "") -> left'
-                (Value.Text l , Value.Text r ) -> Value.Text (l <> r)
-                _                              -> Value.Append left' right'
+                (Value.Scalar (Syntax.Text ""), _) ->
+                    right'
+                (_, Value.Scalar (Syntax.Text "")) ->
+                    left'
+                (Value.Scalar (Syntax.Text l), Value.Scalar (Syntax.Text r)) ->
+                    Value.Scalar (Syntax.Text (l <> r))
+                _ ->
+                    Value.Append left' right'
           where
             left'  = evaluate env left
             right' = evaluate env right
 
+        Syntax.Scalar scalar ->
+            Value.Scalar scalar
         Syntax.Embed (_, value) ->
             value
 
@@ -298,12 +301,6 @@ quote names value = Syntax.Syntax{..}
             Value.Merge record ->
                 Syntax.Merge (quote names record)
 
-            Value.True ->
-                Syntax.True
-
-            Value.False ->
-                Syntax.False
-
             Value.And left right ->
                 Syntax.And (quote names left) () (quote names right)
 
@@ -316,12 +313,6 @@ quote names value = Syntax.Syntax{..}
                     (quote names ifTrue)
                     (quote names ifFalse)
 
-            Value.Integer n ->
-                Syntax.Integer n
-
-            Value.Natural n ->
-                Syntax.Natural n
-
             Value.Times left right ->
                 Syntax.Times (quote names left) () (quote names right)
 
@@ -331,8 +322,8 @@ quote names value = Syntax.Syntax{..}
             Value.NaturalFold ->
                 Syntax.NaturalFold
 
-            Value.Text text ->
-                Syntax.Text text
-
             Value.Append left right ->
                 Syntax.Append (quote names left) () (quote names right)
+
+            Value.Scalar scalar ->
+                Syntax.Scalar scalar

@@ -316,15 +316,16 @@ grammar = mdo
 
         <|> do  location <- locatedToken Lexer.True_
 
-                return Syntax{ node = Syntax.True, .. }
+                return Syntax{ node = Syntax.Scalar Syntax.True, .. }
 
         <|> do  location <- locatedToken Lexer.False_
 
-                return Syntax{ node = Syntax.False, .. }
+                return Syntax{ node = Syntax.Scalar Syntax.False, .. }
 
         <|> do  let f (location, n) = Syntax{..}
                       where
-                        node = Syntax.Integer (fromIntegral (negate n))
+                        node =
+                            Syntax.Scalar (Syntax.Integer (fromIntegral (negate n)))
 
                 token Lexer.Dash
 
@@ -334,7 +335,7 @@ grammar = mdo
 
         <|> do  let f (location, n) = Syntax{..}
                       where
-                        node = Syntax.Natural (fromIntegral n)
+                        node = Syntax.Scalar (Syntax.Natural (fromIntegral n))
 
                 located <- locatedInt
 
@@ -346,7 +347,7 @@ grammar = mdo
 
         <|> do  let f (location, t) = Syntax{..}
                       where
-                        node = Syntax.Text t
+                        node = Syntax.Scalar (Syntax.Text t)
 
                 located <- locatedText
 

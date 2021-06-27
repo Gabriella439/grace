@@ -13,6 +13,7 @@ module Grace.Syntax
     ( -- * Syntax
       Syntax(..)
     , Node(..)
+    , Scalar(..)
     , Binding(..)
     ) where
 
@@ -100,14 +101,6 @@ data Node s a
     -- ^
     --   >>> pretty @(Node () Void) (Merge "x")
     --   merge x
-    | True
-    -- ^
-    --   >>> pretty @(Node () Void) Grace.Syntax.True
-    --   true
-    | False
-    -- ^
-    --   >>> pretty @(Node () Void) Grace.Syntax.False
-    --   false
     | And (Syntax s a) s (Syntax s a)
     -- ^
     --   >>> pretty @(Node () Void) (And "x" () "y")
@@ -120,14 +113,6 @@ data Node s a
     -- ^
     --   >>> pretty @(Node () Void) (If "x" "y" "z")
     --   if x then y else z
-    | Integer Integer
-    -- ^
-    --   >>> pretty @(Node () Void) (Integer 1)
-    --   1
-    | Natural Natural
-    -- ^
-    --   >>> pretty @(Node () Void) (Natural 1)
-    --   1
     | Times (Syntax s a) s (Syntax s a)
     -- ^
     --   >>> pretty @(Node () Void) (Times "x" () "y")
@@ -140,14 +125,11 @@ data Node s a
     -- ^
     --   >>> pretty @(Node () Void) NaturalFold
     --   Natural/fold
-    | Text Text
-    -- ^
-    --   >>> pretty @(Node () Void) (Text "a\n")
-    --   "a\n"
     | Append (Syntax s a) s (Syntax s a)
     -- ^
     --   >>> pretty @(Node () Void) (Append "x" () "y")
     --   x ++ y
+    | Scalar Scalar
     | Embed a
     deriving stock (Eq, Foldable, Functor, Show, Traversable)
 
@@ -174,30 +156,22 @@ instance Bifunctor Node where
         Alternative name
     first f (Merge record) =
         Merge (first f record)
-    first _ Grace.Syntax.True =
-        Grace.Syntax.True
-    first _ Grace.Syntax.False =
-        Grace.Syntax.False
     first f (And left location right) =
         And (first f left) (f location) (first f right)
     first f (Or left location right) =
         Or (first f left) (f location) (first f right)
     first f (If predicate ifTrue ifFalse) =
         If (first f predicate) (first f ifTrue) (first f ifFalse)
-    first _ (Integer number) =
-        Integer number
-    first _ (Natural number) =
-        Natural number
     first f (Times left location right) =
         Times (first f left) (f location) (first f right)
     first f (Plus left location right) =
         Plus (first f left) (f location) (first f right)
     first _ NaturalFold =
         NaturalFold
-    first _ (Text text) =
-        Text text
     first f (Append left location right) =
         Append (first f left) (f location) (first f right)
+    first _ (Scalar scalar) =
+        Scalar scalar
     first _ (Embed a) =
         Embed a
 
@@ -208,6 +182,37 @@ instance IsString (Node s a) where
 
 instance Pretty a => Pretty (Node s a) where
     pretty = prettyExpression
+
+-- | A scalar value
+data Scalar
+    = Integer Integer
+    -- ^
+    --   >>> pretty (Integer 1)
+    --   1
+    | Natural Natural
+    -- ^
+    --   >>> pretty (Natural 1)
+    --   1
+    | Text Text
+    -- ^
+    --   >>> pretty (Text "a\n")
+    --   "a\n"
+    | True
+    -- ^
+    --   >>> pretty Grace.Syntax.True
+    --   true
+    | False
+    -- ^
+    --   >>> pretty Grace.Syntax.False
+    --   false
+    deriving (Eq, Show)
+
+instance Pretty Scalar where
+    pretty Grace.Syntax.True  = "true"
+    pretty Grace.Syntax.False = "false"
+    pretty (Integer number)   = pretty number
+    pretty (Natural number)   = pretty number
+    pretty (Text text)        = Type.prettyTextLiteral text
 
 -- | Pretty-print an expression
 prettyExpression :: Pretty a => Node s a -> Doc b
@@ -318,18 +323,10 @@ prettyPrimitiveExpression (Record ((key₀, value₀) : keyValues)) =
         <>  Type.prettyRecordLabel key
         <>  ": "
         <>  prettySyntax prettyExpression value
-prettyPrimitiveExpression Grace.Syntax.True =
-    "true"
-prettyPrimitiveExpression Grace.Syntax.False =
-    "false"
-prettyPrimitiveExpression (Integer number) =
-    pretty number
-prettyPrimitiveExpression (Natural number) =
-    pretty number
 prettyPrimitiveExpression NaturalFold =
     "Natural/fold"
-prettyPrimitiveExpression (Text text) =
-    Type.prettyTextLiteral text
+prettyPrimitiveExpression (Scalar scalar) =
+    pretty scalar
 prettyPrimitiveExpression (Embed a) =
     pretty a
 prettyPrimitiveExpression other =

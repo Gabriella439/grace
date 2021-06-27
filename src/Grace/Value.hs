@@ -11,9 +11,8 @@ module Grace.Value
 
 import Data.String (IsString(..))
 import Data.Text (Text)
-import Numeric.Natural (Natural)
 import Grace.Location (Location)
-import Grace.Syntax (Syntax)
+import Grace.Syntax (Scalar, Syntax)
 import Grace.Type (Type)
 
 {-| A `Closure` captures the current evaluation environment in order to defer
@@ -84,18 +83,14 @@ data Value
     | Field Value Text
     | Alternative Text
     | Merge Value
-    | True
-    | False
     | And Value Value
     | Or Value Value
     | If Value Value Value
-    | Integer Integer
-    | Natural Natural
     | Times Value Value
     | Plus Value Value
     | NaturalFold
-    | Text Text
     | Append Value Value
+    | Scalar Scalar
     deriving stock (Eq, Show)
 
 instance IsString Value where

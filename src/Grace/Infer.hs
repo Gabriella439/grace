@@ -1525,10 +1525,10 @@ infer e₀ = do
 
             return Type{ location, node = Type.UnsolvedType α }
 
-        Syntax.True -> do
+        Syntax.Scalar Syntax.True -> do
             return _Type{ node = Type.Scalar Monotype.Bool }
 
-        Syntax.False -> do
+        Syntax.Scalar Syntax.False -> do
             return _Type{ node = Type.Scalar Monotype.Bool }
 
         Syntax.And l location r -> do
@@ -1556,10 +1556,10 @@ infer e₀ = do
 
             return _L₁
 
-        Syntax.Integer _ -> do
+        Syntax.Scalar (Syntax.Integer _) -> do
             return _Type{ node = Type.Scalar Monotype.Integer }
 
-        Syntax.Natural _ -> do
+        Syntax.Scalar (Syntax.Natural _) -> do
             return _Type{ node = Type.Scalar Monotype.Natural }
 
         Syntax.Times l location r -> do
@@ -1585,7 +1585,7 @@ infer e₀ = do
                         )
                 }
 
-        Syntax.Text _ -> do
+        Syntax.Scalar (Syntax.Text _) -> do
             return _Type{ node = Type.Scalar Monotype.Text }
 
         Syntax.Append l location r -> do
