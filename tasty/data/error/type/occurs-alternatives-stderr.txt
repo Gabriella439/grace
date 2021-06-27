@@ -2,7 +2,7 @@ Not a subtype
 
 The following type:
 
-↳ < C : a? | d? >
+↳ < C : a? | e? >
 
 tasty/data/error/type/occurs-alternatives-input.grace:2:12: 
   │
@@ -13,7 +13,7 @@ tasty/data/error/type/occurs-alternatives-input.grace:2:12:
 
 ↳ a?
 
-tasty/data/error/type/occurs-alternatives-input.grace:2:2: 
+tasty/data/error/type/occurs-alternatives-input.grace:2:7: 
   │
 2 │ \x -> [ x, C x ]
-  │  ↑
+  │       ↑
