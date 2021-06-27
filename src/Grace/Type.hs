@@ -36,7 +36,13 @@ import Data.Text (Text)
 import Prettyprinter (Doc, Pretty(..))
 import Grace.Domain (Domain)
 import Grace.Existential (Existential)
-import Grace.Monotype (Monotype, RemainingAlternatives(..), RemainingFields(..))
+
+import Grace.Monotype
+    ( Monotype
+    , RemainingAlternatives(..)
+    , RemainingFields(..)
+    , Scalar(..)
+    )
 
 import qualified Data.Text      as Text
 import qualified Grace.Lexer    as Lexer
@@ -103,26 +109,7 @@ data Node s
     -- < x : X | y : Y >
     -- >>> pretty @(Node ()) (Union (Alternatives [("x", "X"), ("y", "Y")] (Monotype.UnsolvedAlternatives 0)))
     -- < x : X | y : Y | a? >
-    | Bool
-    -- ^ Boolean type
-    --
-    -- >>> pretty @(Node ()) Bool
-    -- Bool
-    | Integer
-    -- ^ Integer number type
-    --
-    -- >>> pretty @(Node ()) Integer
-    -- Integer
-    | Natural
-    -- ^ Natural number type
-    --
-    -- >>> pretty @(Node ()) Natural
-    -- Natural
-    | Text
-    -- ^ Text type
-    --
-    -- >>> pretty @(Node ()) Text
-    -- Text
+    | Scalar Scalar
     deriving stock (Eq, Functor, Show)
 
 instance IsString (Node s) where
@@ -165,14 +152,8 @@ fromMonotype monotype = Type{ location = (), node }
             Record (Fields (map (\(k, τ) -> (k, fromMonotype τ)) kτs) ρ)
         Monotype.Union (Monotype.Alternatives kτs ρ) ->
             Union (Alternatives (map (\(k, τ) -> (k, fromMonotype τ)) kτs) ρ)
-        Monotype.Bool ->
-            Bool
-        Monotype.Integer ->
-            Integer
-        Monotype.Natural ->
-            Natural
-        Monotype.Text ->
-            Text
+        Monotype.Scalar scalar ->
+            Scalar scalar
 
 {-| Substitute a `Type` by replacing all occurrences of the given unsolved
     variable with a `Monotype`
@@ -196,14 +177,8 @@ solveType α₀ τ Type{ node = old, .. } = Type{ node = new, .. }
             Record (Fields (map (\(k, _A) -> (k, solveType α₀ τ _A)) kAs) ρ)
         Union (Alternatives kAs ρ) ->
             Union (Alternatives (map (\(k, _A) -> (k, solveType α₀ τ _A)) kAs) ρ)
-        Bool ->
-            Bool
-        Integer ->
-            Integer
-        Natural ->
-            Natural
-        Text ->
-            Text
+        Scalar scalar ->
+            Scalar scalar
 
 {-| Substitute a `Type` by replacing all occurrences of the given unsolved
     fields variable with a t`Monotype.Record`
@@ -235,14 +210,8 @@ solveFields ρ₀ r@(Monotype.Fields kτs ρ₁) Type{ node = old, .. } =
             Union (Alternatives (map adapt kAs) ρ)
           where
             adapt (k, _A) = (k, solveFields ρ₀ r _A)
-        Bool ->
-            Bool
-        Integer ->
-            Integer
-        Natural ->
-            Natural
-        Text ->
-            Text
+        Scalar scalar ->
+            Scalar scalar
 
 {-| Substitute a `Type` by replacing all occurrences of the given unsolved
     alternatives variable with a t`Monotype.Union`
@@ -274,14 +243,8 @@ solveAlternatives ρ₀ r@(Monotype.Alternatives kτs ρ₁) Type{ node = old, .
                 Union (Alternatives (map (\(k, _A) -> (k, solveAlternatives ρ₀ r _A)) kAs₀) ρ)
           where
             kAs₁ = kAs₀ <> map (\(k, τ) -> (k, fmap (\_ -> location) (fromMonotype τ))) kτs
-        Bool ->
-            Bool
-        Integer ->
-            Integer
-        Natural ->
-            Natural
-        Text ->
-            Text
+        Scalar scalar ->
+            Scalar scalar
 
 {-| Replace all occurrences of a variable within one `Type` with another `Type`,
     given the variable's label and index
@@ -307,14 +270,8 @@ substituteType α₀ n _A₀ Type{ node = old, .. } = Type{ node = new, .. }
             Record (Fields (map (\(k, _A₁) -> (k, substituteType α₀ n _A₀ _A₁)) kAs) ρ)
         Union (Alternatives kAs ρ) ->
             Union (Alternatives (map (\(k, _A₁) -> (k, substituteType α₀ n _A₀ _A₁)) kAs) ρ)
-        Bool ->
-            Bool
-        Integer ->
-            Integer
-        Natural ->
-            Natural
-        Text ->
-            Text
+        Scalar scalar ->
+            Scalar scalar
 
 {-| Replace all occurrences of a variable within one `Type` with another `Type`,
     given the variable's label and index
@@ -345,14 +302,8 @@ substituteFields ρ₀ n r@(Fields kτs ρ₁) Type{ node = old, .. } =
             kAs₁ = kAs₀ <> map (\(k, τ) -> (k, fmap (\_ -> location) τ)) kτs
         Union (Alternatives kAs ρ) ->
             Union (Alternatives (map (\(k, _A) -> (k, substituteFields ρ₀ n r _A)) kAs) ρ)
-        Bool ->
-            Bool
-        Integer ->
-            Integer
-        Natural ->
-            Natural
-        Text ->
-            Text
+        Scalar scalar ->
+            Scalar scalar
 
 {-| Replace all occurrences of a variable within one `Type` with another `Type`,
     given the variable's label and index
@@ -383,14 +334,8 @@ substituteAlternatives ρ₀ n r@(Alternatives kτs ρ₁) Type{ node = old, .. 
                 Union (Alternatives (map (\(k, _A) -> (k, substituteAlternatives ρ₀ n r _A)) kAs₀) ρ)
           where
             kAs₁ = kAs₀ <> map (\(k, τ) -> (k, fmap (\_ -> location) τ)) kτs
-        Bool ->
-            Bool
-        Integer ->
-            Integer
-        Natural ->
-            Natural
-        Text ->
-            Text
+        Scalar scalar ->
+            Scalar scalar
 
 {-| Count how many times the given `Existential` `Type` variable appears within
     a `Type`
@@ -408,13 +353,7 @@ typeFreeIn :: Existential Monotype -> Type s-> Bool
             α₀ `typeFreeIn` _A || α₀ `typeFreeIn` _B
         List _A ->
             α₀ `typeFreeIn` _A
-        Bool ->
-            False
-        Integer ->
-            False
-        Natural ->
-            False
-        Text ->
+        Scalar _->
             False
         Record (Fields kAs _) ->
             any (\(_, _A) -> α₀ `typeFreeIn` _A) kAs
@@ -437,13 +376,7 @@ fieldsFreeIn :: Existential Monotype.Record -> Type s -> Bool
             ρ₀ `fieldsFreeIn` _A || ρ₀ `fieldsFreeIn` _B
         List _A ->
             ρ₀ `fieldsFreeIn` _A
-        Bool ->
-            False
-        Integer ->
-            False
-        Natural ->
-            False
-        Text ->
+        Scalar _ ->
             False
         Record (Fields kAs ρ₁) ->
                 UnsolvedFields ρ₀ == ρ₁
@@ -467,13 +400,7 @@ alternativesFreeIn :: Existential Monotype.Union -> Type s -> Bool
             ρ₀ `alternativesFreeIn` _A || ρ₀ `alternativesFreeIn` _B
         List _A ->
             ρ₀ `alternativesFreeIn` _A
-        Bool ->
-            False
-        Integer ->
-            False
-        Natural ->
-            False
-        Text ->
+        Scalar _ ->
             False
         Record (Fields kAs _) ->
             any (\(_, _A) -> ρ₀ `alternativesFreeIn` _A) kAs
@@ -507,10 +434,7 @@ prettyPrimitiveType (VariableType α) = pretty α
 prettyPrimitiveType (UnsolvedType α) = pretty α <> "?"
 prettyPrimitiveType (Record r)       = pretty r
 prettyPrimitiveType (Union u)        = pretty u
-prettyPrimitiveType  Bool            = "Bool"
-prettyPrimitiveType  Natural         = "Natural"
-prettyPrimitiveType  Integer         = "Integer"
-prettyPrimitiveType  Text            = "Text"
+prettyPrimitiveType (Scalar scalar)  = pretty scalar
 prettyPrimitiveType  other           = "(" <> prettyQuantifiedType other <> ")"
 
 prettyRecordType :: Record s -> Doc a

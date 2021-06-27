@@ -255,16 +255,7 @@ wellFormedType _Γ Type{..} =
             predicate (Context.Variable Domain.Alternatives α₁) = α₀ == α₁
             predicate  _                             = False
 
-        Type.Bool -> do
-            return ()
-
-        Type.Integer -> do
-            return ()
-
-        Type.Natural -> do
-            return ()
-
-        Type.Text -> do
+        Type.Scalar _ -> do
             return ()
 
 {-| This corresponds to the judgment:
@@ -350,23 +341,15 @@ subtype _A₀ _B₀ = do
 
             discardUpTo (Context.Variable domain α)
 
-        (Type.Bool, Type.Bool) -> do
-            return ()
-
-        (Type.Integer, Type.Integer) -> do
-            return ()
-
-        (Type.Natural, Type.Natural) -> do
-            return ()
-
-        (Type.Text, Type.Text) -> do
+        (Type.Scalar s₀, Type.Scalar s₁)
+            | s₀ == s₁ -> do
+                return ()
+            
+        (Type.Scalar Monotype.Natural, Type.Scalar Monotype.Integer) -> do
             return ()
 
         (Type.List _A, Type.List _B) -> do
             subtype _A _B
-
-        (Type.Natural, Type.Integer) -> do
-            return ()
 
         (_A@(Type.Record (Type.Fields kAs₀ fields₀)), _B@(Type.Record (Type.Fields kBs₀ fields₁))) -> do
             let mapA = Map.fromList kAs₀
@@ -766,14 +749,8 @@ instantiateTypeL α _A₀ = do
             instLSolve (Monotype.UnsolvedType β)
         Type.VariableType β -> do
             instLSolve (Monotype.VariableType β)
-        Type.Bool -> do
-            instLSolve Monotype.Bool
-        Type.Integer -> do
-            instLSolve Monotype.Integer
-        Type.Natural -> do
-            instLSolve Monotype.Natural
-        Type.Text -> do
-            instLSolve Monotype.Text
+        Type.Scalar scalar -> do
+            instLSolve (Monotype.Scalar scalar)
 
         -- InstLArr
         Type.Function _A₁ _A₂ -> do
@@ -872,14 +849,8 @@ instantiateTypeR _A₀ α = do
             instRSolve (Monotype.UnsolvedType β)
         Type.VariableType β -> do
             instRSolve (Monotype.VariableType β)
-        Type.Bool -> do
-            instRSolve Monotype.Bool
-        Type.Integer -> do
-            instRSolve Monotype.Integer
-        Type.Natural -> do
-            instRSolve Monotype.Natural
-        Type.Text -> do
-            instRSolve Monotype.Text
+        Type.Scalar scalar -> do
+            instRSolve (Monotype.Scalar scalar)
 
         -- InstRArr
         Type.Function _A₁ _A₂ -> do
@@ -1555,25 +1526,25 @@ infer e₀ = do
             return Type{ location, node = Type.UnsolvedType α }
 
         Syntax.True -> do
-            return _Type{ node = Type.Bool }
+            return _Type{ node = Type.Scalar Monotype.Bool }
 
         Syntax.False -> do
-            return _Type{ node = Type.Bool }
+            return _Type{ node = Type.Scalar Monotype.Bool }
 
         Syntax.And l location r -> do
-            check l Type{ location, node = Type.Bool }
-            check r Type{ location, node = Type.Bool }
+            check l Type{ location, node = Type.Scalar Monotype.Bool }
+            check r Type{ location, node = Type.Scalar Monotype.Bool }
 
-            return Type{ location, node = Type.Bool }
+            return Type{ location, node = Type.Scalar Monotype.Bool }
 
         Syntax.Or l location r -> do
-            check l Type{ location, node = Type.Bool }
-            check r Type{ location, node = Type.Bool }
+            check l Type{ location, node = Type.Scalar Monotype.Bool }
+            check r Type{ location, node = Type.Scalar Monotype.Bool }
 
-            return Type{ location, node = Type.Bool }
+            return Type{ location, node = Type.Scalar Monotype.Bool }
 
         Syntax.If predicate l r -> do
-            check predicate _Type{ node = Type.Bool }
+            check predicate _Type{ node = Type.Scalar Monotype.Bool }
 
             _L₀ <- infer l
 
@@ -1586,28 +1557,28 @@ infer e₀ = do
             return _L₁
 
         Syntax.Integer _ -> do
-            return _Type{ node = Type.Integer }
+            return _Type{ node = Type.Scalar Monotype.Integer }
 
         Syntax.Natural _ -> do
-            return _Type{ node = Type.Natural }
+            return _Type{ node = Type.Scalar Monotype.Natural }
 
         Syntax.Times l location r -> do
-            check l Type{ location, node = Type.Natural }
-            check r Type{ location, node = Type.Natural }
+            check l Type{ location, node = Type.Scalar Monotype.Natural }
+            check r Type{ location, node = Type.Scalar Monotype.Natural }
 
-            return Type{ location = Syntax.location e₀, node = Type.Natural }
+            return Type{ location, node = Type.Scalar Monotype.Natural }
 
         Syntax.Plus l location r -> do
-            check l Type{ location, node = Type.Natural }
-            check r Type{ location, node = Type.Natural }
+            check l Type{ location, node = Type.Scalar Monotype.Natural }
+            check r Type{ location, node = Type.Scalar Monotype.Natural }
 
-            return Type{ location, node = Type.Natural }
+            return Type{ location, node = Type.Scalar Monotype.Natural }
 
         Syntax.NaturalFold -> do
             return _Type
                 { node =
                     Type.Forall (Syntax.location e₀) "a" Domain.Type
-                        (   _Type{ node = Type.Natural }
+                        (   _Type{ node = Type.Scalar Monotype.Natural }
                         ~>  (  (_Type{ node = "a" } ~> _Type{ node = "a" })
                             ~> (_Type{ node = "a" } ~> _Type{ node = "a" })
                             )
@@ -1615,13 +1586,13 @@ infer e₀ = do
                 }
 
         Syntax.Text _ -> do
-            return _Type{ node = Type.Text }
+            return _Type{ node = Type.Scalar Monotype.Text }
 
         Syntax.Append l location r -> do
-            check l Type{ location, node = Type.Text }
-            check r Type{ location, node = Type.Text }
+            check l Type{ location, node = Type.Scalar Monotype.Text }
+            check r Type{ location, node = Type.Scalar Monotype.Text }
 
-            return Type{ location, node = Type.Text }
+            return Type{ location, node = Type.Scalar Monotype.Text }
 
         Syntax.Embed (type_, _) -> do
             return type_

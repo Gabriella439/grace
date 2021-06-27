@@ -15,9 +15,10 @@ import Test.Tasty (TestTree)
 import qualified Control.Monad.Except      as Except
 import qualified Data.Text                 as Text
 import qualified Grace.Interpret           as Interpret
+import qualified Grace.Monotype            as Monotype
 import qualified Grace.Normalize           as Normalize
-import qualified Grace.Value               as Value
 import qualified Grace.Type                as Type
+import qualified Grace.Value               as Value
 import qualified Prettyprinter             as Pretty
 import qualified Prettyprinter.Render.Text as Pretty.Text
 import qualified System.Directory          as Directory
@@ -132,7 +133,7 @@ interpretCodeWithImport = Tasty.HUnit.testCase "interpret code with import" do
           where
             location = Location{ name = "tasty/data/unit/plus-input.grace", code = "2 + 3\n", offset = 2 }
 
-            node = Type.Natural
+            node = Type.Scalar Monotype.Natural
 
     Tasty.HUnit.assertEqual "" expectedValue actualValue
 
@@ -144,7 +145,7 @@ interpretCode = Tasty.HUnit.testCase "interpret code with import" do
           where
             location = Location{ name = "(input)", code = "2 + 2", offset = 2 }
 
-            node = Type.Natural
+            node = Type.Scalar Monotype.Natural
 
     Tasty.HUnit.assertEqual "" expectedValue actualValue
 

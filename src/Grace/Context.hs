@@ -78,7 +78,7 @@ data Entry s
     -- ^ A placeholder type variable whose type has been (at least partially)
     --   inferred
     --
-    -- >>> pretty @(Entry ()) (SolvedType 0 Monotype.Bool)
+    -- >>> pretty @(Entry ()) (SolvedType 0 (Monotype.Scalar Monotype.Bool))
     -- a = Bool
     | SolvedFields (Existential Monotype.Record) Monotype.Record
     -- ^ A placeholder fields variable whose type has been (at least partially)
@@ -132,7 +132,7 @@ instance Pretty (Entry s) where
     > , SolvedType 3 (Monotype.UnsolvedType 2)
     > , UnsolvedType 2
     > , Variable "b"
-    > , Annotation "a" Type.Bool
+    > , Annotation "a" (Monotype.Scalar Monotype.Bool)
     > ]
 
     The ordering matters because the bidirectional type-checking algorithm
@@ -219,7 +219,7 @@ prettyAlternativeType (k, τ) =
     >>> pretty original
     a?
 
-    >>> pretty (solveType [ UnsolvedType 1, SolvedType 0 Monotype.Bool ] original)
+    >>> pretty (solveType [ UnsolvedType 1, SolvedType 0 (Monotype.Scalar Monotype.Bool) ] original)
     Bool
 -}
 solveType :: Context s -> Type s -> Type s
@@ -232,7 +232,7 @@ solveType context type_ = foldl snoc type_ context
 
 {-| Substitute a t`Type.Record` using the solved entries of a `Context`
 
-    >>> original = Type.Fields [("x", Type{ location = (), node = Type.Bool })] (Monotype.UnsolvedFields 0)
+    >>> original = Type.Fields [("x", Type{ location = (), node = Type.Scalar Monotype.Bool })] (Monotype.UnsolvedFields 0)
     >>> pretty original
     { x : Bool, a? }
 
@@ -256,7 +256,7 @@ solveRecord context record = record'
 {-| Substitute a t`Type.Union` using the solved entries of a `Context`
     `Context`
 
-    >>> original = Type.Alternatives [("A", Type{ location = (), node = Type.Bool })] (Monotype.UnsolvedAlternatives 0)
+    >>> original = Type.Alternatives [("A", Type{ location = (), node = Type.Scalar Monotype.Bool })] (Monotype.UnsolvedAlternatives 0)
     >>> pretty original
     < A : Bool | a? >
 
@@ -288,7 +288,7 @@ solveUnion context union = union'
     >>> pretty original
     b? -> a?
 
-    >>> pretty (complete [ UnsolvedType 1, SolvedType 0 Monotype.Bool ] original)
+    >>> pretty (complete [ UnsolvedType 1, SolvedType 0 (Monotype.Scalar Monotype.Bool) ] original)
     forall (a : Type) . a -> Bool
 -}
 complete :: Context s -> Type s -> Type s
@@ -346,9 +346,9 @@ complete context type_ = do
     Returns `Nothing` if no such `UnsolvedType` variable is present within the
     `Context`
 
-    >>> splitOnUnsolvedType 1 [ UnsolvedType 1, SolvedType 0 Monotype.Bool ]
-    Just ([],[SolvedType 0 Bool])
-    >>> splitOnUnsolvedType 0 [ UnsolvedType 1, SolvedType 0 Monotype.Bool ]
+    >>> splitOnUnsolvedType 1 [ UnsolvedType 1, SolvedType 0 (Monotype.Scalar Monotype.Bool) ]
+    Just ([],[SolvedType 0 (Scalar Bool)])
+    >>> splitOnUnsolvedType 0 [ UnsolvedType 1, SolvedType 0 (Monotype.Scalar Monotype.Bool) ]
     Nothing
 -}
 splitOnUnsolvedType
@@ -369,9 +369,9 @@ splitOnUnsolvedType _ [] = Nothing
     Returns `Nothing` if no such `UnsolvedFields` variable is present within the
     `Context`
 
-    >>> splitOnUnsolvedFields 1 [ UnsolvedFields 1, SolvedType 0 Monotype.Bool ]
-    Just ([],[SolvedType 0 Bool])
-    >>> splitOnUnsolvedFields 0 [ UnsolvedFields 1, SolvedType 0 Monotype.Bool ]
+    >>> splitOnUnsolvedFields 1 [ UnsolvedFields 1, SolvedType 0 (Monotype.Scalar Monotype.Bool) ]
+    Just ([],[SolvedType 0 (Scalar Bool)])
+    >>> splitOnUnsolvedFields 0 [ UnsolvedFields 1, SolvedType 0 (Monotype.Scalar Monotype.Bool) ]
     Nothing
 -}
 splitOnUnsolvedFields
@@ -392,9 +392,9 @@ splitOnUnsolvedFields _ [] = Nothing
     Returns `Nothing` if no such `UnsolvedAlternatives` variable is present
     within the `Context`
 
-    >>> splitOnUnsolvedAlternatives 1 [ UnsolvedAlternatives 1, SolvedType 0 Monotype.Bool ]
-    Just ([],[SolvedType 0 Bool])
-    >>> splitOnUnsolvedAlternatives 0 [ UnsolvedAlternatives 1, SolvedType 0 Monotype.Bool ]
+    >>> splitOnUnsolvedAlternatives 1 [ UnsolvedAlternatives 1, SolvedType 0 (Monotype.Scalar Monotype.Bool) ]
+    Just ([],[SolvedType 0 (Scalar Bool)])
+    >>> splitOnUnsolvedAlternatives 0 [ UnsolvedAlternatives 1, SolvedType 0 (Monotype.Scalar Monotype.Bool) ]
     Nothing
 -}
 splitOnUnsolvedAlternatives
@@ -412,8 +412,8 @@ splitOnUnsolvedAlternatives _ [] = Nothing
 {-| Retrieve a variable's annotated type from a `Context`, given the variable's
     label and index
 
-    >>> lookup "x" 0 [ Annotation "x" Type{ location = (), node = Type.Bool }, Annotation "y" Type{ location = (), node = Type.Natural } ]
-    Just (Type {location = (), node = Bool})
+    >>> lookup "x" 0 [ Annotation "x" Type{ location = (), node = Type.Scalar Monotype.Bool }, Annotation "y" Type{ location = (), node = Type.Scalar Monotype.Natural } ]
+    Just (Type {location = (), node = Scalar Bool})
 -}
 lookup
     :: Text

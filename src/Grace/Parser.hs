@@ -450,13 +450,13 @@ grammar = mdo
 
     primitiveType <- rule
         (   do  location <- locatedToken Lexer.Bool
-                return Type{ node = Type.Bool, .. }
+                return Type{ node = Type.Scalar Monotype.Bool, .. }
         <|> do  location <- locatedToken Lexer.Integer
-                return Type{ node = Type.Integer, .. }
+                return Type{ node = Type.Scalar Monotype.Integer, .. }
         <|> do  location <- locatedToken Lexer.Natural
-                return Type{ node = Type.Natural, .. }
+                return Type{ node = Type.Scalar Monotype.Natural, .. }
         <|> do  location <- locatedToken Lexer.Text
-                return Type{ node = Type.Text, .. }
+                return Type{ node = Type.Scalar Monotype.Text, .. }
         <|> do  let variable (location, name) = Type{..}
                       where
                         node = Type.VariableType name

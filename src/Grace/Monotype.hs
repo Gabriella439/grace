@@ -7,6 +7,7 @@
 module Grace.Monotype
     ( -- * Types
       Monotype(..)
+    , Scalar(..)
     , Record(..)
     , RemainingFields(..)
     , Union(..)
@@ -60,13 +61,24 @@ data Monotype
     -- < x : X | y : Y >
     -- >>> pretty (Union (Alternatives [("x", "X"), ("y", "Y")] (Monotype.UnsolvedAlternatives 0)))
     -- < x : X | y : Y | a? >
-    | Bool
+    | Scalar Scalar
+    deriving stock (Eq, Show)
+
+instance IsString Monotype where
+    fromString string = VariableType (fromString string)
+
+instance Pretty Monotype where
+    pretty = prettyMonotype
+
+-- | A scalar type
+data Scalar
+    = Bool
     -- ^ Boolean type
     --
     -- >>> pretty Bool
     -- Bool
     | Integer
-    -- ^ Integer type
+    -- ^ Integer number type
     --
     -- >>> pretty Integer
     -- Integer
@@ -82,11 +94,11 @@ data Monotype
     -- Text
     deriving stock (Eq, Show)
 
-instance IsString Monotype where
-    fromString string = VariableType (fromString string)
-
-instance Pretty Monotype where
-    pretty = prettyMonotype
+instance Pretty Scalar where
+    pretty Bool    = "Bool"
+    pretty Natural = "Natural"
+    pretty Integer = "Integer"
+    pretty Text    = "Text"
 
 -- | A monomorphic record type
 data Record = Fields [(Text, Monotype)] RemainingFields
@@ -141,14 +153,8 @@ prettyPrimitiveType (Record r) =
     prettyRecordType r
 prettyPrimitiveType (Union u) =
     prettyUnionType u
-prettyPrimitiveType Bool =
-    "Bool"
-prettyPrimitiveType Integer =
-    "Integer"
-prettyPrimitiveType Natural =
-    "Natural"
-prettyPrimitiveType Text =
-    "Text"
+prettyPrimitiveType (Scalar scalar) =
+    pretty scalar
 prettyPrimitiveType other =
     "(" <> prettyMonotype other <> ")"
 
