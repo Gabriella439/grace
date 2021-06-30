@@ -1,4 +1,23 @@
-tasty/data/error/type/occurs-fields-input.grace:5:52: Invalid input - Parsing failed
+Record type mismatch
+
+The following record type:
+
+↳ { x : Bool, a }
+
+tasty/data/error/type/occurs-fields-input.grace:2:2: 
   │
-5 │   [ (f : forall (a : Fields) . { a } -> { x : Bool | a }) r
-  │                                                    ↑
+2 │ \f ->
+  │  ↑
+
+… is not a subtype of the following record type:
+
+↳ { a }
+
+tasty/data/error/type/occurs-fields-input.grace:2:2: 
+  │
+2 │ \f ->
+  │  ↑
+
+The former record has the following extra fields:
+
+• x
