@@ -295,6 +295,13 @@ complete :: Context s -> Type s -> Type s
 complete context type_ = do
     State.evalState (Monad.foldM snoc type_ context) 0
   where
+    numUnsolved = fromIntegral (length (filter predicate context)) - 1
+      where
+        predicate (UnsolvedType         _) = True
+        predicate (UnsolvedFields       _) = True
+        predicate (UnsolvedAlternatives _) = True
+        predicate  _                       = False
+
     snoc t (SolvedType         α τ) = do return (Type.solveType         α τ t)
     snoc t (SolvedFields       α r) = do return (Type.solveFields       α r t)
     snoc t (SolvedAlternatives α r) = do return (Type.solveAlternatives α r t)
@@ -303,12 +310,12 @@ complete context type_ = do
 
         State.put $! n + 1
 
-        let a = Existential.toVariable n
-
-        let node =
-                Type.Forall (Type.location t) a Domain.Type (Type.solveType α (Monotype.VariableType a) t)
+        let a = Existential.toVariable (numUnsolved - n)
 
         let Type{ location } = t
+
+        let node =
+                Type.Forall location a Domain.Type (Type.solveType α (Monotype.VariableType a) t)
 
         return Type.Type{..}
     snoc t (UnsolvedFields ρ) | ρ `Type.fieldsFreeIn` t = do
@@ -316,12 +323,12 @@ complete context type_ = do
 
         State.put $! n + 1
 
-        let a = Existential.toVariable n
-
-        let node =
-                Type.Forall (Type.location t) a Domain.Fields (Type.solveFields ρ (Monotype.Fields [] (Monotype.VariableFields a)) t)
+        let a = Existential.toVariable (numUnsolved - n)
 
         let Type{ location } = t
+
+        let node =
+                Type.Forall location a Domain.Fields (Type.solveFields ρ (Monotype.Fields [] (Monotype.VariableFields a)) t)
 
         return Type.Type{..}
     snoc t (UnsolvedAlternatives ρ) | ρ `Type.alternativesFreeIn` t = do
@@ -329,12 +336,12 @@ complete context type_ = do
 
         State.put $! n + 1
 
-        let a = Existential.toVariable n
-
-        let node =
-                Type.Forall (Type.location t) a Domain.Alternatives (Type.solveAlternatives ρ (Monotype.Alternatives [] (Monotype.VariableAlternatives a)) t)
+        let a = Existential.toVariable (numUnsolved - n)
 
         let Type{ location } = t
+
+        let node =
+                Type.Forall location a Domain.Alternatives (Type.solveAlternatives ρ (Monotype.Alternatives [] (Monotype.VariableAlternatives a)) t)
 
         return Type.Type{..}
     snoc t _ = do

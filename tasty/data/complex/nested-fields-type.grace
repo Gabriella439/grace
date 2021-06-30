@@ -1,1 +1,1 @@
-forall (d : Type) . forall (c : Fields) . forall (b : Fields) . forall (a : Fields) . { a : { b : { c : d, c }, b }, a } -> d
+forall (a : Type) . forall (b : Fields) . forall (c : Fields) . forall (d : Fields) . { a : { b : { c : a, b }, c }, d } -> a

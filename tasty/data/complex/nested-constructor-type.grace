@@ -1,1 +1,1 @@
-forall (c : Type) . forall (b : Alternatives) . forall (a : Alternatives) . c -> < C : < C : c | b > | a >
+forall (a : Type) . forall (b : Alternatives) . forall (c : Alternatives) . a -> < C : < C : a | b > | c >

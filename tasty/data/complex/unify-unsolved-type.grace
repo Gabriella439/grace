@@ -1,1 +1,1 @@
-forall (d : Type) . forall (c : Fields) . forall (b : Type) . forall (a : Alternatives) . { x : d, y : b, c } -> { y : b, x : d, c } -> { example0 : List { x : d, y : b, c }, example1 : List < R : Bool | L : Natural | a > }
+forall (a : Type) . forall (b : Fields) . forall (c : Type) . forall (d : Alternatives) . { x : a, y : c, b } -> { y : c, x : a, b } -> { example0 : List { x : a, y : c, b }, example1 : List < R : Bool | L : Natural | d > }
