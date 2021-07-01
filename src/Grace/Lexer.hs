@@ -92,7 +92,9 @@ parseToken =
             ] <?> "keyword"
 
         , Combinators.choice
-            [ NaturalFold <$ symbol "Natural/fold"
+            [ NaturalEven <$ symbol "Natural/even"
+            , NaturalFold <$ symbol "Natural/fold"
+            , NaturalOdd  <$ symbol "Natural/odd"
             , False_      <$ symbol "false"
             , True_       <$ symbol "true"
             ] <?> "built-in value"
@@ -320,7 +322,9 @@ data Token
     | List
     | Merge
     | Natural
+    | NaturalEven
     | NaturalFold
+    | NaturalOdd
     | OpenAngle
     | OpenBrace
     | OpenBracket

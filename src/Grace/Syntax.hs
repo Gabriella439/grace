@@ -178,23 +178,21 @@ data Scalar
     -- ^
     --   >>> pretty (Text "a\n")
     --   "a\n"
-    | True
+    | Bool Bool
     -- ^
-    --   >>> pretty Grace.Syntax.True
+    --   >>> pretty (Bool True)
     --   true
-    | False
-    -- ^
-    --   >>> pretty Grace.Syntax.False
+    --   >>> pretty (Bool False)
     --   false
     deriving (Eq, Show)
 
 instance Pretty Scalar where
-    pretty Grace.Syntax.True  = "true"
-    pretty Grace.Syntax.False = "false"
-    pretty (Double number)    = pretty number
-    pretty (Integer number)   = pretty number
-    pretty (Natural number)   = pretty number
-    pretty (Text text)        = Type.prettyTextLiteral text
+    pretty (Bool True )     = "true"
+    pretty (Bool False)     = "false"
+    pretty (Double number)  = pretty number
+    pretty (Integer number) = pretty number
+    pretty (Natural number) = pretty number
+    pretty (Text text)      = Type.prettyTextLiteral text
 
 -- | A binary infix operator
 data Operator
@@ -233,10 +231,20 @@ data Builtin
     -- ^
     --   >>> pretty NaturalFold
     --   Natural/fold
+    | NaturalEven
+    -- ^
+    --   >>> pretty NaturalEven
+    --   Natural/even
+    | NaturalOdd
+    -- ^
+    --   >>> pretty NaturalOdd
+    --   Natural/odd
     deriving (Eq, Show)
 
 instance Pretty Builtin where
     pretty NaturalFold = "Natural/fold"
+    pretty NaturalEven = "Natural/even"
+    pretty NaturalOdd  = "Natural/odd"
 
 -- | Pretty-print an expression
 prettyExpression :: Pretty a => Node s a -> Doc b

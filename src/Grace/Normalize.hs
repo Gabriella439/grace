@@ -102,6 +102,17 @@ evaluate env Syntax.Syntax{..} =
                   where
                     go 0 !result = result
                     go m !result = go (m - 1) (evaluateApplication succ result)
+
+                (Value.Builtin Syntax.NaturalEven
+                  , Value.Scalar (Syntax.Natural n)
+                  ) ->
+                      Value.Scalar (Syntax.Bool (even n))
+
+                (Value.Builtin Syntax.NaturalOdd
+                  , Value.Scalar (Syntax.Natural n)
+                  ) ->
+                      Value.Scalar (Syntax.Bool (odd n))
+
                 _ ->
                     evaluateApplication function' argument'
           where
@@ -144,9 +155,9 @@ evaluate env Syntax.Syntax{..} =
 
         Syntax.If predicate ifTrue ifFalse ->
             case predicate' of
-                Value.Scalar Syntax.True  -> ifTrue'
-                Value.Scalar Syntax.False -> ifFalse'
-                _           -> Value.If predicate' ifTrue' ifFalse'
+                Value.Scalar (Syntax.Bool True) -> ifTrue'
+                Value.Scalar (Syntax.Bool False) -> ifFalse'
+                _ -> Value.If predicate' ifTrue' ifFalse'
           where
             predicate' = evaluate env predicate
             ifTrue'    = evaluate env ifTrue
@@ -157,11 +168,11 @@ evaluate env Syntax.Syntax{..} =
 
         Syntax.Operator left _ Syntax.And right ->
             case left' of
-                Value.Scalar Syntax.True -> right'
-                Value.Scalar Syntax.False -> Value.Scalar Syntax.False
+                Value.Scalar (Syntax.Bool True) -> right'
+                Value.Scalar (Syntax.Bool False) -> Value.Scalar (Syntax.Bool False)
                 _ -> case right' of
-                    Value.Scalar Syntax.True -> left'
-                    Value.Scalar Syntax.False -> Value.Scalar Syntax.False
+                    Value.Scalar (Syntax.Bool True) -> left'
+                    Value.Scalar (Syntax.Bool False) -> Value.Scalar (Syntax.Bool False)
                     _ -> Value.Operator left' Syntax.And right'
           where
             left'  = evaluate env left
@@ -169,11 +180,11 @@ evaluate env Syntax.Syntax{..} =
 
         Syntax.Operator left _ Syntax.Or right ->
             case left' of
-                Value.Scalar Syntax.True -> Value.Scalar Syntax.True
-                Value.Scalar Syntax.False -> right'
+                Value.Scalar (Syntax.Bool True) -> Value.Scalar (Syntax.Bool True)
+                Value.Scalar (Syntax.Bool False) -> right'
                 _ -> case right' of
-                    Value.Scalar Syntax.True -> Value.Scalar Syntax.True
-                    Value.Scalar Syntax.False -> left'
+                    Value.Scalar (Syntax.Bool True) -> Value.Scalar (Syntax.Bool True)
+                    Value.Scalar (Syntax.Bool False) -> left'
                     _ -> Value.Operator left' Syntax.Or right'
           where
             left'  = evaluate env left

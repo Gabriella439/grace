@@ -1531,10 +1531,7 @@ infer e₀ = do
 
             return Type{ location, node = Type.UnsolvedType α }
 
-        Syntax.Scalar Syntax.True -> do
-            return _Type{ node = Type.Scalar Monotype.Bool }
-
-        Syntax.Scalar Syntax.False -> do
+        Syntax.Scalar (Syntax.Bool _) -> do
             return _Type{ node = Type.Scalar Monotype.Bool }
 
         Syntax.Operator l location Syntax.And r -> do
@@ -1593,6 +1590,18 @@ infer e₀ = do
                             )
                         )
                 }
+
+        Syntax.Builtin Syntax.NaturalEven -> do
+            return
+                (   _Type{ node = Type.Scalar Monotype.Natural }
+                ~>  _Type{ node = Type.Scalar Monotype.Bool }
+                )
+
+        Syntax.Builtin Syntax.NaturalOdd -> do
+            return
+                (   _Type{ node = Type.Scalar Monotype.Natural }
+                ~>  _Type{ node = Type.Scalar Monotype.Bool }
+                )
 
         Syntax.Scalar (Syntax.Text _) -> do
             return _Type{ node = Type.Scalar Monotype.Text }
