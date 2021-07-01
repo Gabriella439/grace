@@ -156,6 +156,7 @@ render t = case t of
     Lexer.Integer          -> "Integer"
     Lexer.IntegerEven      -> "Integer/even"
     Lexer.IntegerOdd       -> "Integer/odd"
+    Lexer.IntegerShow      -> "Integer/show"
     Lexer.Label _          -> "a label"
     Lexer.Lambda           -> "\\"
     Lexer.Let              -> "let"
@@ -369,6 +370,10 @@ grammar = mdo
         <|> do  location <- locatedToken Lexer.IntegerOdd
 
                 return Syntax{ node = Syntax.Builtin Syntax.IntegerOdd, .. }
+
+        <|> do  location <- locatedToken Lexer.IntegerShow
+
+                return Syntax{ node = Syntax.Builtin Syntax.IntegerShow, .. }
 
         <|> do  location <- locatedToken Lexer.NaturalFold
 

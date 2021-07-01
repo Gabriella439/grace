@@ -1603,6 +1603,12 @@ infer e₀ = do
                 ~>  _Type{ node = Type.Scalar Monotype.Bool }
                 )
 
+        Syntax.Builtin Syntax.IntegerShow -> do
+            return
+                (   _Type{ node = Type.Scalar Monotype.Integer }
+                ~>  _Type{ node = Type.Scalar Monotype.Text }
+                )
+
         Syntax.Scalar (Syntax.Text _) -> do
             return _Type{ node = Type.Scalar Monotype.Text }
 

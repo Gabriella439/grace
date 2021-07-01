@@ -235,6 +235,10 @@ data Builtin
     -- ^
     --   >>> pretty IntegerOdd
     --   Integer/odd
+    | IntegerShow
+    -- ^
+    --   >>> pretty IntegerShow
+    --   Integer/show
     | NaturalFold
     -- ^
     --   >>> pretty NaturalFold
@@ -244,6 +248,7 @@ data Builtin
 instance Pretty Builtin where
     pretty IntegerEven = "Integer/even"
     pretty IntegerOdd  = "Integer/odd"
+    pretty IntegerShow = "Integer/show"
     pretty NaturalFold = "Natural/fold"
 
 -- | Pretty-print an expression

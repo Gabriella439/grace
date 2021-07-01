@@ -18,6 +18,7 @@ import Grace.Type (Type)
 import Grace.Value (Closure(..), Value)
 import Prelude hiding (succ)
 
+import qualified Data.Text    as Text
 import qualified Grace.Value  as Value
 import qualified Grace.Syntax as Syntax
 
@@ -122,6 +123,16 @@ evaluate env Syntax.Syntax{..} =
                   , Value.Scalar (Syntax.Natural n)
                   ) ->
                       Value.Scalar (Syntax.Bool (odd n))
+
+                (Value.Builtin Syntax.IntegerShow
+                  , Value.Scalar (Syntax.Natural n)
+                  ) ->
+                      Value.Scalar (Syntax.Text (Text.pack (show n)))
+
+                (Value.Builtin Syntax.IntegerShow
+                  , Value.Scalar (Syntax.Integer n)
+                  ) ->
+                      Value.Scalar (Syntax.Text (Text.pack (show n)))
 
                 _ ->
                     evaluateApplication function' argument'
