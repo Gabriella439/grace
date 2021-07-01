@@ -1580,6 +1580,12 @@ infer e₀ = do
 
             return Type{ location, node = Type.Scalar Monotype.Natural }
 
+        Syntax.Builtin Syntax.DoubleShow -> do
+            return
+                (   _Type{ node = Type.Scalar Monotype.Double }
+                ~>  _Type{ node = Type.Scalar Monotype.Text }
+                )
+
         Syntax.Builtin Syntax.NaturalFold -> do
             return _Type
                 { node =
@@ -1601,12 +1607,6 @@ infer e₀ = do
             return
                 (   _Type{ node = Type.Scalar Monotype.Integer }
                 ~>  _Type{ node = Type.Scalar Monotype.Bool }
-                )
-
-        Syntax.Builtin Syntax.IntegerShow -> do
-            return
-                (   _Type{ node = Type.Scalar Monotype.Integer }
-                ~>  _Type{ node = Type.Scalar Monotype.Text }
                 )
 
         Syntax.Scalar (Syntax.Text _) -> do

@@ -124,13 +124,18 @@ evaluate env Syntax.Syntax{..} =
                   ) ->
                       Value.Scalar (Syntax.Bool (odd n))
 
-                (Value.Builtin Syntax.IntegerShow
+                (Value.Builtin Syntax.DoubleShow
                   , Value.Scalar (Syntax.Natural n)
                   ) ->
                       Value.Scalar (Syntax.Text (Text.pack (show n)))
 
-                (Value.Builtin Syntax.IntegerShow
+                (Value.Builtin Syntax.DoubleShow
                   , Value.Scalar (Syntax.Integer n)
+                  ) ->
+                      Value.Scalar (Syntax.Text (Text.pack (show n)))
+
+                (Value.Builtin Syntax.DoubleShow
+                  , Value.Scalar (Syntax.Double n)
                   ) ->
                       Value.Scalar (Syntax.Text (Text.pack (show n)))
 

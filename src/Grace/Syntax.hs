@@ -227,7 +227,11 @@ instance Pretty Operator where
 
 -- | A built-in function
 data Builtin
-    = IntegerEven
+    = DoubleShow
+    -- ^
+    --   >>> pretty DoubleShow
+    --   Double/show
+    | IntegerEven
     -- ^
     --   >>> pretty IntegerEven
     --   Integer/even
@@ -235,10 +239,6 @@ data Builtin
     -- ^
     --   >>> pretty IntegerOdd
     --   Integer/odd
-    | IntegerShow
-    -- ^
-    --   >>> pretty IntegerShow
-    --   Integer/show
     | NaturalFold
     -- ^
     --   >>> pretty NaturalFold
@@ -246,9 +246,9 @@ data Builtin
     deriving (Eq, Show)
 
 instance Pretty Builtin where
+    pretty DoubleShow  = "Double/show"
     pretty IntegerEven = "Integer/even"
     pretty IntegerOdd  = "Integer/odd"
-    pretty IntegerShow = "Integer/show"
     pretty NaturalFold = "Natural/fold"
 
 -- | Pretty-print an expression

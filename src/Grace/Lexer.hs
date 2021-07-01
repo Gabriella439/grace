@@ -92,9 +92,9 @@ parseToken =
             ] <?> "keyword"
 
         , Combinators.choice
-            [ IntegerEven <$ symbol "Integer/even"
+            [ DoubleShow  <$ symbol "Double/show"
+            , IntegerEven <$ symbol "Integer/even"
             , IntegerOdd  <$ symbol "Integer/odd"
-            , IntegerShow <$ symbol "Integer/show"
             , NaturalFold <$ symbol "Natural/fold"
             , False_      <$ symbol "false"
             , True_       <$ symbol "true"
@@ -305,6 +305,7 @@ data Token
     | Comma
     | Dash
     | DoubleLiteral Double
+    | DoubleShow
     | Dot
     | Double
     | Else
@@ -319,7 +320,6 @@ data Token
     | Integer
     | IntegerEven
     | IntegerOdd
-    | IntegerShow
     | Label Text
     | Lambda
     | Let
