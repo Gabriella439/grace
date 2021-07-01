@@ -1606,6 +1606,22 @@ infer e₀ = do
                         }
                 }
 
+        Syntax.Builtin Syntax.ListMap -> do
+            return _Type
+                { node =
+                    Type.Forall (Syntax.location e₀) "a" Domain.Type _Type
+                        { node =
+                            Type.Forall (Syntax.location e₀) "b" Domain.Type
+                                (   (   _Type{ node = "a" }
+                                    ~>  _Type{ node = "b" }
+                                    )
+                                ~>  (   _Type{ node = Type.List _Type{ node = "a" } }
+                                    ~>  _Type{ node = Type.List _Type{ node = "b" } }
+                                    )
+                                )
+                        }
+                }
+
         Syntax.Builtin Syntax.IntegerEven -> do
             return
                 (   _Type{ node = Type.Scalar Monotype.Integer }

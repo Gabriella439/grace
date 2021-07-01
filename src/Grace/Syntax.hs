@@ -235,6 +235,10 @@ data Builtin
     -- ^
     --   >>> pretty ListFold
     --   List/fold
+    | ListMap
+    -- ^
+    --   >>> pretty ListMap
+    --   List/map
     | IntegerEven
     -- ^
     --   >>> pretty IntegerEven
@@ -252,6 +256,7 @@ data Builtin
 instance Pretty Builtin where
     pretty DoubleShow  = "Double/show"
     pretty ListFold    = "List/fold"
+    pretty ListMap     = "List/map"
     pretty IntegerEven = "Integer/even"
     pretty IntegerOdd  = "Integer/odd"
     pretty NaturalFold = "Natural/fold"

@@ -94,6 +94,7 @@ parseToken =
         , Combinators.choice
             [ DoubleShow  <$ symbol "Double/show"
             , ListFold    <$ symbol "List/fold"
+            , ListMap     <$ symbol "List/map"
             , IntegerEven <$ symbol "Integer/even"
             , IntegerOdd  <$ symbol "Integer/odd"
             , NaturalFold <$ symbol "Natural/fold"
@@ -324,6 +325,7 @@ data Token
     | Label Text
     | Lambda
     | ListFold
+    | ListMap
     | Let
     | List
     | Merge
