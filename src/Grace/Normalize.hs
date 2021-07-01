@@ -92,7 +92,7 @@ evaluate env Syntax.Syntax{..} =
                   | Just f <- lookup alternative alternativeHandlers ->
                       evaluateApplication f x
                 (Value.Application
-                    (Value.Application Value.NaturalFold
+                    (Value.Application (Value.Builtin Syntax.NaturalFold)
                         (Value.Scalar (Syntax.Natural n))
                     )
                     succ
@@ -151,9 +151,6 @@ evaluate env Syntax.Syntax{..} =
             predicate' = evaluate env predicate
             ifTrue'    = evaluate env ifTrue
             ifFalse'   = evaluate env ifFalse
-
-        Syntax.NaturalFold ->
-            Value.NaturalFold
 
         Syntax.Scalar scalar ->
             Value.Scalar scalar
@@ -227,6 +224,9 @@ evaluate env Syntax.Syntax{..} =
           where
             left'  = evaluate env left
             right' = evaluate env right
+
+        Syntax.Builtin builtin ->
+            Value.Builtin builtin
 
         Syntax.Embed (_, value) ->
             value
@@ -308,11 +308,11 @@ quote names value = Syntax.Syntax{..}
                     (quote names ifTrue)
                     (quote names ifFalse)
 
-            Value.NaturalFold ->
-                Syntax.NaturalFold
-
             Value.Scalar scalar ->
                 Syntax.Scalar scalar
 
             Value.Operator left operator right ->
                 Syntax.Operator (quote names left) () operator (quote names right)
+
+            Value.Builtin builtin ->
+                Syntax.Builtin builtin

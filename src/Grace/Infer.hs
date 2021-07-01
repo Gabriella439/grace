@@ -1583,7 +1583,7 @@ infer e₀ = do
 
             return Type{ location, node = Type.Scalar Monotype.Natural }
 
-        Syntax.NaturalFold -> do
+        Syntax.Builtin Syntax.NaturalFold -> do
             return _Type
                 { node =
                     Type.Forall (Syntax.location e₀) "a" Domain.Type

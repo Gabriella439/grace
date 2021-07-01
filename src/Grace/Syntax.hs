@@ -15,6 +15,7 @@ module Grace.Syntax
     , Node(..)
     , Scalar(..)
     , Operator(..)
+    , Builtin(..)
     , Binding(..)
     ) where
 
@@ -106,10 +107,6 @@ data Node s a
     -- ^
     --   >>> pretty @(Node () Void) (If "x" "y" "z")
     --   if x then y else z
-    | NaturalFold
-    -- ^
-    --   >>> pretty @(Node () Void) NaturalFold
-    --   Natural/fold
     | Scalar Scalar
     | Operator (Syntax s a) s Operator (Syntax s a)
     -- ^
@@ -117,6 +114,7 @@ data Node s a
     --   x && y
     --   >>> pretty @(Node () Void) (Operator "x" () Plus "y")
     --   x + y
+    | Builtin Builtin
     | Embed a
     deriving stock (Eq, Foldable, Functor, Show, Traversable)
 
@@ -145,12 +143,12 @@ instance Bifunctor Node where
         Merge (first f record)
     first f (If predicate ifTrue ifFalse) =
         If (first f predicate) (first f ifTrue) (first f ifFalse)
-    first _ NaturalFold =
-        NaturalFold
     first _ (Scalar scalar) =
         Scalar scalar
     first f (Operator left location operator right) =
         Operator (first f left) (f location) operator (first f right)
+    first _ (Builtin builtin) =
+        Builtin builtin
     first _ (Embed a) =
         Embed a
 
@@ -228,6 +226,17 @@ instance Pretty Operator where
     pretty Plus   = "+"
     pretty Times  = "*"
     pretty Append = "++"
+
+-- | A built-in function
+data Builtin
+    = NaturalFold
+    -- ^
+    --   >>> pretty NaturalFold
+    --   Natural/fold
+    deriving (Eq, Show)
+
+instance Pretty Builtin where
+    pretty NaturalFold = "Natural/fold"
 
 -- | Pretty-print an expression
 prettyExpression :: Pretty a => Node s a -> Doc b
@@ -326,8 +335,8 @@ prettyPrimitiveExpression (Record ((key₀, value₀) : keyValues)) =
         <>  Type.prettyRecordLabel key
         <>  ": "
         <>  prettySyntax prettyExpression value
-prettyPrimitiveExpression NaturalFold =
-    "Natural/fold"
+prettyPrimitiveExpression (Builtin builtin) =
+    pretty builtin
 prettyPrimitiveExpression (Scalar scalar) =
     pretty scalar
 prettyPrimitiveExpression (Embed a) =

@@ -362,7 +362,7 @@ grammar = mdo
 
         <|> do  location <- locatedToken Lexer.NaturalFold
 
-                return Syntax{ node = Syntax.NaturalFold, .. }
+                return Syntax{ node = Syntax.Builtin Syntax.NaturalFold, .. }
 
         <|> do  let f (location, t) = Syntax{..}
                       where
