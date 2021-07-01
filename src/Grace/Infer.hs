@@ -1586,15 +1586,24 @@ infer e₀ = do
                 ~>  _Type{ node = Type.Scalar Monotype.Text }
                 )
 
-        Syntax.Builtin Syntax.NaturalFold -> do
+        Syntax.Builtin Syntax.ListFold -> do
             return _Type
                 { node =
-                    Type.Forall (Syntax.location e₀) "a" Domain.Type
-                        (   _Type{ node = Type.Scalar Monotype.Natural }
-                        ~>  (  (_Type{ node = "a" } ~> _Type{ node = "a" })
-                            ~> (_Type{ node = "a" } ~> _Type{ node = "a" })
-                            )
-                        )
+                    Type.Forall (Syntax.location e₀) "a" Domain.Type _Type
+                        { node =
+                            Type.Forall (Syntax.location e₀) "b" Domain.Type
+                                (   _Type{ node = Type.List _Type{ node = "a" } }
+                                ~>  (   (   _Type{ node = "a" }
+                                        ~>  ( _Type{ node = "b" }
+                                            ~>  _Type{ node = "b" }
+                                            )
+                                        )
+                                    ~>  (   _Type{ node = "b" }
+                                        ~>  _Type{ node = "b" }
+                                        )
+                                    )
+                                )
+                        }
                 }
 
         Syntax.Builtin Syntax.IntegerEven -> do
@@ -1608,6 +1617,17 @@ infer e₀ = do
                 (   _Type{ node = Type.Scalar Monotype.Integer }
                 ~>  _Type{ node = Type.Scalar Monotype.Bool }
                 )
+
+        Syntax.Builtin Syntax.NaturalFold -> do
+            return _Type
+                { node =
+                    Type.Forall (Syntax.location e₀) "a" Domain.Type
+                        (   _Type{ node = Type.Scalar Monotype.Natural }
+                        ~>  (  (_Type{ node = "a" } ~> _Type{ node = "a" })
+                            ~> (_Type{ node = "a" } ~> _Type{ node = "a" })
+                            )
+                        )
+                }
 
         Syntax.Scalar (Syntax.Text _) -> do
             return _Type{ node = Type.Scalar Monotype.Text }

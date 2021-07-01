@@ -91,18 +91,32 @@ evaluate env Syntax.Syntax{..} =
                   , Value.Application (Value.Alternative alternative) x
                   )
                   | Just f <- lookup alternative alternativeHandlers ->
-                      evaluateApplication f x
+                      apply f x
+                (Value.Application
+                    (Value.Application (Value.Builtin Syntax.ListFold)
+                        (Value.List elements)
+                    )
+                    cons
+                  , nil
+                  ) ->
+                    go elements nil
+                  where
+                    go [] !result =
+                        result
+                    go (x : xs) !result =
+                        go xs (apply (apply cons x) result)
+
                 (Value.Application
                     (Value.Application (Value.Builtin Syntax.NaturalFold)
                         (Value.Scalar (Syntax.Natural n))
                     )
                     succ
-                  , nil
+                  , zero
                   ) ->
-                    go n nil
+                    go n zero
                   where
                     go 0 !result = result
-                    go m !result = go (m - 1) (evaluateApplication succ result)
+                    go m !result = go (m - 1) (apply succ result)
 
                 (Value.Builtin Syntax.IntegerEven
                   , Value.Scalar (Syntax.Integer n)
@@ -140,7 +154,7 @@ evaluate env Syntax.Syntax{..} =
                       Value.Scalar (Syntax.Text (Text.pack (show n)))
 
                 _ ->
-                    evaluateApplication function' argument'
+                    apply function' argument'
           where
             function' = evaluate env function
             argument' = evaluate env argument
@@ -268,10 +282,10 @@ evaluate env Syntax.Syntax{..} =
         Syntax.Embed (_, value) ->
             value
 
-evaluateApplication :: Value -> Value -> Value
-evaluateApplication (Value.Lambda (Closure name capturedEnv body)) argument =
+apply :: Value -> Value -> Value
+apply (Value.Lambda (Closure name capturedEnv body)) argument =
     evaluate ((name, argument) : capturedEnv) body
-evaluateApplication function argument =
+apply function argument =
     Value.Application function argument
 
 
