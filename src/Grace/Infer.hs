@@ -1591,15 +1591,15 @@ infer e₀ = do
                         )
                 }
 
-        Syntax.Builtin Syntax.NaturalEven -> do
+        Syntax.Builtin Syntax.IntegerEven -> do
             return
-                (   _Type{ node = Type.Scalar Monotype.Natural }
+                (   _Type{ node = Type.Scalar Monotype.Integer }
                 ~>  _Type{ node = Type.Scalar Monotype.Bool }
                 )
 
-        Syntax.Builtin Syntax.NaturalOdd -> do
+        Syntax.Builtin Syntax.IntegerOdd -> do
             return
-                (   _Type{ node = Type.Scalar Monotype.Natural }
+                (   _Type{ node = Type.Scalar Monotype.Integer }
                 ~>  _Type{ node = Type.Scalar Monotype.Bool }
                 )
 

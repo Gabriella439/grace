@@ -227,24 +227,24 @@ instance Pretty Operator where
 
 -- | A built-in function
 data Builtin
-    = NaturalFold
+    = IntegerEven
+    -- ^
+    --   >>> pretty IntegerEven
+    --   Integer/even
+    | IntegerOdd
+    -- ^
+    --   >>> pretty IntegerOdd
+    --   Integer/odd
+    | NaturalFold
     -- ^
     --   >>> pretty NaturalFold
     --   Natural/fold
-    | NaturalEven
-    -- ^
-    --   >>> pretty NaturalEven
-    --   Natural/even
-    | NaturalOdd
-    -- ^
-    --   >>> pretty NaturalOdd
-    --   Natural/odd
     deriving (Eq, Show)
 
 instance Pretty Builtin where
+    pretty IntegerEven = "Integer/even"
+    pretty IntegerOdd  = "Integer/odd"
     pretty NaturalFold = "Natural/fold"
-    pretty NaturalEven = "Natural/even"
-    pretty NaturalOdd  = "Natural/odd"
 
 -- | Pretty-print an expression
 prettyExpression :: Pretty a => Node s a -> Doc b

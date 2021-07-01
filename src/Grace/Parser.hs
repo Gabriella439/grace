@@ -154,6 +154,8 @@ render t = case t of
     Lexer.In               -> "in"
     Lexer.Int _            -> "an integer literal"
     Lexer.Integer          -> "Integer"
+    Lexer.IntegerEven      -> "Integer/even"
+    Lexer.IntegerOdd       -> "Integer/odd"
     Lexer.Label _          -> "a label"
     Lexer.Lambda           -> "\\"
     Lexer.Let              -> "let"
@@ -161,8 +163,6 @@ render t = case t of
     Lexer.Merge            -> "merge"
     Lexer.Natural          -> "Natural"
     Lexer.NaturalFold      -> "Natural/fold"
-    Lexer.NaturalEven      -> "Natural/even"
-    Lexer.NaturalOdd       -> "Natural/odd"
     Lexer.OpenAngle        -> "<"
     Lexer.OpenBrace        -> "{"
     Lexer.OpenBracket      -> "<"
@@ -362,17 +362,17 @@ grammar = mdo
 
                 return (f located)
 
-        <|> do  location <- locatedToken Lexer.NaturalEven
+        <|> do  location <- locatedToken Lexer.IntegerEven
 
-                return Syntax{ node = Syntax.Builtin Syntax.NaturalEven, .. }
+                return Syntax{ node = Syntax.Builtin Syntax.IntegerEven, .. }
+
+        <|> do  location <- locatedToken Lexer.IntegerOdd
+
+                return Syntax{ node = Syntax.Builtin Syntax.IntegerOdd, .. }
 
         <|> do  location <- locatedToken Lexer.NaturalFold
 
                 return Syntax{ node = Syntax.Builtin Syntax.NaturalFold, .. }
-
-        <|> do  location <- locatedToken Lexer.NaturalOdd
-
-                return Syntax{ node = Syntax.Builtin Syntax.NaturalOdd, .. }
 
         <|> do  let f (location, t) = Syntax{..}
                       where

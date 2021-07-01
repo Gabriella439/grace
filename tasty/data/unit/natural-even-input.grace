@@ -1,1 +1,1 @@
-Natural/even 2
+Integer/even 2

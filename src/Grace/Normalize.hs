@@ -103,12 +103,22 @@ evaluate env Syntax.Syntax{..} =
                     go 0 !result = result
                     go m !result = go (m - 1) (evaluateApplication succ result)
 
-                (Value.Builtin Syntax.NaturalEven
+                (Value.Builtin Syntax.IntegerEven
+                  , Value.Scalar (Syntax.Integer n)
+                  ) ->
+                      Value.Scalar (Syntax.Bool (even n))
+
+                (Value.Builtin Syntax.IntegerEven
                   , Value.Scalar (Syntax.Natural n)
                   ) ->
                       Value.Scalar (Syntax.Bool (even n))
 
-                (Value.Builtin Syntax.NaturalOdd
+                (Value.Builtin Syntax.IntegerOdd
+                  , Value.Scalar (Syntax.Integer n)
+                  ) ->
+                      Value.Scalar (Syntax.Bool (odd n))
+
+                (Value.Builtin Syntax.IntegerOdd
                   , Value.Scalar (Syntax.Natural n)
                   ) ->
                       Value.Scalar (Syntax.Bool (odd n))

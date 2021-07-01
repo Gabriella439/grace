@@ -92,9 +92,9 @@ parseToken =
             ] <?> "keyword"
 
         , Combinators.choice
-            [ NaturalEven <$ symbol "Natural/even"
+            [ IntegerEven <$ symbol "Integer/even"
+            , IntegerOdd  <$ symbol "Integer/odd"
             , NaturalFold <$ symbol "Natural/fold"
-            , NaturalOdd  <$ symbol "Natural/odd"
             , False_      <$ symbol "false"
             , True_       <$ symbol "true"
             ] <?> "built-in value"
@@ -316,15 +316,15 @@ data Token
     | In
     | Int Int
     | Integer
+    | IntegerEven
+    | IntegerOdd
     | Label Text
     | Lambda
     | Let
     | List
     | Merge
     | Natural
-    | NaturalEven
     | NaturalFold
-    | NaturalOdd
     | OpenAngle
     | OpenBrace
     | OpenBracket

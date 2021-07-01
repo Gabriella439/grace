@@ -1,1 +1,1 @@
-Natural/odd 2
+Integer/odd 2
