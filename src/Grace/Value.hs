@@ -12,7 +12,7 @@ module Grace.Value
 import Data.String (IsString(..))
 import Data.Text (Text)
 import Grace.Location (Location)
-import Grace.Syntax (Scalar, Syntax)
+import Grace.Syntax (Operator, Scalar, Syntax)
 import Grace.Type (Type)
 
 {-| A `Closure` captures the current evaluation environment in order to defer
@@ -83,14 +83,10 @@ data Value
     | Field Value Text
     | Alternative Text
     | Merge Value
-    | And Value Value
-    | Or Value Value
     | If Value Value Value
-    | Times Value Value
-    | Plus Value Value
     | NaturalFold
-    | Append Value Value
     | Scalar Scalar
+    | Operator Value Operator Value
     deriving stock (Eq, Show)
 
 instance IsString Value where

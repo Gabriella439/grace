@@ -1537,13 +1537,13 @@ infer e₀ = do
         Syntax.Scalar Syntax.False -> do
             return _Type{ node = Type.Scalar Monotype.Bool }
 
-        Syntax.And l location r -> do
+        Syntax.Operator l location Syntax.And r -> do
             check l Type{ location, node = Type.Scalar Monotype.Bool }
             check r Type{ location, node = Type.Scalar Monotype.Bool }
 
             return Type{ location, node = Type.Scalar Monotype.Bool }
 
-        Syntax.Or l location r -> do
+        Syntax.Operator l location Syntax.Or r -> do
             check l Type{ location, node = Type.Scalar Monotype.Bool }
             check r Type{ location, node = Type.Scalar Monotype.Bool }
 
@@ -1571,13 +1571,13 @@ infer e₀ = do
         Syntax.Scalar (Syntax.Natural _) -> do
             return _Type{ node = Type.Scalar Monotype.Natural }
 
-        Syntax.Times l location r -> do
+        Syntax.Operator l location Syntax.Times r -> do
             check l Type{ location, node = Type.Scalar Monotype.Natural }
             check r Type{ location, node = Type.Scalar Monotype.Natural }
 
             return Type{ location, node = Type.Scalar Monotype.Natural }
 
-        Syntax.Plus l location r -> do
+        Syntax.Operator l location Syntax.Plus r -> do
             check l Type{ location, node = Type.Scalar Monotype.Natural }
             check r Type{ location, node = Type.Scalar Monotype.Natural }
 
@@ -1597,7 +1597,7 @@ infer e₀ = do
         Syntax.Scalar (Syntax.Text _) -> do
             return _Type{ node = Type.Scalar Monotype.Text }
 
-        Syntax.Append l location r -> do
+        Syntax.Operator l location Syntax.Append r -> do
             check l Type{ location, node = Type.Scalar Monotype.Text }
             check r Type{ location, node = Type.Scalar Monotype.Text }
 

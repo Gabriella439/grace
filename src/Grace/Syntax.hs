@@ -14,6 +14,7 @@ module Grace.Syntax
       Syntax(..)
     , Node(..)
     , Scalar(..)
+    , Operator(..)
     , Binding(..)
     ) where
 
@@ -101,35 +102,21 @@ data Node s a
     -- ^
     --   >>> pretty @(Node () Void) (Merge "x")
     --   merge x
-    | And (Syntax s a) s (Syntax s a)
-    -- ^
-    --   >>> pretty @(Node () Void) (And "x" () "y")
-    --   x && y
-    | Or (Syntax s a) s (Syntax s a)
-    -- ^
-    --   >>> pretty @(Node () Void) (Or "x" () "y")
-    --   x || y
     | If (Syntax s a) (Syntax s a) (Syntax s a)
     -- ^
     --   >>> pretty @(Node () Void) (If "x" "y" "z")
     --   if x then y else z
-    | Times (Syntax s a) s (Syntax s a)
-    -- ^
-    --   >>> pretty @(Node () Void) (Times "x" () "y")
-    --   x * y
-    | Plus (Syntax s a) s (Syntax s a)
-    -- ^
-    --   >>> pretty @(Node () Void) (Plus "x" () "y")
-    --   x + y
     | NaturalFold
     -- ^
     --   >>> pretty @(Node () Void) NaturalFold
     --   Natural/fold
-    | Append (Syntax s a) s (Syntax s a)
-    -- ^
-    --   >>> pretty @(Node () Void) (Append "x" () "y")
-    --   x ++ y
     | Scalar Scalar
+    | Operator (Syntax s a) s Operator (Syntax s a)
+    -- ^
+    --   >>> pretty @(Node () Void) (Operator "x" () And "y")
+    --   x && y
+    --   >>> pretty @(Node () Void) (Operator "x" () Plus "y")
+    --   x + y
     | Embed a
     deriving stock (Eq, Foldable, Functor, Show, Traversable)
 
@@ -156,22 +143,14 @@ instance Bifunctor Node where
         Alternative name
     first f (Merge record) =
         Merge (first f record)
-    first f (And left location right) =
-        And (first f left) (f location) (first f right)
-    first f (Or left location right) =
-        Or (first f left) (f location) (first f right)
     first f (If predicate ifTrue ifFalse) =
         If (first f predicate) (first f ifTrue) (first f ifFalse)
-    first f (Times left location right) =
-        Times (first f left) (f location) (first f right)
-    first f (Plus left location right) =
-        Plus (first f left) (f location) (first f right)
     first _ NaturalFold =
         NaturalFold
-    first f (Append left location right) =
-        Append (first f left) (f location) (first f right)
     first _ (Scalar scalar) =
         Scalar scalar
+    first f (Operator left location operator right) =
+        Operator (first f left) (f location) operator (first f right)
     first _ (Embed a) =
         Embed a
 
@@ -219,6 +198,37 @@ instance Pretty Scalar where
     pretty (Natural number)   = pretty number
     pretty (Text text)        = Type.prettyTextLiteral text
 
+-- | A binary infix operator
+data Operator
+    = And
+    -- ^
+    --   >>> pretty And
+    --   &&
+    | Or
+    -- ^
+    --   >>> pretty Or
+    --   ||
+    | Plus
+    -- ^
+    --   >>> pretty Plus
+    --   +
+    | Times
+    -- ^
+    --   >>> pretty Times
+    --   *
+    | Append
+    -- ^
+    --   >>> pretty Append
+    --   ++
+    deriving (Eq, Show)
+
+instance Pretty Operator where
+    pretty And    = "&&"
+    pretty Or     = "||"
+    pretty Plus   = "+"
+    pretty Times  = "*"
+    pretty Append = "++"
+
 -- | Pretty-print an expression
 prettyExpression :: Pretty a => Node s a -> Doc b
 prettyExpression (Lambda _ name body) =
@@ -239,45 +249,33 @@ prettyExpression (Annotation annotated annotation) =
 prettyExpression other =
     prettyTimesExpression other
 
+prettyOperator
+    :: Pretty a
+    => Operator
+    -> (Node s a -> Doc b)
+    -> (Node s a -> Doc b)
+prettyOperator operator0 prettyNext (Operator left _ operator1 right)
+    | operator0 == operator1 =
+            prettySyntax (prettyOperator operator0 prettyNext) left
+        <>  " " <> pretty operator1 <> " "
+        <> prettySyntax prettyNext right
+prettyOperator _ prettyNext other =
+    prettyNext other
+
 prettyTimesExpression :: Pretty a => Node s a -> Doc b
-prettyTimesExpression (Times left _ right) =
-        prettySyntax prettyTimesExpression left
-    <>  " * "
-    <>  prettySyntax prettyPlusExpression right
-prettyTimesExpression other =
-    prettyPlusExpression other
+prettyTimesExpression = prettyOperator Times prettyPlusExpression
 
 prettyPlusExpression :: Pretty a => Node s a -> Doc b
-prettyPlusExpression (Plus left _ right) =
-        prettySyntax prettyPlusExpression left
-    <>  " + "
-    <>  prettySyntax prettyOrExpression right
-prettyPlusExpression other =
-    prettyOrExpression other
+prettyPlusExpression = prettyOperator Plus prettyOrExpression
 
 prettyOrExpression :: Pretty a => Node s a -> Doc b
-prettyOrExpression (Or left _ right) =
-        prettySyntax prettyOrExpression left
-    <>  " || "
-    <>  prettySyntax prettyAndExpression right
-prettyOrExpression other =
-    prettyAndExpression other
+prettyOrExpression = prettyOperator Or prettyAndExpression
 
 prettyAndExpression :: Pretty a => Node s a -> Doc b
-prettyAndExpression (And left _ right) =
-        prettySyntax prettyAndExpression left
-    <>  " && "
-    <>  prettySyntax prettyAppendExpression right
-prettyAndExpression other =
-    prettyAppendExpression other
+prettyAndExpression = prettyOperator And prettyAppendExpression
 
 prettyAppendExpression :: Pretty a => Node s a -> Doc b
-prettyAppendExpression (Append left _ right) =
-        prettySyntax prettyAppendExpression left
-    <>  " ++ "
-    <>  prettySyntax prettyApplicationExpression right
-prettyAppendExpression other =
-    prettyApplicationExpression other
+prettyAppendExpression = prettyOperator Append prettyApplicationExpression
 
 prettyApplicationExpression :: Pretty a => Node s a -> Doc b
 prettyApplicationExpression (Application function argument) =

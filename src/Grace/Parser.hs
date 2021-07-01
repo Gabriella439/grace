@@ -229,7 +229,7 @@ grammar = mdo
     let op token_ operator subExpression = do
             let snoc l@Syntax{ location } (s, r) = Syntax{..}
                   where
-                    node = operator l s r
+                    node = Syntax.Operator l s operator r
 
             e0 <- subExpression
 

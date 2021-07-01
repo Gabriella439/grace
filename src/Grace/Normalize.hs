@@ -142,30 +142,6 @@ evaluate env Syntax.Syntax{..} =
         Syntax.Merge record ->
             Value.Merge (evaluate env record)
 
-        Syntax.And left _ right ->
-            case left' of
-                Value.Scalar Syntax.True -> right'
-                Value.Scalar Syntax.False -> Value.Scalar Syntax.False
-                _ -> case right' of
-                    Value.Scalar Syntax.True -> left'
-                    Value.Scalar Syntax.False -> Value.Scalar Syntax.False
-                    _ -> Value.And left' right'
-          where
-            left'  = evaluate env left
-            right' = evaluate env right
-
-        Syntax.Or left _ right ->
-            case left' of
-                Value.Scalar Syntax.True -> Value.Scalar Syntax.True
-                Value.Scalar Syntax.False -> right'
-                _ -> case right' of
-                    Value.Scalar Syntax.True -> Value.Scalar Syntax.True
-                    Value.Scalar Syntax.False -> left'
-                    _ -> Value.Or left' right'
-          where
-            left'  = evaluate env left
-            right' = evaluate env right
-
         Syntax.If predicate ifTrue ifFalse ->
             case predicate' of
                 Value.Scalar Syntax.True  -> ifTrue'
@@ -176,7 +152,37 @@ evaluate env Syntax.Syntax{..} =
             ifTrue'    = evaluate env ifTrue
             ifFalse'   = evaluate env ifFalse
 
-        Syntax.Times left _ right ->
+        Syntax.NaturalFold ->
+            Value.NaturalFold
+
+        Syntax.Scalar scalar ->
+            Value.Scalar scalar
+
+        Syntax.Operator left _ Syntax.And right ->
+            case left' of
+                Value.Scalar Syntax.True -> right'
+                Value.Scalar Syntax.False -> Value.Scalar Syntax.False
+                _ -> case right' of
+                    Value.Scalar Syntax.True -> left'
+                    Value.Scalar Syntax.False -> Value.Scalar Syntax.False
+                    _ -> Value.Operator left' Syntax.And right'
+          where
+            left'  = evaluate env left
+            right' = evaluate env right
+
+        Syntax.Operator left _ Syntax.Or right ->
+            case left' of
+                Value.Scalar Syntax.True -> Value.Scalar Syntax.True
+                Value.Scalar Syntax.False -> right'
+                _ -> case right' of
+                    Value.Scalar Syntax.True -> Value.Scalar Syntax.True
+                    Value.Scalar Syntax.False -> left'
+                    _ -> Value.Operator left' Syntax.Or right'
+          where
+            left'  = evaluate env left
+            right' = evaluate env right
+
+        Syntax.Operator left _ Syntax.Times right ->
             case (left', right') of
                 (Value.Scalar (Syntax.Natural 1), _) ->
                     right'
@@ -189,12 +195,12 @@ evaluate env Syntax.Syntax{..} =
                 (Value.Scalar (Syntax.Natural l), Value.Scalar (Syntax.Natural r)) ->
                     Value.Scalar (Syntax.Natural (l * r))
                 _ ->
-                    Value.Times left' right'
+                    Value.Operator left' Syntax.Times right'
           where
             left'  = evaluate env left
             right' = evaluate env right
 
-        Syntax.Plus left _ right ->
+        Syntax.Operator left _ Syntax.Plus right ->
             case (left', right') of
                 (Value.Scalar (Syntax.Natural 0), _) ->
                     right'
@@ -203,15 +209,12 @@ evaluate env Syntax.Syntax{..} =
                 (Value.Scalar (Syntax.Natural l), Value.Scalar (Syntax.Natural r)) ->
                     Value.Scalar (Syntax.Natural (l + r))
                 _ ->
-                    Value.Plus left' right'
+                    Value.Operator left' Syntax.Plus right'
           where
             left'  = evaluate env left
             right' = evaluate env right
 
-        Syntax.NaturalFold ->
-            Value.NaturalFold
-
-        Syntax.Append left _ right ->
+        Syntax.Operator left _ Syntax.Append right ->
             case (left', right') of
                 (Value.Scalar (Syntax.Text ""), _) ->
                     right'
@@ -220,13 +223,11 @@ evaluate env Syntax.Syntax{..} =
                 (Value.Scalar (Syntax.Text l), Value.Scalar (Syntax.Text r)) ->
                     Value.Scalar (Syntax.Text (l <> r))
                 _ ->
-                    Value.Append left' right'
+                    Value.Operator left' Syntax.Append right'
           where
             left'  = evaluate env left
             right' = evaluate env right
 
-        Syntax.Scalar scalar ->
-            Value.Scalar scalar
         Syntax.Embed (_, value) ->
             value
 
@@ -301,29 +302,17 @@ quote names value = Syntax.Syntax{..}
             Value.Merge record ->
                 Syntax.Merge (quote names record)
 
-            Value.And left right ->
-                Syntax.And (quote names left) () (quote names right)
-
-            Value.Or left right ->
-                Syntax.Or (quote names left) () (quote names right)
-
             Value.If predicate ifTrue ifFalse ->
                 Syntax.If
                     (quote names predicate)
                     (quote names ifTrue)
                     (quote names ifFalse)
 
-            Value.Times left right ->
-                Syntax.Times (quote names left) () (quote names right)
-
-            Value.Plus left right ->
-                Syntax.Plus (quote names left) () (quote names right)
-
             Value.NaturalFold ->
                 Syntax.NaturalFold
 
-            Value.Append left right ->
-                Syntax.Append (quote names left) () (quote names right)
-
             Value.Scalar scalar ->
                 Syntax.Scalar scalar
+
+            Value.Operator left operator right ->
+                Syntax.Operator (quote names left) () operator (quote names right)
