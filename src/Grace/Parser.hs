@@ -162,6 +162,7 @@ render t = case t of
     Lexer.Let              -> "let"
     Lexer.List             -> "list"
     Lexer.ListFold         -> "List/fold"
+    Lexer.ListLength       -> "List/length"
     Lexer.ListMap          -> "List/map"
     Lexer.Merge            -> "merge"
     Lexer.Natural          -> "Natural"
@@ -372,6 +373,10 @@ grammar = mdo
         <|> do  location <- locatedToken Lexer.ListFold
 
                 return Syntax{ node = Syntax.Builtin Syntax.ListFold, .. }
+
+        <|> do  location <- locatedToken Lexer.ListLength
+
+                return Syntax{ node = Syntax.Builtin Syntax.ListLength, .. }
 
         <|> do  location <- locatedToken Lexer.ListMap
 

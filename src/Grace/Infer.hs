@@ -1606,6 +1606,15 @@ infer e₀ = do
                         }
                 }
 
+        Syntax.Builtin Syntax.ListLength -> do
+            return _Type
+                { node =
+                    Type.Forall (Syntax.location e₀) "a" Domain.Type
+                        (   _Type{ node = Type.List _Type{ node = "a" } }
+                        ~>  _Type{ node = Type.Scalar Monotype.Natural }
+                        )
+                }
+
         Syntax.Builtin Syntax.ListMap -> do
             return _Type
                 { node =

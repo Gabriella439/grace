@@ -106,6 +106,11 @@ evaluate env Syntax.Syntax{..} =
                     go (x : xs) !result =
                         go xs (apply (apply cons x) result)
 
+                (Value.Builtin Syntax.ListLength
+                  , Value.List elements
+                  ) ->
+                    Value.Scalar (Syntax.Natural (fromIntegral (length elements)))
+
                 (Value.Application (Value.Builtin Syntax.ListMap) f
                   , Value.List elements
                   ) ->
