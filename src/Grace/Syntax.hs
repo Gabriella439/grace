@@ -184,6 +184,10 @@ data Scalar
     --   true
     --   >>> pretty (Bool False)
     --   false
+    | Null
+    -- ^
+    --   >>> pretty Null
+    --   null
     deriving (Eq, Show)
 
 instance Pretty Scalar where
@@ -193,6 +197,7 @@ instance Pretty Scalar where
     pretty (Integer number) = pretty number
     pretty (Natural number) = pretty number
     pretty (Text text)      = Type.prettyTextLiteral text
+    pretty  Null            = "null"
 
 -- | A binary infix operator
 data Operator

@@ -90,6 +90,11 @@ data Node s
     --
     -- >>> pretty @(Node ()) (Function "a" "b")
     -- a -> b
+    | Optional (Type s)
+    -- ^ Optional type
+    --
+    -- >>> pretty @(Node ()) (Optional "a")
+    -- Optional a
     | List (Type s)
     -- ^ List type
     --
@@ -146,6 +151,8 @@ fromMonotype monotype = Type{ location = (), node }
             UnsolvedType α
         Monotype.Function τ σ ->
             Function (fromMonotype τ) (fromMonotype σ)
+        Monotype.Optional τ ->
+            Optional (fromMonotype τ)
         Monotype.List τ ->
             List (fromMonotype τ)
         Monotype.Record (Monotype.Fields kτs ρ) ->
@@ -171,6 +178,8 @@ solveType α₀ τ Type{ node = old, .. } = Type{ node = new, .. }
             Forall s α₁ domain (solveType α₀ τ _A)
         Function _A _B ->
             Function (solveType α₀ τ _A) (solveType α₀ τ _B)
+        Optional _A ->
+            Optional (solveType α₀ τ _A)
         List _A ->
             List (solveType α₀ τ _A)
         Record (Fields kAs ρ) ->
@@ -197,6 +206,8 @@ solveFields ρ₀ r@(Monotype.Fields kτs ρ₁) Type{ node = old, .. } =
             Forall s α domain (solveFields ρ₀ r _A)
         Function _A _B ->
             Function (solveFields ρ₀ r _A) (solveFields ρ₀ r _B)
+        Optional _A ->
+            Optional (solveFields ρ₀ r _A)
         List _A ->
             List (solveFields ρ₀ r _A)
         Record (Fields kAs₀ ρ)
@@ -230,6 +241,8 @@ solveAlternatives ρ₀ r@(Monotype.Alternatives kτs ρ₁) Type{ node = old, .
             Forall s α domain (solveAlternatives ρ₀ r _A)
         Function _A _B ->
             Function (solveAlternatives ρ₀ r _A) (solveAlternatives ρ₀ r _B)
+        Optional _A ->
+            Optional (solveAlternatives ρ₀ r _A)
         List _A ->
             List (solveAlternatives ρ₀ r _A)
         Record (Fields kAs ρ) ->
@@ -264,6 +277,8 @@ substituteType α₀ n _A₀ Type{ node = old, .. } = Type{ node = new, .. }
             else Forall s α₁ domain (substituteType α₀  n      _A₀ _A₁)
         Function _A₁ _B ->
             Function (substituteType α₀ n _A₀ _A₁) (substituteType α₀ n _A₀ _B)
+        Optional _A₁ ->
+            Optional (substituteType α₀ n _A₀ _A₁)
         List _A₁ ->
             List (substituteType α₀ n _A₀ _A₁)
         Record (Fields kAs ρ) ->
@@ -291,6 +306,8 @@ substituteFields ρ₀ n r@(Fields kτs ρ₁) Type{ node = old, .. } =
             else Forall s α₁ domain (substituteFields ρ₀  n      r _A)
         Function _A _B ->
             Function (substituteFields ρ₀ n r _A) (substituteFields ρ₀ n r _B)
+        Optional _A ->
+            Optional (substituteFields ρ₀ n r _A)
         List _A ->
             List (substituteFields ρ₀ n r _A)
         Record (Fields kAs₀ ρ)
@@ -323,6 +340,8 @@ substituteAlternatives ρ₀ n r@(Alternatives kτs ρ₁) Type{ node = old, .. 
             else Forall s α₁ domain (substituteAlternatives ρ₀  n      r _A)
         Function _A _B ->
             Function (substituteAlternatives ρ₀ n r _A) (substituteAlternatives ρ₀ n r _B)
+        Optional _A ->
+            Optional (substituteAlternatives ρ₀ n r _A)
         List _A ->
             List (substituteAlternatives ρ₀ n r _A)
         Record (Fields kAs ρ) ->
@@ -351,6 +370,8 @@ typeFreeIn :: Existential Monotype -> Type s-> Bool
             α₀ `typeFreeIn` _A
         Function _A _B ->
             α₀ `typeFreeIn` _A || α₀ `typeFreeIn` _B
+        Optional _A ->
+            α₀ `typeFreeIn` _A
         List _A ->
             α₀ `typeFreeIn` _A
         Scalar _->
@@ -374,6 +395,8 @@ fieldsFreeIn :: Existential Monotype.Record -> Type s -> Bool
             ρ₀ `fieldsFreeIn` _A
         Function _A _B ->
             ρ₀ `fieldsFreeIn` _A || ρ₀ `fieldsFreeIn` _B
+        Optional _A ->
+            ρ₀ `fieldsFreeIn` _A
         List _A ->
             ρ₀ `fieldsFreeIn` _A
         Scalar _ ->
@@ -398,6 +421,8 @@ alternativesFreeIn :: Existential Monotype.Union -> Type s -> Bool
             ρ₀ `alternativesFreeIn` _A
         Function _A _B ->
             ρ₀ `alternativesFreeIn` _A || ρ₀ `alternativesFreeIn` _B
+        Optional _A ->
+            ρ₀ `alternativesFreeIn` _A
         List _A ->
             ρ₀ `alternativesFreeIn` _A
         Scalar _ ->
@@ -426,8 +451,12 @@ prettyFunctionType other =
     prettyApplicationType other
 
 prettyApplicationType :: Node s -> Doc a
-prettyApplicationType (List _A) = "List " <> prettyType prettyPrimitiveType _A
-prettyApplicationType  other    = prettyPrimitiveType other
+prettyApplicationType (Optional _A) =
+    "Optional " <> prettyType prettyPrimitiveType _A
+prettyApplicationType (List _A) =
+    "List " <> prettyType prettyPrimitiveType _A
+prettyApplicationType other =
+    prettyPrimitiveType other
 
 prettyPrimitiveType :: Node s -> Doc a
 prettyPrimitiveType (VariableType α) = pretty α

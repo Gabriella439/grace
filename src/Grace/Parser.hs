@@ -167,10 +167,12 @@ render t = case t of
     Lexer.Merge            -> "merge"
     Lexer.Natural          -> "Natural"
     Lexer.NaturalFold      -> "Natural/fold"
+    Lexer.Null             -> "null"
     Lexer.OpenAngle        -> "<"
     Lexer.OpenBrace        -> "{"
     Lexer.OpenBracket      -> "<"
     Lexer.OpenParenthesis  -> "("
+    Lexer.Optional         -> "List"
     Lexer.Or               -> "||"
     Lexer.Plus             -> "+"
     Lexer.Text             -> "Text"
@@ -337,6 +339,10 @@ grammar = mdo
 
                 return Syntax{ node = Syntax.Scalar (Syntax.Bool False), .. }
 
+        <|> do  location <- locatedToken Lexer.Null
+
+                return Syntax{ node = Syntax.Scalar Syntax.Null, .. }
+
         <|> do  let f sign (location, n) = Syntax{..}
                       where
                         node = Syntax.Scalar (Syntax.Double (sign n))
@@ -495,6 +501,15 @@ grammar = mdo
                 locatedList <- locatedToken Lexer.List
                 t <- primitiveType
                 return (f locatedList t)
+
+        <|> do  let f location t = Type{..}
+                      where
+                        node = Type.Optional t
+
+                locatedOptional <- locatedToken Lexer.Optional
+                t <- primitiveType
+                return (f locatedOptional t)
+
         <|> do  primitiveType
         )
 

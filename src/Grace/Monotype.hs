@@ -42,6 +42,11 @@ data Monotype
     --
     -- >>> pretty (Function "a" "b")
     -- a -> b
+    | Optional Monotype
+    -- ^ Optional type
+    --
+    -- >>> pretty (Optional "a")
+    -- Optional a
     | List Monotype
     -- ^ List type
     --
@@ -147,8 +152,9 @@ prettyMonotype other =
     prettyApplicationType other
 
 prettyApplicationType :: Monotype -> Doc a
-prettyApplicationType (List _A) = "List " <> prettyPrimitiveType _A
-prettyApplicationType  other    =  prettyPrimitiveType other
+prettyApplicationType (List     _A) = "List "     <> prettyPrimitiveType _A
+prettyApplicationType (Optional _A) = "Optional " <> prettyPrimitiveType _A
+prettyApplicationType  other        =  prettyPrimitiveType other
 
 prettyPrimitiveType :: Monotype -> Doc a
 prettyPrimitiveType (VariableType α) =

@@ -101,15 +101,17 @@ parseToken =
             , NaturalFold <$ symbol "Natural/fold"
             , False_      <$ symbol "false"
             , True_       <$ symbol "true"
+            , Null        <$ symbol "null"
             ] <?> "built-in value"
 
         , Combinators.choice
-            [ List    <$ symbol "List"
-            , Double  <$ symbol "Double"
-            , Integer <$ symbol "Integer"
-            , Natural <$ symbol "Natural"
-            , Bool    <$ symbol "Bool"
-            , Text    <$ symbol "Text"
+            [ List     <$ symbol "List"
+            , Optional <$ symbol "Optional"
+            , Double   <$ symbol "Double"
+            , Integer  <$ symbol "Integer"
+            , Natural  <$ symbol "Natural"
+            , Bool     <$ symbol "Bool"
+            , Text     <$ symbol "Text"
             ] <?> "built-in type"
 
         , OpenAngle        <$ symbol "<"
@@ -261,10 +263,17 @@ reserved =
         , "Type"
         , "Fields"
         , "Alternatives"
+        , "Double/show"
+        , "List/fold"
+        , "List/length"
+        , "List/map"
+        , "Integer/even"
+        , "Integer/odd"
         , "Natural/fold"
         , "false"
         , "true"
         , "List"
+        , "Optional"
         , "Bool"
         , "Double"
         , "Integer"
@@ -333,10 +342,12 @@ data Token
     | Merge
     | Natural
     | NaturalFold
+    | Null
     | OpenAngle
     | OpenBrace
     | OpenBracket
     | OpenParenthesis
+    | Optional
     | Or
     | Plus
     | Text

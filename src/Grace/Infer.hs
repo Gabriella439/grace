@@ -160,6 +160,9 @@ wellFormedType _Γ Type{..} =
             predicate (Context.SolvedType   α₁ _) = α₀ == α₁
             predicate  _                          = False
 
+        Type.Optional _A -> do
+            wellFormedType _Γ _A
+
         Type.List _A -> do
             wellFormedType _Γ _A
 
@@ -353,6 +356,12 @@ subtype _A₀ _B₀ = do
 
         (Type.Scalar Monotype.Integer, Type.Scalar Monotype.Double) -> do
             return ()
+
+        (Type.Optional _A, Type.Optional _B) -> do
+            subtype _A _B
+
+        (_, Type.Optional _B) -> do
+            subtype _A₀ _B
 
         (Type.List _A, Type.List _B) -> do
             subtype _A _B
@@ -782,6 +791,16 @@ instantiateTypeL α _A₀ = do
 
             discardUpTo (Context.Variable domain β)
 
+        Type.Optional _A -> do
+            let _ΓL = _Γ
+            let _ΓR = _Γ'
+
+            α₁ <- fresh
+
+            set (_ΓR <> (Context.SolvedType α (Monotype.Optional (Monotype.UnsolvedType α₁)) : Context.UnsolvedType α₁ : _ΓL))
+
+            instantiateTypeL α₁ _A
+
         Type.List _A -> do
             let _ΓL = _Γ
             let _ΓR = _Γ'
@@ -905,6 +924,16 @@ instantiateTypeR _A₀ α = do
             instantiateTypeR (Type.substituteAlternatives β₀ 0 β₁' _B) α
 
             discardUpTo (Context.MarkerAlternatives β₁)
+
+        Type.Optional _A -> do
+            let _ΓL = _Γ
+            let _ΓR = _Γ'
+
+            α₁ <- fresh
+
+            set (_ΓR <> (Context.SolvedType α (Monotype.Optional (Monotype.UnsolvedType α₁)) : Context.UnsolvedType α₁ : _ΓL))
+
+            instantiateTypeR _A α₁
 
         Type.List _A -> do
             let _ΓL = _Γ
@@ -1567,6 +1596,14 @@ infer e₀ = do
 
         Syntax.Scalar (Syntax.Natural _) -> do
             return _Type{ node = Type.Scalar Monotype.Natural }
+
+        Syntax.Scalar Syntax.Null -> do
+            α <- fresh
+
+            push (Context.UnsolvedType α)
+
+            return _Type
+                { node = Type.Optional _Type{ node = Type.UnsolvedType α } }
 
         Syntax.Operator l location Syntax.Times r -> do
             check l Type{ location, node = Type.Scalar Monotype.Natural }
