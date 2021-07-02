@@ -147,6 +147,7 @@ render t = case t of
     Lexer.DoubleShow       -> "Double/show"
     Lexer.Else             -> "else"
     Lexer.Equals           -> "="
+    Lexer.Exists           -> "exists"
     Lexer.False_           -> "False"
     Lexer.Fields           -> "Fields"
     Lexer.File _           -> "a file"
@@ -468,20 +469,29 @@ grammar = mdo
         )
 
     quantifiedType <- rule do
-        let forall (location, (typeVariableOffset, typeVariable), domain_) type_ =
+        let forall (forallOrExists, location, (typeVariableOffset, typeVariable), domain_) type_ =
                 Type{..}
               where
-                node = Type.Forall typeVariableOffset typeVariable domain_ type_
+                node = forallOrExists typeVariableOffset typeVariable domain_ type_
 
-        locatedTypeVariables <- many do
-            locatedForall <- locatedToken Lexer.Forall
-            token Lexer.OpenParenthesis
-            locatedTypeVariable <- locatedLabel
-            token Lexer.Colon
-            domain_ <- domain
-            token Lexer.CloseParenthesis
-            token Lexer.Dot
-            return (locatedForall, locatedTypeVariable, domain_)
+        locatedTypeVariables <- many
+            (   do  locatedForall <- locatedToken Lexer.Forall
+                    token Lexer.OpenParenthesis
+                    locatedTypeVariable <- locatedLabel
+                    token Lexer.Colon
+                    domain_ <- domain
+                    token Lexer.CloseParenthesis
+                    token Lexer.Dot
+                    return (Type.Forall, locatedForall, locatedTypeVariable, domain_)
+            <|> do  locatedExists <- locatedToken Lexer.Exists
+                    token Lexer.OpenParenthesis
+                    locatedTypeVariable <- locatedLabel
+                    token Lexer.Colon
+                    domain_ <- domain
+                    token Lexer.CloseParenthesis
+                    token Lexer.Dot
+                    return (Type.Exists, locatedExists, locatedTypeVariable, domain_)
+            )
         t <- functionType
         return (foldr forall t locatedTypeVariables)
 

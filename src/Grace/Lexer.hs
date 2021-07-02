@@ -79,7 +79,8 @@ parseToken =
             ] <?> "operator"
 
         , Combinators.choice
-            [ Forall       <$ symbol "forall"
+            [ Exists       <$ symbol "exists"
+            , Forall       <$ symbol "forall"
             , Let          <$ symbol "let"
             , In           <$ symbol "in"
             , If           <$ symbol "if"
@@ -322,6 +323,7 @@ data Token
     | Double
     | Else
     | Equals
+    | Exists
     | False_
     | Fields
     | File FilePath

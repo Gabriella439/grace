@@ -137,6 +137,10 @@ wellFormedType _Γ Type{..} =
         Type.Forall _ α domain _A -> do
             wellFormedType (Context.Variable domain α : _Γ) _A
 
+        -- ForallWF
+        Type.Exists _ α domain _A -> do
+            wellFormedType (Context.Variable domain α : _Γ) _A
+
         -- EvarWF / SolvedEvarWF
         _A@(Type.UnsolvedType α₀)
             | any predicate _Γ -> do
@@ -304,6 +308,38 @@ subtype _A₀ _B₀ = do
             _Θ <- get
             subtype (Context.solveType _Θ _A₂) (Context.solveType _Θ _B₂)
 
+        -- <:∃R
+        (_, Type.Exists nameLocation α₀ Domain.Type _B) -> do
+            α₁ <- fresh
+
+            push (Context.MarkerType α₁)
+            push (Context.UnsolvedType α₁)
+
+            let α₁' = Type{ location = nameLocation, node = Type.UnsolvedType α₁ }
+            subtype _A₀ (Type.substituteType α₀ 0 α₁' _B)
+
+            discardUpTo (Context.MarkerType α₁)
+        (_, Type.Exists _ α₀ Domain.Fields _B) -> do
+            α₁ <- fresh
+
+            push (Context.MarkerFields   α₁)
+            push (Context.UnsolvedFields α₁)
+
+            let α₁' = Type.Fields [] (Monotype.UnsolvedFields α₁)
+            subtype _A₀ (Type.substituteFields α₀ 0 α₁' _B)
+
+            discardUpTo (Context.MarkerFields α₁)
+        (_, Type.Exists _ α₀ Domain.Alternatives _B) -> do
+            α₁ <- fresh
+
+            push (Context.MarkerAlternatives α₁)
+            push (Context.UnsolvedAlternatives α₁)
+
+            let α₁' = Type.Alternatives [] (Monotype.UnsolvedAlternatives α₁)
+            subtype _A₀ (Type.substituteAlternatives α₀ 0 α₁' _B)
+
+            discardUpTo (Context.MarkerAlternatives α₁)
+
         -- <:∀L
         (Type.Forall nameLocation α₀ Domain.Type _A, _) -> do
             α₁ <- fresh
@@ -335,6 +371,14 @@ subtype _A₀ _B₀ = do
             subtype (Type.substituteAlternatives α₀ 0 α₁' _A) _B₀
 
             discardUpTo (Context.MarkerAlternatives α₁)
+
+        -- <:∃L
+        (Type.Exists _ α domain _A, _) -> do
+            push (Context.Variable domain α)
+
+            subtype _A _B₀
+
+            discardUpTo (Context.Variable domain α)
 
         -- <:∀R
         (_, Type.Forall _ α domain _B) -> do
@@ -767,6 +811,38 @@ instantiateTypeL α _A₀ = do
         Type.Scalar scalar -> do
             instLSolve (Monotype.Scalar scalar)
 
+        -- InstLExt
+        Type.Exists nameLocation β₀ Domain.Type _B -> do
+            β₁ <- fresh
+
+            push (Context.MarkerType β₁)
+            push (Context.UnsolvedType β₁)
+
+            let β₁' = Type{ location = nameLocation, node = Type.UnsolvedType β₁ }
+            instantiateTypeR (Type.substituteType β₀ 0 β₁' _B) α
+
+            discardUpTo (Context.MarkerType β₁)
+        Type.Exists _ β₀ Domain.Fields _B -> do
+            β₁ <- fresh
+
+            push (Context.MarkerFields β₁)
+            push (Context.UnsolvedFields β₁)
+
+            let β₁' = Type.Fields [] (Monotype.UnsolvedFields β₁)
+            instantiateTypeR (Type.substituteFields β₀ 0 β₁' _B) α
+
+            discardUpTo (Context.MarkerFields β₁)
+        Type.Exists _ β₀ Domain.Alternatives _B -> do
+            β₁ <- fresh
+
+            push (Context.MarkerAlternatives β₁)
+            push (Context.UnsolvedAlternatives β₁)
+
+            let β₁' = Type.Alternatives [] (Monotype.UnsolvedAlternatives β₁)
+            instantiateTypeR (Type.substituteAlternatives β₀ 0 β₁' _B) α
+
+            discardUpTo (Context.MarkerAlternatives β₁)
+
         -- InstLArr
         Type.Function _A₁ _A₂ -> do
             let _ΓL = _Γ
@@ -892,6 +968,14 @@ instantiateTypeR _A₀ α = do
             _Θ <- get
 
             instantiateTypeR (Context.solveType _Θ _A₂) α₂
+
+        -- InstRExtL
+        Type.Exists _ β domain _B -> do
+            push (Context.Variable domain β)
+
+            instantiateTypeL α _B
+
+            discardUpTo (Context.Variable domain β)
 
         -- InstRAllL
         Type.Forall nameLocation β₀ Domain.Type _B -> do
@@ -1721,6 +1805,41 @@ check Syntax{ node = Syntax.Lambda _ x e } Type{ node = Type.Function _A _B } = 
 
     discardUpTo (Context.Annotation x _A)
 
+-- ∃I
+check e Type{ node = Type.Exists nameLocation α₀ Domain.Type _A } = do
+    α₁ <- fresh
+
+    push (Context.MarkerType α₁)
+    push (Context.UnsolvedType α₁)
+
+    let α₁' = Type{ location = nameLocation, node = Type.UnsolvedType α₁ }
+
+    check e (Type.substituteType α₀ 0 α₁' _A)
+
+    discardUpTo (Context.MarkerType α₁)
+check e Type{ node = Type.Exists _ α₀ Domain.Fields _A } = do
+    α₁ <- fresh
+
+    push (Context.MarkerFields α₁)
+    push (Context.UnsolvedFields α₁)
+
+    let α₁' = Type.Fields [] (Monotype.UnsolvedFields α₁)
+
+    check e (Type.substituteFields α₀ 0 α₁' _A)
+
+    discardUpTo (Context.MarkerFields α₁)
+check e Type{ node = Type.Exists _ α₀ Domain.Alternatives _A } = do
+    α₁ <- fresh
+
+    push (Context.MarkerAlternatives α₁)
+    push (Context.UnsolvedAlternatives α₁)
+
+    let α₁' = Type.Alternatives [] (Monotype.UnsolvedAlternatives α₁)
+
+    check e (Type.substituteAlternatives α₀ 0 α₁' _A)
+
+    discardUpTo (Context.MarkerAlternatives α₁)
+
 -- ∀I
 check e Type{ node = Type.Forall _ α domain _A } = do
     push (Context.Variable domain α)
@@ -1777,6 +1896,16 @@ inferApplication _A₀@Type{ node = Type.Forall _ α₀ Domain.Alternatives _A }
     let α₁' = Type.Alternatives [] (Monotype.UnsolvedAlternatives α₁)
 
     inferApplication (Type.substituteAlternatives α₀ 0 α₁' _A) e
+
+-- ∃App
+inferApplication _A₀@Type{ node = Type.Exists _ α domain _A } e = do
+    push (Context.Variable domain α)
+
+    _B <- inferApplication _A e
+
+    discardUpTo (Context.Variable domain α)
+
+    return _B
 
 -- αApp
 inferApplication Type{ node = Type.UnsolvedType α, .. } e = do

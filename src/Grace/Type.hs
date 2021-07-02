@@ -80,6 +80,11 @@ data Node s
     --
     -- >>> pretty @(Node ()) (UnsolvedType 0)
     -- a?
+    | Exists s Text Domain (Type s)
+    -- ^ Existentially quantified type
+    --
+    -- >>> pretty @(Node ()) (Exists () "a" Domain.Type "a")
+    -- exists (a : Type) . a
     | Forall s Text Domain (Type s)
     -- ^ Universally quantified type
     --
@@ -174,6 +179,8 @@ solveType α₀ τ Type{ node = old, .. } = Type{ node = new, .. }
         UnsolvedType α₁
             | α₀ == α₁ -> node (fmap (\_ -> location) (fromMonotype τ))
             | otherwise -> UnsolvedType α₁
+        Exists s α₁ domain _A ->
+            Exists s α₁ domain (solveType α₀ τ _A)
         Forall s α₁ domain _A ->
             Forall s α₁ domain (solveType α₀ τ _A)
         Function _A _B ->
@@ -202,6 +209,8 @@ solveFields ρ₀ r@(Monotype.Fields kτs ρ₁) Type{ node = old, .. } =
             VariableType α
         UnsolvedType α ->
             UnsolvedType α
+        Exists s α domain _A ->
+            Exists s α domain (solveFields ρ₀ r _A)
         Forall s α domain _A ->
             Forall s α domain (solveFields ρ₀ r _A)
         Function _A _B ->
@@ -237,6 +246,8 @@ solveAlternatives ρ₀ r@(Monotype.Alternatives kτs ρ₁) Type{ node = old, .
             VariableType α
         UnsolvedType α ->
             UnsolvedType α
+        Exists s α domain _A ->
+            Exists s α domain (solveAlternatives ρ₀ r _A)
         Forall s α domain _A ->
             Forall s α domain (solveAlternatives ρ₀ r _A)
         Function _A _B ->
@@ -271,6 +282,10 @@ substituteType α₀ n _A₀ Type{ node = old, .. } = Type{ node = new, .. }
             | otherwise          -> VariableType α₁
         UnsolvedType α ->
             UnsolvedType α
+        Exists s α₁ domain _A₁ ->
+            if α₀ == α₁ && domain == Domain.Type
+            then Exists s α₁ domain (substituteType α₀ (n + 1) _A₀ _A₁)
+            else Exists s α₁ domain (substituteType α₀  n      _A₀ _A₁)
         Forall s α₁ domain _A₁ ->
             if α₀ == α₁ && domain == Domain.Type
             then Forall s α₁ domain (substituteType α₀ (n + 1) _A₀ _A₁)
@@ -300,6 +315,10 @@ substituteFields ρ₀ n r@(Fields kτs ρ₁) Type{ node = old, .. } =
             VariableType α
         UnsolvedType α ->
             UnsolvedType α
+        Exists s α₁ domain _A ->
+            if ρ₀ == α₁ && domain == Domain.Fields
+            then Exists s α₁ domain (substituteFields ρ₀ (n + 1) r _A)
+            else Exists s α₁ domain (substituteFields ρ₀  n      r _A)
         Forall s α₁ domain _A ->
             if ρ₀ == α₁ && domain == Domain.Fields
             then Forall s α₁ domain (substituteFields ρ₀ (n + 1) r _A)
@@ -334,6 +353,10 @@ substituteAlternatives ρ₀ n r@(Alternatives kτs ρ₁) Type{ node = old, .. 
             VariableType α
         UnsolvedType α ->
             UnsolvedType α
+        Exists s α₁ domain _A ->
+            if ρ₀ == α₁ && domain == Domain.Alternatives
+            then Exists s α₁ domain (substituteAlternatives ρ₀ (n + 1) r _A)
+            else Exists s α₁ domain (substituteAlternatives ρ₀  n      r _A)
         Forall s α₁ domain _A ->
             if ρ₀ == α₁ && domain == Domain.Alternatives
             then Forall s α₁ domain (substituteAlternatives ρ₀ (n + 1) r _A)
@@ -366,6 +389,8 @@ typeFreeIn :: Existential Monotype -> Type s-> Bool
             False
         UnsolvedType α₁ ->
             α₀ == α₁
+        Exists _ _ _ _A ->
+            α₀ `typeFreeIn` _A
         Forall _ _ _ _A ->
             α₀ `typeFreeIn` _A
         Function _A _B ->
@@ -391,6 +416,8 @@ fieldsFreeIn :: Existential Monotype.Record -> Type s -> Bool
             False
         UnsolvedType _ ->
             False
+        Exists _ _ _ _A ->
+            ρ₀ `fieldsFreeIn` _A
         Forall _ _ _ _A ->
             ρ₀ `fieldsFreeIn` _A
         Function _A _B ->
@@ -417,6 +444,8 @@ alternativesFreeIn :: Existential Monotype.Union -> Type s -> Bool
             False
         UnsolvedType _ ->
             False
+        Exists _ _ _ _A ->
+            ρ₀ `alternativesFreeIn` _A
         Forall _ _ _ _A ->
             ρ₀ `alternativesFreeIn` _A
         Function _A _B ->
@@ -440,6 +469,12 @@ prettyQuantifiedType (Forall _ α Domain.Fields _A) =
     "forall (" <> pretty α <> " : Fields) . " <> prettyType prettyQuantifiedType _A
 prettyQuantifiedType (Forall _ α Domain.Alternatives _A) =
     "forall (" <> pretty α <> " : Alternatives) . " <> prettyType prettyQuantifiedType _A
+prettyQuantifiedType (Exists _ α Domain.Type _A) =
+    "exists (" <> pretty α <> " : Type) . " <> prettyType prettyQuantifiedType _A
+prettyQuantifiedType (Exists _ α Domain.Fields _A) =
+    "exists (" <> pretty α <> " : Fields) . " <> prettyType prettyQuantifiedType _A
+prettyQuantifiedType (Exists _ α Domain.Alternatives _A) =
+    "exists (" <> pretty α <> " : Alternatives) . " <> prettyType prettyQuantifiedType _A
 prettyQuantifiedType other = prettyFunctionType other
 
 prettyFunctionType :: Node s -> Doc a

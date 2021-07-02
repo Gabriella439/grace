@@ -1,0 +1,1 @@
+exists (t : Type) . t
