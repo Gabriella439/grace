@@ -44,7 +44,7 @@ fileToTestTree prefix = do
 
     let name = FilePath.takeBaseName input
 
-    eitherResult <- Except.runExceptT (Interpret.interpret (Path input))
+    eitherResult <- Except.runExceptT (Interpret.interpret Nothing (Path input))
 
     case eitherResult of
         Left message -> do
@@ -128,7 +128,7 @@ main = do
 
 interpretCodeWithImport :: TestTree
 interpretCodeWithImport = Tasty.HUnit.testCase "interpret code with import" do
-    actualValue <- Except.runExceptT (Interpret.interpret (Interpret.Code "./tasty/data/unit/plus-input.grace"))
+    actualValue <- Except.runExceptT (Interpret.interpret Nothing (Interpret.Code "./tasty/data/unit/plus-input.grace"))
 
     let expectedValue =
             Right (Type{ location, node }, Value.Scalar (Syntax.Natural 5))
@@ -141,7 +141,7 @@ interpretCodeWithImport = Tasty.HUnit.testCase "interpret code with import" do
 
 interpretCode :: TestTree
 interpretCode = Tasty.HUnit.testCase "interpret code with import" do
-    actualValue <- Except.runExceptT (Interpret.interpret (Interpret.Code "2 + 2"))
+    actualValue <- Except.runExceptT (Interpret.interpret Nothing (Interpret.Code "2 + 2"))
 
     let expectedValue =
             Right (Type{ location, node }, Value.Scalar (Syntax.Natural 4))

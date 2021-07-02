@@ -53,7 +53,7 @@ main = do
 
     text <- Text.IO.getContents
 
-    eitherResult <- Except.runExceptT (Interpret.interpret (Code text))
+    eitherResult <- Except.runExceptT (Interpret.interpret Nothing (Code text))
 
     (inferred, value) <- case eitherResult of
         Left message -> do
