@@ -239,7 +239,7 @@ text = lexeme do
     return (TextLiteral (Text.concat texts))
 
 isLabel :: Char -> Bool
-isLabel c = Char.isAlphaNum c || c == '_'
+isLabel c = Char.isAlphaNum c || c == '_' || c == '-' || c == '/'
 
 -- | Returns `True` if the given label is valid
 validRecordLabel :: Text -> Bool
@@ -247,7 +247,7 @@ validRecordLabel text_  =
     case Text.uncons text_ of
         Nothing     -> False
         Just (h, t) ->
-                (Char.isAlpha h || h == '_')
+                (Char.isAlpha h || h == '_' || h == '-' || h == '/')
             &&  Text.all isLabel t
             &&  not (HashSet.member text_ reserved)
 
@@ -284,7 +284,7 @@ reserved =
 
 label :: Parser Token
 label = lexeme do
-    let isLabel0 c = Char.isLower c || c == '_'
+    let isLabel0 c = Char.isLower c || c == '_' || c == '-' || c == '/'
 
     c0 <- Megaparsec.satisfy isLabel0 <?> "label character"
 
