@@ -419,6 +419,9 @@ subtype _A₀ _B₀ = do
 
             let both = Map.intersectionWith (,) mapA mapB
 
+            -- TODO: The `fields* /= Monotype.EmptyFields` might not be correct
+            --
+            -- See also the matching `check` code.
             let okayA = Map.null extraA || (fields₁ /= Monotype.EmptyFields && fields₀ /= fields₁)
             let okayB = Map.null extraB || (fields₀ /= Monotype.EmptyFields && fields₀ /= fields₁)
 
@@ -447,7 +450,7 @@ subtype _A₀ _B₀ = do
                 #{listToText (Map.keys extraB)}
                 |]
 
-               | not okayA && okayB -> do
+               | not okayA -> do
                 Except.throwError [__i|
                 Record type mismatch
 
@@ -468,7 +471,7 @@ subtype _A₀ _B₀ = do
                 #{listToText (Map.keys extraA)}
                 |]
 
-               | okayA && not okayB -> do
+               | not okayB -> do
                 Except.throwError [__i|
                 Record type mismatch
 
@@ -1850,6 +1853,33 @@ check e Type{ node = Type.Forall _ α domain _A } = do
 
 check Syntax{ node = Syntax.List elements } Type{ node = Type.List α } = do
     traverse_ (`check` α)  elements
+
+check e@Syntax{ node = Syntax.Record keyValues } _B@Type{ node = Type.Record (Type.Fields keyTypes fields) }
+    | let mapValues = Map.fromList keyValues
+    , let mapTypes  = Map.fromList keyTypes
+
+    , let extraValues = Map.difference mapValues mapTypes
+    , let extraTypes  = Map.difference mapTypes  mapValues
+
+    , let both = Map.intersectionWith (,) mapValues mapTypes
+    , not (Map.null both) = do
+        let process (value, type_) = check value type_
+
+        _ <- traverse process both
+
+        let e' =
+                Syntax
+                    { node = Syntax.Record (Map.toList extraValues)
+                    , location = Syntax.location e
+                    }
+
+        let _B' =
+                Type
+                    { node = Type.Record (Type.Fields (Map.toList extraTypes) fields)
+                    , location = Type.location _B
+                    }
+
+        check e' _B'
 
 -- Sub
 check e _B = do
