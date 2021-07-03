@@ -33,6 +33,7 @@ library
                      , Grace.Monotype
                      , Grace.Normalize
                      , Grace.Parser
+                     , Grace.Pretty
                      , Grace.Syntax
                      , Grace.Type
                      , Grace.Value

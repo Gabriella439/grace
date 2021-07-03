@@ -9,21 +9,20 @@ module Grace
       main
     ) where
 
-import Prettyprinter (Pretty(..))
 import Grace.Interpret (Input(..))
 import Grace.Syntax (Syntax(..))
 import Options.Applicative (Parser, ParserInfo)
 
-import qualified Control.Monad.Except      as Except
-import qualified Data.Text.IO              as Text.IO
-import qualified Prettyprinter             as Pretty
-import qualified Prettyprinter.Render.Text as Pretty.Text
-import qualified Grace.Interpret           as Interpret
-import qualified Grace.Normalize           as Normalize
-import qualified Grace.Syntax              as Syntax
-import qualified Options.Applicative       as Options
-import qualified System.Exit               as Exit
-import qualified System.IO                 as IO
+import qualified Control.Monad.Except as Except
+import qualified Data.Text.IO         as Text.IO
+import qualified Prettyprinter        as Pretty
+import qualified Grace.Interpret      as Interpret
+import qualified Grace.Normalize      as Normalize
+import qualified Grace.Pretty
+import qualified Grace.Syntax         as Syntax
+import qualified Options.Applicative  as Options
+import qualified System.Exit          as Exit
+import qualified System.IO            as IO
 
 data Options = Options
     { annotate :: Bool
@@ -42,9 +41,6 @@ parser = do
         )
 
     return Options{..}
-
-pretty_ :: Pretty a => a -> IO ()
-pretty_ x = Pretty.Text.putDoc (Pretty.pretty x <> Pretty.hardline)
 
 -- | Command-line entrypoint
 main :: IO ()
@@ -74,4 +70,5 @@ main = do
             | otherwise =
                 syntax
 
-    pretty_ annotatedExpression
+    Grace.Pretty.renderIO 80 IO.stdout
+        (Pretty.pretty annotatedExpression <> Pretty.hardline)

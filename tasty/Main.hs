@@ -12,28 +12,24 @@ import Prettyprinter (Pretty)
 import System.FilePath ((</>))
 import Test.Tasty (TestTree)
 
-import qualified Control.Monad.Except      as Except
-import qualified Data.Text                 as Text
-import qualified Grace.Interpret           as Interpret
-import qualified Grace.Monotype            as Monotype
-import qualified Grace.Normalize           as Normalize
-import qualified Grace.Syntax              as Syntax
-import qualified Grace.Type                as Type
-import qualified Grace.Value               as Value
-import qualified Prettyprinter             as Pretty
-import qualified Prettyprinter.Render.Text as Pretty.Text
-import qualified System.Directory          as Directory
-import qualified System.FilePath           as FilePath
-import qualified Test.Tasty                as Tasty
-import qualified Test.Tasty.HUnit          as Tasty.HUnit
-import qualified Test.Tasty.Silver         as Silver
+import qualified Control.Monad.Except as Except
+import qualified Data.Text            as Text
+import qualified Grace.Interpret      as Interpret
+import qualified Grace.Monotype       as Monotype
+import qualified Grace.Normalize      as Normalize
+import qualified Grace.Pretty
+import qualified Grace.Syntax         as Syntax
+import qualified Grace.Type           as Type
+import qualified Grace.Value          as Value
+import qualified Prettyprinter        as Pretty
+import qualified System.Directory     as Directory
+import qualified System.FilePath      as FilePath
+import qualified Test.Tasty           as Tasty
+import qualified Test.Tasty.HUnit     as Tasty.HUnit
+import qualified Test.Tasty.Silver    as Silver
 
 pretty_ :: Pretty a => a -> Text
-pretty_ x = Pretty.Text.renderStrict stream
-  where
-    doc = Pretty.pretty x <> Pretty.hardline
-
-    stream = Pretty.layoutPretty Pretty.defaultLayoutOptions doc
+pretty_ x = Grace.Pretty.renderStrict 80 (Pretty.pretty x <> Pretty.hardline)
 
 fileToTestTree :: FilePath -> IO TestTree
 fileToTestTree prefix = do
