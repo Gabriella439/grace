@@ -1,6 +1,8 @@
+{-# LANGUAGE DataKinds        #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE NamedFieldPuns   #-}
 {-# LANGUAGE RecordWildCards  #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- | This module implements support for file-based imports
 module Grace.Interpret
@@ -12,13 +14,15 @@ module Grace.Interpret
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.Bifunctor (Bifunctor(..))
+import Data.Generics.Product (the)
 import Data.Text (Text)
 import Grace.Location (Location(..))
-import Grace.Syntax (Binding(..), Node(..), Syntax(..))
+import Grace.Syntax (Node(..), Syntax(..))
 import Grace.Type (Type)
 import Grace.Value (Value)
 import System.FilePath ((</>))
 
+import qualified Control.Lens         as Lens
 import qualified Control.Monad.Except as Except
 import qualified Data.Text.IO         as Text.IO
 import qualified Grace.Infer          as Infer
@@ -119,46 +123,11 @@ interpret maybeAnnotation input = do
     valid JSON.
 -}
 annotate :: Syntax s a -> Syntax s (Maybe (Type s), a)
-annotate Syntax{ node, .. } = Syntax{ node = annotateNode node, .. }
+annotate = Lens.transform transformSyntax . fmap ((,) Nothing)
   where
-    -- This is the interesting case
-    annotateNode (Annotation Syntax{ node = Embed a } annotation) =
+    transformSyntax = Lens.over (the @"node") transformNode
+
+    transformNode (Annotation Syntax{ node = Embed (_, a) } annotation) =
         Embed (Just annotation, a)
-
-    -- Normally we'd use something like @Control.Lens.Plated@ to avoid this
-    -- boilerplate recursion, but that requires deriving `Data` for a whole
-    -- bunch of types, including the `Existential` type which does not support
-    -- deriving `Data` because it has a nominal type parameter.
-    annotateNode (Variable name index) =
-        Variable name index
-    annotateNode (Lambda name nameLocation body) =
-        Lambda name nameLocation (annotate body)
-    annotateNode (Application function argument) =
-        Application (annotate function) (annotate argument)
-    annotateNode (Let bindings body) =
-        Let (fmap annotateBinding bindings) (annotate body)
-    annotateNode (Annotation annotated annotation) =
-        Annotation (annotate annotated) annotation
-    annotateNode (List elements) =
-        List (fmap annotate elements)
-    annotateNode (Record keyValues) =
-        Record (fmap (\(key, value) -> (key, annotate value)) keyValues)
-    annotateNode (Field record fieldLocation field) =
-        Field (annotate record) fieldLocation field
-    annotateNode (Alternative name) =
-        Alternative name
-    annotateNode (Merge record) =
-        Merge (annotate record)
-    annotateNode (If predicate ifTrue ifFalse) =
-        If (annotate predicate) (annotate ifTrue) (annotate ifFalse)
-    annotateNode (Scalar scalar) =
-        Scalar scalar
-    annotateNode (Operator left operatorLocation operator right) =
-        Operator (annotate left) operatorLocation operator (annotate right)
-    annotateNode (Builtin builtin) =
-        Builtin builtin
-    annotateNode (Embed a) =
-        Embed (Nothing, a)
-
-    annotateBinding Binding{..} =
-        Binding{ assignment = annotate assignment, .. }
+    transformNode node =
+        node

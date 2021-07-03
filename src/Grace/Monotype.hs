@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE OverloadedStrings  #-}
 
@@ -16,8 +17,9 @@ module Grace.Monotype
 
 import Data.String (IsString(..))
 import Data.Text (Text)
-import Prettyprinter (Doc, Pretty(..))
+import GHC.Generics (Generic)
 import Grace.Existential (Existential)
+import Prettyprinter (Doc, Pretty(..))
 
 {- $setup
 
@@ -67,7 +69,7 @@ data Monotype
     -- >>> pretty (Union (Alternatives [("x", "X"), ("y", "Y")] (Monotype.UnsolvedAlternatives 0)))
     -- < x : X | y : Y | a? >
     | Scalar Scalar
-    deriving stock (Eq, Show)
+    deriving stock (Eq, Generic, Show)
 
 instance IsString Monotype where
     fromString string = VariableType (fromString string)
@@ -102,7 +104,7 @@ data Scalar
     --
     -- >>> pretty Text
     -- Text
-    deriving stock (Eq, Show)
+    deriving stock (Eq, Generic, Show)
 
 instance Pretty Scalar where
     pretty Bool    = "Bool"
@@ -113,7 +115,7 @@ instance Pretty Scalar where
 
 -- | A monomorphic record type
 data Record = Fields [(Text, Monotype)] RemainingFields
-    deriving stock (Eq, Show)
+    deriving stock (Eq, Generic, Show)
 
 -- | This represents whether or not the record type is open or closed
 data RemainingFields
@@ -126,11 +128,11 @@ data RemainingFields
     | VariableFields Text
     -- ^ Same as `UnsolvedFields`, except that the user has given the fields
     --   variable an explicit name in the source code
-    deriving stock (Eq, Show)
+    deriving stock (Eq, Generic, Show)
 
 -- | A monomorphic union type
 data Union = Alternatives [(Text, Monotype)] RemainingAlternatives
-    deriving stock (Eq, Show)
+    deriving stock (Eq, Generic, Show)
 
 -- | This represents whether or not the union type is open or closed
 data RemainingAlternatives
@@ -143,7 +145,7 @@ data RemainingAlternatives
     | VariableAlternatives Text
     -- ^ Same as `UnsolvedAlternatives`, except that the user has given the
     --   alternatives variable an explicit name in the source code
-    deriving stock (Eq, Show)
+    deriving stock (Eq, Generic, Show)
 
 prettyMonotype :: Monotype -> Doc a
 prettyMonotype (Function _A _B) =

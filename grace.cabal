@@ -12,6 +12,8 @@ library
                      , containers
                      , Earley
                      , filepath
+                     , generic-lens
+                     , lens
                      , megaparsec
                      , mtl
                      , optparse-applicative

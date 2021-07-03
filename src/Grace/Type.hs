@@ -1,9 +1,13 @@
+{-# LANGUAGE ApplicativeDo      #-}
+{-# LANGUAGE DataKinds          #-}
+{-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE DeriveTraversable  #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleInstances  #-}
 {-# LANGUAGE NamedFieldPuns     #-}
 {-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE RecordWildCards    #-}
+{-# LANGUAGE TypeApplications   #-}
 
 {-| This module stores the `Type` type representing polymorphic types and
     utilities for operating on `Type`s
@@ -31,11 +35,15 @@ module Grace.Type
     , prettyTextLiteral
     ) where
 
+import Control.Lens (Plated(..))
+import Data.Generics.Product (the)
+import Data.Generics.Sum (_As)
 import Data.String (IsString(..))
 import Data.Text (Text)
-import Prettyprinter (Doc, Pretty(..))
+import GHC.Generics (Generic)
 import Grace.Domain (Domain)
 import Grace.Existential (Existential)
+import Prettyprinter (Doc, Pretty(..))
 
 import Grace.Monotype
     ( Monotype
@@ -44,6 +52,7 @@ import Grace.Monotype
     , Scalar(..)
     )
 
+import qualified Control.Lens   as Lens
 import qualified Data.Text      as Text
 import qualified Grace.Lexer    as Lexer
 import qualified Grace.Domain   as Domain
@@ -57,13 +66,52 @@ import qualified Grace.Monotype as Monotype
 
 -- | A potentially polymorphic type
 data Type s = Type { location :: s, node :: Node s }
-    deriving stock (Eq, Functor, Show)
+    deriving stock (Eq, Functor, Generic, Show)
 
 instance IsString (Type ()) where
     fromString string = Type{ location = (), node = fromString string }
 
 instance Pretty (Type s) where
     pretty = prettyType prettyQuantifiedType
+
+instance Plated (Type s) where
+    plate onType Type{ node = oldNode, .. } = do
+        newNode <- case oldNode of
+            VariableType a -> do
+                pure (VariableType a)
+            UnsolvedType a -> do
+                pure (UnsolvedType a)
+            Exists s a domain oldA -> do
+                newA <- onType oldA
+                return (Exists s a domain newA)
+            Forall s a domain oldA -> do
+                newA <- onType oldA
+                return (Forall s a domain newA)
+            Function oldA oldB -> do
+                newA <- onType oldA
+                newB <- onType oldB
+                return (Function newA newB)
+            Optional oldA -> do
+                newA <- onType oldA
+                return (Optional newA)
+            List oldA -> do
+                newA <- onType oldA
+                return (List newA)
+            Record (Fields oldFieldTypes fields) -> do
+                let onPair (field, oldType) = do
+                        newType <- onType oldType
+                        return (field, newType)
+                newFieldTypes <- traverse onPair oldFieldTypes
+                return (Record (Fields newFieldTypes fields))
+            Union (Alternatives oldAlternativeTypes alternatives) -> do
+                let onPair (alternative, oldType) = do
+                        newType <- onType oldType
+                        return (alternative, newType)
+                newAlternativeTypes <- traverse onPair oldAlternativeTypes
+                return (Union (Alternatives newAlternativeTypes alternatives))
+            Scalar scalar -> do
+                pure (Scalar scalar)
+        return Type{ node = newNode, .. }
 
 prettyType :: (Node s -> Doc b) -> Type s -> Doc b
 prettyType prettyNode Type{ node } = prettyNode node
@@ -120,7 +168,7 @@ data Node s
     -- >>> pretty @(Node ()) (Union (Alternatives [("x", "X"), ("y", "Y")] (Monotype.UnsolvedAlternatives 0)))
     -- < x : X | y : Y | a? >
     | Scalar Scalar
-    deriving stock (Eq, Functor, Show)
+    deriving stock (Eq, Functor, Generic, Show)
 
 instance IsString (Node s) where
     fromString string = VariableType (fromString string)
@@ -130,14 +178,14 @@ instance Pretty (Node s) where
 
 -- | A potentially polymorphic record type
 data Record s = Fields [(Text, Type s)] RemainingFields
-    deriving stock (Eq, Functor, Show)
+    deriving stock (Eq, Functor, Generic, Show)
 
 instance Pretty (Record s) where
     pretty = prettyRecordType
 
 -- | A potentially polymorphic union type
 data Union s = Alternatives [(Text, Type s)] RemainingAlternatives
-    deriving stock (Eq, Functor, Show)
+    deriving stock (Eq, Functor, Generic, Show)
 
 instance Pretty (Union s) where
     pretty = prettyUnionType
@@ -171,104 +219,61 @@ fromMonotype monotype = Type{ location = (), node }
     variable with a `Monotype`
 -}
 solveType :: Existential Monotype -> Monotype -> Type s -> Type s
-solveType α₀ τ Type{ node = old, .. } = Type{ node = new, .. }
+solveType unsolved monotype = Lens.transform transformType
   where
-    new = case old of
-        VariableType α ->
-            VariableType α
-        UnsolvedType α₁
-            | α₀ == α₁ -> node (fmap (\_ -> location) (fromMonotype τ))
-            | otherwise -> UnsolvedType α₁
-        Exists s α₁ domain _A ->
-            Exists s α₁ domain (solveType α₀ τ _A)
-        Forall s α₁ domain _A ->
-            Forall s α₁ domain (solveType α₀ τ _A)
-        Function _A _B ->
-            Function (solveType α₀ τ _A) (solveType α₀ τ _B)
-        Optional _A ->
-            Optional (solveType α₀ τ _A)
-        List _A ->
-            List (solveType α₀ τ _A)
-        Record (Fields kAs ρ) ->
-            Record (Fields (map (\(k, _A) -> (k, solveType α₀ τ _A)) kAs) ρ)
-        Union (Alternatives kAs ρ) ->
-            Union (Alternatives (map (\(k, _A) -> (k, solveType α₀ τ _A)) kAs) ρ)
-        Scalar scalar ->
-            Scalar scalar
+    transformType type_ = Lens.over (the @"node") transformNode type_
+      where
+        transformNode (UnsolvedType unsolved')
+            | unsolved == unsolved' =
+                node (fmap (\_ -> location type_) (fromMonotype monotype))
+
+        transformNode node =
+            node
 
 {-| Substitute a `Type` by replacing all occurrences of the given unsolved
     fields variable with a t`Monotype.Record`
 -}
 solveFields
     :: Existential Monotype.Record -> Monotype.Record -> Type s -> Type s
-solveFields ρ₀ r@(Monotype.Fields kτs ρ₁) Type{ node = old, .. } =
-    Type{ node = new, .. }
+solveFields unsolved (Monotype.Fields fieldMonotypes fields) =
+    Lens.transform transformType
   where
-    new = case old of
-        VariableType α ->
-            VariableType α
-        UnsolvedType α ->
-            UnsolvedType α
-        Exists s α domain _A ->
-            Exists s α domain (solveFields ρ₀ r _A)
-        Forall s α domain _A ->
-            Forall s α domain (solveFields ρ₀ r _A)
-        Function _A _B ->
-            Function (solveFields ρ₀ r _A) (solveFields ρ₀ r _B)
-        Optional _A ->
-            Optional (solveFields ρ₀ r _A)
-        List _A ->
-            List (solveFields ρ₀ r _A)
-        Record (Fields kAs₀ ρ)
-            | UnsolvedFields ρ₀ == ρ ->
-                Record (Fields (map (\(k, _A) -> (k, solveFields ρ₀ r _A)) kAs₁) ρ₁)
-            | otherwise ->
-                Record (Fields (map (\(k, _A) -> (k, solveFields ρ₀ r _A)) kAs₀) ρ)
+    transformType type_ = Lens.over (the @"node") transformNode type_
+      where
+        transformNode (Record (Fields fieldTypes (UnsolvedFields unsolved')))
+            | unsolved == unsolved' = Record (Fields fieldTypes' fields)
           where
-            kAs₁ = kAs₀ <> map (\(k, τ) -> (k, fmap (\_ -> location) (fromMonotype τ))) kτs
-        Union (Alternatives kAs ρ) ->
-            Union (Alternatives (map adapt kAs) ρ)
-          where
-            adapt (k, _A) = (k, solveFields ρ₀ r _A)
-        Scalar scalar ->
-            Scalar scalar
+            fieldTypes' =
+                fieldTypes <> map transformPair fieldMonotypes
+
+            transformPair (field, monotype) =
+                (field, fmap (\_ -> location type_) (fromMonotype monotype))
+
+        transformNode node =
+            node
 
 {-| Substitute a `Type` by replacing all occurrences of the given unsolved
     alternatives variable with a t`Monotype.Union`
 -}
 solveAlternatives
     :: Existential Monotype.Union -> Monotype.Union -> Type s -> Type s
-solveAlternatives ρ₀ r@(Monotype.Alternatives kτs ρ₁) Type{ node = old, .. } =
-    Type{ node = new, .. }
+solveAlternatives unsolved (Monotype.Alternatives alternativeMonotypes alternatives) =
+    Lens.transform transformType
   where
-    new = case old of
-        VariableType α ->
-            VariableType α
-        UnsolvedType α ->
-            UnsolvedType α
-        Exists s α domain _A ->
-            Exists s α domain (solveAlternatives ρ₀ r _A)
-        Forall s α domain _A ->
-            Forall s α domain (solveAlternatives ρ₀ r _A)
-        Function _A _B ->
-            Function (solveAlternatives ρ₀ r _A) (solveAlternatives ρ₀ r _B)
-        Optional _A ->
-            Optional (solveAlternatives ρ₀ r _A)
-        List _A ->
-            List (solveAlternatives ρ₀ r _A)
-        Record (Fields kAs ρ) ->
-            Record (Fields (map adapt kAs) ρ)
+    transformType type_ = Lens.over (the @"node") transformNode type_
+      where
+        transformNode (Union (Alternatives alternativeTypes (UnsolvedAlternatives unsolved')))
+            | unsolved == unsolved' =
+                Union (Alternatives alternativeTypes' alternatives)
           where
-            adapt (k, _A) = (k, solveAlternatives ρ₀ r _A)
-        Union (Alternatives kAs₀ ρ)
-            | UnsolvedAlternatives ρ₀ == ρ ->
-                Union (Alternatives (map (\(k, _A) -> (k, solveAlternatives ρ₀ r _A)) kAs₁) ρ₁)
-            | otherwise ->
-                Union (Alternatives (map (\(k, _A) -> (k, solveAlternatives ρ₀ r _A)) kAs₀) ρ)
-          where
-            kAs₁ = kAs₀ <> map (\(k, τ) -> (k, fmap (\_ -> location) (fromMonotype τ))) kτs
-        Scalar scalar ->
-            Scalar scalar
+            alternativeTypes' =
+                alternativeTypes <> map transformPair alternativeMonotypes
+
+            transformPair (alternative, monotype) =
+                (alternative, fmap (\_ -> location type_) (fromMonotype monotype))
+
+        transformNode node =
+            node
 
 {-| Replace all occurrences of a variable within one `Type` with another `Type`,
     given the variable's label and index
@@ -382,85 +387,42 @@ substituteAlternatives ρ₀ n r@(Alternatives kτs ρ₁) Type{ node = old, .. 
 {-| Count how many times the given `Existential` `Type` variable appears within
     a `Type`
 -}
-typeFreeIn :: Existential Monotype -> Type s-> Bool
-α₀ `typeFreeIn` Type{ node } =
-    case node of
-        VariableType _ ->
-            False
-        UnsolvedType α₁ ->
-            α₀ == α₁
-        Exists _ _ _ _A ->
-            α₀ `typeFreeIn` _A
-        Forall _ _ _ _A ->
-            α₀ `typeFreeIn` _A
-        Function _A _B ->
-            α₀ `typeFreeIn` _A || α₀ `typeFreeIn` _B
-        Optional _A ->
-            α₀ `typeFreeIn` _A
-        List _A ->
-            α₀ `typeFreeIn` _A
-        Scalar _->
-            False
-        Record (Fields kAs _) ->
-            any (\(_, _A) -> α₀ `typeFreeIn` _A) kAs
-        Union (Alternatives kAs _) ->
-            any (\(_, _A) -> α₀ `typeFreeIn` _A) kAs
+typeFreeIn :: Existential Monotype -> Type s -> Bool
+typeFreeIn unsolved =
+    Lens.has
+        ( Lens.cosmos
+        . the @"node"
+        . _As @"UnsolvedType"
+        . Lens.only unsolved
+        )
 
 {-| Count how many times the given `Existential` t`Monotype.Record` variable
     appears within a `Type`
 -}
 fieldsFreeIn :: Existential Monotype.Record -> Type s -> Bool
-ρ₀ `fieldsFreeIn` Type{ node } =
-    case node of
-        VariableType _ ->
-            False
-        UnsolvedType _ ->
-            False
-        Exists _ _ _ _A ->
-            ρ₀ `fieldsFreeIn` _A
-        Forall _ _ _ _A ->
-            ρ₀ `fieldsFreeIn` _A
-        Function _A _B ->
-            ρ₀ `fieldsFreeIn` _A || ρ₀ `fieldsFreeIn` _B
-        Optional _A ->
-            ρ₀ `fieldsFreeIn` _A
-        List _A ->
-            ρ₀ `fieldsFreeIn` _A
-        Scalar _ ->
-            False
-        Record (Fields kAs ρ₁) ->
-                UnsolvedFields ρ₀ == ρ₁
-            ||  any (\(_, _A) -> ρ₀ `fieldsFreeIn` _A) kAs
-        Union (Alternatives kAs _) ->
-            any (\(_, _A) -> ρ₀ `fieldsFreeIn` _A) kAs
+fieldsFreeIn unsolved =
+    Lens.has
+        ( Lens.cosmos
+        . the @"node"
+        . _As @"Record"
+        . the @2
+        . _As @"UnsolvedFields"
+        . Lens.only unsolved
+        )
 
 {-| Count how many times the given `Existential` t`Monotype.Union` variable
     appears within a `Type`
 -}
 alternativesFreeIn :: Existential Monotype.Union -> Type s -> Bool
-ρ₀ `alternativesFreeIn` Type{ node } =
-    case node of
-        VariableType _ ->
-            False
-        UnsolvedType _ ->
-            False
-        Exists _ _ _ _A ->
-            ρ₀ `alternativesFreeIn` _A
-        Forall _ _ _ _A ->
-            ρ₀ `alternativesFreeIn` _A
-        Function _A _B ->
-            ρ₀ `alternativesFreeIn` _A || ρ₀ `alternativesFreeIn` _B
-        Optional _A ->
-            ρ₀ `alternativesFreeIn` _A
-        List _A ->
-            ρ₀ `alternativesFreeIn` _A
-        Scalar _ ->
-            False
-        Record (Fields kAs _) ->
-            any (\(_, _A) -> ρ₀ `alternativesFreeIn` _A) kAs
-        Union (Alternatives kAs ρ₁) ->
-                UnsolvedAlternatives ρ₀ == ρ₁
-            ||  any (\(_, _A) -> ρ₀ `alternativesFreeIn` _A) kAs
+alternativesFreeIn unsolved =
+    Lens.has
+        ( Lens.cosmos
+        . the @"node"
+        . _As @"Union"
+        . the @2
+        . _As @"UnsolvedAlternatives"
+        . Lens.only unsolved
+        )
 
 prettyQuantifiedType :: Node s -> Doc a
 prettyQuantifiedType (Forall _ α Domain.Type _A) =

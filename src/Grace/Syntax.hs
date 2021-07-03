@@ -1,3 +1,5 @@
+{-# LANGUAGE ApplicativeDo      #-}
+{-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE DeriveTraversable  #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleInstances  #-}
@@ -19,11 +21,13 @@ module Grace.Syntax
     , Binding(..)
     ) where
 
+import Control.Lens (Plated(..))
 import Data.Bifunctor (Bifunctor(..))
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.String (IsString(..))
 import Data.Text (Text)
 import Prettyprinter (Doc, Pretty(..))
+import GHC.Generics (Generic)
 import Grace.Type (Type)
 import Numeric.Natural (Natural)
 
@@ -38,7 +42,7 @@ import qualified Grace.Type as Type
 
 -- | The surface syntax for the language
 data Syntax s a = Syntax { location :: s, node :: Node s a }
-    deriving stock (Eq, Foldable, Functor, Show, Traversable)
+    deriving stock (Eq, Foldable, Functor, Generic, Show, Traversable)
 
 instance Bifunctor Syntax where
     first f Syntax{ location, node } =
@@ -51,6 +55,64 @@ instance IsString (Syntax () a) where
 
 instance Pretty a => Pretty (Syntax s a) where
     pretty = prettySyntax prettyExpression
+
+instance Plated (Syntax s a) where
+    plate onSyntax Syntax{ node = oldNode, .. } = do
+        newNode <- case oldNode of
+            Variable name index -> do
+                pure (Variable name index)
+            Lambda s name oldBody -> do
+                newBody <- onSyntax oldBody
+                return (Lambda s name newBody)
+            Application oldFunction oldArgument -> do
+                newFunction <- onSyntax oldFunction
+                newArgument <- onSyntax oldArgument
+                return (Application newFunction newArgument)
+            Annotation oldAnnotated annotation -> do
+                newAnnotated <- onSyntax oldAnnotated
+                return (Annotation newAnnotated annotation)
+            Let oldBindings oldBody -> do
+                let onBinding Binding{ assignment = oldAssignment, .. } = do
+                        newAssignment <- onSyntax oldAssignment
+                        return Binding{ assignment = newAssignment, .. }
+                newBindings <- traverse onBinding oldBindings
+                newBody <- onSyntax oldBody
+                return (Let newBindings newBody)
+            List oldElements -> do
+                newElements <- traverse onSyntax oldElements
+                return (List newElements)
+            Record oldFieldValues -> do
+                let onPair (field, oldValue) = do
+                        newValue <- onSyntax oldValue
+                        return (field, newValue)
+
+                newFieldValues <- traverse onPair oldFieldValues
+                return (Record newFieldValues)
+            Field oldRecord s field -> do
+                newRecord <- onSyntax oldRecord
+                return (Field newRecord s field)
+            Alternative name -> do
+                pure (Alternative name)
+            Merge oldRecord -> do
+                newRecord <- onSyntax oldRecord
+                return (Merge newRecord)
+            If oldPredicate oldIfTrue oldIfFalse -> do
+                newPredicate <- onSyntax oldPredicate
+                newIfTrue <- onSyntax oldIfTrue
+                newIfFalse <- onSyntax oldIfFalse
+                return (If newPredicate newIfTrue newIfFalse)
+            Scalar scalar -> do
+                pure (Scalar scalar)
+            Operator oldLeft s operator oldRight -> do
+                newLeft <- onSyntax oldLeft
+                newRight <- onSyntax oldRight
+                return (Operator newLeft s operator newRight)
+            Builtin builtin -> do
+                pure (Builtin builtin)
+            Embed a -> do
+                pure (Embed a)
+
+        return Syntax{ node = newNode, .. }
 
 prettySyntax :: Pretty a => (Node s a -> Doc b) -> Syntax s a -> Doc b
 prettySyntax prettyNode Syntax{ node } = prettyNode node
@@ -116,7 +178,7 @@ data Node s a
     --   x + y
     | Builtin Builtin
     | Embed a
-    deriving stock (Eq, Foldable, Functor, Show, Traversable)
+    deriving stock (Eq, Foldable, Generic, Functor, Show, Traversable)
 
 instance Bifunctor Node where
     first _ (Variable name index) =
@@ -188,7 +250,7 @@ data Scalar
     -- ^
     --   >>> pretty Null
     --   null
-    deriving (Eq, Show)
+    deriving (Eq, Generic, Show)
 
 instance Pretty Scalar where
     pretty (Bool True )     = "true"
@@ -221,7 +283,7 @@ data Operator
     -- ^
     --   >>> pretty Append
     --   ++
-    deriving (Eq, Show)
+    deriving (Eq, Generic, Show)
 
 instance Pretty Operator where
     pretty And    = "&&"
@@ -260,7 +322,7 @@ data Builtin
     -- ^
     --   >>> pretty NaturalFold
     --   Natural/fold
-    deriving (Eq, Show)
+    deriving (Eq, Generic, Show)
 
 instance Pretty Builtin where
     pretty DoubleShow  = "Double/show"
@@ -270,6 +332,7 @@ instance Pretty Builtin where
     pretty IntegerEven = "Integer/even"
     pretty IntegerOdd  = "Integer/odd"
     pretty NaturalFold = "Natural/fold"
+
 
 -- | Pretty-print an expression
 prettyExpression :: Pretty a => Node s a -> Doc b
@@ -389,7 +452,7 @@ data Binding s a = Binding
     , name :: Text
     , annotation :: Maybe (Type s)
     , assignment :: Syntax s a
-    } deriving stock (Eq, Foldable, Functor, Show, Traversable)
+    } deriving stock (Eq, Foldable, Functor, Generic, Show, Traversable)
 
 instance Bifunctor Binding where
     first f Binding{ nameLocation, annotation, assignment, .. } =
