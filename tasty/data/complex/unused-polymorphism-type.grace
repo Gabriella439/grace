@@ -1,1 +1,1 @@
-{ x : forall (a : Type) . Bool }
+{ x: forall (a : Type) . Bool }

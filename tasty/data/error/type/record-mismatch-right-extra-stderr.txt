@@ -2,7 +2,7 @@ Record type mismatch
 
 The following record type:
 
-↳ { x : Natural }
+↳ { x: Natural }
 
 tasty/data/error/type/record-mismatch-right-extra-input.grace:1:8: 
   │

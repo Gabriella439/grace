@@ -1,1 +1,1 @@
-{ "foo bar" : Natural, "if" : Natural }
+{ "foo bar": Natural, "if": Natural }

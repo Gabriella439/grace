@@ -2,7 +2,7 @@ Union type mismatch
 
 The following union type:
 
-↳ < A : { } >
+↳ < A: { } >
 
 tasty/data/error/type/union-mismatch-left-extra-input.grace:1:12: 
   │

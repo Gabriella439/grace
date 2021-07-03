@@ -2,7 +2,7 @@ Not a subtype
 
 The following type:
 
-↳ b? -> < True : b? | c? >
+↳ b? -> < True: b? | c? >
 
 tasty/data/error/type/exists-unification-input.grace:3:6: 
   │

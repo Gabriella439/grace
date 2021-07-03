@@ -1,1 +1,1 @@
-forall (a : Type) . forall (p : Fields) . { foo : a, p } -> a
+forall (a : Type) . forall (p : Fields) . { foo: a, p } -> a

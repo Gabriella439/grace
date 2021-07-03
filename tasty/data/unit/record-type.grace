@@ -1,1 +1,1 @@
-{ x : Bool, y : Bool }
+{ x: Bool, y: Bool }

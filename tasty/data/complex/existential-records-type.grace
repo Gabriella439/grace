@@ -1,1 +1,1 @@
-List (exists (a : Fields) . { x : Natural, a })
+List (exists (a : Fields) . { x: Natural, a })

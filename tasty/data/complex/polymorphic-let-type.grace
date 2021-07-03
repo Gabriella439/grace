@@ -1,1 +1,1 @@
-{ example0 : Bool, example1 : { } }
+{ example0: Bool, example1: { } }

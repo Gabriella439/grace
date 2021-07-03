@@ -2,7 +2,7 @@ Record type mismatch
 
 The following record type:
 
-↳ { x : Bool, a }
+↳ { x: Bool, a }
 
 tasty/data/error/type/occurs-fields-input.grace:2:2: 
   │

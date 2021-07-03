@@ -11,7 +11,7 @@ tasty/data/error/type/record-mismatch-two-extra-input.grace:1:19:
 
 … is not a subtype of the following record type:
 
-↳ { x : Natural, y : Natural }
+↳ { x: Natural, y: Natural }
 
 tasty/data/error/type/record-mismatch-two-extra-input.grace:1:3: 
   │

@@ -11,7 +11,7 @@ tasty/data/error/type/union-mismatch-right-extra-input.grace:1:12:
 
 … is not a subtype of the following union type:
 
-↳ < A : { } >
+↳ < A: { } >
 
 tasty/data/error/type/union-mismatch-right-extra-input.grace:1:19: 
   │
