@@ -54,8 +54,8 @@ import Grace.Monotype
 
 import qualified Control.Lens   as Lens
 import qualified Data.Text      as Text
-import qualified Grace.Lexer    as Lexer
 import qualified Grace.Domain   as Domain
+import qualified Grace.Lexer    as Lexer
 import qualified Grace.Monotype as Monotype
 
 {- $setup
@@ -472,7 +472,7 @@ prettyRecordType (Fields [] (VariableFields ρ)) =
     "{ " <> pretty ρ <> " }"
 prettyRecordType (Fields ((key₀, type₀) : keyTypes) fields) =
         "{ "
-    <>  prettyRecordLabel key₀
+    <>  prettyRecordLabel False key₀
     <>  " : "
     <>  prettyType prettyQuantifiedType type₀
     <>  foldMap prettyFieldType keyTypes
@@ -502,7 +502,7 @@ prettyUnionType (Alternatives ((key₀, type₀) : keyTypes) alternatives) =
 prettyFieldType :: (Text, Type s) -> Doc a
 prettyFieldType (key, type_) =
         ", "
-    <>  prettyRecordLabel key
+    <>  prettyRecordLabel False key
     <>  " : "
     <> prettyType prettyQuantifiedType type_
 
@@ -525,8 +525,15 @@ prettyTextLiteral text =
         ) text
     <>  "\""
 
--- | Pretty-print a record label (with quotes if necessary)
-prettyRecordLabel :: Text -> Doc b
-prettyRecordLabel label
-    | Lexer.validRecordLabel label = pretty label
-    | otherwise                    = prettyTextLiteral label
+-- | Pretty-print a record label
+prettyRecordLabel
+    :: Bool
+    -- ^ Always quote the label if `True`
+    --
+    -- This is mainly set to `True` when pretty-printing `Syntax` so that the
+    -- output is valid JSON
+    -> Text
+    -> Doc b
+prettyRecordLabel alwaysQuote label
+    | Lexer.validRecordLabel label && not alwaysQuote = pretty label
+    | otherwise                                       = prettyTextLiteral label

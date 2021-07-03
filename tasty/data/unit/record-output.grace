@@ -1,1 +1,1 @@
-{ x: true, y: false }
+{ "x": true, "y": false }

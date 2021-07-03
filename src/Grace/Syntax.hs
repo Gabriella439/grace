@@ -397,7 +397,7 @@ prettyFieldExpression :: Pretty a => Node s a -> Doc b
 prettyFieldExpression (Field record _ key) =
         prettySyntax prettyFieldExpression record
     <>  "."
-    <>  Type.prettyRecordLabel key
+    <>  Type.prettyRecordLabel False key
 prettyFieldExpression other =
     prettyPrimitiveExpression other
 
@@ -420,7 +420,7 @@ prettyPrimitiveExpression (Record []) =
     "{ }"
 prettyPrimitiveExpression (Record ((key₀, value₀) : keyValues)) =
         "{ "
-    <>  Type.prettyRecordLabel key₀
+    <>  Type.prettyRecordLabel True key₀
     <>  ": "
     <>  prettySyntax prettyExpression value₀
     <>  foldMap prettyKeyValue keyValues
@@ -428,7 +428,7 @@ prettyPrimitiveExpression (Record ((key₀, value₀) : keyValues)) =
   where
     prettyKeyValue (key, value) =
             ", "
-        <>  Type.prettyRecordLabel key
+        <>  Type.prettyRecordLabel True key
         <>  ": "
         <>  prettySyntax prettyExpression value
 prettyPrimitiveExpression (Builtin builtin) =
