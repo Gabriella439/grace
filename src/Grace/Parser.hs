@@ -614,7 +614,7 @@ parse
     :: String
     -- ^ Name of the input (used for error messages)
     -> Text
-    -- ^ Tokens lexed from source code
+    -- ^ Source code
     -> Either Text (Syntax Offset FilePath)
 parse name code = do
     tokens <- Lexer.lex name code
