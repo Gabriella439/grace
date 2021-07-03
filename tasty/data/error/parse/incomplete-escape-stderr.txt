@@ -1,4 +1,4 @@
 tasty/data/error/parse/incomplete-escape-input.grace:1:2: Invalid input - Lexing failed
   │
-1 │ "\"
+1 │ "\ "
   │  ↑

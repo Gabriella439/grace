@@ -223,12 +223,14 @@ text = lexeme do
 
     let escaped =
             Combinators.choice
-                [ "\b" <$ "\\b"
+                [ "\"" <$ "\\\""
+                , "\\" <$ "\\\\"
+                , "/"  <$ "\\/"
+                , "\b" <$ "\\b"
                 , "\f" <$ "\\f"
                 , "\n" <$ "\\n"
                 , "\r" <$ "\\r"
                 , "\t" <$ "\\t"
-                , "\\" <$ "\\\\"
                 , unicodeEscape
                 ] <?> "escape sequence"
 
