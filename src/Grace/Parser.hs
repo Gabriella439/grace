@@ -21,7 +21,7 @@ module Grace.Parser
       parse
     ) where
 
-import Control.Applicative (many, (<|>))
+import Control.Applicative (many, optional, (<|>))
 import Control.Applicative.Combinators.NonEmpty (sepBy1)
 import Control.Applicative.Combinators (endBy, sepBy)
 import Data.Functor (void)
@@ -317,7 +317,9 @@ grammar = mdo
                         node = Syntax.List elements
 
                 locatedOpenBracket <- locatedToken Lexer.OpenBracket
+                optional (token Lexer.Comma)
                 elements <- expression `sepBy` token Lexer.Comma
+                optional (token Lexer.Comma)
                 token Lexer.CloseBracket
 
                 return (f locatedOpenBracket elements)
@@ -327,7 +329,9 @@ grammar = mdo
                         node = Syntax.Record fieldValues
 
                 locatedOpenBrace <- locatedToken Lexer.OpenBrace
+                optional (token Lexer.Comma)
                 fieldValues <- fieldValue `sepBy` token Lexer.Comma
+                optional (token Lexer.Comma)
                 token Lexer.CloseBrace
 
                 return (f locatedOpenBrace fieldValues)
@@ -546,6 +550,8 @@ grammar = mdo
 
                 locatedOpenBrace <- locatedToken Lexer.OpenBrace
 
+                optional (token Lexer.Comma)
+
                 fieldTypes <- fieldType `endBy` token Lexer.Comma
                 
                 toFields <-
@@ -556,6 +562,8 @@ grammar = mdo
                             return (\fs -> Type.Fields (fs <> [ f ]) Monotype.EmptyFields)
                     )
 
+                optional (token Lexer.Comma)
+
                 token Lexer.CloseBrace
 
                 return (record locatedOpenBrace (toFields fieldTypes))
@@ -564,6 +572,8 @@ grammar = mdo
                         node = Type.Union alternatives
 
                 locatedOpenAngle <- locatedToken Lexer.OpenAngle
+
+                optional (token Lexer.Bar)
 
                 alternativeTypes <- alternativeType `endBy` token Lexer.Bar
 
@@ -574,6 +584,8 @@ grammar = mdo
                     <|> do  a <- alternativeType
                             return (\as -> Type.Alternatives (as <> [ a ]) Monotype.EmptyAlternatives)
                     )
+
+                optional (token Lexer.Bar)
 
                 token Lexer.CloseAngle
                 return (union locatedOpenAngle (toAlternatives alternativeTypes))
