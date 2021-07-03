@@ -52,12 +52,12 @@ data Entry s
     -- ^ Universally quantified variable
     --
     -- >>> pretty @(Entry ()) (Variable Domain.Type "a")
-    -- a : Type
+    -- a: Type
     | Annotation Text (Type s)
     -- ^ A bound variable whose type is known
     --
     -- >>> pretty @(Entry ()) (Annotation "x" "a")
-    -- x : a
+    -- x: a
     | UnsolvedType (Existential Monotype)
     -- ^ A placeholder type variable whose type has not yet been inferred
     --
@@ -85,34 +85,34 @@ data Entry s
     --   inferred
     --
     -- >>> pretty @(Entry ()) (SolvedFields 0 (Monotype.Fields [("x", "X")] (Monotype.UnsolvedFields 1)))
-    -- a = x : X | b?
+    -- a = x: X | b?
     | SolvedAlternatives (Existential Monotype.Union) Monotype.Union
     -- ^ A placeholder alternatives variable whose type has been (at least
     --   partially) inferred
     --
     -- >>> pretty @(Entry ()) (SolvedAlternatives 0 (Monotype.Alternatives [("x", "X")] (Monotype.UnsolvedAlternatives 1)))
-    -- a = x : X | b?
+    -- a = x: X | b?
     | MarkerType (Existential Monotype)
     -- ^ This is used by the bidirectional type-checking algorithm to separate
     --   context entries introduced before and after type-checking a universally
     --   quantified type
     --
     -- >>> pretty @(Entry ()) (MarkerType 0)
-    -- ➤a : Type
+    -- ➤ a: Type
     | MarkerFields (Existential Monotype.Record)
     -- ^ This is used by the bidirectional type-checking algorithm to separate
     --   context entries introduced before and after type-checking universally
     --   quantified fields
     --
     -- >>> pretty @(Entry ()) (MarkerFields 0)
-    -- ➤a : Fields
+    -- ➤ a: Fields
     | MarkerAlternatives (Existential Monotype.Union)
     -- ^ This is used by the bidirectional type-checking algorithm to separate
     --   context entries introduced before and after type-checking universally
     --   quantified alternatives
     --
     -- >>> pretty @(Entry ()) (MarkerAlternatives 0)
-    -- ➤a : Alternatives
+    -- ➤ a: Alternatives
     deriving stock (Eq, Show)
 
 instance Pretty (Entry s) where
@@ -148,12 +148,8 @@ instance Pretty (Entry s) where
 type Context s = [Entry s]
 
 prettyEntry :: Entry s -> Doc a
-prettyEntry (Variable Domain.Type α) =
-    Pretty.pretty α <> " : Type"
-prettyEntry (Variable Domain.Fields α) =
-    Pretty.pretty α <> " : Fields"
-prettyEntry (Variable Domain.Alternatives α) =
-    Pretty.pretty α <> " : Alternatives"
+prettyEntry (Variable domain α) =
+    Pretty.pretty α <> ": " <> pretty domain
 prettyEntry (UnsolvedType α) =
     Pretty.pretty α <> "?"
 prettyEntry (UnsolvedFields ρ) =
@@ -172,7 +168,7 @@ prettyEntry (SolvedFields ρ (Monotype.Fields ((k₀, τ₀) : kτs) fields)) =
         Pretty.pretty ρ
     <>  " = "
     <>  Pretty.pretty k₀
-    <>  " : "
+    <>  ": "
     <>  Pretty.pretty τ₀
     <>  foldMap prettyFieldType kτs
     <>  case fields of
@@ -189,7 +185,7 @@ prettyEntry (SolvedAlternatives ρ₀ (Monotype.Alternatives ((k₀, τ₀) : k�
         Pretty.pretty ρ₀
     <>  " = "
     <>  Pretty.pretty k₀
-    <>  " : "
+    <>  ": "
     <>  Pretty.pretty τ₀
     <>  foldMap prettyAlternativeType kτs
     <>  " | "
@@ -198,20 +194,20 @@ prettyEntry (SolvedAlternatives ρ₀ (Monotype.Alternatives ((k₀, τ₀) : k�
             Monotype.UnsolvedAlternatives ρ₁ -> Pretty.pretty ρ₁ <> "?"
             Monotype.VariableAlternatives ρ₁ -> Pretty.pretty ρ₁
 prettyEntry (Annotation x α) =
-    Pretty.pretty x <> " : " <> Pretty.pretty α
+    Pretty.pretty x <> ": " <> Pretty.pretty α
 prettyEntry (MarkerType α) =
-    "➤" <> Pretty.pretty α <> " : Type"
+    "➤ " <> Pretty.pretty α <> ": Type"
 prettyEntry (MarkerFields α) =
-    "➤" <> Pretty.pretty α <> " : Fields"
+    "➤ " <> Pretty.pretty α <> ": Fields"
 prettyEntry (MarkerAlternatives α) =
-    "➤" <> Pretty.pretty α <> " : Alternatives"
+    "➤ " <> Pretty.pretty α <> ": Alternatives"
 
 prettyFieldType :: (Text, Monotype) -> Doc a
-prettyFieldType (k, τ) = ", " <> Pretty.pretty k <> " : " <> Pretty.pretty τ
+prettyFieldType (k, τ) = ", " <> Pretty.pretty k <> ": " <> Pretty.pretty τ
 
 prettyAlternativeType :: (Text, Monotype) -> Doc a
 prettyAlternativeType (k, τ) =
-    ", " <> Pretty.pretty k <> " : " <> Pretty.pretty τ
+    ", " <> Pretty.pretty k <> ": " <> Pretty.pretty τ
 
 {-| Substitute a `Type` using the solved entries of a `Context`
 
@@ -234,14 +230,14 @@ solveType context type_ = foldl snoc type_ context
 
     >>> original = Type.Fields [("x", Type{ location = (), node = Type.Scalar Monotype.Bool })] (Monotype.UnsolvedFields 0)
     >>> pretty original
-    { x : Bool, a? }
+    { x: Bool, a? }
 
     >>> entry = SolvedFields 0 (Monotype.Fields [] Monotype.EmptyFields)
     >>> pretty entry
     a = •
 
     >>> pretty (solveRecord [ entry ] original)
-    { x : Bool }
+    { x: Bool }
 -}
 solveRecord :: Context s -> Type.Record s -> Type.Record s
 solveRecord context record = record'
@@ -258,14 +254,14 @@ solveRecord context record = record'
 
     >>> original = Type.Alternatives [("A", Type{ location = (), node = Type.Scalar Monotype.Bool })] (Monotype.UnsolvedAlternatives 0)
     >>> pretty original
-    < A : Bool | a? >
+    < A: Bool | a? >
 
     >>> entry = SolvedAlternatives 0 (Monotype.Alternatives [] Monotype.EmptyAlternatives)
     >>> pretty entry
     a = •
 
     >>> pretty (solveUnion [ entry ] original)
-    < A : Bool >
+    < A: Bool >
 -}
 solveUnion :: Context s -> Type.Union s -> Type.Union s
 solveUnion context union = union'

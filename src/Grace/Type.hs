@@ -9,6 +9,8 @@
 {-# LANGUAGE RecordWildCards    #-}
 {-# LANGUAGE TypeApplications   #-}
 
+{-# OPTIONS_GHC -Wno-orphans #-}
+
 {-| This module stores the `Type` type representing polymorphic types and
     utilities for operating on `Type`s
 -}
@@ -158,16 +160,16 @@ data Node s
     -- ^ Record type
     --
     -- >>> pretty @(Node ()) (Record (Fields [("x", "X"), ("y", "Y")] Monotype.EmptyFields))
-    -- { x : X, y : Y }
+    -- { x: X, y: Y }
     -- >>> pretty @(Node ()) (Record (Fields [("x", "X"), ("y", "Y")] (Monotype.UnsolvedFields 0)))
-    -- { x : X, y : Y, a? }
+    -- { x: X, y: Y, a? }
     | Union (Union s)
     -- ^ Union type
     --
     -- >>> pretty @(Node ()) (Union (Alternatives [("x", "X"), ("y", "Y")] Monotype.EmptyAlternatives))
-    -- < x : X | y : Y >
+    -- < x: X | y: Y >
     -- >>> pretty @(Node ()) (Union (Alternatives [("x", "X"), ("y", "Y")] (Monotype.UnsolvedAlternatives 0)))
-    -- < x : X | y : Y | a? >
+    -- < x: X | y: Y | a? >
     | Scalar Scalar
     deriving stock (Eq, Functor, Generic, Show)
 
@@ -215,6 +217,9 @@ fromMonotype monotype = Type{ location = (), node }
             Union (Alternatives (map (\(k, τ) -> (k, fromMonotype τ)) kτs) ρ)
         Monotype.Scalar scalar ->
             Scalar scalar
+
+instance Pretty Monotype where
+    pretty = pretty . fromMonotype
 
 {-| Substitute a `Type` by replacing all occurrences of the given unsolved
     variable with a `Monotype`
