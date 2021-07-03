@@ -20,6 +20,7 @@ library
                      , parser-combinators
                      , prettyprinter
                      , string-interpolate
+                     , terminal-size
                      , text
                      , unordered-containers
   exposed-modules:     Grace

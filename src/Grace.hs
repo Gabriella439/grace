@@ -12,17 +12,19 @@ module Grace
 import Grace.Interpret (Input(..))
 import Grace.Syntax (Syntax(..))
 import Options.Applicative (Parser, ParserInfo)
+import System.Console.Terminal.Size (Window(..))
 
-import qualified Control.Monad.Except as Except
-import qualified Data.Text.IO         as Text.IO
-import qualified Prettyprinter        as Pretty
-import qualified Grace.Interpret      as Interpret
-import qualified Grace.Normalize      as Normalize
+import qualified Control.Monad.Except         as Except
+import qualified Data.Text.IO                 as Text.IO
+import qualified Prettyprinter                as Pretty
+import qualified Grace.Interpret              as Interpret
+import qualified Grace.Normalize              as Normalize
 import qualified Grace.Pretty
-import qualified Grace.Syntax         as Syntax
-import qualified Options.Applicative  as Options
-import qualified System.Exit          as Exit
-import qualified System.IO            as IO
+import qualified Grace.Syntax                 as Syntax
+import qualified Options.Applicative          as Options
+import qualified System.Console.Terminal.Size as Size
+import qualified System.Exit                  as Exit
+import qualified System.IO                    as IO
 
 data Options = Options
     { annotate :: Bool
@@ -70,5 +72,12 @@ main = do
             | otherwise =
                 syntax
 
-    Grace.Pretty.renderIO 80 IO.stdout
+    maybeWindow <- Size.size
+
+    let renderWidth =
+            case maybeWindow of
+                Nothing         -> Grace.Pretty.defaultColumns
+                Just Window{..} -> width
+
+    Grace.Pretty.renderIO renderWidth IO.stdout
         (Pretty.pretty annotatedExpression <> Pretty.hardline)

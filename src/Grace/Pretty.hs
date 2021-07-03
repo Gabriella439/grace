@@ -3,6 +3,7 @@ module Grace.Pretty
     ( -- * Prettyprinting
       renderStrict
     , renderIO
+    , defaultColumns
     ) where
 
 import Data.Text (Text)
@@ -34,6 +35,10 @@ renderIO
     -> IO ()
 renderIO columns handle =
     Pretty.Text.renderIO handle . Pretty.layoutSmart (layoutOptions columns)
+
+-- | The default column size to use
+defaultColumns :: Int
+defaultColumns = 80
 
 layoutOptions
     :: Int

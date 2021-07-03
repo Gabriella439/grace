@@ -530,7 +530,7 @@ prettyRecordLabel
     :: Bool
     -- ^ Always quote the label if `True`
     --
-    -- This is mainly set to `True` when pretty-printing `Syntax` so that the
+    -- This is mainly set to `True` when pretty-printing records so that the
     -- output is valid JSON
     -> Text
     -> Doc b

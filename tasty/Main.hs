@@ -29,7 +29,9 @@ import qualified Test.Tasty.HUnit     as Tasty.HUnit
 import qualified Test.Tasty.Silver    as Silver
 
 pretty_ :: Pretty a => a -> Text
-pretty_ x = Grace.Pretty.renderStrict 80 (Pretty.pretty x <> Pretty.hardline)
+pretty_ x =
+    Grace.Pretty.renderStrict Grace.Pretty.defaultColumns
+        (Pretty.pretty x <> Pretty.hardline)
 
 fileToTestTree :: FilePath -> IO TestTree
 fileToTestTree prefix = do

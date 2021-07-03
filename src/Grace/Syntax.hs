@@ -153,7 +153,7 @@ data Node s a
     | Record [(Text, Syntax s a)]
     -- ^
     --   >>> pretty @(Node () Void) (Record [ ("x", "a"), ("y", "b") ])
-    --   { x: a, y: b }
+    --   { "x": a, "y": b }
     | Field (Syntax s a) s Text
     -- ^
     --   >>> pretty @(Node () Void) (Field "x" () "a")
