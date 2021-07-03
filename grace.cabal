@@ -9,6 +9,7 @@ build-type:          Simple
 library
   hs-source-dirs:      src
   build-depends:       base
+                     , ansi-terminal
                      , containers
                      , Earley
                      , filepath
@@ -19,6 +20,7 @@ library
                      , optparse-applicative
                      , parser-combinators
                      , prettyprinter
+                     , prettyprinter-ansi-terminal
                      , string-interpolate
                      , terminal-size
                      , text

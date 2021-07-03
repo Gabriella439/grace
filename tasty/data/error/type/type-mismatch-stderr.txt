@@ -2,7 +2,7 @@ Not a subtype
 
 The following type:
 
-↳ Bool
+   [0;4mBool[0m
 
 tasty/data/error/type/type-mismatch-input.grace:1:5: 
   │
@@ -11,7 +11,7 @@ tasty/data/error/type/type-mismatch-input.grace:1:5:
 
 … cannot be a subtype of:
 
-↳ Natural
+   [0;4mNatural[0m
 
 tasty/data/error/type/type-mismatch-input.grace:1:3: 
   │

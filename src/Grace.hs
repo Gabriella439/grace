@@ -10,7 +10,7 @@ module Grace
       main
     ) where
 
-import Control.Applicative (many)
+import Control.Applicative (many, (<|>))
 import Data.Foldable (traverse_)
 import Grace.Interpret (Input(..))
 import Grace.Syntax (Syntax(..))
@@ -26,13 +26,16 @@ import qualified Grace.Parser                 as Parser
 import qualified Grace.Pretty
 import qualified Grace.Syntax                 as Syntax
 import qualified Options.Applicative          as Options
+import qualified System.Console.ANSI          as ANSI
 import qualified System.Console.Terminal.Size as Size
 import qualified System.Exit                  as Exit
 import qualified System.IO                    as IO
 
+data Highlight = Color | Plain | Auto
+
 data Options
-    = Interpret { annotate :: Bool, file :: FilePath }
-    | Format { files :: [FilePath] }
+    = Interpret { annotate :: Bool, highlight :: Highlight, file :: FilePath }
+    | Format { highlight :: Highlight, files :: [FilePath] }
 
 parserInfo :: ParserInfo Options
 parserInfo =
@@ -52,6 +55,8 @@ parser = do
                 <>  Options.metavar "FILE"
                 )
 
+            highlight <- parseHighlight
+
             return Interpret{..}
 
     let format = do
@@ -60,6 +65,8 @@ parser = do
                         (   Options.help "File to format"
                         <>  Options.metavar "FILE"
                         )
+
+            highlight <- parseHighlight
 
             files <- many parseFile
 
@@ -76,6 +83,26 @@ parser = do
                     (Options.progDesc "Interpret a Grace file")
                 )
         )
+  where
+    parseHighlight =
+            Options.flag' Color
+                (    Options.long "color"
+                <>   Options.help "Enable syntax highlighting"
+                )
+        <|> Options.flag' Plain
+                (    Options.long "plain"
+                <>   Options.help "Disable syntax highlighting"
+                )
+        <|> pure Auto
+
+
+detectColor :: Highlight -> IO Bool
+detectColor Color = do
+    return True
+detectColor Plain = do
+    return False
+detectColor Auto = do
+    ANSI.hSupportsANSI IO.stdout
 
 -- | Command-line entrypoint
 main :: IO ()
@@ -123,10 +150,14 @@ main = do
                         Nothing         -> Grace.Pretty.defaultColumns
                         Just Window{..} -> width
 
-            Grace.Pretty.renderIO renderWidth IO.stdout
-                (Pretty.pretty annotatedExpression <> Pretty.hardline)
+            color <- detectColor highlight
+
+            Grace.Pretty.renderIO color renderWidth IO.stdout
+                (Grace.Pretty.pretty annotatedExpression <> Pretty.hardline)
 
         Format{..} -> do
+            color <- detectColor highlight
+
             case files of
                 [ "-" ] -> do
                     text <- Text.IO.getContents
@@ -146,8 +177,8 @@ main = do
                                 Nothing         -> Grace.Pretty.defaultColumns
                                 Just Window{..} -> width
 
-                    Grace.Pretty.renderIO renderWidth IO.stdout
-                        (Pretty.pretty syntax <> Pretty.hardline)
+                    Grace.Pretty.renderIO color renderWidth IO.stdout
+                        (Grace.Pretty.pretty syntax <> Pretty.hardline)
                 _ -> do
                     let formatFile file = do
                             text <- Text.IO.readFile file
@@ -162,8 +193,9 @@ main = do
 
                             IO.withFile file IO.WriteMode \handle -> do
                                 Grace.Pretty.renderIO
+                                    color
                                     Grace.Pretty.defaultColumns
                                     handle
-                                    (Pretty.pretty syntax <> Pretty.hardline)
+                                    (Grace.Pretty.pretty syntax <> Pretty.hardline)
 
                     traverse_ formatFile files

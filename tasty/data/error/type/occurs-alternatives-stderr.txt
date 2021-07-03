@@ -2,7 +2,7 @@ Not a subtype
 
 The following type:
 
-↳ < C: a? | d? >
+   [0;32;1m<[0m [0mC[0m[0;32;1m:[0m [0m[0ma[0m?[0m [0;32;1m|[0m [0m[0md[0m?[0m [0;32;1m>[0m
 
 tasty/data/error/type/occurs-alternatives-input.grace:2:12: 
   │
@@ -11,7 +11,7 @@ tasty/data/error/type/occurs-alternatives-input.grace:2:12:
 
 … cannot be a subtype of:
 
-↳ a?
+   [0m[0ma[0m?[0m
 
 tasty/data/error/type/occurs-alternatives-input.grace:2:2: 
   │

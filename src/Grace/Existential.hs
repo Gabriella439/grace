@@ -17,7 +17,7 @@ module Grace.Existential
     ) where
 
 import Data.Text (Text)
-import Prettyprinter (Pretty(..))
+import Grace.Pretty (Pretty(..), label)
 
 import qualified Data.Char as Char
 import qualified Data.Text as Text
@@ -27,7 +27,7 @@ newtype Existential a = UnsafeExistential Int
     deriving newtype (Eq, Num, Show)
 
 instance Pretty (Existential a) where
-    pretty x = pretty (toVariable x)
+    pretty x = label (pretty (toVariable x))
 
 {-| Convert an existential variable to a user-friendly `Text`
     representation

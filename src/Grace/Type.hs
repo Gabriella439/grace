@@ -32,7 +32,7 @@ module Grace.Type
     , substituteFields
     , substituteAlternatives
 
-    -- * Miscellaneous
+    -- * Pretty-printing
     , prettyRecordLabel
     , prettyTextLiteral
     ) where
@@ -45,7 +45,9 @@ import Data.Text (Text)
 import GHC.Generics (Generic)
 import Grace.Domain (Domain)
 import Grace.Existential (Existential)
-import Prettyprinter (Doc, Pretty(..))
+import Grace.Pretty (Pretty(..), keyword, punctuation, label, builtin, operator)
+import Prettyprinter (Doc)
+import Prettyprinter.Render.Terminal (AnsiStyle)
 
 import Grace.Monotype
     ( Monotype
@@ -75,7 +77,7 @@ instance IsString (Type ()) where
     fromString string = Type{ location = (), node = fromString string }
 
 instance Pretty (Type s) where
-    pretty = prettyType prettyQuantifiedType
+    pretty = liftType prettyQuantifiedType
 
 instance Plated (Type s) where
     plate onType Type{ node = oldNode, .. } = do
@@ -116,8 +118,8 @@ instance Plated (Type s) where
                 pure (Scalar scalar)
         return Type{ node = newNode, .. }
 
-prettyType :: (Node s -> Doc b) -> Type s -> Doc b
-prettyType prettyNode Type{ node } = prettyNode node
+liftType :: (Node s -> Doc b) -> Type s -> Doc b
+liftType pretty_ Type{ node } = pretty_ node
 
 -- | The constructors for `Type`
 data Node s
@@ -430,7 +432,7 @@ alternativesFreeIn unsolved =
         . Lens.only unsolved
         )
 
-prettyQuantifiedType :: Node s -> Doc a
+prettyQuantifiedType :: Node s -> Doc AnsiStyle
 prettyQuantifiedType type_
     | isQuantified type_ = Pretty.group (Pretty.flatAlt long short)
     | otherwise          = prettyFunctionType type_
@@ -444,42 +446,68 @@ prettyQuantifiedType type_
     long = Pretty.align (prettyLong type_)
 
     prettyShort (Forall _ a domain _A) =
-            "forall ("
-        <>  pretty a
-        <>  " : "
+            keyword "forall"
+        <>  " "
+        <>  punctuation "("
+        <>  label (pretty a)
+        <>  " "
+        <>  punctuation ":"
+        <>  " "
         <>  pretty domain
-        <>  ") . "
-        <>  prettyType prettyShort _A
+        <>  punctuation ")"
+        <>  " "
+        <>  punctuation "."
+        <>  " "
+        <>  liftType prettyShort _A
     prettyShort (Exists _ a domain _A) =
-            "exists ("
-        <>  pretty a
-        <>  " : "
+            keyword "exists"
+        <>  " "
+        <>  punctuation "("
+        <>  label (pretty a)
+        <>  " "
+        <>  punctuation ":"
+        <>  " "
         <>  pretty domain
-        <>  ") . "
-        <>  prettyType prettyShort _A
+        <>  punctuation ")"
+        <>  " "
+        <>  punctuation "."
+        <>  " "
+        <>  liftType prettyShort _A
     prettyShort _A =
         prettyFunctionType _A
 
     prettyLong (Forall _ a domain _A) =
-            "forall ("
-        <>  pretty a
-        <>  " : "
+            keyword "forall"
+        <>  " "
+        <>  punctuation "("
+        <>  label (pretty a)
+        <>  " "
+        <>  punctuation ":"
+        <>  " "
         <>  pretty domain
-        <>  ") ."
+        <>  punctuation ")"
+        <>  " "
+        <>  punctuation "."
         <>  Pretty.hardline
-        <>  prettyType prettyLong _A
+        <>  liftType prettyLong _A
     prettyLong (Exists _ a domain _A) =
-            "exists ("
-        <>  pretty a
-        <>  " : "
+            keyword "exists"
+        <>  " "
+        <>  punctuation "("
+        <>  label (pretty a)
+        <>  " "
+        <>  punctuation ":"
+        <>  " "
         <>  pretty domain
-        <>  ") ."
+        <>  punctuation ")"
+        <>  " "
+        <>  punctuation "."
         <>  Pretty.hardline
-        <>  prettyType prettyLong _A
+        <>  liftType prettyLong _A
     prettyLong _A =
         "  " <> prettyFunctionType _A
 
-prettyFunctionType :: Node s -> Doc a
+prettyFunctionType :: Node s -> Doc AnsiStyle
 prettyFunctionType  type_@Function{} = Pretty.group (Pretty.flatAlt long short)
   where
     long = Pretty.align (prettyLong type_)
@@ -487,160 +515,225 @@ prettyFunctionType  type_@Function{} = Pretty.group (Pretty.flatAlt long short)
     short = prettyShort type_
 
     prettyShort (Function _A _B) =
-            prettyType prettyApplicationType _A
-        <>  " -> "
-        <>  prettyType prettyShort _B
+            liftType prettyApplicationType _A
+        <>  " "
+        <>  punctuation "->"
+        <>  " "
+        <>  liftType prettyShort _B
     prettyShort _A =
         prettyApplicationType _A
 
     prettyLong (Function _A _B) =
-            prettyType prettyApplicationType _A
-        <>  " ->"
+            liftType prettyApplicationType _A
+        <>  " "
+        <>  punctuation "->"
         <>  Pretty.hardline
-        <>  prettyType prettyLong _B
+        <>  liftType prettyLong _B
     prettyLong _A =
         "  " <> prettyApplicationType _A
 prettyFunctionType other =
     prettyApplicationType other
 
-prettyApplicationType :: Node s -> Doc a
+prettyApplicationType :: Node s -> Doc AnsiStyle
 prettyApplicationType (Optional _A) = Pretty.group (Pretty.flatAlt long short)
   where
-    short = "Optional " <> prettyType prettyPrimitiveType _A
+    short = builtin "Optional" <> " " <> liftType prettyPrimitiveType _A
 
     long =
         Pretty.align
-            (   "Optional"
+            (   builtin "Optional"
             <>  Pretty.hardline
             <>  "  "
-            <>  prettyType prettyPrimitiveType _A
+            <>  liftType prettyPrimitiveType _A
             )
 prettyApplicationType (List _A) = Pretty.group (Pretty.flatAlt long short)
   where
-    short = "List " <> prettyType prettyPrimitiveType _A
+    short = builtin "List" <> " " <> liftType prettyPrimitiveType _A
 
     long =
         Pretty.align
-            (   "List"
+            (   builtin "List"
             <>  Pretty.hardline
             <>  "  "
-            <>  prettyType prettyPrimitiveType _A
+            <>  liftType prettyPrimitiveType _A
             )
 prettyApplicationType other =
     prettyPrimitiveType other
 
-prettyPrimitiveType :: Node s -> Doc a
-prettyPrimitiveType (VariableType α) = pretty α
-prettyPrimitiveType (UnsolvedType α) = pretty α <> "?"
-prettyPrimitiveType (Record r)       = pretty r
-prettyPrimitiveType (Union u)        = pretty u
-prettyPrimitiveType (Scalar scalar)  = pretty scalar
-prettyPrimitiveType  other           = Pretty.group (Pretty.flatAlt long short)
+prettyPrimitiveType :: Node s -> Doc AnsiStyle
+prettyPrimitiveType (VariableType α) =
+    label (pretty α)
+prettyPrimitiveType (UnsolvedType α) =
+    label (pretty α <> "?")
+prettyPrimitiveType (Record r) =
+    prettyRecordType r
+prettyPrimitiveType (Union u) =
+    prettyUnionType u
+prettyPrimitiveType (Scalar scalar) =
+    pretty scalar
+prettyPrimitiveType other =
+    Pretty.group (Pretty.flatAlt long short)
   where
-    short = "(" <> prettyQuantifiedType other <> ")"
+    short = punctuation "(" <> prettyQuantifiedType other <> punctuation ")"
 
     long =
         Pretty.align
-            (   "( "
+            (   punctuation "("
+            <>  " "
             <>  prettyQuantifiedType other
             <>  Pretty.hardline
-            <>  ")"
+            <>  punctuation ")"
             )
 
-prettyRecordType :: Record s -> Doc a
+prettyRecordType :: Record s -> Doc AnsiStyle
 prettyRecordType (Fields [] EmptyFields) =
-    "{ }"
+    punctuation "{" <> " " <> punctuation "}"
 prettyRecordType (Fields [] (UnsolvedFields ρ)) =
-    "{ " <> pretty ρ <> "? }"
+        punctuation "{ "
+    <>  label (pretty ρ <> "?")
+    <>  " "
+    <>  punctuation "}"
 prettyRecordType (Fields [] (VariableFields ρ)) =
-    "{ " <> pretty ρ <> " }"
+    punctuation "{" <> " " <> label (pretty ρ) <> " " <> punctuation "}"
 prettyRecordType (Fields ((key₀, type₀) : keyTypes) fields) =
     Pretty.group (Pretty.flatAlt long short)
   where
     short =
-            "{ "
+            punctuation "{"
+        <>  " "
         <>  prettyShortFieldType (key₀, type₀)
-        <>  foldMap (\ft -> ", " <> prettyShortFieldType ft) keyTypes
+        <>  foldMap (\ft -> punctuation "," <> " " <> prettyShortFieldType ft) keyTypes
         <>  case fields of
-                EmptyFields      -> " }"
-                UnsolvedFields ρ -> ", " <> pretty ρ <> "? }"
-                VariableFields ρ -> ", " <> pretty ρ <> " }"
+                EmptyFields ->
+                        " "
+                    <>  punctuation "}"
+                UnsolvedFields ρ ->
+                        punctuation ","
+                    <>  " "
+                    <>  label (pretty ρ <> "?")
+                    <>  " "
+                    <>  punctuation "}"
+                VariableFields ρ ->
+                        punctuation ","
+                    <>  " "
+                    <>  label (pretty ρ)
+                    <>  " "
+                    <>  punctuation "}"
 
     long =
         Pretty.align
-            (   "{ "
+            (   punctuation "{"
+            <>  " "
             <>  prettyLongFieldType (key₀, type₀)
-            <>  foldMap (\ft -> ", " <> prettyLongFieldType ft) keyTypes
+            <>  foldMap (\ft -> punctuation "," <> " " <> prettyLongFieldType ft) keyTypes
             <>  case fields of
                     EmptyFields ->
-                        "}"
+                        punctuation "}"
                     UnsolvedFields ρ ->
-                        ", " <> pretty ρ <> "?" <> Pretty.hardline <> "}"
+                            punctuation ","
+                        <>  " "
+                        <>  label (pretty ρ <> "?")
+                        <>  Pretty.hardline
+                        <>  punctuation "}"
                     VariableFields ρ ->
-                        ", " <> pretty ρ <> Pretty.hardline <> "}"
+                            punctuation ","
+                        <>  " "
+                        <>  label (pretty ρ)
+                        <>  Pretty.hardline
+                        <>  punctuation "}"
             )
 
-    prettyShortFieldType :: (Text, Type s) -> Doc a
+    prettyShortFieldType :: (Text, Type s) -> Doc AnsiStyle
     prettyShortFieldType (key, type_) =
             prettyRecordLabel False key
-        <>  ": "
-        <>  prettyType prettyQuantifiedType type_
+        <>  operator ":"
+        <>  " "
+        <>  liftType prettyQuantifiedType type_
 
-    prettyLongFieldType :: (Text, Type s) -> Doc a
+    prettyLongFieldType :: (Text, Type s) -> Doc AnsiStyle
     prettyLongFieldType (key, type_) =
             prettyRecordLabel False key
-        <>  ":"
+        <>  operator ":"
         <>  Pretty.group (Pretty.flatAlt (Pretty.hardline <> "    ") " ")
-        <>  prettyType prettyQuantifiedType type_
+        <>  liftType prettyQuantifiedType type_
         <>  Pretty.hardline
 
-prettyUnionType :: Union s -> Doc a
+prettyUnionType :: Union s -> Doc AnsiStyle
 prettyUnionType (Alternatives [] EmptyAlternatives) =
-    "< >"
+    punctuation "<" <> " " <> punctuation ">"
 prettyUnionType (Alternatives [] (UnsolvedAlternatives ρ)) =
-    "< " <> pretty ρ <> "? >"
+        punctuation "<"
+    <>  " "
+    <>  label (pretty ρ <> "?")
+    <>  " "
+    <>  punctuation ">"
 prettyUnionType (Alternatives [] (VariableAlternatives ρ)) =
-    "< " <> pretty ρ <> " >"
+    punctuation "<" <> " " <> label (pretty ρ) <> " " <> punctuation ">"
 prettyUnionType (Alternatives ((key₀, type₀) : keyTypes) alternatives) =
     Pretty.group (Pretty.flatAlt long short)
   where
     short =
-            "< "
+            punctuation "<"
+        <>  " "
         <>  prettyShortAlternativeType (key₀, type₀)
-        <>  foldMap (\kt -> " | " <> prettyShortAlternativeType kt) keyTypes
+        <>  foldMap (\kt -> " " <> punctuation "|" <> " " <> prettyShortAlternativeType kt) keyTypes
         <>  case alternatives of
-                EmptyAlternatives      -> " >"
-                UnsolvedAlternatives ρ -> " | " <> pretty ρ <> "? >"
-                VariableAlternatives ρ -> " | " <> pretty ρ <> " >"
+                EmptyAlternatives ->
+                        " "
+                    <>  punctuation ">"
+                UnsolvedAlternatives ρ ->
+                        " "
+                    <>  punctuation "|"
+                    <>  " "
+                    <>  label (pretty ρ <> "?")
+                    <>  " "
+                    <>  punctuation ">"
+                VariableAlternatives ρ ->
+                        " "
+                    <>  punctuation "|"
+                    <>  " "
+                    <>  label (pretty ρ)
+                    <>  " "
+                    <>  punctuation ">"
 
     long  =
         Pretty.align
-            (   "< "
+            (   punctuation "<"
+            <>  " "
             <>  prettyLongAlternativeType (key₀, type₀)
-            <>  foldMap (\kt -> "| " <> prettyLongAlternativeType kt) keyTypes
+            <>  foldMap (\kt -> punctuation "|" <> " " <> prettyLongAlternativeType kt) keyTypes
             <>  case alternatives of
                     EmptyAlternatives ->
-                        ">"
+                        punctuation ">"
                     UnsolvedAlternatives ρ ->
-                        "| " <> pretty ρ <> "?" <> Pretty.hardline <> ">"
+                            punctuation "|"
+                        <>  " "
+                        <>  label (pretty ρ <> "?")
+                        <>  Pretty.hardline
+                        <>  punctuation ">"
                     VariableAlternatives ρ ->
-                        "| " <> pretty ρ <> Pretty.hardline <> ">"
+                            punctuation "|"
+                        <>  " "
+                        <>  label (pretty ρ)
+                        <>  Pretty.hardline
+                        <>  punctuation ">"
             )
 
     prettyShortAlternativeType (key, type_) =
-            pretty key
-        <>  ": "
-        <>  prettyType prettyQuantifiedType type_
+            label (pretty key)
+        <>  operator ":"
+        <>  " "
+        <>  liftType prettyQuantifiedType type_
 
     prettyLongAlternativeType (key, type_) =
-            pretty key
-        <>  ":"
+            label (pretty key)
+        <>  operator ":"
         <>  Pretty.group (Pretty.flatAlt (Pretty.hardline <> "    ") " ")
-        <>  prettyType prettyQuantifiedType type_
+        <>  liftType prettyQuantifiedType type_
         <>  Pretty.hardline
 
 -- | Pretty-print a @Text@ literal
-prettyTextLiteral :: Text -> Doc b
+prettyTextLiteral :: Text -> Doc AnsiStyle
 prettyTextLiteral text =
         "\""
     <>  ( pretty
@@ -662,7 +755,9 @@ prettyRecordLabel
     -- This is mainly set to `True` when pretty-printing records so that the
     -- output is valid JSON
     -> Text
-    -> Doc b
-prettyRecordLabel alwaysQuote label
-    | Lexer.validRecordLabel label && not alwaysQuote = pretty label
-    | otherwise                                       = prettyTextLiteral label
+    -> Doc AnsiStyle
+prettyRecordLabel alwaysQuote field
+    | Lexer.validRecordLabel field && not alwaysQuote =
+        label (pretty field)
+    | otherwise =
+        label (prettyTextLiteral field)

@@ -7,8 +7,8 @@ module Main where
 import Data.Text (Text)
 import Grace.Interpret (Input(..))
 import Grace.Location (Location(..))
+import Grace.Pretty (Pretty(..))
 import Grace.Type (Type(..))
-import Prettyprinter (Pretty)
 import System.FilePath ((</>))
 import Test.Tasty (TestTree)
 
@@ -30,8 +30,8 @@ import qualified Test.Tasty.Silver    as Silver
 
 pretty_ :: Pretty a => a -> Text
 pretty_ x =
-    Grace.Pretty.renderStrict Grace.Pretty.defaultColumns
-        (Pretty.pretty x <> Pretty.hardline)
+    Grace.Pretty.renderStrict False Grace.Pretty.defaultColumns
+        (pretty x <> Pretty.hardline)
 
 fileToTestTree :: FilePath -> IO TestTree
 fileToTestTree prefix = do

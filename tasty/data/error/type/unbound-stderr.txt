@@ -1,4 +1,4 @@
-Unbound variable: x
+Unbound variable: [0mx[0m
 
 tasty/data/error/type/unbound-input.grace:1:1: 
   │

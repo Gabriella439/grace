@@ -19,7 +19,7 @@ import Data.String (IsString(..))
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Grace.Existential (Existential)
-import Prettyprinter (Pretty(..))
+import Grace.Pretty (Pretty(..), builtin)
 
 -- | A monomorphic type
 data Monotype
@@ -66,11 +66,11 @@ data Scalar
     deriving stock (Eq, Generic, Show)
 
 instance Pretty Scalar where
-    pretty Bool    = "Bool"
-    pretty Double  = "Double"
-    pretty Natural = "Natural"
-    pretty Integer = "Integer"
-    pretty Text    = "Text"
+    pretty Bool    = builtin "Bool"
+    pretty Double  = builtin "Double"
+    pretty Natural = builtin "Natural"
+    pretty Integer = builtin "Integer"
+    pretty Text    = builtin "Text"
 
 -- | A monomorphic record type
 data Record = Fields [(Text, Monotype)] RemainingFields

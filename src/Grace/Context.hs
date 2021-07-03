@@ -28,9 +28,11 @@ import Data.Text (Text)
 import Grace.Domain (Domain)
 import Grace.Existential (Existential)
 import Grace.Monotype (Monotype)
+import Grace.Pretty (Pretty(..), label, operator, punctuation)
 import Grace.Type (Type(..))
 import Prelude hiding (lookup)
-import Prettyprinter (Doc, Pretty(..))
+import Prettyprinter (Doc)
+import Prettyprinter.Render.Terminal (AnsiStyle)
 
 import qualified Control.Monad              as Monad
 import qualified Control.Monad.State.Strict as State
@@ -38,7 +40,6 @@ import qualified Grace.Domain               as Domain
 import qualified Grace.Existential          as Existential
 import qualified Grace.Monotype             as Monotype
 import qualified Grace.Type                 as Type
-import qualified Prettyprinter              as Pretty
 
 {- $setup
 
@@ -85,7 +86,7 @@ data Entry s
     --   inferred
     --
     -- >>> pretty @(Entry ()) (SolvedFields 0 (Monotype.Fields [("x", "X")] (Monotype.UnsolvedFields 1)))
-    -- a = x: X | b?
+    -- a = x: X, b?
     | SolvedAlternatives (Existential Monotype.Union) Monotype.Union
     -- ^ A placeholder alternatives variable whose type has been (at least
     --   partially) inferred
@@ -147,67 +148,83 @@ instance Pretty (Entry s) where
 -}
 type Context s = [Entry s]
 
-prettyEntry :: Entry s -> Doc a
+prettyEntry :: Entry s -> Doc AnsiStyle
 prettyEntry (Variable domain α) =
-    Pretty.pretty α <> ": " <> pretty domain
+    label (pretty α) <> operator ":" <> " " <> pretty domain
 prettyEntry (UnsolvedType α) =
-    Pretty.pretty α <> "?"
+    pretty α <> "?"
 prettyEntry (UnsolvedFields ρ) =
-    Pretty.pretty ρ <> "?"
+    pretty ρ <> "?"
 prettyEntry (UnsolvedAlternatives ρ) =
-    Pretty.pretty ρ <> "?"
+    pretty ρ <> "?"
 prettyEntry (SolvedType α τ) =
-    Pretty.pretty α <> " = " <> Pretty.pretty τ
+    pretty α <> " " <> punctuation "=" <> " " <> pretty τ
 prettyEntry (SolvedFields ρ (Monotype.Fields [] Monotype.EmptyFields)) =
-    Pretty.pretty ρ <> " = •"
+    pretty ρ <> " " <> punctuation "=" <> " " <> punctuation "•"
 prettyEntry (SolvedFields ρ₀ (Monotype.Fields [] (Monotype.UnsolvedFields ρ₁))) =
-    Pretty.pretty ρ₀ <> " = • | " <>  Pretty.pretty ρ₁ <> "?"
+        pretty ρ₀
+    <>  " "
+    <>  punctuation "="
+    <>  " "
+    <>  pretty ρ₁
+    <>  "?"
 prettyEntry (SolvedFields ρ₀ (Monotype.Fields [] (Monotype.VariableFields ρ₁))) =
-    Pretty.pretty ρ₀ <> " = • | " <>  Pretty.pretty ρ₁
+        pretty ρ₀
+    <>  " "
+    <>  punctuation "="
+    <>  " "
+    <>  label (pretty ρ₁)
 prettyEntry (SolvedFields ρ (Monotype.Fields ((k₀, τ₀) : kτs) fields)) =
-        Pretty.pretty ρ
+        pretty ρ
     <>  " = "
-    <>  Pretty.pretty k₀
-    <>  ": "
-    <>  Pretty.pretty τ₀
+    <>  label (pretty k₀)
+    <>  operator ":"
+    <>  " "
+    <>  pretty τ₀
     <>  foldMap prettyFieldType kτs
     <>  case fields of
-            Monotype.EmptyFields       -> ""
-            Monotype.UnsolvedFields ρ₁ -> " | " <> Pretty.pretty ρ₁ <> "?"
-            Monotype.VariableFields ρ₁ -> " | " <> Pretty.pretty ρ₁
+            Monotype.EmptyFields ->
+                ""
+            Monotype.UnsolvedFields ρ₁ ->
+                punctuation "," <> " " <> pretty ρ₁ <> "?"
+            Monotype.VariableFields ρ₁ ->
+                punctuation "," <> " " <> pretty ρ₁
 prettyEntry (SolvedAlternatives ρ (Monotype.Alternatives [] Monotype.EmptyAlternatives)) =
-    Pretty.pretty ρ <> " = •"
+    pretty ρ <> " " <> punctuation "=" <> " " <> punctuation "•"
 prettyEntry (SolvedAlternatives ρ₀ (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives ρ₁))) =
-    Pretty.pretty ρ₀ <> " = • | " <>  Pretty.pretty ρ₁ <> "?"
+    pretty ρ₀ <> " " <> punctuation "=" <> " " <> pretty ρ₁ <> "?"
 prettyEntry (SolvedAlternatives ρ₀ (Monotype.Alternatives [] (Monotype.VariableAlternatives ρ₁))) =
-    Pretty.pretty ρ₀ <> " = • | " <>  Pretty.pretty ρ₁
+    pretty ρ₀ <> " " <> punctuation "=" <> " " <>  label (pretty ρ₁)
 prettyEntry (SolvedAlternatives ρ₀ (Monotype.Alternatives ((k₀, τ₀) : kτs) fields)) =
-        Pretty.pretty ρ₀
-    <>  " = "
-    <>  Pretty.pretty k₀
-    <>  ": "
-    <>  Pretty.pretty τ₀
-    <>  foldMap prettyAlternativeType kτs
-    <>  " | "
+        pretty ρ₀
+    <>  " "
+    <>  punctuation "="
+    <>  " "
+    <>  prettyAlternativeType (k₀, τ₀)
+    <>  foldMap (\kt -> " " <> punctuation "|" <> " " <> prettyAlternativeType kt) kτs
     <>  case fields of
-            Monotype.EmptyAlternatives       -> ""
-            Monotype.UnsolvedAlternatives ρ₁ -> Pretty.pretty ρ₁ <> "?"
-            Monotype.VariableAlternatives ρ₁ -> Pretty.pretty ρ₁
+            Monotype.EmptyAlternatives ->
+                ""
+            Monotype.UnsolvedAlternatives ρ₁ ->
+                " " <> punctuation "|" <> " " <> pretty ρ₁ <> "?"
+            Monotype.VariableAlternatives ρ₁ ->
+                " " <> punctuation "|" <> " " <> label (pretty ρ₁)
 prettyEntry (Annotation x α) =
-    Pretty.pretty x <> ": " <> Pretty.pretty α
+    pretty x <> operator ":" <> " " <> pretty α
 prettyEntry (MarkerType α) =
-    "➤ " <> Pretty.pretty α <> ": Type"
+    "➤ " <> pretty α <> ": Type"
 prettyEntry (MarkerFields α) =
-    "➤ " <> Pretty.pretty α <> ": Fields"
+    "➤ " <> pretty α <> ": Fields"
 prettyEntry (MarkerAlternatives α) =
-    "➤ " <> Pretty.pretty α <> ": Alternatives"
+    "➤ " <> pretty α <> ": Alternatives"
 
-prettyFieldType :: (Text, Monotype) -> Doc a
-prettyFieldType (k, τ) = ", " <> Pretty.pretty k <> ": " <> Pretty.pretty τ
+prettyFieldType :: (Text, Monotype) -> Doc AnsiStyle
+prettyFieldType (k, τ) =
+    punctuation "," <> " " <> pretty k <> operator ":" <> " " <> pretty τ
 
-prettyAlternativeType :: (Text, Monotype) -> Doc a
+prettyAlternativeType :: (Text, Monotype) -> Doc AnsiStyle
 prettyAlternativeType (k, τ) =
-    ", " <> Pretty.pretty k <> ": " <> Pretty.pretty τ
+    pretty k <> operator ":" <> " " <> pretty τ
 
 {-| Substitute a `Type` using the solved entries of a `Context`
 

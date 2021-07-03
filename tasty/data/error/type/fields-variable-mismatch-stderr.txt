@@ -2,7 +2,7 @@ Not a record subtype
 
 The following type:
 
-↳ { b }
+   [0;32;1m{[0m [0mb[0m [0;32;1m}[0m
 
 tasty/data/error/type/fields-variable-mismatch-input.grace:1:62: 
   │
@@ -11,7 +11,7 @@ tasty/data/error/type/fields-variable-mismatch-input.grace:1:62:
 
 … cannot be a subtype of:
 
-↳ { a }
+   [0;32;1m{[0m [0ma[0m [0;32;1m}[0m
 
 tasty/data/error/type/fields-variable-mismatch-input.grace:1:71: 
   │

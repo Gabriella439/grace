@@ -46,10 +46,10 @@ import Grace.Context (Context, Entry)
 import Grace.Existential (Existential)
 import Grace.Location (Location(..))
 import Grace.Monotype (Monotype)
+import Grace.Pretty (Pretty(..))
 import Grace.Syntax (Syntax(Syntax))
 import Grace.Type (Type(..))
 import Grace.Value (Value)
-import Prettyprinter (Pretty)
 
 import qualified Control.Monad        as Monad
 import qualified Control.Monad.Except as Except
@@ -100,13 +100,13 @@ discardUpTo entry =
 
 prettyToText :: Pretty a => a -> Text
 prettyToText =
-      Grace.Pretty.renderStrict Grace.Pretty.defaultColumns
-    . Pretty.pretty
+      Grace.Pretty.renderStrict True Grace.Pretty.defaultColumns
+    . pretty
 
-prettyToInsert :: Pretty a => a -> Text
-prettyToInsert a =
-      Grace.Pretty.renderStrict Grace.Pretty.defaultColumns
-        ("↳ " <> Pretty.align (Pretty.pretty a))
+insert :: Pretty a => a -> Text
+insert a =
+      Grace.Pretty.renderStrict True Grace.Pretty.defaultColumns
+        ("   " <> Pretty.align (pretty a))
 
 listToText :: Pretty a => [a] -> Text
 listToText elements =
@@ -155,7 +155,7 @@ wellFormedType _Γ Type{..} =
 
                 The following type:
 
-                #{prettyToInsert _A}
+                #{insert _A}
 
                 … is not well-formed within the following context:
 
@@ -186,7 +186,7 @@ wellFormedType _Γ Type{..} =
 
                 The following unsolved fields variable:
 
-                #{prettyToInsert (Context.UnsolvedFields α₀)}
+                #{insert (Context.UnsolvedFields α₀)}
 
                 … is not well-formed within the following context:
 
@@ -208,7 +208,7 @@ wellFormedType _Γ Type{..} =
 
                 The following fields variable:
 
-                #{prettyToInsert (Context.Variable Domain.Fields α₀)}
+                #{insert (Context.Variable Domain.Fields α₀)}
 
                 … is not well-formed within the following context:
 
@@ -232,7 +232,7 @@ wellFormedType _Γ Type{..} =
 
                 The following unsolved alternatives variable:
 
-                #{prettyToInsert (Context.UnsolvedAlternatives α₀)}
+                #{insert (Context.UnsolvedAlternatives α₀)}
 
                 … is not well-formed within the following context:
 
@@ -254,7 +254,7 @@ wellFormedType _Γ Type{..} =
 
                 The following alternatives variable:
 
-                #{prettyToInsert (Context.Variable Domain.Alternatives α₀)}
+                #{insert (Context.Variable Domain.Alternatives α₀)}
 
                 … is not well-formed within the following context:
 
@@ -435,13 +435,13 @@ subtype _A₀ _B₀ = do
 
                 The following record type:
 
-                #{prettyToInsert _A₀}
+                #{insert _A₀}
 
                 #{locA₀}
 
                 … is not a subtype of the following record type:
 
-                #{prettyToInsert _B₀}
+                #{insert _B₀}
 
                 #{locB₀}
 
@@ -460,13 +460,13 @@ subtype _A₀ _B₀ = do
 
                 The following record type:
 
-                #{prettyToInsert _A₀}
+                #{insert _A₀}
 
                 #{locA₀}
 
                 … is not a subtype of the following record type:
 
-                #{prettyToInsert _B₀}
+                #{insert _B₀}
 
                 #{locB₀}
 
@@ -481,13 +481,13 @@ subtype _A₀ _B₀ = do
 
                 The following record type:
 
-                #{prettyToInsert _A₀}
+                #{insert _A₀}
 
                 #{locA₀}
 
                 … is not a subtype of the following record type:
 
-                #{prettyToInsert _B₀}
+                #{insert _B₀}
 
                 #{locB₀}
 
@@ -573,13 +573,13 @@ subtype _A₀ _B₀ = do
 
                     The following type:
 
-                    #{prettyToInsert _A}
+                    #{insert _A}
 
                     #{locA₀}
 
                     … cannot be a subtype of:
 
-                    #{prettyToInsert _B}
+                    #{insert _B}
 
                     #{locB₀}
                     |]
@@ -602,13 +602,13 @@ subtype _A₀ _B₀ = do
 
                 The following union type:
 
-                #{prettyToInsert _A₀}
+                #{insert _A₀}
 
                 #{locA₀}
 
                 … is not a subtype of the following union type:
 
-                #{prettyToInsert _B₀}
+                #{insert _B₀}
 
                 #{locB₀}
 
@@ -627,13 +627,13 @@ subtype _A₀ _B₀ = do
 
                 The following union type:
 
-                #{prettyToInsert _A₀}
+                #{insert _A₀}
 
                 #{locA₀}
 
                 … is not a subtype of the following union type:
 
-                #{prettyToInsert _B₀}
+                #{insert _B₀}
 
                 #{locB₀}
 
@@ -648,13 +648,13 @@ subtype _A₀ _B₀ = do
 
                 The following union type:
 
-                #{prettyToInsert _A₀}
+                #{insert _A₀}
 
                 #{locA₀}
 
                 … is not a subtype of the following union type:
 
-                #{prettyToInsert _B₀}
+                #{insert _B₀}
 
                 #{locB₀}
 
@@ -744,13 +744,13 @@ subtype _A₀ _B₀ = do
 
                     The following type:
 
-                    #{prettyToInsert _A}
+                    #{insert _A}
 
                     #{locA₀}
 
                     … cannot be a subtype of:
 
-                    #{prettyToInsert _B}
+                    #{insert _B}
 
                     #{locB₀}
                     |]
@@ -761,13 +761,13 @@ subtype _A₀ _B₀ = do
 
             The following type:
 
-            #{prettyToInsert _A}
+            #{insert _A}
 
             #{locA₀}
 
             … cannot be a subtype of:
 
-            #{prettyToInsert _B}
+            #{insert _B}
 
             #{locB₀}
             |]
@@ -791,7 +791,7 @@ instantiateTypeL α _A₀ = do
 
         The following unsolved variable:
 
-        #{prettyToInsert (Context.UnsolvedType α)}}
+        #{insert (Context.UnsolvedType α)}
 
         … cannot be instantiated because the variable is missing from the context:
 
@@ -933,7 +933,7 @@ instantiateTypeR _A₀ α = do
 
         The following unsolved variable:
 
-        #{prettyToInsert (Context.UnsolvedType α)}}
+        #{insert (Context.UnsolvedType α)}
 
         … cannot be instantiated because the variable is missing from the context:
 
@@ -1113,11 +1113,11 @@ instantiateFieldsL ρ₀ location r@(Type.Fields kAs rest) = do
 
             The following fields variable:
 
-            #{prettyToInsert ρ₀}
+            #{insert ρ₀}
 
             … cannot be instantiated to the following record type:
 
-            #{prettyToInsert (Type.Record r)}
+            #{insert (Type.Record r)}
 
             #{Location.renderError "" location}
 
@@ -1143,7 +1143,7 @@ instantiateFieldsL ρ₀ location r@(Type.Fields kAs rest) = do
 
         The following unsolved fields variable:
 
-        #{prettyToInsert (Context.UnsolvedFields ρ₀)}}
+        #{insert (Context.UnsolvedFields ρ₀)}
 
         … cannot be instantiated because the fields variable is missing from the
         context:
@@ -1180,11 +1180,11 @@ instantiateFieldsR location r@(Type.Fields kAs rest) ρ₀ = do
 
             The following fields variable:
 
-            #{prettyToInsert ρ₀}
+            #{insert ρ₀}
 
             … cannot be instantiated to the following record type:
 
-            #{prettyToInsert (Type.Record r)}
+            #{insert (Type.Record r)}
 
             #{Location.renderError "" location}
 
@@ -1210,7 +1210,7 @@ instantiateFieldsR location r@(Type.Fields kAs rest) ρ₀ = do
 
         The following unsolved fields variable:
 
-        #{prettyToInsert (Context.UnsolvedFields ρ₀)}}
+        #{insert (Context.UnsolvedFields ρ₀)}
 
         … cannot be instantiated because the fields variable is missing from the
         context:
@@ -1284,11 +1284,11 @@ instantiateAlternativesL ρ₀ location u@(Type.Alternatives kAs rest) = do
 
             The following alternatives variable:
 
-            #{prettyToInsert ρ₀}
+            #{insert ρ₀}
 
             … cannot be instantiated to the following union type:
 
-            #{prettyToInsert (Type.Union u)}
+            #{insert (Type.Union u)}
 
             #{Location.renderError "" location}
 
@@ -1314,7 +1314,7 @@ instantiateAlternativesL ρ₀ location u@(Type.Alternatives kAs rest) = do
 
         The following unsolved alternatives variable:
 
-        #{prettyToInsert (Context.UnsolvedAlternatives ρ₀)}}
+        #{insert (Context.UnsolvedAlternatives ρ₀)}}
 
         … cannot be instantiated because the alternatives variable is missing from the
         context:
@@ -1351,11 +1351,11 @@ instantiateAlternativesR location u@(Type.Alternatives kAs rest) ρ₀ = do
 
             The following alternatives variable:
 
-            #{prettyToInsert ρ₀}
+            #{insert ρ₀}
 
             … cannot be instantiated to the following union type:
 
-            #{prettyToInsert (Type.Union u)}
+            #{insert (Type.Union u)}
 
             #{Location.renderError "" location}
 
@@ -1381,7 +1381,7 @@ instantiateAlternativesR location u@(Type.Alternatives kAs rest) ρ₀ = do
 
         The following unsolved alternatives variable:
 
-        #{prettyToInsert (Context.UnsolvedAlternatives ρ₀)}}
+        #{insert (Context.UnsolvedAlternatives ρ₀)}
 
         … cannot be instantiated because the alternatives variable is missing from the
         context:
@@ -1578,7 +1578,7 @@ infer e₀ = do
                                 The merge keyword expects a record of handlers where all handlers are functions,
                                 but you provided a handler of the following type:
 
-                                #{prettyToInsert _A}
+                                #{insert _A}
 
                                 #{Location.renderError "" (Type.location _A)}
 
@@ -1608,7 +1608,7 @@ infer e₀ = do
                         The first argument to a merge expression must be a record where all fields are
                         statically known.  However, you provided an argument of type:
 
-                        #{prettyToInsert _R}
+                        #{insert _R}
 
                         #{Location.renderError "" (Type.location _R)}
 
@@ -1622,7 +1622,7 @@ infer e₀ = do
                         The first argument to a merge expression must be a record, but you provided an
                         expression of the following type:
 
-                        #{prettyToInsert _R}
+                        #{insert _R}
 
                         #{Location.renderError "" (Type.location _R)}
 
@@ -1951,7 +1951,7 @@ inferApplication Type{ node = Type.UnsolvedType α, .. } e = do
 
         The following unsolved variable:
 
-        #{prettyToInsert (Context.UnsolvedType α)}}
+        #{insert (Context.UnsolvedType α)}
 
         … cannot be solved because the variable is missing from the context:
 
@@ -1976,7 +1976,7 @@ inferApplication Type{ node = Type.VariableType α, ..} _ = do
 
     The following type variable:
 
-    #{prettyToInsert α}
+    #{insert α}
 
     … should have been replaced with an unsolved variable.
 
@@ -1988,7 +1988,7 @@ inferApplication _A@Type{..} _ = do
 
     An expression of the following type:
 
-    #{prettyToInsert _A}
+    #{insert _A}
 
     #{Location.renderError "" location}
 
