@@ -136,7 +136,7 @@ Grace implements the following features so that you don't have to:
 
   Grace extends the bidirectional type-checking algorithm with support for
   inferring the types of open records (also known as
-  [row polymorphims](https://en.wikipedia.org/wiki/Row_polymorphism)) and
+  [row polymorphisms](https://en.wikipedia.org/wiki/Row_polymorphism)) and
   open unions (also known as [polymorphic variants](https://2ality.com/2018/01/polymorphic-variants-reasonml.html)).  This lets you easily work with records or
   sums where not all fields or alternatives are known in advance.
 
