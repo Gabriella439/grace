@@ -203,10 +203,10 @@ fromMonotype :: Monotype -> Type ()
 fromMonotype monotype = Type{ location = (), node }
   where
     node = case monotype of
-        Monotype.VariableType α ->
-            VariableType α
-        Monotype.UnsolvedType α ->
-            UnsolvedType α
+        Monotype.VariableType a ->
+            VariableType a
+        Monotype.UnsolvedType a ->
+            UnsolvedType a
         Monotype.Function τ σ ->
             Function (fromMonotype τ) (fromMonotype σ)
         Monotype.Optional τ ->
@@ -287,32 +287,32 @@ solveAlternatives unsolved (Monotype.Alternatives alternativeMonotypes alternati
     given the variable's label and index
 -}
 substituteType :: Text -> Int -> Type s -> Type s -> Type s
-substituteType α₀ n _A₀ Type{ node = old, .. } = Type{ node = new, .. }
+substituteType a0 n _A0 Type{ node = old, .. } = Type{ node = new, .. }
   where
     new = case old of
-        VariableType α₁
-            | α₀ == α₁ && n == 0 -> node _A₀
-            | otherwise          -> VariableType α₁
-        UnsolvedType α ->
-            UnsolvedType α
-        Exists s α₁ domain _A₁ ->
-            if α₀ == α₁ && domain == Domain.Type
-            then Exists s α₁ domain (substituteType α₀ (n + 1) _A₀ _A₁)
-            else Exists s α₁ domain (substituteType α₀  n      _A₀ _A₁)
-        Forall s α₁ domain _A₁ ->
-            if α₀ == α₁ && domain == Domain.Type
-            then Forall s α₁ domain (substituteType α₀ (n + 1) _A₀ _A₁)
-            else Forall s α₁ domain (substituteType α₀  n      _A₀ _A₁)
-        Function _A₁ _B ->
-            Function (substituteType α₀ n _A₀ _A₁) (substituteType α₀ n _A₀ _B)
-        Optional _A₁ ->
-            Optional (substituteType α₀ n _A₀ _A₁)
-        List _A₁ ->
-            List (substituteType α₀ n _A₀ _A₁)
+        VariableType a1
+            | a0 == a1 && n == 0 -> node _A0
+            | otherwise          -> VariableType a1
+        UnsolvedType a ->
+            UnsolvedType a
+        Exists s a1 domain _A1 ->
+            if a0 == a1 && domain == Domain.Type
+            then Exists s a1 domain (substituteType a0 (n + 1) _A0 _A1)
+            else Exists s a1 domain (substituteType a0  n      _A0 _A1)
+        Forall s a1 domain _A1 ->
+            if a0 == a1 && domain == Domain.Type
+            then Forall s a1 domain (substituteType a0 (n + 1) _A0 _A1)
+            else Forall s a1 domain (substituteType a0  n      _A0 _A1)
+        Function _A1 _B ->
+            Function (substituteType a0 n _A0 _A1) (substituteType a0 n _A0 _B)
+        Optional _A1 ->
+            Optional (substituteType a0 n _A0 _A1)
+        List _A1 ->
+            List (substituteType a0 n _A0 _A1)
         Record (Fields kAs ρ) ->
-            Record (Fields (map (\(k, _A₁) -> (k, substituteType α₀ n _A₀ _A₁)) kAs) ρ)
+            Record (Fields (map (\(k, _A1) -> (k, substituteType a0 n _A0 _A1)) kAs) ρ)
         Union (Alternatives kAs ρ) ->
-            Union (Alternatives (map (\(k, _A₁) -> (k, substituteType α₀ n _A₀ _A₁)) kAs) ρ)
+            Union (Alternatives (map (\(k, _A1) -> (k, substituteType a0 n _A0 _A1)) kAs) ρ)
         Scalar scalar ->
             Scalar scalar
 
@@ -320,37 +320,37 @@ substituteType α₀ n _A₀ Type{ node = old, .. } = Type{ node = new, .. }
     given the variable's label and index
 -}
 substituteFields :: Text -> Int -> Record s -> Type s -> Type s
-substituteFields ρ₀ n r@(Fields kτs ρ₁) Type{ node = old, .. } =
+substituteFields ρ0 n r@(Fields kτs ρ1) Type{ node = old, .. } =
     Type{ node = new, .. }
   where
     new = case old of
-        VariableType α ->
-            VariableType α
-        UnsolvedType α ->
-            UnsolvedType α
-        Exists s α₁ domain _A ->
-            if ρ₀ == α₁ && domain == Domain.Fields
-            then Exists s α₁ domain (substituteFields ρ₀ (n + 1) r _A)
-            else Exists s α₁ domain (substituteFields ρ₀  n      r _A)
-        Forall s α₁ domain _A ->
-            if ρ₀ == α₁ && domain == Domain.Fields
-            then Forall s α₁ domain (substituteFields ρ₀ (n + 1) r _A)
-            else Forall s α₁ domain (substituteFields ρ₀  n      r _A)
+        VariableType a ->
+            VariableType a
+        UnsolvedType a ->
+            UnsolvedType a
+        Exists s a1 domain _A ->
+            if ρ0 == a1 && domain == Domain.Fields
+            then Exists s a1 domain (substituteFields ρ0 (n + 1) r _A)
+            else Exists s a1 domain (substituteFields ρ0  n      r _A)
+        Forall s a1 domain _A ->
+            if ρ0 == a1 && domain == Domain.Fields
+            then Forall s a1 domain (substituteFields ρ0 (n + 1) r _A)
+            else Forall s a1 domain (substituteFields ρ0  n      r _A)
         Function _A _B ->
-            Function (substituteFields ρ₀ n r _A) (substituteFields ρ₀ n r _B)
+            Function (substituteFields ρ0 n r _A) (substituteFields ρ0 n r _B)
         Optional _A ->
-            Optional (substituteFields ρ₀ n r _A)
+            Optional (substituteFields ρ0 n r _A)
         List _A ->
-            List (substituteFields ρ₀ n r _A)
-        Record (Fields kAs₀ ρ)
-            | VariableFields ρ₀ == ρ && n == 0 ->
-                Record (Fields (map (\(k, _A) -> (k, substituteFields ρ₀ n r _A)) kAs₁) ρ₁)
+            List (substituteFields ρ0 n r _A)
+        Record (Fields kAs0 ρ)
+            | VariableFields ρ0 == ρ && n == 0 ->
+                Record (Fields (map (\(k, _A) -> (k, substituteFields ρ0 n r _A)) kAs1) ρ1)
             | otherwise ->
-                Record (Fields (map (\(k, _A) -> (k, substituteFields ρ₀ n r _A)) kAs₀) ρ)
+                Record (Fields (map (\(k, _A) -> (k, substituteFields ρ0 n r _A)) kAs0) ρ)
           where
-            kAs₁ = kAs₀ <> map (\(k, τ) -> (k, fmap (\_ -> location) τ)) kτs
+            kAs1 = kAs0 <> map (\(k, τ) -> (k, fmap (\_ -> location) τ)) kτs
         Union (Alternatives kAs ρ) ->
-            Union (Alternatives (map (\(k, _A) -> (k, substituteFields ρ₀ n r _A)) kAs) ρ)
+            Union (Alternatives (map (\(k, _A) -> (k, substituteFields ρ0 n r _A)) kAs) ρ)
         Scalar scalar ->
             Scalar scalar
 
@@ -358,37 +358,37 @@ substituteFields ρ₀ n r@(Fields kτs ρ₁) Type{ node = old, .. } =
     given the variable's label and index
 -}
 substituteAlternatives :: Text -> Int -> Union s -> Type s -> Type s
-substituteAlternatives ρ₀ n r@(Alternatives kτs ρ₁) Type{ node = old, .. } =
+substituteAlternatives ρ0 n r@(Alternatives kτs ρ1) Type{ node = old, .. } =
     Type{ node = new, .. }
   where
     new = case old of
-        VariableType α ->
-            VariableType α
-        UnsolvedType α ->
-            UnsolvedType α
-        Exists s α₁ domain _A ->
-            if ρ₀ == α₁ && domain == Domain.Alternatives
-            then Exists s α₁ domain (substituteAlternatives ρ₀ (n + 1) r _A)
-            else Exists s α₁ domain (substituteAlternatives ρ₀  n      r _A)
-        Forall s α₁ domain _A ->
-            if ρ₀ == α₁ && domain == Domain.Alternatives
-            then Forall s α₁ domain (substituteAlternatives ρ₀ (n + 1) r _A)
-            else Forall s α₁ domain (substituteAlternatives ρ₀  n      r _A)
+        VariableType a ->
+            VariableType a
+        UnsolvedType a ->
+            UnsolvedType a
+        Exists s a1 domain _A ->
+            if ρ0 == a1 && domain == Domain.Alternatives
+            then Exists s a1 domain (substituteAlternatives ρ0 (n + 1) r _A)
+            else Exists s a1 domain (substituteAlternatives ρ0  n      r _A)
+        Forall s a1 domain _A ->
+            if ρ0 == a1 && domain == Domain.Alternatives
+            then Forall s a1 domain (substituteAlternatives ρ0 (n + 1) r _A)
+            else Forall s a1 domain (substituteAlternatives ρ0  n      r _A)
         Function _A _B ->
-            Function (substituteAlternatives ρ₀ n r _A) (substituteAlternatives ρ₀ n r _B)
+            Function (substituteAlternatives ρ0 n r _A) (substituteAlternatives ρ0 n r _B)
         Optional _A ->
-            Optional (substituteAlternatives ρ₀ n r _A)
+            Optional (substituteAlternatives ρ0 n r _A)
         List _A ->
-            List (substituteAlternatives ρ₀ n r _A)
+            List (substituteAlternatives ρ0 n r _A)
         Record (Fields kAs ρ) ->
-            Record (Fields (map (\(k, _A) -> (k, substituteAlternatives ρ₀ n r _A)) kAs) ρ)
-        Union (Alternatives kAs₀ ρ)
-            | Monotype.VariableAlternatives ρ₀ == ρ && n == 0 ->
-                Union (Alternatives (map (\(k, _A) -> (k, substituteAlternatives ρ₀ n r _A)) kAs₁) ρ₁)
+            Record (Fields (map (\(k, _A) -> (k, substituteAlternatives ρ0 n r _A)) kAs) ρ)
+        Union (Alternatives kAs0 ρ)
+            | Monotype.VariableAlternatives ρ0 == ρ && n == 0 ->
+                Union (Alternatives (map (\(k, _A) -> (k, substituteAlternatives ρ0 n r _A)) kAs1) ρ1)
             | otherwise ->
-                Union (Alternatives (map (\(k, _A) -> (k, substituteAlternatives ρ₀ n r _A)) kAs₀) ρ)
+                Union (Alternatives (map (\(k, _A) -> (k, substituteAlternatives ρ0 n r _A)) kAs0) ρ)
           where
-            kAs₁ = kAs₀ <> map (\(k, τ) -> (k, fmap (\_ -> location) τ)) kτs
+            kAs1 = kAs0 <> map (\(k, τ) -> (k, fmap (\_ -> location) τ)) kτs
         Scalar scalar ->
             Scalar scalar
 
@@ -561,10 +561,10 @@ prettyApplicationType other =
     prettyPrimitiveType other
 
 prettyPrimitiveType :: Node s -> Doc AnsiStyle
-prettyPrimitiveType (VariableType α) =
-    label (pretty α)
-prettyPrimitiveType (UnsolvedType α) =
-    label (pretty α <> "?")
+prettyPrimitiveType (VariableType a) =
+    label (pretty a)
+prettyPrimitiveType (UnsolvedType a) =
+    label (pretty a <> "?")
 prettyPrimitiveType (Record r) =
     prettyRecordType r
 prettyPrimitiveType (Union u) =
@@ -595,13 +595,13 @@ prettyRecordType (Fields [] (UnsolvedFields ρ)) =
     <>  punctuation "}"
 prettyRecordType (Fields [] (VariableFields ρ)) =
     punctuation "{" <> " " <> label (pretty ρ) <> " " <> punctuation "}"
-prettyRecordType (Fields ((key₀, type₀) : keyTypes) fields) =
+prettyRecordType (Fields (keyType : keyTypes) fields) =
     Pretty.group (Pretty.flatAlt long short)
   where
     short =
             punctuation "{"
         <>  " "
-        <>  prettyShortFieldType (key₀, type₀)
+        <>  prettyShortFieldType keyType
         <>  foldMap (\ft -> punctuation "," <> " " <> prettyShortFieldType ft) keyTypes
         <>  case fields of
                 EmptyFields ->
@@ -624,7 +624,7 @@ prettyRecordType (Fields ((key₀, type₀) : keyTypes) fields) =
         Pretty.align
             (   punctuation "{"
             <>  " "
-            <>  prettyLongFieldType (key₀, type₀)
+            <>  prettyLongFieldType keyType
             <>  foldMap (\ft -> punctuation "," <> " " <> prettyLongFieldType ft) keyTypes
             <>  case fields of
                     EmptyFields ->
@@ -669,13 +669,13 @@ prettyUnionType (Alternatives [] (UnsolvedAlternatives ρ)) =
     <>  punctuation ">"
 prettyUnionType (Alternatives [] (VariableAlternatives ρ)) =
     punctuation "<" <> " " <> label (pretty ρ) <> " " <> punctuation ">"
-prettyUnionType (Alternatives ((key₀, type₀) : keyTypes) alternatives) =
+prettyUnionType (Alternatives (keyType : keyTypes) alternatives) =
     Pretty.group (Pretty.flatAlt long short)
   where
     short =
             punctuation "<"
         <>  " "
-        <>  prettyShortAlternativeType (key₀, type₀)
+        <>  prettyShortAlternativeType keyType
         <>  foldMap (\kt -> " " <> punctuation "|" <> " " <> prettyShortAlternativeType kt) keyTypes
         <>  case alternatives of
                 EmptyAlternatives ->
@@ -700,7 +700,7 @@ prettyUnionType (Alternatives ((key₀, type₀) : keyTypes) alternatives) =
         Pretty.align
             (   punctuation "<"
             <>  " "
-            <>  prettyLongAlternativeType (key₀, type₀)
+            <>  prettyLongAlternativeType keyType
             <>  foldMap (\kt -> punctuation "|" <> " " <> prettyLongAlternativeType kt) keyTypes
             <>  case alternatives of
                     EmptyAlternatives ->

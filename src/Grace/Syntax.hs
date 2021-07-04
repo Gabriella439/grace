@@ -561,13 +561,13 @@ prettyPrimitiveExpression (List (element : elements)) =
         liftSyntax prettyExpression e <> Pretty.hardline
 prettyPrimitiveExpression (Record []) =
     punctuation "{" <> " " <> punctuation "}"
-prettyPrimitiveExpression (Record ((key₀, value₀) : keyValues)) =
+prettyPrimitiveExpression (Record (keyValue : keyValues)) =
     Pretty.group (Pretty.flatAlt long short)
   where
     short =
             punctuation "{"
         <>  " "
-        <>  prettyShortKeyValue (key₀, value₀)
+        <>  prettyShortKeyValue keyValue
         <>  foldMap (\kv -> punctuation "," <> " " <> prettyShortKeyValue kv) keyValues
         <>  " "
         <>  punctuation "}"
@@ -576,7 +576,7 @@ prettyPrimitiveExpression (Record ((key₀, value₀) : keyValues)) =
         Pretty.align
             (   punctuation "{"
             <>  " "
-            <>  prettyLongKeyValue (key₀, value₀)
+            <>  prettyLongKeyValue keyValue
             <>  foldMap (\kv -> punctuation "," <> " " <> prettyLongKeyValue kv) keyValues
             <>  punctuation "}"
             )
