@@ -12,6 +12,9 @@ Grace for one of two reasons:
   programming language theory by studying a clear and realistic reference
   implementation
 
+If you're interested in code samples, then jump down to the
+[Quick tour](#quick-tour) section.
+
 ## Features
 
 Grace implements the following features so that you don't have to:
@@ -219,7 +222,11 @@ Grace also does not support the following tooling:
 
 ## Development
 
-These are the issues and pull requests I'm most likely to accept:
+You can get started on changing the language to your liking by reading the
+[CONTRIBUTING](./CONTRIBUTING.md) guide.
+
+If you're interested in upstreaming your changes, then these are the issues and
+pull requests I'm most likely to accept:
 
 * Bug fixes
 
