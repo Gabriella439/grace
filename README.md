@@ -251,6 +251,10 @@ pull requests I'm most likely to accept:
   parser, or evaluator without too much regression in functionality then I'll
   probably accept it.
 
+* Adding more comments or clearer contributing instructions
+
+  … so that people can more easily adapt the language to their own use case.
+
 These are the issues and pull requests that I'm most likely to reject:
 
 * Anything that significantly increases my maintenance burden
