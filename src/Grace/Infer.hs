@@ -2013,6 +2013,37 @@ infer e0 = do
 check
     :: (MonadState Status m, MonadError Text m)
     => Syntax Location (Type Location, Value) -> Type Location -> m ()
+-- The check function is the most important function to understand for the
+-- bidirectional type-checking algorithm.
+--
+-- Most people, when they first run across the `check` function think that you
+-- could get rid of most rules except for the final `Sub` rule, but that's not
+-- true!
+--
+-- The reason you should add `check` rules for many more types (especially
+-- complex types) is to ensure that subtyping rules work correctly.  For
+-- example, consider this expression:
+--
+--     [ 2, -3 ]
+--
+-- If you omit the `check` rule for `List`s then the above expression will
+-- fail to type-check because the first element of the list is a `Natural`
+-- number and the second element of the `List` is an `Integer`.
+--
+-- However, if you keep the `check` rule for `List`s and add a type annotation:
+--
+--     [ 2, -3 ] : List Integer
+--
+-- … then it works because the interpreter knows to treat both elements as an
+-- `Integer`.
+--
+-- In general, if you want subtyping to work reliably then you need to add
+-- more cases to the `check` function so that the interpreter can propagate
+-- top-level type annotations down to the "leaves" of your syntax tree.  If
+-- you do this consistently then the user only ever needs to provide top-level
+-- type annotations to fix any type errors that they might encounter, which is
+-- a desirable property!
+
 -- →I
 check Syntax{ node = Syntax.Lambda _ x e } Type{ node = Type.Function _A _B } = do
     push (Context.Annotation x _A)
