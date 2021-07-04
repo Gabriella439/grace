@@ -158,6 +158,30 @@ Grace implements the following features so that you don't have to:
 Also, the package and the code is extensively commented and documented to help
 you get started making changes.
 
+## Notable omissions
+
+Grace does not support:
+
+* Input / output ("IO")
+
+  Grace only supports pure computation and doesn't support an effect system for
+  managing or sequencing effects
+
+* Type classes
+
+  These require global coherence, which does not play nice with Dhall-style
+  path-based imports
+
+* User-defined datatypes
+
+  All data types in Grace are anonymous (e.g. anonymous records and anonymous
+  unions), and there is no concept of a data declaration
+
+* Recursion or recursive data types
+
+  This is the feature I'd most like to add, especially if there were some way
+  to implement anonymous recursion, but I couldn't find a simple solution.
+
 ## Quick tour
 
 This section provides a lightning tour that covers all language features as
