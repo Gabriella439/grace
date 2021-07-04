@@ -18,20 +18,15 @@
     `Control.Monad.State.Strict.StateT` to thread around `Context`s and
     manipulate them instead of explicit `Context` passing as in the original
     paper.
+
+    Also, the code will not add comments for code that corresponds 1-to-1 with
+    the original paper.  Instead, the comments will mostly explaining new
+    type-checking logic that wasn't already covered by the paper.  The comments
+    are intended to be read top-to-bottom.
 -}
 module Grace.Infer
     ( -- * Type inference
       typeOf
-
-    , -- * Internal implementation
-      Status(..)
-    , wellFormedType
-    , subtype
-    , instantiateTypeL
-    , instantiateTypeR
-    , infer
-    , check
-    , inferApplication
     ) where
 
 import Data.Text (Text)
@@ -298,6 +293,14 @@ subtype _A0 _B0 = do
 
         -- InstantiateL
         (Type.UnsolvedType a, _)
+            -- The `not (a `Type.typeFreeIn` _B)` is the "occurs check" which
+            -- prevents a type variable from being defined in terms of itself
+            -- (i.e. a type should not "occur" within itself).
+            --
+            -- Later on you'll see matching "occurs checks" for record types and
+            -- union types so that Fields variables and Alternatives variables
+            -- cannot refer to the record or union that they belong to,
+            -- respectively.
             | not (a `Type.typeFreeIn` _B0) && elem (Context.UnsolvedType a) _Γ -> do
                 instantiateTypeL a _B0
 
@@ -309,8 +312,43 @@ subtype _A0 _B0 = do
         -- <:→
         (Type.Function _A1 _A2, Type.Function _B1 _B2) -> do
             subtype _B1 _A1
+
             _Θ <- get
+
+            -- CAREFULLY NOTE: Pay really close attention to how we need to use
+            -- `Context.solveType` any time we update the context.  The paper
+            -- already mentions this, but if you forget to do this then you
+            -- will get bugs due to unsolved variables not getting solved
+            -- correctly.
+            --
+            -- A much more reliable way to fix this problem would simply be to
+            -- have every function (like `subtype`, `instantiateL`, …)
+            -- apply `solveType` to its inputs.  For example, this very
+            -- `subtype` function could begin by doing:
+            --
+            --     _Γ <- get
+            --     let _A0' = Context.solveType _Γ _A0
+            --     let _B0' = Context.solveType _Γ _B0
+            --
+            -- … and then use _A0' and _B0' for downstream steps.  If we did
+            -- that at the beginning of each function then everything would
+            -- "just work".
+            --
+            -- However, this would be more inefficient because we'd calling
+            -- `solveType` wastefully over and over with the exact same context
+            -- in many cases.  So, the tradeoff here is that we get improved
+            -- performance if we're willing to remember to call `solveType` in
+            -- the right places.
             subtype (Context.solveType _Θ _A2) (Context.solveType _Θ _B2)
+
+        -- One of the main extensions that is not present in the original paper
+        -- is the addition of existential quantification.  This was actually
+        -- pretty easy to implement: you just take the rules for universal
+        -- quantification and flip them around and everything works.  Elegant!
+        --
+        -- For example, the <:∃R rule is basically the same as the <:∀L rule,
+        -- except with the arguments flipped.  Similarly, the <:∃L rule is
+        -- basically the same as the <:∀R rule with the arguments flipped.
 
         -- <:∃R
         (_, Type.Exists nameLocation a0 Domain.Type _B) -> do
@@ -396,6 +434,15 @@ subtype _A0 _B0 = do
             | s0 == s1 -> do
                 return ()
             
+        (Type.Optional _A, Type.Optional _B) -> do
+            subtype _A _B
+
+        (Type.List _A, Type.List _B) -> do
+            subtype _A _B
+
+        -- This is where you need to add any non-trivial subtypes.  For example,
+        -- the following three rules specify that `Natural` is a subtype of
+        -- `Integer`, which is in turn a subtype of `Double`.
         (Type.Scalar Monotype.Natural, Type.Scalar Monotype.Integer) -> do
             return ()
 
@@ -405,15 +452,16 @@ subtype _A0 _B0 = do
         (Type.Scalar Monotype.Integer, Type.Scalar Monotype.Double) -> do
             return ()
 
-        (Type.Optional _A, Type.Optional _B) -> do
-            subtype _A _B
-
+        -- Similarly, this is the rule that says that `T` is a subtype of
+        -- `Optional T`.  If that feels unprincipled to you then delete this
+        -- rule.
         (_, Type.Optional _B) -> do
             subtype _A0 _B
 
-        (Type.List _A, Type.List _B) -> do
-            subtype _A _B
-
+        -- The type-checking code for records is the first place where we
+        -- implement a non-trivial type that wasn't already covered by the
+        -- paper, so we'll go into more detail here to explain the general
+        -- type-checking principles of the paper.
         (_A@(Type.Record (Type.Fields kAs0 fields0)), _B@(Type.Record (Type.Fields kBs0 fields1))) -> do
             let mapA = Map.fromList kAs0
             let mapB = Map.fromList kBs0
@@ -429,6 +477,14 @@ subtype _A0 _B0 = do
             let okayA = Map.null extraA || (fields1 /= Monotype.EmptyFields && fields0 /= fields1)
             let okayB = Map.null extraB || (fields0 /= Monotype.EmptyFields && fields0 /= fields1)
 
+            -- First we check that there are no mismatches in the record types
+            -- that cannot be resolved by just setting an unsolved Fields
+            -- variable to the right type.
+            --
+            -- For example, `{ x: Bool }` can never be a subtype of
+            -- `{ y: Text }`, but `{ x: Bool, a }` can be a subtype of
+            -- `{ y: Text, b }` if we solve `a` to be `{ y: Text }` and solve
+            -- `b` to be `{ x : Bool }`.
             if | not okayA && not okayB -> do
                 Except.throwError [__i|
                 Record type mismatch
@@ -499,21 +555,65 @@ subtype _A0 _B0 = do
                | otherwise -> do
                    return ()
 
+            -- If record A is a subtype of record B, then all fields in A
+            -- must be a subtype of the matching fields in record B
+            --
+            -- We only check fields are present in `both` records.  For
+            -- mismatched fields present only in on record type we have to
+            -- skip to the next step of resolving the mismatch by solving Fields
+            -- variables.
             let process (_A1, _B1) = do
                     _Θ <- get
                     subtype (Context.solveType _Θ _A1) (Context.solveType _Θ _B1)
 
             _ <- traverse process both
 
+            -- Here is where we handle fields that were only present in one
+            -- record type.  They still might be okay if one or both of the
+            -- record types has an unsolved fields variable.
             case (fields0, fields1) of
                 _ | fields0 == fields1 -> do
                         return ()
 
+                -- Both records type have unsolved Fields variables.  Great!
+                -- This is the most flexible case, since we can replace these
+                -- unsolved variables with whatever fields we want to make the
+                -- types match.
+                --
+                -- However, it's not as simple as setting each Fields variable
+                -- to the extra fields from the opposing record type.  For
+                -- example, if the two record types we're comparing are:
+                --
+                --     { x: Bool, p0 } <: { y: Text, p1 }
+                --
+                -- … then it's not correct to say:
+                --
+                --     p0 = y: Text
+                --     p1 = x: Bool
+                --
+                -- … because that is not the most general solution for `p0` and
+                -- `p1`!  The actual most general solution is:
+                --
+                --     p0 = { y: Text, p2 }
+                --     p1 = { x: Bool, p2 }
+                --
+                -- … where `p2` is a fresh Field type variable representing the
+                -- fact that both records could potentially have even more
+                -- fields other than `x` and `y`.
                 (Monotype.UnsolvedFields p0, Monotype.UnsolvedFields p1) -> do
                     p2 <- fresh
 
                     _Γ0 <- get
 
+                    -- We have to insert p2 before both p0 and p1 within the
+                    -- context because the bidirectional type-checking algorithm
+                    -- requires that the context is ordered and all variables
+                    -- within the context can only reference prior variables
+                    -- within the context.
+                    --
+                    -- Since `p0` and `p1` both have to reference `p2`, then we
+                    -- need to insert `p2` right before `p0` or `p1`, whichever
+                    -- one comes first
                     let p0First = do
                             (_ΓR, _ΓL) <- Context.splitOnUnsolvedFields p0 _Γ0
 
@@ -551,12 +651,21 @@ subtype _A0 _B0 = do
 
                     _Θ <- get
 
+                    -- Now we solve for `p0`.  This is basically saying:
+                    --
+                    -- p0 = { extraFieldsFromRecordB, p2 }
                     instantiateFieldsL p0 (Type.location _B0) (Context.solveRecord _Θ (Type.Fields (Map.toList extraB) (Monotype.UnsolvedFields p2)))
 
                     _Δ <- get
 
+                    -- Similarly, solve for `p1`.  This is basically saying:
+                    --
+                    -- p1 = { extraFieldsFromRecordA, p2 }
                     instantiateFieldsR (Type.location _A0) (Context.solveRecord _Δ (Type.Fields (Map.toList extraA) (Monotype.UnsolvedFields p2))) p1
 
+                -- If only one of the records has a Fields variable then the
+                -- solution is simpler: just set the Field variable to the
+                -- extra fields from the opposing record
                 (Monotype.UnsolvedFields p0, _) -> do
                     _Θ <- get
 
@@ -584,6 +693,9 @@ subtype _A0 _B0 = do
                     #{locB0}
                     |]
 
+        -- Checking if one union is a subtype of another union is basically the
+        -- exact same as the logic for checking if a record is a subtype of
+        -- another record.
         (_A@(Type.Union (Type.Alternatives kAs0 alternatives0)), _B@(Type.Union (Type.Alternatives kBs0 alternatives1))) -> do
             let mapA = Map.fromList kAs0
             let mapB = Map.fromList kBs0
@@ -755,6 +867,22 @@ subtype _A0 _B0 = do
                     #{locB0}
                     |]
 
+        -- Unfortunately, we need to have this wildcard match at the end,
+        -- otherwise we'd have to specify a number of cases that is quadratic
+        -- in the number of `Type` constructors.  That in turn means that you
+        -- can easily forget to add cases like:
+        --
+        --     (Type.List _A, Type.List _B) -> do
+        --         subtype _A _B
+        --
+        -- … because the exhaustivity checker won't warn you if you forget to
+        -- add that case.
+        --
+        -- The way I remember to do this is that when I add new complex types I
+        -- grep the codebase for all occurrences of an existing complex type
+        -- (like `List`), and then one of the occurrences will be here in this
+        -- `subtype` function and then I'll remember to add a case for my new
+        -- complex type here.
         (_A, _B) -> do
             Except.throwError [__i|
             Not a subtype
@@ -778,6 +906,10 @@ subtype _A0 _B0 = do
 
     … which updates the context Γ to produce the new context Δ, by instantiating
     α̂ such that α̂ <: A.
+
+    The @instantiate*@ family of functions should really be called @solve*@
+    because their job is to solve an unsolved variable within the context.
+    However, for consistency with the paper we still name them @instantiate*@.
 -}
 instantiateTypeL
     :: (MonadState Status m, MonadError Text m)
@@ -874,16 +1006,54 @@ instantiateTypeL a _A0 = do
 
             discardUpTo (Context.Variable domain b)
 
+        -- This case is the first example of a general pattern we have to
+        -- follow when solving unsolved variables.
+        --
+        -- Typically when you solve an unsolved variable (e.g. `a`) to some
+        -- type (e.g. `A`), you cannot just directly solve the variable as:
+        --
+        --     a = A
+        --
+        -- … because unsolved variables can only be solved to `Monotype`s, but
+        -- `A` is typically a `Type`.
+        --
+        -- So, instead, what you do is you solve the variable one layer at a
+        -- time.  For example, if you try to solve `a` to (the `Type`)
+        -- `Optional (List Bool)`, you will actually get three solved variables
+        -- added to the context:
+        --
+        --     a = Optional b
+        --     b = List c
+        --     c = Bool
+        --
+        -- In other words, each time you solve one layer of a complex type, you
+        -- need to create a fresh unsolved variable for each inner type and
+        -- solve each inner unsolved variable.
+        --
+        -- This may seem really indirect and tedious, but if you try to skip
+        -- this one-layer-at-a-time solving process then you will likely get
+        -- bugs due to solved variables referring to each other out of order.
+        --
+        -- This wasn't obvious to me from reading the original paper since they
+        -- didn't really cover how to type-check complex types other than
+        -- function types.
         Type.Optional _A -> do
             let _ΓL = _Γ
             let _ΓR = _Γ'
 
+            -- To solve `a` against `Optional _A` we create a fresh unsolved
+            -- variable named `a1`, …
             a1 <- fresh
 
+            -- … solve `a` to `Optional a1`, taking care that `a1` comes before
+            -- `a` within the context, (since `a` refers to `a1`)  …
             set (_ΓR <> (Context.SolvedType a (Monotype.Optional (Monotype.UnsolvedType a1)) : Context.UnsolvedType a1 : _ΓL))
 
+            -- … and then solve `a1` against _A`
             instantiateTypeL a1 _A
 
+        -- We solve an unsolved variable against `List` using the same
+        -- principles described above for solving `Optional`
         Type.List _A -> do
             let _ΓL = _Γ
             let _ΓR = _Γ'
@@ -894,6 +1064,13 @@ instantiateTypeL a _A0 = do
 
             instantiateTypeL a1 _A
 
+        -- This is still the same one-layer-at-a-time principle, with a small
+        -- twist.  In order to solve:
+        --
+        --     a = { r }
+        --
+        -- We replace `r` with a new unsolved Fields variable and then solve for
+        -- that Fields variable.
         Type.Record r -> do
             let _ΓL = _Γ
             let _ΓR = _Γ'
@@ -904,6 +1081,8 @@ instantiateTypeL a _A0 = do
 
             instantiateFieldsL p (Type.location _A0) r
 
+        -- Same principle as for `Record`, but replacing the Field variable with
+        -- an Alternatives variable
         Type.Union u -> do
             let _ΓL = _Γ
             let _ΓR = _Γ'
@@ -1057,14 +1236,25 @@ instantiateTypeR _A0 a = do
             instantiateAlternativesR (Type.location _A0) u p
 
 {- The following `equateFields` / `instantiateFieldsL` / `instantiateFieldsR`,
-   `equateAlternatives` / `instantiateAlternativesL` / `instantiateAlternativesR` judgments
-   are not present in the bidirectional type-checking paper.  These were added
-   in order to support row polymorphism and variant polymorphism, by following
-   the same general type-checking principles as the original paper.
+   `equateAlternatives` / `instantiateAlternativesL` / 
+   `instantiateAlternativesR` judgments are not present in the bidirectional
+   type-checking paper.  These were added in order to support row polymorphism
+   and variant polymorphism, by following the same general type-checking
+   principles as the original paper.
+
+   If you understand how the `instantiateL` and `instantiateR` functions work,
+   then you will probably understand how these functions work because they
+   follow the same rules:
+
+   * Always make sure that solved variables only reference variables earlier
+     within the context
+
+   * Solve for unsolved variables one layer at a time
 
    Note that the implementation and the user-facing terminology use the term
    fields/alternatives instead of rows/variants, respectively.
 -}
+
 equateFields
     :: (MonadState Status m, MonadError Text m)
     => Existential Monotype.Record -> Existential Monotype.Record -> m ()
@@ -1651,21 +1841,6 @@ infer e0 = do
 
             return Type{ location, node = Type.UnsolvedType a }
 
-        Syntax.Scalar (Syntax.Bool _) -> do
-            return _Type{ node = Type.Scalar Monotype.Bool }
-
-        Syntax.Operator l location Syntax.And r -> do
-            check l Type{ location, node = Type.Scalar Monotype.Bool }
-            check r Type{ location, node = Type.Scalar Monotype.Bool }
-
-            return Type{ location, node = Type.Scalar Monotype.Bool }
-
-        Syntax.Operator l location Syntax.Or r -> do
-            check l Type{ location, node = Type.Scalar Monotype.Bool }
-            check r Type{ location, node = Type.Scalar Monotype.Bool }
-
-            return Type{ location, node = Type.Scalar Monotype.Bool }
-
         Syntax.If predicate l r -> do
             check predicate _Type{ node = Type.Scalar Monotype.Bool }
 
@@ -1679,6 +1854,12 @@ infer e0 = do
 
             return _L1
 
+        -- All the type inference rules for scalars go here.  This part is
+        -- pretty self-explanatory: a scalar literal returns the matching
+        -- scalar type.
+        Syntax.Scalar (Syntax.Bool _) -> do
+            return _Type{ node = Type.Scalar Monotype.Bool }
+
         Syntax.Scalar (Syntax.Double _) -> do
             return _Type{ node = Type.Scalar Monotype.Double }
 
@@ -1688,7 +1869,14 @@ infer e0 = do
         Syntax.Scalar (Syntax.Natural _) -> do
             return _Type{ node = Type.Scalar Monotype.Natural }
 
+        Syntax.Scalar (Syntax.Text _) -> do
+            return _Type{ node = Type.Scalar Monotype.Text }
+
         Syntax.Scalar Syntax.Null -> do
+            -- NOTE: You might think that you could just infer that `null`
+            -- has type `forall (a : Type) . Optional a`.  This does not work
+            -- because it will lead to data structures with impredicative types
+            -- if you store a `null` inside of, say, a `List`.
             a <- fresh
 
             push (Context.UnsolvedType a)
@@ -1696,6 +1884,30 @@ infer e0 = do
             return _Type
                 { node = Type.Optional _Type{ node = Type.UnsolvedType a } }
 
+        Syntax.Operator l location Syntax.And r -> do
+            check l Type{ location, node = Type.Scalar Monotype.Bool }
+            check r Type{ location, node = Type.Scalar Monotype.Bool }
+
+            return Type{ location, node = Type.Scalar Monotype.Bool }
+
+        Syntax.Operator l location Syntax.Or r -> do
+            check l Type{ location, node = Type.Scalar Monotype.Bool }
+            check r Type{ location, node = Type.Scalar Monotype.Bool }
+
+            return Type{ location, node = Type.Scalar Monotype.Bool }
+
+        -- I have no idea how to generalize `+` and `*` to work on all numeric
+        -- types.  This seems to be a weakness of bidirectional type-checking.
+        -- My understanding is that the idiomatic way to fix this within the
+        -- bidirectional type-checking framework is to permit adding other types
+        -- of values if you provide a type annotation, such as:
+        --
+        --     (-2 + -2) : Integer
+        --
+        -- In other words, you add `check` rules for `Times` and `Plus` so that
+        -- they will expect different argument types depending on the expected
+        -- output types.  For simplicity, I just have it so that `+` and `*`
+        -- only work on `Natural` numbers for now.
         Syntax.Operator l location Syntax.Times r -> do
             check l Type{ location, node = Type.Scalar Monotype.Natural }
             check r Type{ location, node = Type.Scalar Monotype.Natural }
@@ -1707,6 +1919,12 @@ infer e0 = do
             check r Type{ location, node = Type.Scalar Monotype.Natural }
 
             return Type{ location, node = Type.Scalar Monotype.Natural }
+
+        Syntax.Operator l location Syntax.Append r -> do
+            check l Type{ location, node = Type.Scalar Monotype.Text }
+            check r Type{ location, node = Type.Scalar Monotype.Text }
+
+            return Type{ location, node = Type.Scalar Monotype.Text }
 
         Syntax.Builtin Syntax.DoubleShow -> do
             return
@@ -1781,15 +1999,6 @@ infer e0 = do
                             )
                         )
                 }
-
-        Syntax.Scalar (Syntax.Text _) -> do
-            return _Type{ node = Type.Scalar Monotype.Text }
-
-        Syntax.Operator l location Syntax.Append r -> do
-            check l Type{ location, node = Type.Scalar Monotype.Text }
-            check r Type{ location, node = Type.Scalar Monotype.Text }
-
-            return Type{ location, node = Type.Scalar Monotype.Text }
 
         Syntax.Embed (type_, _) -> do
             return type_

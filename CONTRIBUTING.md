@@ -121,13 +121,13 @@ Then read the
 [Complete and Easy Bidirectional Typechecking for Higher-Rank Polymorphism](https://arxiv.org/abs/1306.6032)
 paper which explains the general principles behind the type-checking algorithm.
 However, there are a few nuances that are not obvious from a casual reading of
-the paper, so follow up by reading the [`Type`][type] module, which is heavily
+the paper, so follow up by reading the [`Infer`][infer] module, which is heavily
 commented with things I had to figure out in the course of attempting to
 implement the paper.
 
 [lexer]: ./src/Grace/Lexer.hs
+[infer]: ./src/Grace/Infer.hs
 [monotype]: ./src/Grace/Monotype.hs
 [normalize]: ./src/Grace/Normalize.hs
 [parser]: ./src/Grace/Parser.hs
 [syntax]: ./src/Grace/Syntax.hs
-[type]: ./src/Grace/Type.hs
