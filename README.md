@@ -1,11 +1,12 @@
 # `grace`
 
-Grace is a ready-to-fork implementation of a functional programming language
-with type inference.  You will most likely be interested in Grace for one of
-two reasons:
+Grace is a ready-to-fork implementation of a JSON-compatible functional
+programming language with type inference.  You will most likely be interested in
+Grace for one of two reasons:
 
-* You need to implement a domain-specific language and you would like begin from
-  a quality existing implementation instead of starting from scratch
+* You need to implement a domain-specific language and you would like to begin
+  from a quality existing implementation instead of building some half-baked
+  language using JSON/YAML as a syntax tree
 
 * You're interested in learning more about state-of-the-art algorithms for
   programming language theory by studying a clear and realistic reference
@@ -160,7 +161,7 @@ you get started making changes.
 
 ## Notable omissions
 
-Grace does not support:
+Grace does not support the following language features:
 
 * Input / output ("IO")
 
@@ -181,6 +182,89 @@ Grace does not support:
 
   This is the feature I'd most like to add, especially if there were some way
   to implement anonymous recursion, but I couldn't find a simple solution.
+
+Grace also does not support the following tooling:
+
+* A REPL
+
+  I would accept a pull request to add this and might even add this myself.  I
+  just haven't gotten around to this.
+
+* A language server
+
+  I will accept pull requests for this, but I don't plan on maintaining a
+  language server myself since it's a lot of work and is a large surface area
+  to maintain.
+
+* Code formatter that preserves comments
+
+  I will probably reject pull requests to add this because I expect this would
+  really clutter up the implementation and the concrete syntax tree.
+
+* Extensive documentation
+
+  Grace is not really meant to be used directly, but is instead intended to be
+  forked and used as a starting point for your own language, so any
+  documentation written for Grace would need to be substantially rewritten as
+  you adjust the language to your needs.
+
+  If you still need an example of a tutorial for a similar language that you can
+  adapt, see
+  [the Dhall language tour](https://docs.dhall-lang.org/tutorials/Language-Tour.html).
+
+## Development
+
+These are the issues and pull requests I'm most likely to accept:
+
+* Bug fixes
+
+* Improving error messages
+
+* Fixes to build against the latest version of GHC or dependencies
+
+* Adding new built-ins
+
+  … especially if they are likely to be widely used by downstream
+  implementations.
+
+* Adding features with a high power-to-weight ratio
+
+  Basically, anything that isn't too complicated and likely to be generally
+  useful is fair game, especially if it's easy for forks to delete or disable
+  if they don't want it.
+
+* Simpler and clearer ways of implementing existing functionality
+
+  For example, if you think there's a way to simplify the type-checker,
+  parser, or evaluator without too much regression in functionality then I'll
+  probably accept it.
+
+These are the issues and pull requests that I'm most likely to reject:
+
+* Anything that significantly increases my maintenance burden
+
+  This project is more of an educational resource, like an executable blog
+  post, than a production-ready package.  So I commit to maintaining to this
+  about as much as I commit to maintaining a blog post (which is to say: not
+  much at all, other than to merge or reject pull requests).
+
+* Anything that significantly deteriorates the clarity of the code
+
+  It's far more important to me that this code is pedagogically useful than the
+  code being production-ready.  Again, think of this project as an executable
+  tutorial that people can learn from.
+
+* Any request to publish binaries or official releases
+
+  This project is made to be forked, not directly used.  If you want to publish
+  anything, then fork the project and maintain binaries/releases yourself.
+
+## Acknowledgments
+
+Your fork doesn't need to credit me or this project, beyond what the
+[BSD 3-clause license](./LICENSE) requires.  The only thanks I need is for
+people to use Grace instead of creating yet another half-baked domain-specific
+language using JSON or YAML.
 
 ## Quick tour
 
