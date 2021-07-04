@@ -183,6 +183,11 @@ Grace does not support the following language features:
   This is the feature I'd most like to add, especially if there were some way
   to implement anonymous recursion, but I couldn't find a simple solution.
 
+* String interpolation
+
+  This is possible, but tricky, to lex, so I decided that it would be simpler
+  to remove the feature.
+
 Grace also does not support the following tooling:
 
 * A REPL
