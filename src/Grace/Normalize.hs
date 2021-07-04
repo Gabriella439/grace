@@ -85,86 +85,7 @@ evaluate env Syntax.Syntax{..} =
         Syntax.Variable name index ->
             lookupVariable name index env
 
-        Syntax.Application function argument ->
-            case (function', argument') of
-                (Value.Merge (Value.Record alternativeHandlers)
-                  , Value.Application (Value.Alternative alternative) x
-                  )
-                  | Just f <- lookup alternative alternativeHandlers ->
-                      apply f x
-                (Value.Application
-                    (Value.Application (Value.Builtin Syntax.ListFold)
-                        (Value.List elements)
-                    )
-                    cons
-                  , nil
-                  ) ->
-                    go elements nil
-                  where
-                    go [] !result =
-                        result
-                    go (x : xs) !result =
-                        go xs (apply (apply cons x) result)
-
-                (Value.Builtin Syntax.ListLength
-                  , Value.List elements
-                  ) ->
-                    Value.Scalar (Syntax.Natural (fromIntegral (length elements)))
-
-                (Value.Application (Value.Builtin Syntax.ListMap) f
-                  , Value.List elements
-                  ) ->
-                    Value.List (map (apply f) elements)
-
-                (Value.Application
-                    (Value.Application (Value.Builtin Syntax.NaturalFold)
-                        (Value.Scalar (Syntax.Natural n))
-                    )
-                    succ
-                  , zero
-                  ) ->
-                    go n zero
-                  where
-                    go 0 !result = result
-                    go m !result = go (m - 1) (apply succ result)
-
-                (Value.Builtin Syntax.IntegerEven
-                  , Value.Scalar (Syntax.Integer n)
-                  ) ->
-                      Value.Scalar (Syntax.Bool (even n))
-
-                (Value.Builtin Syntax.IntegerEven
-                  , Value.Scalar (Syntax.Natural n)
-                  ) ->
-                      Value.Scalar (Syntax.Bool (even n))
-
-                (Value.Builtin Syntax.IntegerOdd
-                  , Value.Scalar (Syntax.Integer n)
-                  ) ->
-                      Value.Scalar (Syntax.Bool (odd n))
-
-                (Value.Builtin Syntax.IntegerOdd
-                  , Value.Scalar (Syntax.Natural n)
-                  ) ->
-                      Value.Scalar (Syntax.Bool (odd n))
-
-                (Value.Builtin Syntax.DoubleShow
-                  , Value.Scalar (Syntax.Natural n)
-                  ) ->
-                      Value.Scalar (Syntax.Text (Text.pack (show n)))
-
-                (Value.Builtin Syntax.DoubleShow
-                  , Value.Scalar (Syntax.Integer n)
-                  ) ->
-                      Value.Scalar (Syntax.Text (Text.pack (show n)))
-
-                (Value.Builtin Syntax.DoubleShow
-                  , Value.Scalar (Syntax.Double n)
-                  ) ->
-                      Value.Scalar (Syntax.Text (Text.pack (show n)))
-
-                _ ->
-                    apply function' argument'
+        Syntax.Application function argument -> apply function' argument'
           where
             function' = evaluate env function
             argument' = evaluate env argument
@@ -292,12 +213,65 @@ evaluate env Syntax.Syntax{..} =
         Syntax.Embed (_, value) ->
             value
 
+{-| This is the function that implements function application, including
+    evaluating anonymous functions and evaluating all built-in functions.
+-}
 apply :: Value -> Value -> Value
 apply (Value.Lambda (Closure name capturedEnv body)) argument =
     evaluate ((name, argument) : capturedEnv) body
+apply
+    (Value.Merge (Value.Record alternativeHandlers))
+    (Value.Application (Value.Alternative alternative) x)
+    | Just f <- lookup alternative alternativeHandlers =
+        apply f x
+apply
+    (Value.Application
+        (Value.Application
+            (Value.Builtin Syntax.ListFold)
+            (Value.List elements)
+        )
+        cons
+    )
+    nil =
+        go elements nil
+  where
+    go      []  !result = result
+    go (x : xs) !result = go xs (apply (apply cons x) result)
+apply (Value.Builtin Syntax.ListLength) (Value.List elements) =
+    Value.Scalar (Syntax.Natural (fromIntegral (length elements)))
+apply
+    (Value.Application (Value.Builtin Syntax.ListMap) f)
+    (Value.List elements) =
+        Value.List (map (apply f) elements)
+apply
+    (Value.Application
+        (Value.Application
+            (Value.Builtin Syntax.NaturalFold)
+            (Value.Scalar (Syntax.Natural n))
+        )
+        succ
+    )
+    zero =
+        go n zero
+  where
+    go 0 !result = result
+    go m !result = go (m - 1) (apply succ result)
+apply (Value.Builtin Syntax.IntegerEven) (Value.Scalar (Syntax.Integer n)) =
+    Value.Scalar (Syntax.Bool (even n))
+apply (Value.Builtin Syntax.IntegerEven) (Value.Scalar (Syntax.Natural n)) =
+    Value.Scalar (Syntax.Bool (even n))
+apply (Value.Builtin Syntax.IntegerOdd) (Value.Scalar (Syntax.Integer n)) =
+    Value.Scalar (Syntax.Bool (odd n))
+apply (Value.Builtin Syntax.IntegerOdd) (Value.Scalar (Syntax.Natural n)) =
+    Value.Scalar (Syntax.Bool (odd n))
+apply (Value.Builtin Syntax.DoubleShow) (Value.Scalar (Syntax.Natural n)) =
+    Value.Scalar (Syntax.Text (Text.pack (show n)))
+apply (Value.Builtin Syntax.DoubleShow) (Value.Scalar (Syntax.Integer n)) =
+    Value.Scalar (Syntax.Text (Text.pack (show n)))
+apply (Value.Builtin Syntax.DoubleShow) (Value.Scalar (Syntax.Double n)) =
+    Value.Scalar (Syntax.Text (Text.pack (show n)))
 apply function argument =
     Value.Application function argument
-
 
 countNames :: Text -> [Text] -> Int
 countNames name = length . filter (== name)
