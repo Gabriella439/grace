@@ -39,6 +39,7 @@ import Grace.Location (Location(..), Offset(..))
 import Prelude hiding (lex)
 import Text.Megaparsec (ParseErrorBundle(..), (<?>), try)
 
+import qualified Control.Monad              as Monad
 import qualified Control.Monad.Combinators  as Combinators
 import qualified Data.Char                  as Char
 import qualified Data.List                  as List
@@ -69,6 +70,7 @@ parseToken =
         [ -- `file` has to come before the lexer for `.` so that a file
           -- prefix of `.` or `..` is not lexed as a field access
           file
+        , label
 
         , Combinators.choice
             [ Or     <$ symbol "||"
@@ -137,7 +139,6 @@ parseToken =
         , double
         , int
         , text
-        , label
         , alternative
         ]
 
@@ -249,14 +250,15 @@ validRecordLabel text_  =
     case Text.uncons text_ of
         Nothing     -> False
         Just (h, t) ->
-                (Char.isAlpha h || h == '_' || h == '-' || h == '/')
+                (Char.isAlpha h || h == '_')
             &&  Text.all isLabel t
             &&  not (HashSet.member text_ reserved)
 
 reserved :: HashSet Text
 reserved =
     HashSet.fromList
-        [ "forall"
+        [ "exists"
+        , "forall"
         , "let"
         , "in"
         , "if"
@@ -273,6 +275,7 @@ reserved =
         , "Integer/even"
         , "Integer/odd"
         , "Natural/fold"
+        , "null"
         , "false"
         , "true"
         , "List"
@@ -285,14 +288,18 @@ reserved =
         ]
 
 label :: Parser Token
-label = lexeme do
-    let isLabel0 c = Char.isLower c || c == '_' || c == '-' || c == '/'
+label = (lexeme . try) do
+    let isLabel0 c = Char.isLower c || c == '_'
 
     c0 <- Megaparsec.satisfy isLabel0 <?> "label character"
 
     cs <- Megaparsec.takeWhileP (Just "label character") isLabel
 
-    return (Label (Text.cons c0 cs))
+    let result = Text.cons c0 cs
+
+    Monad.guard (not (HashSet.member result reserved))
+
+    return (Label result)
 
 alternative :: Parser Token
 alternative = lexeme do
