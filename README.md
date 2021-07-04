@@ -179,7 +179,9 @@ Available options:
 Available commands:
   format                   Format Grace code
   interpret                Interpret a Grace file
+```
 
+```bash
 $ grace interpret --help
 Usage: grace interpret [--annotate] FILE [--color | --plain]
   Interpret a Grace file
@@ -190,7 +192,9 @@ Available options:
   --color                  Enable syntax highlighting
   --plain                  Disable syntax highlighting
   -h,--help                Show this help text
+```
 
+```bash
 $ grace format --help
 Usage: grace format [--color | --plain] [FILE]
   Format Grace code
@@ -268,7 +272,7 @@ Grace supports the following Scalar types:
 
 * Unions, such as `Left 1`, `Right True`
 
-  Any identifer beginning with a capital character is a union tag.  You don't
+  Any identifer beginning with an uppercase character is a union tag.  You don't
   need to specify the type of the union, since union types are open and
   inferred.
 
@@ -283,14 +287,14 @@ package dependencies:
     { "repository": "https://github.com/Gabriel439/Haskell-Turtle-Library.git"
     , "revision": "ae5edf227b515b34c1cb6c89d9c58ea0eece12d5"
     }
-, Local { "relativePath": "~/proj/optparse-applicative" }
-, Local { "relativePath": "~/proj/discrimination" }
+, Local { "path": "~/proj/optparse-applicative" }
+, Local { "path": "~/proj/discrimination" }
 , Hackage { "package": "lens", "version": "4.15.4" }
 , GitHub
     { "repository": "https://github.com/haskell/text.git"
     , "revision": "ccbfabedea1cf5b38ff19f37549feaf01225e537"
     }
-, Local { "relativePath": "~/proj/servant-swagger" }
+, Local { "path": "~/proj/servant-swagger" }
 , Hackage { "package": "aeson", "version": "1.2.3.0" }
 ]
 ```
@@ -301,9 +305,9 @@ You can annotate a value with type using the `:` operator.  The left argument
 to the operator is a value and the right argument is the expected type:
 
 ```dhall
-true : Bool
-↑      ↑
-Value  Expected type
+  true : Bool
+# ↑      ↑
+# Value  Expected type
 ```
 
 You can also ask to include the inferred type of an interpreted expression as
@@ -454,8 +458,10 @@ You can also use the following built-in functions:
 By default, the type-checker will infer a polymorphic type for a function
 if you haven't yet used the function:
 
-```
+```bash
 $ grace interpret --annotate - <<< '\x -> [ x, x ]'
+```
+```dhall
 (\x -> [ x, x ]) : forall (a : Type) . a -> List a
 ```
 
@@ -510,7 +516,7 @@ in  twice (twice 2)
 (including both `Natural` and `List Natural`)..
 
 You can also use existential quantification for parts of the type signature
-that wish to omit:
+that you wish to omit:
 
 ```dhall
 let numbers : exists (a : Type) . List a
@@ -580,7 +586,7 @@ Note that if you existentially quantify a value's type then you can't do
 anything meaningful with that value; it is now a black box as far as the
 language is concerned.
 
-### Open records
+### Open records and unions
 
 The interpreter can infer polymorphic types for open records, too.  For
 example:
@@ -640,6 +646,21 @@ existentially quantifying them:
 ```dhall
 [ { x: 1, y: true }, { x: 2, z: "" } ]
     : List (exists (a : Fields) . { x: Natural, a })
+```
+
+… and we can write a function that consumes this list if the function only
+accesses the field named `x`:
+
+```dhall
+let values
+      : List (exists (a : Fields) . { x: Natural, a })
+      =  [ { x: 1, y: true }, { x: 2, z: "" } ]
+
+let handler
+      : forall (a : Fields) . { x : Natural, a } -> Natural
+      = \record -> record.x
+
+in  List/map handler values
 ```
 
 The compiler also infers universally quantified types for union alternatives,
