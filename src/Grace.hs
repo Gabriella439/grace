@@ -156,8 +156,6 @@ main = do
                 (Grace.Pretty.pretty annotatedExpression <> Pretty.hardline)
 
         Format{..} -> do
-            color <- detectColor highlight
-
             case files of
                 [ "-" ] -> do
                     text <- Text.IO.getContents
@@ -177,6 +175,8 @@ main = do
                                 Nothing         -> Grace.Pretty.defaultColumns
                                 Just Window{..} -> width
 
+                    color <- detectColor highlight
+
                     Grace.Pretty.renderIO color renderWidth IO.stdout
                         (Grace.Pretty.pretty syntax <> Pretty.hardline)
                 _ -> do
@@ -193,7 +193,7 @@ main = do
 
                             IO.withFile file IO.WriteMode \handle -> do
                                 Grace.Pretty.renderIO
-                                    color
+                                    False
                                     Grace.Pretty.defaultColumns
                                     handle
                                     (Grace.Pretty.pretty syntax <> Pretty.hardline)
