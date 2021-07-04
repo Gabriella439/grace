@@ -638,20 +638,55 @@ instance Bifunctor Binding where
 
 instance Pretty a => Pretty (Binding s a) where
     pretty Binding{ annotation = Nothing, .. } =
-            keyword "let"
-        <>  " "
-        <>  label (pretty name)
-        <>  " = "
-        <>  liftSyntax prettyExpression assignment
-    pretty Binding{ annotation = Just type_, .. } =
-            keyword "let"
-        <>  " "
-        <>  label (pretty name)
-        <>  " "
-        <>  operator ":"
-        <>  " "
-        <>  pretty type_
+        Pretty.group (Pretty.flatAlt long short)
+      where
+        long =
+            Pretty.align
+                (   keyword "let"
+                <>  " "
+                <>  label (pretty name)
+                <>  Pretty.hardline
+                <>  "      "
+                <>  punctuation "="
+                <>  " "
+                <>  pretty assignment
+                )
+
+        short = keyword "let"
+            <>  " "
+            <>  label (pretty name)
             <>  " "
             <>  punctuation "="
             <>  " "
-            <>  liftSyntax prettyExpression assignment
+            <>  pretty assignment
+    pretty Binding{ annotation = Just type_, .. } =
+        Pretty.group (Pretty.flatAlt long short)
+      where
+        long =
+            Pretty.align
+                (   keyword "let"
+                <>  " "
+                <>  label (pretty name)
+                <>  Pretty.hardline
+                <>  "      "
+                <>  operator ":"
+                <>  " "
+                <>  pretty type_
+                <>  Pretty.hardline
+                <>  "      "
+                <>  punctuation "="
+                <>  " "
+                <>  pretty assignment
+                )
+        short =
+                keyword "let"
+            <>  " "
+            <>  label (pretty name)
+            <>  " "
+            <>  operator ":"
+            <>  " "
+            <>  pretty type_
+            <>  " "
+            <>  punctuation "="
+            <>  " "
+            <>  pretty assignment
