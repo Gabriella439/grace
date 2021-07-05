@@ -349,6 +349,10 @@ instance Pretty Builtin where
 -- | Pretty-print an expression
 prettyExpression :: Pretty a => Node s a -> Doc AnsiStyle
 prettyExpression expression@Lambda{} =
+    -- Anywhere you see `Pretty.group (Pretty.flatAlt long short)` that means
+    -- that the pretty-printer will first attempt to display `short` if that
+    -- fits on one line, otherwise it will fall back to displaying `long`
+    -- (which is typically a multi-line result)
     Pretty.group (Pretty.flatAlt long short)
   where
     short = prettyShort expression

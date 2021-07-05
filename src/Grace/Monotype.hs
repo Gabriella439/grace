@@ -21,7 +21,11 @@ import GHC.Generics (Generic)
 import Grace.Existential (Existential)
 import Grace.Pretty (Pretty(..), builtin)
 
--- | A monomorphic type
+{-| A monomorphic type
+
+    This is same type as `Grace.Type.Type`, except without the
+    `Grace.Type.Forall` and `Grace.Type.Exists` constructors
+-}
 data Monotype
     = VariableType Text
     | UnsolvedType (Existential Monotype)

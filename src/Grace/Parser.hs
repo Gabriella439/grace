@@ -124,6 +124,9 @@ locatedToken expectedToken =
         | expectedToken == actualToken = Just start
         | otherwise                    = Nothing
 
+-- | This render function is currently never used since `Location.renderError`
+--   does not display expected tokens at all, but I maintain this anyway in
+--   case someone wants to modify the code to display them.
 render :: Token -> Text
 render t = case t of
     Lexer.Alternative _    -> "an alternative"
@@ -186,6 +189,20 @@ render t = case t of
 grammar :: Grammar r (Parser r (Syntax Offset FilePath))
 grammar = mdo
     expression <- rule
+        -- The reason all of these rules use a `let f … = …` at the beginning
+        -- is due to a limitation of the `ApplicativeDo` extension.  For
+        -- example, I'd prefer to just write something like:
+        --
+        --
+        --      location <- locatedToken Lexer.Lambda
+        --      (nameLocation, name) <- locatedLabel 
+        --      token Lexer.Arrow
+        --      body <- expression
+        --      let node = Syntax.Lambda nameLocation name body
+        --      return Syntax{..}
+        --
+        -- … but that is not permitted by the extension
+
         (   do  let f location (nameLocation, name) body = Syntax{..}
                       where
                         node = Syntax.Lambda nameLocation name body
