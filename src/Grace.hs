@@ -3,8 +3,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 
-{-| This module contains the top-level `main` function that parses, type-checks
-    and evaluates an expression
+{-| This module contains the top-level `main` function that implements the
+    command-line API
 -}
 module Grace
     ( -- * Main
@@ -13,11 +13,14 @@ module Grace
 
 import Control.Applicative (many, (<|>))
 import Data.Foldable (traverse_)
+import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Interpret (Input(..))
 import Grace.Location (Location(..))
 import Grace.Syntax (Builtin(..), Node(..), Syntax(..))
 import Options.Applicative (Parser, ParserInfo)
+import Prettyprinter (Doc)
+import Prettyprinter.Render.Terminal (AnsiStyle)
 import System.Console.Terminal.Size (Window(..))
 
 import qualified Control.Monad.Except         as Except
@@ -34,7 +37,14 @@ import qualified System.Console.Terminal.Size as Size
 import qualified System.Exit                  as Exit
 import qualified System.IO                    as IO
 
-data Highlight = Color | Plain | Auto
+data Highlight
+    = Color
+    -- ^ Force the use of ANSI color escape sequences to highlight source code
+    | Plain
+    -- ^ Don't highlight source code
+    | Auto
+    -- ^ Auto-detect whether to highlight source code based on whether or not
+    --   @stdout@ is a terminal
 
 data Options
     = Interpret { annotate :: Bool, highlight :: Highlight, file :: FilePath }
@@ -111,12 +121,34 @@ parser = do
 
 
 detectColor :: Highlight -> IO Bool
-detectColor Color = do
-    return True
-detectColor Plain = do
-    return False
-detectColor Auto = do
-    ANSI.hSupportsANSI IO.stdout
+detectColor Color = do return True
+detectColor Plain = do return False
+detectColor Auto  = do ANSI.hSupportsANSI IO.stdout
+
+getWidth :: IO Int
+getWidth = do
+    maybeWindow <- Size.size
+
+    let renderWidth =
+            case maybeWindow of
+                Nothing         -> Grace.Pretty.defaultColumns
+                Just Window{..} -> width
+
+    return renderWidth
+
+getRender :: Highlight -> IO (Doc AnsiStyle -> IO ())
+getRender highlight = do
+    color <- detectColor highlight
+    width <- getWidth
+
+    return (Grace.Pretty.renderIO color width IO.stdout)
+
+throws :: Either Text a -> IO a
+throws (Left text) = do
+    Text.IO.hPutStrLn IO.stderr text
+    Exit.exitFailure
+throws (Right result) = do
+    return result
 
 -- | Command-line entrypoint
 main :: IO ()
@@ -128,7 +160,6 @@ main = do
             input <- case file of
                 "-" -> do
                     text <- Text.IO.getContents
-
                     return (Code text)
                 _ -> do
                     return (Path file)
@@ -136,13 +167,7 @@ main = do
             eitherResult <- do
                 Except.runExceptT (Interpret.interpret Nothing input)
 
-            (inferred, value) <- case eitherResult of
-                Left message -> do
-                    Text.IO.hPutStrLn IO.stderr message
-
-                    Exit.exitFailure
-                Right result -> do
-                    return result
+            (inferred, value) <- throws eitherResult
 
             let syntax = Normalize.quote [] value
 
@@ -150,60 +175,31 @@ main = do
                     | annotate =
                         Syntax
                             { node =
-                                Annotation syntax
-                                    (fmap (\_ -> ()) inferred)
+                                Annotation syntax (fmap (\_ -> ()) inferred)
                             , location = ()
                             }
                     | otherwise =
                         syntax
 
-            maybeWindow <- Size.size
+            render <- getRender highlight
 
-            let renderWidth =
-                    case maybeWindow of
-                        Nothing         -> Grace.Pretty.defaultColumns
-                        Just Window{..} -> width
-
-            color <- detectColor highlight
-
-            Grace.Pretty.renderIO color renderWidth IO.stdout
-                (Grace.Pretty.pretty annotatedExpression <> Pretty.hardline)
+            render (Grace.Pretty.pretty annotatedExpression <> Pretty.hardline)
 
         Format{..} -> do
             case files of
                 [ "-" ] -> do
                     text <- Text.IO.getContents
 
-                    syntax <- case Parser.parse "(input)" text of
-                        Left message -> do
-                            Text.IO.hPutStrLn IO.stderr message
+                    syntax <- throws (Parser.parse "(input)" text)
 
-                            Exit.exitFailure
-                        Right syntax -> do
-                            return syntax
+                    render <- getRender highlight
 
-                    maybeWindow <- Size.size
-
-                    let renderWidth =
-                            case maybeWindow of
-                                Nothing         -> Grace.Pretty.defaultColumns
-                                Just Window{..} -> width
-
-                    color <- detectColor highlight
-
-                    Grace.Pretty.renderIO color renderWidth IO.stdout
-                        (Grace.Pretty.pretty syntax <> Pretty.hardline)
+                    render (Grace.Pretty.pretty syntax <> Pretty.hardline)
                 _ -> do
                     let formatFile file = do
                             text <- Text.IO.readFile file
 
-                            syntax <- case Parser.parse file text of
-                                Left message -> do
-                                    Text.IO.hPutStrLn IO.stderr message
-
-                                    Exit.exitFailure
-                                Right syntax -> do
-                                    return syntax
+                            syntax <- throws (Parser.parse file text)
 
                             IO.withFile file IO.WriteMode \handle -> do
                                 Grace.Pretty.renderIO
@@ -232,31 +228,14 @@ main = do
                                 , node = Builtin builtin
                                 }
 
-                    type_ <- case Infer.typeOf expression of
-                        Left message -> do
-                            Text.IO.hPutStrLn IO.stderr message
-
-                            Exit.exitFailure
-                        Right type_ -> do
-                            return type_
+                    type_ <- throws (Infer.typeOf expression)
 
                     let annotated :: Node Location Void
                         annotated = Annotation expression type_
 
-                    maybeWindow <- Size.size
+                    render <- getRender highlight
 
-                    let renderWidth =
-                            case maybeWindow of
-                                Nothing         -> Grace.Pretty.defaultColumns
-                                Just Window{..} -> width
-
-                    color <- detectColor highlight
-
-                    Grace.Pretty.renderIO
-                        color
-                        renderWidth
-                        IO.stdout
-                        (Grace.Pretty.pretty annotated <> Pretty.hardline)
+                    render (Grace.Pretty.pretty annotated <> Pretty.hardline)
 
             let builtins = [ minBound .. maxBound ]
 

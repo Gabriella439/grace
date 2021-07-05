@@ -22,7 +22,7 @@ import Grace.Pretty (Pretty(..), label)
 import qualified Data.Char as Char
 import qualified Data.Text as Text
 
--- | An unsolved existential variable
+-- | An existential variable
 newtype Existential a = UnsafeExistential Int
     deriving newtype (Eq, Num, Show)
 
@@ -32,12 +32,12 @@ instance Pretty (Existential a) where
 {-| Convert an existential variable to a user-friendly `Text`
     representation
 
->>> toVariable 0
-"a"
->>> toVariable 1
-"b"
->>> toVariable 26
-"a0"
+    >>> toVariable 0
+    "a"
+    >>> toVariable 1
+    "b"
+    >>> toVariable 26
+    "a0"
 -}
 toVariable :: Existential a -> Text
 toVariable (UnsafeExistential n) = Text.cons prefix suffix

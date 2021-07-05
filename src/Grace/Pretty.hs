@@ -33,14 +33,15 @@ import qualified Prettyprinter.Render.Text     as Pretty.Text
     / "Prettyprinter.Render.Text".`Pretty.Text.renderStrict`
 -}
 renderStrict
-    :: Bool
+    :: Pretty a
+    => Bool
     -- ^ True to enable syntax highlighting
     -> Int
     -- ^ Available columns
-    -> Doc AnsiStyle
+    -> a
     -> Text
 renderStrict highlight columns =
-    render . Pretty.layoutSmart (layoutOptions columns)
+    render . Pretty.layoutSmart (layoutOptions columns) . pretty
   where
     render =
         if highlight
@@ -52,15 +53,16 @@ renderStrict highlight columns =
     / "Prettyprinter.Render.Text".`Pretty.Text.renderIO`
 -}
 renderIO
-    :: Bool
+    :: Pretty a
+    => Bool
     -- ^ True to enable syntax highlighting
     -> Int
     -- ^ Available columns
     -> Handle
-    -> Doc AnsiStyle
+    -> a
     -> IO ()
 renderIO highlight columns handle =
-    render handle . Pretty.layoutSmart (layoutOptions columns)
+    render handle . Pretty.layoutSmart (layoutOptions columns) . pretty
   where
     render =
         if highlight

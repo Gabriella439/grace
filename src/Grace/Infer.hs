@@ -20,7 +20,7 @@
     paper.
 
     Also, the code will not add comments for code that corresponds 1-to-1 with
-    the original paper.  Instead, the comments will mostly explaining new
+    the original paper.  Instead, the comments will mostly explain new
     type-checking logic that wasn't already covered by the paper.  The comments
     are intended to be read top-to-bottom.
 -}
@@ -80,28 +80,32 @@ fresh = do
 
     return (fromIntegral n)
 
+-- The main place where we depart from the paper is that we don't explicitly
+-- thread the `Context` around.  Instead, we mutate the ambient state using
+-- the following utility functions
+
+-- | Push a new `Context` `Entry` onto the stack
 push :: MonadState Status m => Entry Location -> m ()
 push entry = State.modify (\s -> s { context = entry : context s })
 
+-- | Retrieve the current `Context`
 get :: MonadState Status m => m (Context Location)
 get = fmap context State.get
 
+-- | Set the `Context` to a new value
 set :: MonadState Status m => Context Location -> m ()
 set context = State.modify (\s -> s{ context })
 
+-- | Discard all `Context` entries up to and including the specified `Entry`
 discardUpTo :: MonadState Status m => Entry Location -> m ()
 discardUpTo entry =
-    State.modify (\s -> s { context = Context.discardUpTo entry (context s) })
+    State.modify (\s -> s{ context = Context.discardUpTo entry (context s) })
 
 prettyToText :: Pretty a => a -> Text
-prettyToText =
-      Grace.Pretty.renderStrict True Grace.Pretty.defaultColumns
-    . pretty
+prettyToText = Grace.Pretty.renderStrict True Grace.Pretty.defaultColumns
 
 insert :: Pretty a => a -> Text
-insert a =
-      Grace.Pretty.renderStrict True Grace.Pretty.defaultColumns
-        ("   " <> Pretty.align (pretty a))
+insert a = prettyToText ("   " <> Pretty.align (pretty a))
 
 listToText :: Pretty a => [a] -> Text
 listToText elements =
@@ -111,7 +115,7 @@ listToText elements =
 
     > Γ ⊢ A
 
-    … which checks that under context Γ, type A is well-formed
+    … which checks that under context Γ, the type A is well-formed
 -}
 wellFormedType :: MonadError Text m => Context Location -> Type Location -> m ()
 wellFormedType _Γ Type{..} =
@@ -559,7 +563,7 @@ subtype _A0 _B0 = do
             -- must be a subtype of the matching fields in record B
             --
             -- We only check fields are present in `both` records.  For
-            -- mismatched fields present only in on record type we have to
+            -- mismatched fields present only in one record type we have to
             -- skip to the next step of resolving the mismatch by solving Fields
             -- variables.
             let process (_A1, _B1) = do
