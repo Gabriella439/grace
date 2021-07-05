@@ -255,6 +255,11 @@ pull requests I'm most likely to accept:
 
   … so that people can more easily adapt the language to their own use case.
 
+* Syntactic sugar
+
+  For example, I'd probably accept pull requests to compress the syntax for
+  nested `forall`s or nested lambdas.
+
 These are the issues and pull requests that I'm most likely to reject:
 
 * Anything that significantly increases my maintenance burden
