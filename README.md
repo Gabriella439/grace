@@ -303,6 +303,7 @@ Available options:
 Available commands:
   format                   Format Grace code
   interpret                Interpret a Grace file
+  builtins                 List all built-in functions and their types
 ```
 
 ```bash
@@ -327,6 +328,16 @@ Available options:
   --color                  Enable syntax highlighting
   --plain                  Disable syntax highlighting
   FILE                     File to format
+  -h,--help                Show this help text
+```
+
+```bash
+Usage: grace builtins [--color | --plain]
+  List all built-in functions and their types
+
+Available options:
+  --color                  Enable syntax highlighting
+  --plain                  Disable syntax highlighting
   -h,--help                Show this help text
 ```
 
@@ -547,7 +558,7 @@ let twice = \x -> [ x, x ]
 in  twice 2
 ```
 
-You can also use the following built-in functions:
+You can also use the built-in functions, including:
 
 * `Double/show : Double -> Text`
 
@@ -576,6 +587,9 @@ You can also use the following built-in functions:
 * `Natural/fold : forall (a : Type) . Natural -> (a -> a) -> a -> a`
 
   Canonical fold for a `Natural` number
+
+For an up-to-date list of builtin functions and their types, run
+the `grace builtins` subcommand.
 
 ### Type checking and inference
 
@@ -801,6 +815,98 @@ $ grace interpret --annotate - <<< '[ Left 1, Right true ]'
 The type is universally quantified over the extra union alternatives, meaning
 that the union is "open" and we can keep adding new alternatives.  We don't
 need to specify the desired type or set of alternatives in advance.
+
+### Imports
+
+You can import a Grace subexpression stored within a separate file by
+referencing the file's relative or absolute path.
+
+For example, instead of having one large expression like this:
+
+```dhall
+[ { "name": "Cake donut"
+  , "batters": [ "Regular", "Chocolate", "Blueberry", "Devil's Food" ]
+  , "topping": [ "None"
+               , "Glazed"
+               , "Sugar"
+               , "Powdered Sugar"
+               , "Chocolate with Sprinkles"
+               , "Chocolate"
+               , "Maple"
+               ]
+  }
+, { "name": "Raised donut"
+  , "batters": [ "Regular" ]
+  , "topping": [ "None", "Glazed", "Sugar", "Chocolate", "Maple" ]
+  }
+, { "name": "Old Fashioned donut"
+  , "batters": [ "Regular", "Chocolate" ]
+  , "topping": [ "None", "Glazed", "Chocolate", "Maple" ]
+  }
+]
+```
+
+… you can split the expression into smaller files:
+
+```dhall
+# ./cake.grace
+
+{ "name": "Cake donut"
+, "batters": [ "Regular", "Chocolate", "Blueberry", "Devil's Food" ]
+, "topping": [ "None"
+             , "Glazed"
+             , "Sugar"
+             , "Powdered Sugar"
+             , "Chocolate with Sprinkles"
+             , "Chocolate"
+             , "Maple"
+             ]
+}
+```
+
+```dhall
+# ./raised.grace
+
+{ "name": "Raised donut"
+, "batters": [ "Regular" ]
+, "topping": [ "None", "Glazed", "Sugar", "Chocolate", "Maple" ]
+}
+```
+
+```dhall
+# ./old-fashioned.grace
+
+{ "name": "Old Fashioned donut"
+, "batters": [ "Regular", "Chocolate" ]
+, "topping": [ "None", "Glazed", "Chocolate", "Maple" ]
+}
+```
+
+… and then reference them within a larger file, like this:
+
+```dhall
+[ ./cake.grace
+, ./raised.grace
+, ./old-fashioned.grace
+]
+```
+
+You can also import functions in this way, too.  For example:
+
+```dhall
+# ./greet.grace
+
+\name -> "Hello, " ++ name ++ "!"
+```
+
+```bash
+$ grace interpret - <<< './greet.grace "John"'
+```
+```dhall
+"Hello, John!"
+```
+
+Any subexpression can be imported in this way.
 
 ## Name
 
