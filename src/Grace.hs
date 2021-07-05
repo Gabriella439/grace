@@ -1,6 +1,7 @@
-{-# LANGUAGE ApplicativeDo   #-}
-{-# LANGUAGE BlockArguments  #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ApplicativeDo     #-}
+{-# LANGUAGE BlockArguments    #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 
 {-| This module contains the top-level `main` function that parses, type-checks
     and evaluates an expression
@@ -12,19 +13,21 @@ module Grace
 
 import Control.Applicative (many, (<|>))
 import Data.Foldable (traverse_)
+import Data.Void (Void)
 import Grace.Interpret (Input(..))
-import Grace.Syntax (Syntax(..))
+import Grace.Location (Location(..))
+import Grace.Syntax (Builtin(..), Node(..), Syntax(..))
 import Options.Applicative (Parser, ParserInfo)
 import System.Console.Terminal.Size (Window(..))
 
 import qualified Control.Monad.Except         as Except
 import qualified Data.Text.IO                 as Text.IO
 import qualified Prettyprinter                as Pretty
+import qualified Grace.Infer                  as Infer
 import qualified Grace.Interpret              as Interpret
 import qualified Grace.Normalize              as Normalize
 import qualified Grace.Parser                 as Parser
 import qualified Grace.Pretty
-import qualified Grace.Syntax                 as Syntax
 import qualified Options.Applicative          as Options
 import qualified System.Console.ANSI          as ANSI
 import qualified System.Console.Terminal.Size as Size
@@ -36,6 +39,7 @@ data Highlight = Color | Plain | Auto
 data Options
     = Interpret { annotate :: Bool, highlight :: Highlight, file :: FilePath }
     | Format { highlight :: Highlight, files :: [FilePath] }
+    | Builtins { highlight :: Highlight }
 
 parserInfo :: ParserInfo Options
 parserInfo =
@@ -72,6 +76,11 @@ parser = do
 
             return Format{..}
 
+    let builtins = do
+            highlight <- parseHighlight
+
+            return Builtins{..}
+
     Options.hsubparser
         (   Options.command "format"
                 (Options.info format
@@ -81,6 +90,11 @@ parser = do
         <>  Options.command "interpret"
                 (Options.info interpret
                     (Options.progDesc "Interpret a Grace file")
+                )
+
+        <>  Options.command "builtins"
+                (Options.info builtins
+                    (Options.progDesc "List all built-in functions and their types")
                 )
         )
   where
@@ -136,7 +150,7 @@ main = do
                     | annotate =
                         Syntax
                             { node =
-                                Syntax.Annotation syntax
+                                Annotation syntax
                                     (fmap (\_ -> ()) inferred)
                             , location = ()
                             }
@@ -199,3 +213,58 @@ main = do
                                     (Grace.Pretty.pretty syntax <> Pretty.hardline)
 
                     traverse_ formatFile files
+
+        Builtins{..} -> do
+            let displayBuiltin :: Builtin -> IO ()
+                displayBuiltin builtin = do
+                    let expression =
+                            Syntax
+                                { location =
+                                    Location
+                                        { name = "(input)"
+                                        , code =
+                                            Grace.Pretty.renderStrict
+                                                False
+                                                Grace.Pretty.defaultColumns
+                                                (Grace.Pretty.pretty builtin)
+                                        , offset = 0
+                                        }
+                                , node = Builtin builtin
+                                }
+
+                    type_ <- case Infer.typeOf expression of
+                        Left message -> do
+                            Text.IO.hPutStrLn IO.stderr message
+
+                            Exit.exitFailure
+                        Right type_ -> do
+                            return type_
+
+                    let annotated :: Node Location Void
+                        annotated = Annotation expression type_
+
+                    maybeWindow <- Size.size
+
+                    let renderWidth =
+                            case maybeWindow of
+                                Nothing         -> Grace.Pretty.defaultColumns
+                                Just Window{..} -> width
+
+                    color <- detectColor highlight
+
+                    Grace.Pretty.renderIO
+                        color
+                        renderWidth
+                        IO.stdout
+                        (Grace.Pretty.pretty annotated <> Pretty.hardline)
+
+            let builtins = [ minBound .. maxBound ]
+
+            case builtins of
+                [] -> do
+                    return ()
+
+                b0 : bs -> do
+                    displayBuiltin b0
+
+                    traverse_ (\b -> Text.IO.putStrLn "" >> displayBuiltin b) bs

@@ -335,7 +335,7 @@ data Builtin
     -- ^
     --   >>> pretty NaturalFold
     --   Natural/fold
-    deriving (Eq, Generic, Show)
+    deriving (Bounded, Enum, Eq, Generic, Show)
 
 instance Pretty Builtin where
     pretty DoubleShow  = builtin "Double/show"
