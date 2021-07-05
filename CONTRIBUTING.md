@@ -15,6 +15,13 @@ $ cabal test tasty --test-option=--accept  # Update golden tests
 $ cabal haddock --hyperlink-source         # Generate Haskell documentation
 ```
 
+You can also enable coverage checking by running this step before running the
+tests:
+
+```bash
+$ cabal configure --enable-coverage
+```
+
 You'll probably also want to use [`ghcid`](https://github.com/ndmitchell/ghcid)
 or
 [`haskell-language-server`](https://github.com/haskell/haskell-language-server)
