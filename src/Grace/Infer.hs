@@ -576,7 +576,8 @@ subtype _A0 _B0 = do
             -- record type.  They still might be okay if one or both of the
             -- record types has an unsolved fields variable.
             case (fields0, fields1) of
-                _ | fields0 == fields1 -> do
+                -- The two records are identical, so there's nothing left to do
+                _ | null extraA && null extraB && fields0 == fields1 -> do
                         return ()
 
                 -- Both records type have unsolved Fields variables.  Great!
@@ -1900,8 +1901,10 @@ infer e0 = do
 
             return Type{ location, node = Type.Scalar Monotype.Bool }
 
-        -- I have no idea how to generalize `+` and `*` to work on all numeric
-        -- types.  This seems to be a weakness of bidirectional type-checking.
+        -- I have no idea how to easily fix `+` and `*` to work on all numeric
+        -- types without a type annotation.  This seems to be a weakness of
+        -- bidirectional type-checking.
+        --
         -- My understanding is that the idiomatic way to fix this within the
         -- bidirectional type-checking framework is to permit adding other types
         -- of values if you provide a type annotation, such as:
@@ -1911,8 +1914,11 @@ infer e0 = do
         -- In other words, you add `check` rules for `Times` and `Plus` so that
         -- they will expect different argument types depending on the expected
         -- output types.  For simplicity, I just have it so that `+` and `*`
-        -- only work on `Natural` numbers for now.
+        -- only work on `Natural` numbers in the absence of an outer type
+        -- constraint.
         Syntax.Operator l location Syntax.Times r -> do
+            _L <- infer l
+            _R <- infer r
             check l Type{ location, node = Type.Scalar Monotype.Natural }
             check r Type{ location, node = Type.Scalar Monotype.Natural }
 
@@ -2098,6 +2104,14 @@ check e Type{ node = Type.Forall _ a domain _A } = do
     check e _A
 
     discardUpTo (Context.Variable domain a)
+
+-- This rules lets you add numbers other than `Natural`s if you provide a type
+-- annotation
+check Syntax{ node = Syntax.Operator l _ op r } _B@Type{ node = Type.Scalar scalar }
+    | scalar `elem` [ Monotype.Double, Monotype.Integer, Monotype.Natural ]
+    , op `elem` [ Syntax.Times, Syntax.Plus ] = do
+    check l _B
+    check r _B
 
 check Syntax{ node = Syntax.List elements } Type{ node = Type.List a } = do
     traverse_ (`check` a)  elements

@@ -1,6 +1,7 @@
 {-# LANGUAGE BangPatterns      #-}
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms   #-}
 {-# LANGUAGE RecordWildCards   #-}
 
 -- | This module contains the logic for efficiently evaluating an expression
@@ -13,7 +14,7 @@ module Grace.Normalize
 import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Location (Location)
-import Grace.Syntax (Syntax)
+import Grace.Syntax (Builtin(..), Scalar(..), Syntax)
 import Grace.Type (Type)
 import Grace.Value (Closure(..), Value)
 import Prelude hiding (succ)
@@ -65,6 +66,17 @@ lookupVariable name index environment =
 instantiate :: Closure -> Value -> Value
 instantiate (Closure name env syntax) value =
     evaluate ((name, value) : env) syntax
+
+asInteger :: Scalar -> Maybe Integer
+asInteger (Natural n) = Just (fromIntegral n)
+asInteger (Integer n) = Just n
+asInteger  _          = Nothing
+
+asDouble :: Scalar -> Maybe Double
+asDouble (Natural n) = Just (fromIntegral n)
+asDouble (Integer n) = Just (fromInteger  n)
+asDouble (Double  n) = Just n
+asDouble  _          = Nothing
 
 {-| Evaluate an expression, leaving behind a `Value` free of reducible
     sub-expressions
@@ -126,8 +138,8 @@ evaluate env Syntax.Syntax{..} =
 
         Syntax.If predicate ifTrue ifFalse ->
             case predicate' of
-                Value.Scalar (Syntax.Bool True) -> ifTrue'
-                Value.Scalar (Syntax.Bool False) -> ifFalse'
+                Value.Scalar (Bool True) -> ifTrue'
+                Value.Scalar (Bool False) -> ifFalse'
                 _ -> Value.If predicate' ifTrue' ifFalse'
           where
             predicate' = evaluate env predicate
@@ -139,11 +151,11 @@ evaluate env Syntax.Syntax{..} =
 
         Syntax.Operator left _ Syntax.And right ->
             case left' of
-                Value.Scalar (Syntax.Bool True) -> right'
-                Value.Scalar (Syntax.Bool False) -> Value.Scalar (Syntax.Bool False)
+                Value.Scalar (Bool True) -> right'
+                Value.Scalar (Bool False) -> Value.Scalar (Bool False)
                 _ -> case right' of
-                    Value.Scalar (Syntax.Bool True) -> left'
-                    Value.Scalar (Syntax.Bool False) -> Value.Scalar (Syntax.Bool False)
+                    Value.Scalar (Bool True) -> left'
+                    Value.Scalar (Bool False) -> Value.Scalar (Bool False)
                     _ -> Value.Operator left' Syntax.And right'
           where
             left'  = evaluate env left
@@ -151,11 +163,11 @@ evaluate env Syntax.Syntax{..} =
 
         Syntax.Operator left _ Syntax.Or right ->
             case left' of
-                Value.Scalar (Syntax.Bool True) -> Value.Scalar (Syntax.Bool True)
-                Value.Scalar (Syntax.Bool False) -> right'
+                Value.Scalar (Bool True) -> Value.Scalar (Bool True)
+                Value.Scalar (Bool False) -> right'
                 _ -> case right' of
-                    Value.Scalar (Syntax.Bool True) -> Value.Scalar (Syntax.Bool True)
-                    Value.Scalar (Syntax.Bool False) -> left'
+                    Value.Scalar (Bool True) -> Value.Scalar (Bool True)
+                    Value.Scalar (Bool False) -> left'
                     _ -> Value.Operator left' Syntax.Or right'
           where
             left'  = evaluate env left
@@ -163,16 +175,24 @@ evaluate env Syntax.Syntax{..} =
 
         Syntax.Operator left _ Syntax.Times right ->
             case (left', right') of
-                (Value.Scalar (Syntax.Natural 1), _) ->
+                (Value.Scalar (Natural 1), _) ->
                     right'
-                (Value.Scalar (Syntax.Natural 0), _) ->
-                    Value.Scalar (Syntax.Natural 0)
-                (_, Value.Scalar (Syntax.Natural 1)) ->
+                (Value.Scalar (Natural 0), _) ->
+                    Value.Scalar (Natural 0)
+                (_, Value.Scalar (Natural 1)) ->
                     left'
-                (_, Value.Scalar (Syntax.Natural 0)) ->
-                    Value.Scalar (Syntax.Natural 0)
-                (Value.Scalar (Syntax.Natural l), Value.Scalar (Syntax.Natural r)) ->
-                    Value.Scalar (Syntax.Natural (l * r))
+                (_, Value.Scalar (Natural 0)) ->
+                    Value.Scalar (Natural 0)
+                (Value.Scalar l, Value.Scalar r)
+                    | Natural m <- l
+                    , Natural n <- r ->
+                        Value.Scalar (Natural (m * n))
+                    | Just m <- asInteger l
+                    , Just n <- asInteger r ->
+                        Value.Scalar (Integer (m * n))
+                    | Just m <- asDouble l
+                    , Just n <- asDouble r ->
+                        Value.Scalar (Double (m * n))
                 _ ->
                     Value.Operator left' Syntax.Times right'
           where
@@ -181,12 +201,20 @@ evaluate env Syntax.Syntax{..} =
 
         Syntax.Operator left _ Syntax.Plus right ->
             case (left', right') of
-                (Value.Scalar (Syntax.Natural 0), _) ->
+                (Value.Scalar (Natural 0), _) ->
                     right'
-                (_, Value.Scalar (Syntax.Natural 0)) ->
+                (_, Value.Scalar (Natural 0)) ->
                     left'
-                (Value.Scalar (Syntax.Natural l), Value.Scalar (Syntax.Natural r)) ->
-                    Value.Scalar (Syntax.Natural (l + r))
+                (Value.Scalar l, Value.Scalar r)
+                    | Natural m <- l
+                    , Natural n <- r ->
+                        Value.Scalar (Natural (m + n))
+                    | Just m <- asInteger l
+                    , Just n <- asInteger r ->
+                        Value.Scalar (Integer (m + n))
+                    | Just m <- asDouble l
+                    , Just n <- asDouble r ->
+                        Value.Scalar (Double (m + n))
                 _ ->
                     Value.Operator left' Syntax.Plus right'
           where
@@ -195,12 +223,12 @@ evaluate env Syntax.Syntax{..} =
 
         Syntax.Operator left _ Syntax.Append right ->
             case (left', right') of
-                (Value.Scalar (Syntax.Text ""), _) ->
+                (Value.Scalar (Text ""), _) ->
                     right'
-                (_, Value.Scalar (Syntax.Text "")) ->
+                (_, Value.Scalar (Text "")) ->
                     left'
-                (Value.Scalar (Syntax.Text l), Value.Scalar (Syntax.Text r)) ->
-                    Value.Scalar (Syntax.Text (l <> r))
+                (Value.Scalar (Text l), Value.Scalar (Text r)) ->
+                    Value.Scalar (Text (l <> r))
                 _ ->
                     Value.Operator left' Syntax.Append right'
           where
@@ -238,7 +266,7 @@ apply
     go      []  !result = result
     go (x : xs) !result = go xs (apply (apply cons x) result)
 apply (Value.Builtin Syntax.ListLength) (Value.List elements) =
-    Value.Scalar (Syntax.Natural (fromIntegral (length elements)))
+    Value.Scalar (Natural (fromIntegral (length elements)))
 apply
     (Value.Application (Value.Builtin Syntax.ListMap) f)
     (Value.List elements) =
@@ -246,8 +274,8 @@ apply
 apply
     (Value.Application
         (Value.Application
-            (Value.Builtin Syntax.NaturalFold)
-            (Value.Scalar (Syntax.Natural n))
+            (Value.Builtin NaturalFold)
+            (Value.Scalar (Natural n))
         )
         succ
     )
@@ -256,20 +284,20 @@ apply
   where
     go 0 !result = result
     go m !result = go (m - 1) (apply succ result)
-apply (Value.Builtin Syntax.IntegerEven) (Value.Scalar (Syntax.Integer n)) =
-    Value.Scalar (Syntax.Bool (even n))
-apply (Value.Builtin Syntax.IntegerEven) (Value.Scalar (Syntax.Natural n)) =
-    Value.Scalar (Syntax.Bool (even n))
-apply (Value.Builtin Syntax.IntegerOdd) (Value.Scalar (Syntax.Integer n)) =
-    Value.Scalar (Syntax.Bool (odd n))
-apply (Value.Builtin Syntax.IntegerOdd) (Value.Scalar (Syntax.Natural n)) =
-    Value.Scalar (Syntax.Bool (odd n))
-apply (Value.Builtin Syntax.DoubleShow) (Value.Scalar (Syntax.Natural n)) =
-    Value.Scalar (Syntax.Text (Text.pack (show n)))
-apply (Value.Builtin Syntax.DoubleShow) (Value.Scalar (Syntax.Integer n)) =
-    Value.Scalar (Syntax.Text (Text.pack (show n)))
-apply (Value.Builtin Syntax.DoubleShow) (Value.Scalar (Syntax.Double n)) =
-    Value.Scalar (Syntax.Text (Text.pack (show n)))
+apply (Value.Builtin IntegerEven) (Value.Scalar (Integer n)) =
+    Value.Scalar (Bool (even n))
+apply (Value.Builtin IntegerEven) (Value.Scalar (Natural n)) =
+    Value.Scalar (Bool (even n))
+apply (Value.Builtin IntegerOdd) (Value.Scalar (Integer n)) =
+    Value.Scalar (Bool (odd n))
+apply (Value.Builtin IntegerOdd) (Value.Scalar (Natural n)) =
+    Value.Scalar (Bool (odd n))
+apply (Value.Builtin DoubleShow) (Value.Scalar (Natural n)) =
+    Value.Scalar (Text (Text.pack (show n)))
+apply (Value.Builtin DoubleShow) (Value.Scalar (Integer n)) =
+    Value.Scalar (Text (Text.pack (show n)))
+apply (Value.Builtin DoubleShow) (Value.Scalar (Double n)) =
+    Value.Scalar (Text (Text.pack (show n)))
 apply function argument =
     Value.Application function argument
 
