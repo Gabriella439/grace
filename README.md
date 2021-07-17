@@ -12,8 +12,9 @@ Grace for one of two reasons:
   programming language theory by studying a clear and realistic reference
   implementation
 
-If you're interested in code samples, then jump down to the
-[Quick tour](#quick-tour) section.
+If you're interested in code samples, then you can either jump down to the
+[Quick tour](#quick-tour) section or check out the
+[examples directory](./examples).
 
 ## Features
 
