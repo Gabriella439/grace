@@ -310,7 +310,8 @@ subtype _A0 _B0 = do
 
         -- InstantiateR
         (_, Type.UnsolvedType a)
-            | not (a `Type.typeFreeIn` _A0) && elem (Context.UnsolvedType a) _Γ -> do
+            |   not (a `Type.typeFreeIn` _A0)
+            &&  elem (Context.UnsolvedType a) _Γ -> do
                 instantiateTypeR _A0 a
 
         -- <:→
@@ -361,10 +362,13 @@ subtype _A0 _B0 = do
             push (Context.MarkerType a1)
             push (Context.UnsolvedType a1)
 
-            let a1' = Type{ location = nameLocation, node = Type.UnsolvedType a1 }
+            let a1' =
+                    Type{ location = nameLocation, node = Type.UnsolvedType a1 }
+
             subtype _A0 (Type.substituteType a0 0 a1' _B)
 
             discardUpTo (Context.MarkerType a1)
+
         (_, Type.Exists _ a0 Domain.Fields _B) -> do
             a1 <- fresh
 
@@ -372,9 +376,11 @@ subtype _A0 _B0 = do
             push (Context.UnsolvedFields a1)
 
             let a1' = Type.Fields [] (Monotype.UnsolvedFields a1)
+
             subtype _A0 (Type.substituteFields a0 0 a1' _B)
 
             discardUpTo (Context.MarkerFields a1)
+
         (_, Type.Exists _ a0 Domain.Alternatives _B) -> do
             a1 <- fresh
 
@@ -382,6 +388,7 @@ subtype _A0 _B0 = do
             push (Context.UnsolvedAlternatives a1)
 
             let a1' = Type.Alternatives [] (Monotype.UnsolvedAlternatives a1)
+
             subtype _A0 (Type.substituteAlternatives a0 0 a1' _B)
 
             discardUpTo (Context.MarkerAlternatives a1)
@@ -393,10 +400,13 @@ subtype _A0 _B0 = do
             push (Context.MarkerType a1)
             push (Context.UnsolvedType a1)
 
-            let a1' = Type{ location = nameLocation, node = Type.UnsolvedType a1 }
+            let a1' =
+                    Type{ location = nameLocation, node = Type.UnsolvedType a1 }
+
             subtype (Type.substituteType a0 0 a1' _A) _B0
 
             discardUpTo (Context.MarkerType a1)
+
         (Type.Forall _ a0 Domain.Fields _A, _) -> do
             a1 <- fresh
 
@@ -404,9 +414,11 @@ subtype _A0 _B0 = do
             push (Context.UnsolvedFields a1)
 
             let a1' = Type.Fields [] (Monotype.UnsolvedFields a1)
+
             subtype (Type.substituteFields a0 0 a1' _A) _B0
 
             discardUpTo (Context.MarkerFields a1)
+
         (Type.Forall _ a0 Domain.Alternatives _A, _) -> do
             a1 <- fresh
 
@@ -414,6 +426,7 @@ subtype _A0 _B0 = do
             push (Context.UnsolvedAlternatives a1)
 
             let a1' = Type.Alternatives [] (Monotype.UnsolvedAlternatives a1)
+
             subtype (Type.substituteAlternatives a0 0 a1' _A) _B0
 
             discardUpTo (Context.MarkerAlternatives a1)
@@ -478,8 +491,11 @@ subtype _A0 _B0 = do
             -- TODO: The `fields* /= Monotype.EmptyFields` might not be correct
             --
             -- See also the matching `check` code.
-            let okayA = Map.null extraA || (fields1 /= Monotype.EmptyFields && fields0 /= fields1)
-            let okayB = Map.null extraB || (fields0 /= Monotype.EmptyFields && fields0 /= fields1)
+            let okayA = Map.null extraA
+                    || (fields1 /= Monotype.EmptyFields && fields0 /= fields1)
+
+            let okayB = Map.null extraB
+                    || (fields0 /= Monotype.EmptyFields && fields0 /= fields1)
 
             -- First we check that there are no mismatches in the record types
             -- that cannot be resolved by just setting an unsolved Fields
@@ -561,15 +577,17 @@ subtype _A0 _B0 = do
 
             -- If record A is a subtype of record B, then all fields in A
             -- must be a subtype of the matching fields in record B
-            --
+            let process (_A1, _B1) = do
+                    _Θ <- get
+
+                    subtype
+                        (Context.solveType _Θ _A1)
+                        (Context.solveType _Θ _B1)
+
             -- We only check fields are present in `both` records.  For
             -- mismatched fields present only in one record type we have to
             -- skip to the next step of resolving the mismatch by solving Fields
             -- variables.
-            let process (_A1, _B1) = do
-                    _Θ <- get
-                    subtype (Context.solveType _Θ _A1) (Context.solveType _Θ _B1)
-
             _ <- traverse process both
 
             -- Here is where we handle fields that were only present in one
@@ -602,7 +620,7 @@ subtype _A0 _B0 = do
                 --     p0 = { y: Text, p2 }
                 --     p1 = { x: Bool, p2 }
                 --
-                -- … where `p2` is a fresh Field type variable representing the
+                -- … where `p2` is a fresh Fields type variable representing the
                 -- fact that both records could potentially have even more
                 -- fields other than `x` and `y`.
                 (Monotype.UnsolvedFields p0, Monotype.UnsolvedFields p1) -> do
@@ -624,14 +642,30 @@ subtype _A0 _B0 = do
 
                             Monad.guard (Context.UnsolvedFields p1 `elem` _ΓR)
 
-                            return (set (_ΓR <> (Context.UnsolvedFields p0 : Context.UnsolvedFields p2 : _ΓL)))
+                            let command =
+                                    set (   _ΓR
+                                        <>  ( Context.UnsolvedFields p0
+                                            : Context.UnsolvedFields p2
+                                            : _ΓL
+                                            )
+                                        )
+
+                            return command
 
                     let p1First = do
                             (_ΓR, _ΓL) <- Context.splitOnUnsolvedFields p1 _Γ0
 
                             Monad.guard (Context.UnsolvedFields p0 `elem` _ΓR)
 
-                            return (set (_ΓR <> (Context.UnsolvedFields p1 : Context.UnsolvedFields p2 : _ΓL)))
+                            let command =
+                                    set (   _ΓR
+                                        <>  ( Context.UnsolvedFields p1
+                                            : Context.UnsolvedFields p2
+                                            : ΓL
+                                            )
+                                        )
+
+                            return command
 
                     case p0First <|> p1First of
                         Nothing -> do
@@ -640,7 +674,11 @@ subtype _A0 _B0 = do
 
                             One of the following fields variables:
 
-                            #{listToText [Context.UnsolvedFields p0, Context.UnsolvedFields p1 ]}
+                            #{listToText
+                                [ Context.UnsolvedFields p0
+                                , Context.UnsolvedFields p1
+                                ]
+                            }
 
                             … is missing from the following context:
 
@@ -659,27 +697,51 @@ subtype _A0 _B0 = do
                     -- Now we solve for `p0`.  This is basically saying:
                     --
                     -- p0 = { extraFieldsFromRecordB, p2 }
-                    instantiateFieldsL p0 (Type.location _B0) (Context.solveRecord _Θ (Type.Fields (Map.toList extraB) (Monotype.UnsolvedFields p2)))
+                    instantiateFieldsL
+                        p0
+                        (Type.location _B0)
+                        (Context.solveRecord _Θ
+                            (Type.Fields (Map.toList extraB)
+                                (Monotype.UnsolvedFields p2)
+                            )
+                        )
 
                     _Δ <- get
 
                     -- Similarly, solve for `p1`.  This is basically saying:
                     --
                     -- p1 = { extraFieldsFromRecordA, p2 }
-                    instantiateFieldsR (Type.location _A0) (Context.solveRecord _Δ (Type.Fields (Map.toList extraA) (Monotype.UnsolvedFields p2))) p1
+                    instantiateFieldsR
+                        (Type.location _A0)
+                        (Context.solveRecord _Δ
+                            (Type.Fields (Map.toList extraA)
+                                (Monotype.UnsolvedFields p2)
+                            )
+                        )
+                        p1
 
                 -- If only one of the records has a Fields variable then the
-                -- solution is simpler: just set the Field variable to the
+                -- solution is simpler: just set the Fields variable to the
                 -- extra fields from the opposing record
                 (Monotype.UnsolvedFields p0, _) -> do
                     _Θ <- get
 
-                    instantiateFieldsL p0 (Type.location _B0) (Context.solveRecord _Θ (Type.Fields (Map.toList extraB) fields1))
+                    instantiateFieldsL
+                        p0
+                        (Type.location _B0)
+                        (Context.solveRecord _Θ
+                            (Type.Fields (Map.toList extraB) fields1)
+                        )
 
                 (_, Monotype.UnsolvedFields p1) -> do
                     _Θ <- get
 
-                    instantiateFieldsR (Type.location _A0) (Context.solveRecord _Θ (Type.Fields (Map.toList extraA) fields0)) p1
+                    instantiateFieldsR
+                        (Type.location _A0)
+                        (Context.solveRecord _Θ
+                            (Type.Fields (Map.toList extraA) fields0)
+                        )
+                        p1
 
                 (_, _) -> do
                     Except.throwError [__i|
@@ -710,8 +772,10 @@ subtype _A0 _B0 = do
 
             let both = Map.intersectionWith (,) mapA mapB
 
-            let okayA = Map.null extraA || alternatives1 /= Monotype.EmptyAlternatives
-            let okayB = Map.null extraB || alternatives0 /= Monotype.EmptyAlternatives
+            let okayA = Map.null extraA
+                    ||  alternatives1 /= Monotype.EmptyAlternatives
+            let okayB = Map.null extraB
+                    ||  alternatives0 /= Monotype.EmptyAlternatives
 
             if | not okayA && not okayB -> do
                 Except.throwError [__i|
@@ -785,7 +849,10 @@ subtype _A0 _B0 = do
 
             let process (_A1, _B1) = do
                     _Θ <- get
-                    subtype (Context.solveType _Θ _A1) (Context.solveType _Θ _B1)
+
+                    subtype
+                        (Context.solveType _Θ _A1)
+                        (Context.solveType _Θ _B1)
 
             _ <- traverse process both
 
@@ -800,14 +867,30 @@ subtype _A0 _B0 = do
 
                             Monad.guard (Context.UnsolvedAlternatives p1 `elem` _ΓR)
 
-                            return (set (_ΓR <> (Context.UnsolvedAlternatives p0 : Context.UnsolvedAlternatives p2 : _ΓL)))
+                            let command =
+                                    set (   _ΓR
+                                        <>  ( Context.UnsolvedAlternatives p0
+                                            : Context.UnsolvedAlternatives p2
+                                            : _ΓL
+                                            )
+                                        )
+
+                            return command
 
                     let p1First = do
                             (_ΓR, _ΓL) <- Context.splitOnUnsolvedAlternatives p1 _Γ0
 
                             Monad.guard (Context.UnsolvedAlternatives p0 `elem` _ΓR)
 
-                            return (set (_ΓR <> (Context.UnsolvedAlternatives p1 : Context.UnsolvedAlternatives p2 : _ΓL)))
+                            let command =
+                                    set (   _ΓR
+                                        <>  ( Context.UnsolvedAlternatives p1
+                                            : Context.UnsolvedAlternatives p2
+                                            : _ΓL
+                                            )
+                                        )
+
+                            return command
 
                     case p0First <|> p1First of
                         Nothing -> do
@@ -816,7 +899,11 @@ subtype _A0 _B0 = do
 
                             One of the following alternatives variables:
 
-                            #{listToText [Context.UnsolvedAlternatives p0, Context.UnsolvedAlternatives p1 ]}
+                            #{listToText
+                                [ Context.UnsolvedAlternatives p0
+                                , Context.UnsolvedAlternatives p1
+                                ]
+                            }
 
                             … is missing from the following context:
 
@@ -832,11 +919,25 @@ subtype _A0 _B0 = do
 
                     _Θ <- get
 
-                    instantiateAlternativesL p0 (Type.location _B0) (Context.solveUnion _Θ (Type.Alternatives (Map.toList extraB) (Monotype.UnsolvedAlternatives p2)))
+                    instantiateAlternativesL
+                        p0
+                        (Type.location _B0)
+                        (Context.solveUnion _Θ
+                            (Type.Alternatives (Map.toList extraB)
+                                (Monotype.UnsolvedAlternatives p2)
+                            )
+                        )
 
                     _Δ <- get
 
-                    instantiateAlternativesR (Type.location _A0) (Context.solveUnion _Δ (Type.Alternatives (Map.toList extraA) (Monotype.UnsolvedAlternatives p2))) p1
+                    instantiateAlternativesR
+                        (Type.location _A0)
+                        (Context.solveUnion _Δ
+                            (Type.Alternatives (Map.toList extraA)
+                                (Monotype.UnsolvedAlternatives p2)
+                            )
+                        )
+                        p1
 
                 (Monotype.EmptyAlternatives, Monotype.EmptyAlternatives) -> do
                     return ()
@@ -844,7 +945,14 @@ subtype _A0 _B0 = do
                 (Monotype.UnsolvedAlternatives p0, _) -> do
                     _Θ <- get
 
-                    instantiateAlternativesL p0 (Type.location _B0) (Context.solveUnion _Θ (Type.Alternatives (Map.toList extraB) alternatives1))
+                    instantiateAlternativesL
+                        p0
+                        (Type.location _B0)
+                        (Context.solveUnion _Θ
+                            (Type.Alternatives (Map.toList extraB)
+                                alternatives1
+                            )
+                        )
 
                 (Monotype.VariableAlternatives p0, Monotype.VariableAlternatives p1)
                     | p0 == p1 -> do
@@ -853,7 +961,14 @@ subtype _A0 _B0 = do
                 (_, Monotype.UnsolvedAlternatives p1) -> do
                     _Θ <- get
 
-                    instantiateAlternativesR (Type.location _A0) (Context.solveUnion _Θ (Type.Alternatives (Map.toList extraA) alternatives0)) p1
+                    instantiateAlternativesR
+                        (Type.location _A0)
+                        (Context.solveUnion _Θ
+                            (Type.Alternatives (Map.toList extraA)
+                                alternatives0
+                            )
+                        )
+                        p1
 
                 (_, _) -> do
                     Except.throwError [__i|
