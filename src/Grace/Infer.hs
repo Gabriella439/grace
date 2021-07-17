@@ -198,26 +198,15 @@ wellFormedType _Γ Type{..} =
             predicate (Context.SolvedFields   a1 _) = a0 == a1
             predicate  _                            = False
 
-        Type.Record (Type.Fields kAs (Monotype.VariableFields a0))
-            | any predicate _Γ -> do
+        Type.Record (Type.Fields kAs (Monotype.VariableFields a))
+            | Context.Variable Domain.Fields a `elem` _Γ -> do
                 traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
             | otherwise -> do
                 Except.throwError [__i|
-                Internal error: Invalid context
-
-                The following fields variable:
-
-                #{insert (Context.Variable Domain.Fields a0)}
-
-                … is not well-formed within the following context:
-
-                #{listToText _Γ}
+                Unbound fields variable: #{a}
 
                 #{Location.renderError "" location}
                 |]
-          where
-            predicate (Context.Variable Domain.Fields a1) = a0 == a1
-            predicate  _                                  = False
 
         Type.Union (Type.Alternatives kAs Monotype.EmptyAlternatives) -> do
             traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
@@ -244,26 +233,15 @@ wellFormedType _Γ Type{..} =
             predicate (Context.SolvedAlternatives   a1 _) = a0 == a1
             predicate  _                                  = False
 
-        Type.Union (Type.Alternatives kAs (Monotype.VariableAlternatives a0))
-            | any predicate _Γ -> do
+        Type.Union (Type.Alternatives kAs (Monotype.VariableAlternatives a))
+            | Context.Variable Domain.Alternatives a `elem` _Γ -> do
                 traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
             | otherwise -> do
                 Except.throwError [__i|
-                Internal error: Invalid context
-
-                The following alternatives variable:
-
-                #{insert (Context.Variable Domain.Alternatives a0)}
-
-                … is not well-formed within the following context:
-
-                #{listToText _Γ}
+                Unbound alternatives variable: #{a}
 
                 #{Location.renderError "" location}
                 |]
-          where
-            predicate (Context.Variable Domain.Alternatives a1) = a0 == a1
-            predicate  _                             = False
 
         Type.Scalar _ -> do
             return ()
@@ -1470,6 +1448,9 @@ instantiateFieldsL p0 location r@(Type.Fields kAs rest) = do
             equateFields p1 p2
 
         _ -> do
+            wellFormedType (bs <> _ΓL)
+                Type{ location, node = Type.Record (Type.Fields [] rest) }
+
             set (_ΓR <> (Context.SolvedFields p0 (Monotype.Fields kbs rest) : bs <> _ΓL))
 
     let instantiate (_, _A, b) = do
@@ -1537,6 +1518,9 @@ instantiateFieldsR location r@(Type.Fields kAs rest) p0 = do
             equateFields p1 p2
 
         _ -> do
+            wellFormedType (bs <> _ΓL)
+                Type{ location, node = Type.Record (Type.Fields [] rest) }
+
             set (_ΓR <> (Context.SolvedFields p0 (Monotype.Fields kbs rest) : bs <> _ΓL))
 
     let instantiate (_, _A, b) = do
@@ -1641,6 +1625,9 @@ instantiateAlternativesL p0 location u@(Type.Alternatives kAs rest) = do
             equateAlternatives p1 p2
 
         _ -> do
+            wellFormedType (bs <> _ΓL)
+                Type{ location, node = Type.Union (Type.Alternatives [] rest) }
+
             set (_ΓR <> (Context.SolvedAlternatives p0 (Monotype.Alternatives kbs rest) : bs <> _ΓL))
 
     let instantiate (_, _A, b) = do
@@ -1708,6 +1695,9 @@ instantiateAlternativesR location u@(Type.Alternatives kAs rest) p0 = do
             equateAlternatives p1 p2
 
         _ -> do
+            wellFormedType (bs <> _ΓL)
+                Type{ location, node = Type.Union (Type.Alternatives [] rest) }
+
             set (_ΓR <> (Context.SolvedAlternatives p0 (Monotype.Alternatives kbs rest) : bs <> _ΓL))
 
     let instantiate (_, _A, b) = do

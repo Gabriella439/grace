@@ -1,3 +1,3 @@
-forall (a : Fields) .
-forall (b : Alternatives) .
-  { example0: { a } -> { a }, example1: < a > -> < b > }
+{ example0: forall (a : Fields) . forall (b : Type) . { a } -> { a }
+, example1: forall (a : Alternatives) . forall (b : Type) . < a > -> < a >
+}
