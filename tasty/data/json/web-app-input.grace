@@ -1,6 +1,6 @@
 ./web-app.json :
   { web-app:
-    { servlet: List (exists (a : Type) . a )
+    { servlet: List ?
     , servlet-mapping:
       { cofaxCDS: Text
       , cofaxEmail: Text

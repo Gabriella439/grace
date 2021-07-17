@@ -1,1 +1,1 @@
-{ markers: List (exists (a : Fields) . { name: Text, a }) }
+{ markers: List { name: Text, ? } }

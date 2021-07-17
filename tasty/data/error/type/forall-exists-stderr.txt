@@ -1,6 +1,6 @@
-Unbound fields variable: a
+Unbound type variable: a
 
-tasty/data/error/type/forall-exists-input.grace:5:37: 
-  │
-5 │       : List (exists (a : Fields) . { x: Natural, a })
-  │                                     ↑
+tasty/data/error/type/forall-exists-input.grace:12:35: 
+   │
+12 │       : List (exists (a : Type) . a)
+   │                                   ↑

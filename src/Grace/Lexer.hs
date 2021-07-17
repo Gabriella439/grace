@@ -92,6 +92,7 @@ parseToken =
             , Type         <$ symbol "Type"
             , Fields       <$ symbol "Fields"
             , Alternatives <$ symbol "Alternatives"
+            , Question     <$ symbol "?"
             ] <?> "keyword"
 
         , Combinators.choice
@@ -361,6 +362,7 @@ data Token
     | Optional
     | Or
     | Plus
+    | Question
     | Text
     | TextLiteral Text
     | Then

@@ -1,12 +1,15 @@
 # This test illustrates that existentially quantified field variables (like `a`)
 # will not unify with other variables outside of the scope of the existential
 # quantification.
+#
+# However, you can use a typed hole instead of the existential quantification,
+# and the reason the typed hole works is that it is anonymous, so there is no
+# need to worry about the named type variable being referenced out of scope.
+#
+# See `./tasty/data/complex/forall-hole-input.grace` for an example of this
+# working with a typed hole
 let values
-      : List (exists (a : Fields) . { x: Natural, a })
-      =  [ { x: 1, y: true }, { x: 2, z: "" } ]
+      : List (exists (a : Type) . a)
+      =  [ 2, true ]
 
-let handler
-      : forall (a : Fields) . { x : Natural, a } -> Natural
-      = \record -> record.x
-
-in  List/map handler values
+in  List/length values

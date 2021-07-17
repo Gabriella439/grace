@@ -88,6 +88,8 @@ data RemainingFields
     -- ^ The record type is open, meaning that some fields are known and there
     --   is an unsolved fields variable that is a placeholder for other fields
     --   that may or may not be present
+    | HoleFields
+    -- ^ A fields hole inserted by the user
     | VariableFields Text
     -- ^ Same as `UnsolvedFields`, except that the user has given the fields
     --   variable an explicit name in the source code
@@ -105,6 +107,8 @@ data RemainingAlternatives
     -- ^ The union type is open, meaning that some alternatives are known and
     --   there is an unsolved alternatives variable that is a placeholder for
     --   other alternatives that may or may not be present
+    | HoleAlternatives
+    -- ^ An alternatives hole inserted by the user
     | VariableAlternatives Text
     -- ^ Same as `UnsolvedAlternatives`, except that the user has given the
     --   alternatives variable an explicit name in the source code

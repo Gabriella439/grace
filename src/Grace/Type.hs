@@ -86,6 +86,8 @@ instance Plated (Type s) where
                 pure (VariableType a)
             UnsolvedType a -> do
                 pure (UnsolvedType a)
+            TypeHole -> do
+                pure TypeHole
             Exists s a domain oldA -> do
                 newA <- onType oldA
                 return (Exists s a domain newA)
@@ -133,6 +135,11 @@ data Node s
     --
     -- >>> pretty @(Node ()) (UnsolvedType 0)
     -- a?
+    | TypeHole
+    -- ^ A type hole inserted by the user
+    --
+    -- >>> pretty @(Node ()) TypeHole
+    -- ?
     | Exists s Text Domain (Type s)
     -- ^ Existentially quantified type
     --
@@ -295,6 +302,8 @@ substituteType a0 n _A0 Type{ node = old, .. } = Type{ node = new, .. }
             | otherwise          -> VariableType a1
         UnsolvedType a ->
             UnsolvedType a
+        TypeHole ->
+            TypeHole
         Exists s a1 domain _A1 ->
             if a0 == a1 && domain == Domain.Type
             then Exists s a1 domain (substituteType a0 (n + 1) _A0 _A1)
@@ -328,6 +337,8 @@ substituteFields ρ0 n r@(Fields kτs ρ1) Type{ node = old, .. } =
             VariableType a
         UnsolvedType a ->
             UnsolvedType a
+        TypeHole ->
+            TypeHole
         Exists s a1 domain _A ->
             if ρ0 == a1 && domain == Domain.Fields
             then Exists s a1 domain (substituteFields ρ0 (n + 1) r _A)
@@ -366,6 +377,8 @@ substituteAlternatives ρ0 n r@(Alternatives kτs ρ1) Type{ node = old, .. } =
             VariableType a
         UnsolvedType a ->
             UnsolvedType a
+        TypeHole ->
+            TypeHole
         Exists s a1 domain _A ->
             if ρ0 == a1 && domain == Domain.Alternatives
             then Exists s a1 domain (substituteAlternatives ρ0 (n + 1) r _A)
@@ -565,6 +578,8 @@ prettyPrimitiveType (VariableType a) =
     label (pretty a)
 prettyPrimitiveType (UnsolvedType a) =
     label (pretty a <> "?")
+prettyPrimitiveType TypeHole  =
+    keyword "?"
 prettyPrimitiveType (Record r) =
     prettyRecordType r
 prettyPrimitiveType (Union u) =
@@ -589,8 +604,15 @@ prettyRecordType :: Record s -> Doc AnsiStyle
 prettyRecordType (Fields [] EmptyFields) =
     punctuation "{" <> " " <> punctuation "}"
 prettyRecordType (Fields [] (UnsolvedFields ρ)) =
-        punctuation "{ "
+        punctuation "{"
+    <>  " "
     <>  label (pretty ρ <> "?")
+    <>  " "
+    <>  punctuation "}"
+prettyRecordType (Fields [] HoleFields) =
+        punctuation "{"
+    <>  " "
+    <>  keyword "?"
     <>  " "
     <>  punctuation "}"
 prettyRecordType (Fields [] (VariableFields ρ)) =
@@ -613,6 +635,12 @@ prettyRecordType (Fields (keyType : keyTypes) fields) =
                     <>  label (pretty ρ <> "?")
                     <>  " "
                     <>  punctuation "}"
+                HoleFields ->
+                        punctuation ","
+                    <>  " "
+                    <>  keyword "?"
+                    <>  " "
+                    <>  punctuation "}"
                 VariableFields ρ ->
                         punctuation ","
                     <>  " "
@@ -633,6 +661,12 @@ prettyRecordType (Fields (keyType : keyTypes) fields) =
                             punctuation ","
                         <>  " "
                         <>  label (pretty ρ <> "?")
+                        <>  Pretty.hardline
+                        <>  punctuation "}"
+                    HoleFields ->
+                            punctuation ","
+                        <>  " "
+                        <>  keyword "?"
                         <>  Pretty.hardline
                         <>  punctuation "}"
                     VariableFields ρ ->
@@ -667,6 +701,12 @@ prettyUnionType (Alternatives [] (UnsolvedAlternatives ρ)) =
     <>  label (pretty ρ <> "?")
     <>  " "
     <>  punctuation ">"
+prettyUnionType (Alternatives [] HoleAlternatives) =
+        punctuation "<"
+    <>  " "
+    <>  keyword "?"
+    <>  " "
+    <>  punctuation ">"
 prettyUnionType (Alternatives [] (VariableAlternatives ρ)) =
     punctuation "<" <> " " <> label (pretty ρ) <> " " <> punctuation ">"
 prettyUnionType (Alternatives (keyType : keyTypes) alternatives) =
@@ -686,6 +726,13 @@ prettyUnionType (Alternatives (keyType : keyTypes) alternatives) =
                     <>  punctuation "|"
                     <>  " "
                     <>  label (pretty ρ <> "?")
+                    <>  " "
+                    <>  punctuation ">"
+                HoleAlternatives ->
+                        " "
+                    <>  punctuation "|"
+                    <>  " "
+                    <>  keyword "?"
                     <>  " "
                     <>  punctuation ">"
                 VariableAlternatives ρ ->
@@ -709,6 +756,12 @@ prettyUnionType (Alternatives (keyType : keyTypes) alternatives) =
                             punctuation "|"
                         <>  " "
                         <>  label (pretty ρ <> "?")
+                        <>  Pretty.hardline
+                        <>  punctuation ">"
+                    HoleAlternatives ->
+                            punctuation "|"
+                        <>  " "
+                        <>  keyword "?"
                         <>  Pretty.hardline
                         <>  punctuation ">"
                     VariableAlternatives ρ ->

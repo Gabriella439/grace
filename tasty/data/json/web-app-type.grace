@@ -1,4 +1,4 @@
-{ web-app: { servlet: List (exists (a : Type) . a)
+{ web-app: { servlet: List ?
            , servlet-mapping: { cofaxCDS: Text
                               , cofaxEmail: Text
                               , cofaxAdmin: Text

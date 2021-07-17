@@ -167,6 +167,9 @@ wellFormedType _Γ Type{..} =
             predicate (Context.SolvedType   a1 _) = a0 == a1
             predicate  _                          = False
 
+        Type.TypeHole -> do
+            return ()
+
         Type.Optional _A -> do
             wellFormedType _Γ _A
 
@@ -197,6 +200,9 @@ wellFormedType _Γ Type{..} =
             predicate (Context.UnsolvedFields a1  ) = a0 == a1
             predicate (Context.SolvedFields   a1 _) = a0 == a1
             predicate  _                            = False
+
+        Type.Record (Type.Fields kAs Monotype.HoleFields) -> do
+            traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
 
         Type.Record (Type.Fields kAs (Monotype.VariableFields a))
             | Context.Variable Domain.Fields a `elem` _Γ -> do
@@ -233,6 +239,9 @@ wellFormedType _Γ Type{..} =
             predicate (Context.SolvedAlternatives   a1 _) = a0 == a1
             predicate  _                                  = False
 
+        Type.Union (Type.Alternatives kAs Monotype.HoleAlternatives) -> do
+            traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
+
         Type.Union (Type.Alternatives kAs (Monotype.VariableAlternatives a))
             | Context.Variable Domain.Alternatives a `elem` _Γ -> do
                 traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
@@ -263,6 +272,20 @@ subtype _A0 _B0 = do
     let locB0 = Location.renderError "" (Type.location _B0)
 
     case (Type.node _A0, Type.node _B0) of
+        (Type.TypeHole, _) -> do
+            a <- fresh
+
+            push (Context.UnsolvedType a)
+
+            subtype Type{ location = Type.location _A0, node = Type.UnsolvedType a } _B0
+
+        (_, Type.TypeHole) -> do
+            b <- fresh
+
+            push (Context.UnsolvedType b)
+
+            subtype _A0 Type{ location = Type.location _B0, node = Type.UnsolvedType b }
+
         -- <:Var
         (Type.VariableType a0, Type.VariableType a1)
             | a0 == a1 -> do
@@ -457,6 +480,20 @@ subtype _A0 _B0 = do
         -- implement a non-trivial type that wasn't already covered by the
         -- paper, so we'll go into more detail here to explain the general
         -- type-checking principles of the paper.
+        (Type.Record (Type.Fields kAs Monotype.HoleFields), _) -> do
+            p <- fresh
+
+            push (Context.UnsolvedFields p)
+
+            subtype Type{ location = Type.location _A0, node = Type.Record (Type.Fields kAs (Monotype.UnsolvedFields p)) } _B0
+
+        (_, Type.Record (Type.Fields kBs Monotype.HoleFields)) -> do
+            p <- fresh
+
+            push (Context.UnsolvedFields p)
+
+            subtype _A0 Type{ location = Type.location _B0, node = Type.Record (Type.Fields kBs (Monotype.UnsolvedFields p)) }
+
         (_A@(Type.Record (Type.Fields kAs0 fields0)), _B@(Type.Record (Type.Fields kBs0 fields1))) -> do
             let mapA = Map.fromList kAs0
             let mapB = Map.fromList kBs0
@@ -741,6 +778,20 @@ subtype _A0 _B0 = do
         -- Checking if one union is a subtype of another union is basically the
         -- exact same as the logic for checking if a record is a subtype of
         -- another record.
+        (Type.Union (Type.Alternatives kAs Monotype.HoleAlternatives), _) -> do
+            p <- fresh
+
+            push (Context.UnsolvedAlternatives p)
+
+            subtype Type{ location = Type.location _A0, node = Type.Union (Type.Alternatives kAs (Monotype.UnsolvedAlternatives p)) } _B0
+
+        (_, Type.Union (Type.Alternatives kBs Monotype.HoleAlternatives)) -> do
+            p <- fresh
+
+            push (Context.UnsolvedAlternatives p)
+
+            subtype _A0 Type{ location = Type.location _B0, node = Type.Union (Type.Alternatives kBs (Monotype.UnsolvedAlternatives p)) }
+
         (_A@(Type.Union (Type.Alternatives kAs0 alternatives0)), _B@(Type.Union (Type.Alternatives kBs0 alternatives1))) -> do
             let mapA = Map.fromList kAs0
             let mapB = Map.fromList kBs0
@@ -1034,6 +1085,13 @@ instantiateTypeL a _A0 = do
             set (_Γ' <> (Context.SolvedType a τ : _Γ))
 
     case Type.node _A0 of
+        Type.TypeHole -> do
+            b <- fresh
+
+            push (Context.UnsolvedType a)
+
+            instantiateTypeL a Type{ location = Type.location _A0, node = Type.UnsolvedType b }
+
         -- InstLReach
         Type.UnsolvedType b
             | let _ΓL = _Γ
@@ -1223,6 +1281,13 @@ instantiateTypeR _A0 a = do
             set (_Γ' <> (Context.SolvedType a τ : _Γ))
 
     case Type.node _A0 of
+        Type.TypeHole -> do
+            b <- fresh
+
+            push (Context.UnsolvedType a)
+
+            instantiateTypeL a Type{ location = Type.location _A0, node = Type.UnsolvedType b }
+
         -- InstRReach
         Type.UnsolvedType b
             | let _ΓL = _Γ

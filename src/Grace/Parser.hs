@@ -179,6 +179,7 @@ render t = case t of
     Lexer.Optional         -> "List"
     Lexer.Or               -> "||"
     Lexer.Plus             -> "+"
+    Lexer.Question         -> "?"
     Lexer.Text             -> "Text"
     Lexer.TextLiteral _    -> "a text literal"
     Lexer.Then             -> "then"
@@ -545,7 +546,9 @@ grammar = mdo
         )
 
     primitiveType <- rule
-        (   do  location <- locatedToken Lexer.Bool
+        (   do  location <- locatedToken Lexer.Question
+                return Type{ node = Type.TypeHole, .. }
+        <|> do  location <- locatedToken Lexer.Bool
                 return Type{ node = Type.Scalar Monotype.Bool, .. }
         <|> do  location <- locatedToken Lexer.Double
                 return Type{ node = Type.Scalar Monotype.Double, .. }
@@ -573,10 +576,12 @@ grammar = mdo
                 
                 toFields <-
                     (   do  text_ <- recordLabel
-                            return (\fs -> Type.Fields fs (Monotype.VariableFields text_))
+                            pure (\fs -> Type.Fields fs (Monotype.VariableFields text_))
+                    <|> do  token Lexer.Question
+                            pure (\fs -> Type.Fields fs Monotype.HoleFields)
                     <|> do  pure (\fs -> Type.Fields fs Monotype.EmptyFields)
                     <|> do  f <- fieldType
-                            return (\fs -> Type.Fields (fs <> [ f ]) Monotype.EmptyFields)
+                            pure (\fs -> Type.Fields (fs <> [ f ]) Monotype.EmptyFields)
                     )
 
                 optional (token Lexer.Comma)
