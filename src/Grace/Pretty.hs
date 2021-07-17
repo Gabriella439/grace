@@ -5,6 +5,7 @@ module Grace.Pretty
     ( -- * Prettyprinting
       renderStrict
     , renderIO
+    , toText
     , defaultColumns
     , Pretty(..)
 
@@ -72,6 +73,10 @@ renderIO highlight columns handle =
 -- | The default column size to use
 defaultColumns :: Int
 defaultColumns = 80
+
+-- | Simple conversion of a document to `Text`
+toText :: Pretty a => a -> Text
+toText = Pretty.Text.renderStrict . Pretty.layoutCompact . pretty
 
 {-| This is like @"Prettyprinter".`Prettyprinter.Pretty`@, except that this
     can return a `Doc` with `AnsiStyle` annotations

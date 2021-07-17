@@ -42,8 +42,10 @@ import Grace.Pretty
     , operator
     )
 
-import qualified Grace.Type         as Type
-import qualified Prettyprinter      as Pretty
+import qualified Data.Text     as Text
+import qualified Grace.Pretty  as Pretty
+import qualified Grace.Type    as Type
+import qualified Prettyprinter as Pretty
 
 {- $setup
 
@@ -450,11 +452,43 @@ prettyOperator
     => Operator
     -> (Node s a -> Doc AnsiStyle)
     -> (Node s a -> Doc AnsiStyle)
-prettyOperator operator0 prettyNext (Operator left _ operator1 right)
-    | operator0 == operator1 =
-            liftSyntax (prettyOperator operator0 prettyNext) left
-        <>  " " <> pretty operator1 <> " "
-        <> liftSyntax prettyNext right
+prettyOperator operator0 prettyNext expression@(Operator _ _ operator1 _)
+    | operator0 == operator1 = Pretty.group (Pretty.flatAlt long short)
+  where
+    short = prettyShort expression
+
+    long = Pretty.align (prettyLong expression)
+
+    prettyShort (Operator left _ op right)
+        | operator0 == op =
+                liftSyntax prettyShort left
+            <>  " "
+            <>  pretty op
+            <>  " "
+            <>  liftSyntax prettyNext right
+    prettyShort other =
+        prettyNext other
+
+    prettyLong (Operator left _ op right)
+        | operator0 == op =
+                liftSyntax prettyLong left
+            <>  Pretty.hardline
+            <>  pretty op
+            <>  pretty (Text.replicate spacing " ")
+            <>  liftSyntax prettyNext right
+    prettyLong other =
+            pretty (Text.replicate indent " ")
+        <>  prettyNext other
+
+    operatorWidth = Text.length (Pretty.toText operator0)
+
+    alignment = 2
+
+    align n = ((n `div` alignment) + 1) * alignment
+
+    indent = align operatorWidth
+
+    spacing = indent - operatorWidth
 prettyOperator _ prettyNext other =
     prettyNext other
 
