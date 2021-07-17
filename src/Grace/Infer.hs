@@ -1247,8 +1247,8 @@ instantiateTypeR _A0 a = do
    and variant polymorphism, by following the same general type-checking
    principles as the original paper.
 
-   If you understand how the `instantiateL` and `instantiateR` functions work,
-   then you will probably understand how these functions work because they
+   If you understand how the `instantiateTypeL` and `instantiateTypeR` functions
+   work, then you will probably understand how these functions work because they
    follow the same rules:
 
    * Always make sure that solved variables only reference variables earlier

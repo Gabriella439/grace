@@ -146,7 +146,7 @@ Grace implements the following features so that you don't have to:
   inferring the types of open records (also known as
   [row polymorphism](https://en.wikipedia.org/wiki/Row_polymorphism)) and
   open unions (also known as [polymorphic variants](https://2ality.com/2018/01/polymorphic-variants-reasonml.html)).  This lets you easily work with records or
-  sums where not all fields or alternatives are known in advance.
+  unions where not all fields or alternatives are known in advance.
 
 * Universal quantification and existential quantification
 
@@ -424,18 +424,18 @@ package dependencies:
 
 ```dhall
 [ GitHub
-    { "repository": "https://github.com/Gabriel439/Haskell-Turtle-Library.git"
-    , "revision": "ae5edf227b515b34c1cb6c89d9c58ea0eece12d5"
+    { repository: "https://github.com/Gabriel439/Haskell-Turtle-Library.git"
+    , revision: "ae5edf227b515b34c1cb6c89d9c58ea0eece12d5"
     }
-, Local { "path": "~/proj/optparse-applicative" }
-, Local { "path": "~/proj/discrimination" }
-, Hackage { "package": "lens", "version": "4.15.4" }
+, Local { path: "~/proj/optparse-applicative" }
+, Local { path: "~/proj/discrimination" }
+, Hackage { package: "lens", version: "4.15.4" }
 , GitHub
-    { "repository": "https://github.com/haskell/text.git"
-    , "revision": "ccbfabedea1cf5b38ff19f37549feaf01225e537"
+    { repository: "https://github.com/haskell/text.git"
+    , revision: "ccbfabedea1cf5b38ff19f37549feaf01225e537"
     }
-, Local { "path": "~/proj/servant-swagger" }
-, Hackage { "package": "aeson", "version": "1.2.3.0" }
+, Local { path: "~/proj/servant-swagger" }
+, Hackage { package: "aeson", version: "1.2.3.0" }
 ]
 ```
 
@@ -531,8 +531,8 @@ record of handlers (one per alternative):
 let render
       : < Left: Double | Right: Bool > -> Text
       = merge
-          { "Left": Double/show
-          , "Right": \b -> if b then "true" else "false"
+          { Left: Double/show
+          , Right: \b -> if b then "true" else "false"
           }
 
 in  [ render (Left 2.0), render (Right true) ]
@@ -669,9 +669,9 @@ in  numbers
 ```
 
 The type-checker will accept the above example and infer that the type `a`
-should be `Natural`.  You can read that type as saying that there `exists` a
-`Type` that we could assign to `a` that would make the type work, but we don't
-care which one.
+should be `Natural` for each element.  You can read that type as saying that
+there `exists` a `Type` that we could assign to `a` that would make the type
+work, but we don't care which one.
 
 You don't need type annotations when the types of values exactly match, but
 you do require type annotations to unify types when one type is a proper
@@ -829,24 +829,24 @@ referencing the file's relative or absolute path.
 For example, instead of having one large expression like this:
 
 ```dhall
-[ { "name": "Cake donut"
-  , "batters": [ "Regular", "Chocolate", "Blueberry", "Devil's Food" ]
-  , "topping": [ "None"
-               , "Glazed"
-               , "Sugar"
-               , "Powdered Sugar"
-               , "Chocolate with Sprinkles"
-               , "Chocolate"
-               , "Maple"
-               ]
+[ { name: "Cake donut"
+  , batters: [ "Regular", "Chocolate", "Blueberry", "Devil's Food" ]
+  , topping: [ "None"
+             , "Glazed"
+             , "Sugar"
+             , "Powdered Sugar"
+             , "Chocolate with Sprinkles"
+             , "Chocolate"
+             , "Maple"
+             ]
   }
-, { "name": "Raised donut"
-  , "batters": [ "Regular" ]
-  , "topping": [ "None", "Glazed", "Sugar", "Chocolate", "Maple" ]
+, { name: "Raised donut"
+  , batters: [ "Regular" ]
+  , topping: [ "None", "Glazed", "Sugar", "Chocolate", "Maple" ]
   }
-, { "name": "Old Fashioned donut"
-  , "batters": [ "Regular", "Chocolate" ]
-  , "topping": [ "None", "Glazed", "Chocolate", "Maple" ]
+, { name: "Old Fashioned donut"
+  , batters: [ "Regular", "Chocolate" ]
+  , topping: [ "None", "Glazed", "Chocolate", "Maple" ]
   }
 ]
 ```
@@ -856,34 +856,34 @@ For example, instead of having one large expression like this:
 ```dhall
 # ./cake.grace
 
-{ "name": "Cake donut"
-, "batters": [ "Regular", "Chocolate", "Blueberry", "Devil's Food" ]
-, "topping": [ "None"
-             , "Glazed"
-             , "Sugar"
-             , "Powdered Sugar"
-             , "Chocolate with Sprinkles"
-             , "Chocolate"
-             , "Maple"
-             ]
+{ name: "Cake donut"
+, batters: [ "Regular", "Chocolate", "Blueberry", "Devil's Food" ]
+, topping: [ "None"
+           , "Glazed"
+           , "Sugar"
+           , "Powdered Sugar"
+           , "Chocolate with Sprinkles"
+           , "Chocolate"
+           , "Maple"
+           ]
 }
 ```
 
 ```dhall
 # ./raised.grace
 
-{ "name": "Raised donut"
-, "batters": [ "Regular" ]
-, "topping": [ "None", "Glazed", "Sugar", "Chocolate", "Maple" ]
+{ name: "Raised donut"
+, batters: [ "Regular" ]
+, topping: [ "None", "Glazed", "Sugar", "Chocolate", "Maple" ]
 }
 ```
 
 ```dhall
 # ./old-fashioned.grace
 
-{ "name": "Old Fashioned donut"
-, "batters": [ "Regular", "Chocolate" ]
-, "topping": [ "None", "Glazed", "Chocolate", "Maple" ]
+{ name: "Old Fashioned donut"
+, batters: [ "Regular", "Chocolate" ]
+, topping: [ "None", "Glazed", "Chocolate", "Maple" ]
 }
 ```
 
