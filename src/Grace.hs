@@ -1,6 +1,7 @@
 {-# LANGUAGE ApplicativeDo     #-}
 {-# LANGUAGE BlockArguments    #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes       #-}
 {-# LANGUAGE RecordWildCards   #-}
 
 {-| This module contains the top-level `main` function that implements the
@@ -13,11 +14,13 @@ module Grace
 
 import Control.Applicative (many, (<|>))
 import Data.Foldable (traverse_)
+import Data.String.Interpolate (__i)
 import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Interpret (Input(..))
 import Grace.Location (Location(..))
 import Grace.Syntax (Builtin(..), Node(..), Syntax(..))
+import Grace.Type (Type(..))
 import Options.Applicative (Parser, ParserInfo)
 import Prettyprinter (Doc)
 import Prettyprinter.Render.Terminal (AnsiStyle)
@@ -28,9 +31,13 @@ import qualified Data.Text.IO                 as Text.IO
 import qualified Prettyprinter                as Pretty
 import qualified Grace.Infer                  as Infer
 import qualified Grace.Interpret              as Interpret
+import qualified Grace.Monotype               as Monotype
 import qualified Grace.Normalize              as Normalize
 import qualified Grace.Parser                 as Parser
 import qualified Grace.Pretty
+import qualified Grace.Syntax                 as Syntax
+import qualified Grace.Type                   as Type
+import qualified Grace.Value                  as Value
 import qualified Options.Applicative          as Options
 import qualified System.Console.ANSI          as ANSI
 import qualified System.Console.Terminal.Size as Size
@@ -48,6 +55,7 @@ data Highlight
 
 data Options
     = Interpret { annotate :: Bool, highlight :: Highlight, file :: FilePath }
+    | Text { file :: FilePath }
     | Format { highlight :: Highlight, files :: [FilePath] }
     | Builtins { highlight :: Highlight }
 
@@ -73,6 +81,14 @@ parser = do
 
             return Interpret{..}
 
+    let text = do
+            file <- Options.strArgument
+                (   Options.help "File to interpret"
+                <>  Options.metavar "FILE"
+                )
+
+            return Text{..}
+
     let format = do
             let parseFile =
                     Options.strArgument
@@ -92,14 +108,19 @@ parser = do
             return Builtins{..}
 
     Options.hsubparser
-        (   Options.command "format"
-                (Options.info format
-                    (Options.progDesc "Format Grace code")
-                )
-
-        <>  Options.command "interpret"
+        (   Options.command "interpret"
                 (Options.info interpret
                     (Options.progDesc "Interpret a Grace file")
+                )
+
+        <>  Options.command "text"
+                (Options.info text
+                    (Options.progDesc "Render a Grace text literal")
+                )
+
+        <>  Options.command "format"
+                (Options.info format
+                    (Options.progDesc "Format Grace code")
                 )
 
         <>  Options.command "builtins"
@@ -184,6 +205,40 @@ main = do
             render <- getRender highlight
 
             render (Grace.Pretty.pretty annotatedExpression <> Pretty.hardline)
+
+        Text{..} -> do
+            input <- case file of
+                "-" -> do
+                    text <- Text.IO.getContents
+
+                    return (Code text)
+                _ -> do
+                    return (Path file)
+
+            let location =
+                    Location
+                        { name = "(input)"
+                        , code = "… : Text"
+                        , offset = 4
+                        }
+
+            let expected = Type{ node = Type.Scalar Monotype.Text, .. }
+
+            eitherResult <- do
+                Except.runExceptT (Interpret.interpret (Just expected) input)
+
+            (_, value) <- throws eitherResult
+
+            case value of
+                Value.Scalar (Syntax.Text text) -> Text.IO.putStr text
+                _ -> do
+                    Text.IO.hPutStrLn IO.stderr [__i|
+                    Internal error: Not a Text literal
+
+                    The input expression did not evaluate to a Text literal, even though it had the
+                    correct type
+                    |]
+                    Exit.exitFailure
 
         Format{..} -> do
             case files of
