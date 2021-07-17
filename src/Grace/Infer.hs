@@ -661,7 +661,7 @@ subtype _A0 _B0 = do
                                     set (   _ΓR
                                         <>  ( Context.UnsolvedFields p1
                                             : Context.UnsolvedFields p2
-                                            : ΓL
+                                            : _ΓL
                                             )
                                         )
 
