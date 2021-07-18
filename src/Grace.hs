@@ -58,6 +58,7 @@ data Options
     | Text { file :: FilePath }
     | Format { highlight :: Highlight, files :: [FilePath] }
     | Builtins { highlight :: Highlight }
+    | Repl {}
 
 parserInfo :: ParserInfo Options
 parserInfo =
@@ -67,7 +68,7 @@ parserInfo =
 parser :: Parser Options
 parser = do
     let interpret = do
-            annotate <- Options.switch 
+            annotate <- Options.switch
                 (   Options.long "annotate"
                 <>  Options.help "Add a type annotation for the inferred type"
                 )
@@ -107,6 +108,9 @@ parser = do
 
             return Builtins{..}
 
+    let repl = do
+            pure Repl{}
+
     Options.hsubparser
         (   Options.command "interpret"
                 (Options.info interpret
@@ -126,6 +130,10 @@ parser = do
         <>  Options.command "builtins"
                 (Options.info builtins
                     (Options.progDesc "List all built-in functions and their types")
+                )
+        <> Options.command "repl"
+                (Options.info repl
+                    (Options.progDesc "Enter a repl for Grace")
                 )
         )
   where
@@ -302,3 +310,6 @@ main = do
                     displayBuiltin b0
 
                     traverse_ (\b -> Text.IO.putStrLn "" >> displayBuiltin b) bs
+
+        Repl{} -> do
+            return ()
