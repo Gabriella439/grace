@@ -21,6 +21,7 @@ library
                      , parser-combinators
                      , prettyprinter
                      , prettyprinter-ansi-terminal
+                     , repline
                      , string-interpolate
                      , terminal-size
                      , text
@@ -40,6 +41,7 @@ library
                      , Grace.Syntax
                      , Grace.Type
                      , Grace.Value
+                     , Grace.Repl
   default-language:    Haskell2010
   ghc-options:         -Wall
 
