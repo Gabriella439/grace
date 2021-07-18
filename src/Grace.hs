@@ -38,6 +38,7 @@ import qualified Grace.Pretty
 import qualified Grace.Syntax                 as Syntax
 import qualified Grace.Type                   as Type
 import qualified Grace.Value                  as Value
+import qualified Grace.Repl                   as Repl
 import qualified Options.Applicative          as Options
 import qualified System.Console.ANSI          as ANSI
 import qualified System.Console.Terminal.Size as Size
@@ -312,4 +313,4 @@ main = do
                     traverse_ (\b -> Text.IO.putStrLn "" >> displayBuiltin b) bs
 
         Repl{} -> do
-            return ()
+            Repl.repl
