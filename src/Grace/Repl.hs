@@ -40,9 +40,9 @@ interpret string = liftIO $ do
         Except.runExceptT (Interpret.interpret Nothing input)
 
     case eitherResult of
-       Left text -> Text.IO.hPutStrLn IO.stderr text
-       Right (_inferred, value) -> do
-        let syntax = Normalize.quote [] value
+        Left text -> Text.IO.hPutStrLn IO.stderr text
+        Right (_inferred, value) -> do
+            let syntax = Normalize.quote [] value
 
-        width <- Grace.Pretty.getWidth
-        Grace.Pretty.renderIO True width IO.stdout (Grace.Pretty.pretty syntax <> "\n")
+            width <- Grace.Pretty.getWidth
+            Grace.Pretty.renderIO True width IO.stdout (Grace.Pretty.pretty syntax <> "\n")
