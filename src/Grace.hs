@@ -24,7 +24,6 @@ import Grace.Type (Type(..))
 import Options.Applicative (Parser, ParserInfo)
 import Prettyprinter (Doc)
 import Prettyprinter.Render.Terminal (AnsiStyle)
-import System.Console.Terminal.Size (Window(..))
 
 import qualified Control.Monad.Except         as Except
 import qualified Data.Text.IO                 as Text.IO
@@ -41,7 +40,6 @@ import qualified Grace.Value                  as Value
 import qualified Grace.Repl                   as Repl
 import qualified Options.Applicative          as Options
 import qualified System.Console.ANSI          as ANSI
-import qualified System.Console.Terminal.Size as Size
 import qualified System.Exit                  as Exit
 import qualified System.IO                    as IO
 
@@ -134,7 +132,7 @@ parser = do
                 )
         <> Options.command "repl"
                 (Options.info repl
-                    (Options.progDesc "Enter a repl for Grace")
+                    (Options.progDesc "Enter a REPL for Grace")
                 )
         )
   where
@@ -155,21 +153,10 @@ detectColor Color = do return True
 detectColor Plain = do return False
 detectColor Auto  = do ANSI.hSupportsANSI IO.stdout
 
-getWidth :: IO Int
-getWidth = do
-    maybeWindow <- Size.size
-
-    let renderWidth =
-            case maybeWindow of
-                Nothing         -> Grace.Pretty.defaultColumns
-                Just Window{..} -> width
-
-    return renderWidth
-
 getRender :: Highlight -> IO (Doc AnsiStyle -> IO ())
 getRender highlight = do
     color <- detectColor highlight
-    width <- getWidth
+    width <- Grace.Pretty.getWidth
 
     return (Grace.Pretty.renderIO color width IO.stdout)
 
