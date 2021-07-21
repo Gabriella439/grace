@@ -224,7 +224,7 @@ wellFormedType _Γ Type{..} =
 
                 The following unsolved alternatives variable:
 
-                #{insert (Context.UnsolvedAlternatives a0)}
+                #{insert (Context.Alternatives a0 Unsolved)}
 
                 … is not well-formed within the following context:
 
@@ -233,9 +233,8 @@ wellFormedType _Γ Type{..} =
                 #{Location.renderError "" location}
                 |]
           where
-            predicate (Context.UnsolvedAlternatives a1  ) = a0 == a1
-            predicate (Context.SolvedAlternatives   a1 _) = a0 == a1
-            predicate  _                                  = False
+            predicate (Context.Alternatives a1 _) = a0 == a1
+            predicate  _                          = False
 
         Type.Union (Type.Alternatives kAs Monotype.HoleAlternatives) -> do
             traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
@@ -384,7 +383,7 @@ subtype _A0 _B0 = do
             a1 <- fresh
 
             push (Context.MarkerAlternatives a1)
-            push (Context.UnsolvedAlternatives a1)
+            push (Context.Alternatives a1 Unsolved)
 
             let a1' = Type.Alternatives [] (Monotype.UnsolvedAlternatives a1)
 
@@ -422,7 +421,7 @@ subtype _A0 _B0 = do
             a1 <- fresh
 
             push (Context.MarkerAlternatives a1)
-            push (Context.UnsolvedAlternatives a1)
+            push (Context.Alternatives a1 Unsolved)
 
             let a1' = Type.Alternatives [] (Monotype.UnsolvedAlternatives a1)
 
@@ -779,14 +778,14 @@ subtype _A0 _B0 = do
         (Type.Union (Type.Alternatives kAs Monotype.HoleAlternatives), _) -> do
             p <- fresh
 
-            push (Context.UnsolvedAlternatives p)
+            push (Context.Alternatives p Unsolved)
 
             subtype Type{ location = Type.location _A0, node = Type.Union (Type.Alternatives kAs (Monotype.UnsolvedAlternatives p)) } _B0
 
         (_, Type.Union (Type.Alternatives kBs Monotype.HoleAlternatives)) -> do
             p <- fresh
 
-            push (Context.UnsolvedAlternatives p)
+            push (Context.Alternatives p Unsolved)
 
             subtype _A0 Type{ location = Type.location _B0, node = Type.Union (Type.Alternatives kBs (Monotype.UnsolvedAlternatives p)) }
 
@@ -892,12 +891,12 @@ subtype _A0 _B0 = do
                     let p0First = do
                             (_ΓR, _ΓL) <- Context.splitOnUnsolvedAlternatives p0 _Γ0
 
-                            Monad.guard (Context.UnsolvedAlternatives p1 `elem` _ΓR)
+                            Monad.guard (Context.Alternatives p1 Unsolved `elem` _ΓR)
 
                             let command =
                                     set (   _ΓR
-                                        <>  ( Context.UnsolvedAlternatives p0
-                                            : Context.UnsolvedAlternatives p2
+                                        <>  ( Context.Alternatives p0 Unsolved
+                                            : Context.Alternatives p2 Unsolved
                                             : _ΓL
                                             )
                                         )
@@ -907,12 +906,12 @@ subtype _A0 _B0 = do
                     let p1First = do
                             (_ΓR, _ΓL) <- Context.splitOnUnsolvedAlternatives p1 _Γ0
 
-                            Monad.guard (Context.UnsolvedAlternatives p0 `elem` _ΓR)
+                            Monad.guard (Context.Alternatives p0 Unsolved `elem` _ΓR)
 
                             let command =
                                     set (   _ΓR
-                                        <>  ( Context.UnsolvedAlternatives p1
-                                            : Context.UnsolvedAlternatives p2
+                                        <>  ( Context.Alternatives p1 Unsolved
+                                            : Context.Alternatives p2 Unsolved
                                             : _ΓL
                                             )
                                         )
@@ -927,8 +926,8 @@ subtype _A0 _B0 = do
                             One of the following alternatives variables:
 
                             #{listToText
-                                [ Context.UnsolvedAlternatives p0
-                                , Context.UnsolvedAlternatives p1
+                                [ Context.Alternatives p0 Unsolved
+                                , Context.Alternatives p1 Unsolved
                                 ]
                             }
 
@@ -1129,7 +1128,7 @@ instantiateTypeL a _A0 = do
             b1 <- fresh
 
             push (Context.MarkerAlternatives b1)
-            push (Context.UnsolvedAlternatives b1)
+            push (Context.Alternatives b1 Unsolved)
 
             let b1' = Type.Alternatives [] (Monotype.UnsolvedAlternatives b1)
             instantiateTypeR (Type.substituteAlternatives b0 0 b1' _B) a
@@ -1243,7 +1242,7 @@ instantiateTypeL a _A0 = do
 
             p <- fresh
 
-            set (_ΓR <> (Context.Type a (Solved (Monotype.Union (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives p)))) : Context.UnsolvedAlternatives p : _ΓL))
+            set (_ΓR <> (Context.Type a (Solved (Monotype.Union (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives p)))) : Context.Alternatives p Unsolved : _ΓL))
 
             instantiateAlternativesL p (Type.location _A0) u
 
@@ -1349,7 +1348,7 @@ instantiateTypeR _A0 a = do
             b1 <- fresh
 
             push (Context.MarkerAlternatives b1)
-            push (Context.UnsolvedAlternatives b1)
+            push (Context.Alternatives b1 Unsolved)
 
             let b1' = Type.Alternatives [] (Monotype.UnsolvedAlternatives b1)
             instantiateTypeR (Type.substituteAlternatives b0 0 b1' _B) a
@@ -1392,7 +1391,7 @@ instantiateTypeR _A0 a = do
 
             p <- fresh
 
-            set (_ΓR <> (Context.Type a (Solved (Monotype.Union (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives p)))) : Context.UnsolvedAlternatives p : _ΓL))
+            set (_ΓR <> (Context.Type a (Solved (Monotype.Union (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives p)))) : Context.Alternatives p Unsolved : _ΓL))
 
             instantiateAlternativesR (Type.location _A0) u p
 
@@ -1602,16 +1601,16 @@ equateAlternatives p0 p1 = do
     let p0First = do
             (_ΓR, _ΓL) <- Context.splitOnUnsolvedAlternatives p1 _Γ0
 
-            Monad.guard (Context.UnsolvedAlternatives p0 `elem` _ΓL)
+            Monad.guard (Context.Alternatives p0 Unsolved `elem` _ΓL)
 
-            return (set (_ΓR <> (Context.SolvedAlternatives p1 (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives p0)) : _ΓL)))
+            return (set (_ΓR <> (Context.Alternatives p1 (Solved (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives p0))) : _ΓL)))
 
     let p1First = do
             (_ΓR, _ΓL) <- Context.splitOnUnsolvedAlternatives p0 _Γ0
 
-            Monad.guard (Context.UnsolvedAlternatives p1 `elem` _ΓL)
+            Monad.guard (Context.Alternatives p1 Unsolved `elem` _ΓL)
 
-            return (set (_ΓR <> (Context.SolvedAlternatives p0 (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives p1)) : _ΓL)))
+            return (set (_ΓR <> (Context.Alternatives p0 (Solved (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives p1))) : _ΓL)))
 
     case p0First <|> p1First of
         Nothing -> do
@@ -1620,7 +1619,7 @@ equateAlternatives p0 p1 = do
 
             One of the following alternatives variables:
 
-            #{listToText [Context.UnsolvedAlternatives p0, Context.UnsolvedAlternatives p1 ]}
+            #{listToText [Context.Alternatives p0 Unsolved, Context.Alternatives p1 Unsolved]}
 
             … is missing from the following context:
 
@@ -1671,7 +1670,7 @@ instantiateAlternativesL p0 location u@(Type.Alternatives kAs rest) = do
 
         The following unsolved alternatives variable:
 
-        #{insert (Context.UnsolvedAlternatives p0)}}
+        #{insert (Context.Alternatives p0 Unsolved)}}
 
         … cannot be instantiated because the alternatives variable is missing from the
         context:
@@ -1683,7 +1682,7 @@ instantiateAlternativesL p0 location u@(Type.Alternatives kAs rest) = do
         Monotype.UnsolvedAlternatives p1 -> do
             p2 <- fresh
 
-            set (_ΓR <> (Context.SolvedAlternatives p0 (Monotype.Alternatives kbs (Monotype.UnsolvedAlternatives p2)) : Context.UnsolvedAlternatives p2 : bs <> _ΓL))
+            set (_ΓR <> (Context.Alternatives p0 (Solved (Monotype.Alternatives kbs (Monotype.UnsolvedAlternatives p2))) : Context.Alternatives p2 Unsolved : bs <> _ΓL))
 
             equateAlternatives p1 p2
 
@@ -1691,7 +1690,7 @@ instantiateAlternativesL p0 location u@(Type.Alternatives kAs rest) = do
             wellFormedType (bs <> _ΓL)
                 Type{ location, node = Type.Union (Type.Alternatives [] rest) }
 
-            set (_ΓR <> (Context.SolvedAlternatives p0 (Monotype.Alternatives kbs rest) : bs <> _ΓL))
+            set (_ΓR <> (Context.Alternatives p0 (Solved (Monotype.Alternatives kbs rest)) : bs <> _ΓL))
 
     let instantiate (_, _A, b) = do
             _Θ <- get
@@ -1741,7 +1740,7 @@ instantiateAlternativesR location u@(Type.Alternatives kAs rest) p0 = do
 
         The following unsolved alternatives variable:
 
-        #{insert (Context.UnsolvedAlternatives p0)}
+        #{insert (Context.Alternatives p0 Unsolved)}
 
         … cannot be instantiated because the alternatives variable is missing from the
         context:
@@ -1753,7 +1752,7 @@ instantiateAlternativesR location u@(Type.Alternatives kAs rest) p0 = do
         Monotype.UnsolvedAlternatives p1 -> do
             p2 <- fresh
 
-            set (_ΓR <> (Context.SolvedAlternatives p0 (Monotype.Alternatives kbs (Monotype.UnsolvedAlternatives p2)) : Context.UnsolvedAlternatives p2 : bs <> _ΓL))
+            set (_ΓR <> (Context.Alternatives p0 (Solved (Monotype.Alternatives kbs (Monotype.UnsolvedAlternatives p2))) : Context.Alternatives p2 Unsolved: bs <> _ΓL))
 
             equateAlternatives p1 p2
 
@@ -1761,7 +1760,7 @@ instantiateAlternativesR location u@(Type.Alternatives kAs rest) p0 = do
             wellFormedType (bs <> _ΓL)
                 Type{ location, node = Type.Union (Type.Alternatives [] rest) }
 
-            set (_ΓR <> (Context.SolvedAlternatives p0 (Monotype.Alternatives kbs rest) : bs <> _ΓL))
+            set (_ΓR <> (Context.Alternatives p0 (Solved (Monotype.Alternatives kbs rest)) : bs <> _ΓL))
 
     let instantiate (_, _A, b) = do
             _Θ <- get
@@ -1886,7 +1885,7 @@ infer e0 = do
             p <- fresh
 
             push (Context.Type a Unsolved)
-            push (Context.UnsolvedAlternatives p)
+            push (Context.Alternatives p Unsolved)
 
             return _Type
                 { node =
@@ -2257,7 +2256,7 @@ check e Type{ node = Type.Exists _ a0 Domain.Alternatives _A } = do
     a1 <- fresh
 
     push (Context.MarkerAlternatives a1)
-    push (Context.UnsolvedAlternatives a1)
+    push (Context.Alternatives a1 Unsolved)
 
     let a1' = Type.Alternatives [] (Monotype.UnsolvedAlternatives a1)
 
@@ -2351,7 +2350,7 @@ inferApplication _A0@Type{ node = Type.Forall _ a0 Domain.Fields _A } e = do
 inferApplication _A0@Type{ node = Type.Forall _ a0 Domain.Alternatives _A } e = do
     a1 <- fresh
 
-    push (Context.UnsolvedAlternatives a1)
+    push (Context.Alternatives a1 Unsolved)
 
     let a1' = Type.Alternatives [] (Monotype.UnsolvedAlternatives a1)
 
