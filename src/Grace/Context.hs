@@ -74,23 +74,19 @@ data Entry s
     -- a?
     -- >>> pretty @(Entry ()) (Type 0 (Solved (Monotype.Scalar Monotype.Bool)))
     -- a = Bool
-    | UnsolvedFields (Existential Monotype.Record)
-    -- ^ A placeholder fields variable whose type has not yet been inferred
+    | Fields (Existential Monotype.Record) (Solution Monotype.Record)
+    -- ^ A placeholder fields variable which is either `Unsolved` or `Solved`
     --
-    -- >>> pretty @(Entry ()) (UnsolvedFields 0)
+    -- >>> pretty @(Entry ()) (Fields 0 Unsolved)
     -- a?
+    -- >>> pretty @(Entry ()) (Fields 0 (Solved (Monotype.Fields [("x", "X")] (Monotype.UnsolvedFields 1))))
+    -- a = x: X, b?
     | UnsolvedAlternatives (Existential Monotype.Union)
     -- ^ A placeholder alternatives variable whose type has not yet been
     -- inferred
     --
     -- >>> pretty @(Entry ()) (UnsolvedAlternatives 0)
     -- a?
-    | SolvedFields (Existential Monotype.Record) Monotype.Record
-    -- ^ A placeholder fields variable whose type has been (at least partially)
-    --   inferred
-    --
-    -- >>> pretty @(Entry ()) (SolvedFields 0 (Monotype.Fields [("x", "X")] (Monotype.UnsolvedFields 1)))
-    -- a = x: X, b?
     | SolvedAlternatives (Existential Monotype.Union) Monotype.Union
     -- ^ A placeholder alternatives variable whose type has been (at least
     --   partially) inferred
@@ -159,32 +155,30 @@ prettyEntry (Type a Unsolved) =
     pretty a <> "?"
 prettyEntry (Type a (Solved τ)) =
     pretty a <> " " <> punctuation "=" <> " " <> pretty τ
-prettyEntry (UnsolvedFields p) =
+prettyEntry (Fields p Unsolved) =
     pretty p <> "?"
-prettyEntry (UnsolvedAlternatives p) =
-    pretty p <> "?"
-prettyEntry (SolvedFields p (Monotype.Fields [] Monotype.EmptyFields)) =
+prettyEntry (Fields p (Solved (Monotype.Fields [] Monotype.EmptyFields))) =
     pretty p <> " " <> punctuation "=" <> " " <> punctuation "•"
-prettyEntry (SolvedFields p0 (Monotype.Fields [] (Monotype.UnsolvedFields p1))) =
+prettyEntry (Fields p0 (Solved (Monotype.Fields [] (Monotype.UnsolvedFields p1)))) =
         pretty p0
     <>  " "
     <>  punctuation "="
     <>  " "
     <>  pretty p1
     <>  "?"
-prettyEntry (SolvedFields p0 (Monotype.Fields [] Monotype.HoleFields)) =
+prettyEntry (Fields p0 (Solved (Monotype.Fields [] Monotype.HoleFields))) =
         pretty p0
     <>  " "
     <>  punctuation "="
     <>  " "
     <>  "?"
-prettyEntry (SolvedFields p0 (Monotype.Fields [] (Monotype.VariableFields p1))) =
+prettyEntry (Fields p0 (Solved (Monotype.Fields [] (Monotype.VariableFields p1)))) =
         pretty p0
     <>  " "
     <>  punctuation "="
     <>  " "
     <>  label (pretty p1)
-prettyEntry (SolvedFields p (Monotype.Fields ((k0, τ0) : kτs) fields)) =
+prettyEntry (Fields p (Solved (Monotype.Fields ((k0, τ0) : kτs) fields))) =
         pretty p
     <>  " = "
     <>  label (pretty k0)
@@ -201,6 +195,8 @@ prettyEntry (SolvedFields p (Monotype.Fields ((k0, τ0) : kτs) fields)) =
                 punctuation "," <> " " <> "?"
             Monotype.VariableFields p1 ->
                 punctuation "," <> " " <> pretty p1
+prettyEntry (UnsolvedAlternatives p) =
+    pretty p <> "?"
 prettyEntry (SolvedAlternatives p (Monotype.Alternatives [] Monotype.EmptyAlternatives)) =
     pretty p <> " " <> punctuation "=" <> " " <> punctuation "•"
 prettyEntry (SolvedAlternatives p0 (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives p1))) =
@@ -254,8 +250,8 @@ prettyAlternativeType (k, τ) =
 solveType :: Context s -> Type.Type s -> Type.Type s
 solveType context type_ = foldl snoc type_ context
   where
-    snoc t (Type a (Solved τ)     ) = Type.solveType         a τ t
-    snoc t (SolvedFields       a r) = Type.solveFields       a r t
+    snoc t (Type   a (Solved τ)   ) = Type.solveType         a τ t
+    snoc t (Fields a (Solved r)   ) = Type.solveFields       a r t
     snoc t (SolvedAlternatives a u) = Type.solveAlternatives a u t
     snoc t  _                       = t
 
@@ -265,7 +261,7 @@ solveType context type_ = foldl snoc type_ context
     >>> pretty original
     { x: Bool, a? }
 
-    >>> entry = SolvedFields 0 (Monotype.Fields [] Monotype.EmptyFields)
+    >>> entry = Fields 0 (Solved (Monotype.Fields [] Monotype.EmptyFields))
     >>> pretty entry
     a = •
 
@@ -326,13 +322,13 @@ complete context type_ = do
   where
     numUnsolved = fromIntegral (length (filter predicate context)) - 1
       where
-        predicate (Type _ Unsolved       ) = True
-        predicate (UnsolvedFields       _) = True
+        predicate (Type   _ Unsolved     ) = True
+        predicate (Fields _ Unsolved     ) = True
         predicate (UnsolvedAlternatives _) = True
         predicate  _                       = False
 
-    snoc t (Type a (Solved τ)     ) = do return (Type.solveType         a τ t)
-    snoc t (SolvedFields       a r) = do return (Type.solveFields       a r t)
+    snoc t (Type   a (Solved τ)   ) = do return (Type.solveType         a τ t)
+    snoc t (Fields a (Solved r)   ) = do return (Type.solveFields       a r t)
     snoc t (SolvedAlternatives a r) = do return (Type.solveAlternatives a r t)
     snoc t (Type a Unsolved) | a `Type.typeFreeIn` t = do
         n <- State.get
@@ -347,7 +343,7 @@ complete context type_ = do
                 Type.Forall location b Domain.Type (Type.solveType a (Monotype.VariableType b) t)
 
         return Type.Type{..}
-    snoc t (UnsolvedFields p) | p `Type.fieldsFreeIn` t = do
+    snoc t (Fields p Unsolved) | p `Type.fieldsFreeIn` t = do
         n <- State.get
 
         State.put $! n + 1
@@ -400,22 +396,22 @@ splitOnUnsolvedType a (entry : entries) = do
 splitOnUnsolvedType _ [] = Nothing
 
 {-| Split a `Context` into two `Context`s before and after the given
-    `UnsolvedFields` variable.  Neither `Context` contains the variable
+    `Unsolved` `Fields` variable.  Neither `Context` contains the variable
 
-    Returns `Nothing` if no such `UnsolvedFields` variable is present within the
-    `Context`
+    Returns `Nothing` if no such `Unsolved` `Fields` variable is present within
+    the `Context`
 
-    >>> splitOnUnsolvedFields 1 [ UnsolvedFields 1, Type 0 (Solved (Monotype.Scalar Monotype.Bool)) ]
+    >>> splitOnUnsolvedFields 1 [ Fields 1 Unsolved, Type 0 (Solved (Monotype.Scalar Monotype.Bool)) ]
     Just ([],[Type 0 (Solved (Scalar Bool))])
-    >>> splitOnUnsolvedFields 0 [ UnsolvedFields 1, Type 0 (Solved (Monotype.Scalar Monotype.Bool)) ]
+    >>> splitOnUnsolvedFields 0 [ Fields 1 Unsolved, Type 0 (Solved (Monotype.Scalar Monotype.Bool)) ]
     Nothing
 -}
 splitOnUnsolvedFields
     :: Existential Monotype.Record
-    -- ^ `UnsolvedFields` variable to split on
+    -- ^ `Unsolved` `Fields` variable to split on
     -> Context s
     -> Maybe (Context s, Context s)
-splitOnUnsolvedFields p0 (UnsolvedFields p1 : entries)
+splitOnUnsolvedFields p0 (Fields p1 Unsolved : entries)
     | p0 == p1 = return ([], entries)
 splitOnUnsolvedFields p (entry : entries) = do
     (prefix, suffix) <- splitOnUnsolvedFields p entries

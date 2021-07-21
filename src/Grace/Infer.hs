@@ -187,7 +187,7 @@ wellFormedType _Γ Type{..} =
 
                 The following unsolved fields variable:
 
-                #{insert (Context.UnsolvedFields a0)}
+                #{insert (Context.Fields a0 Unsolved)}
 
                 … is not well-formed within the following context:
 
@@ -196,9 +196,8 @@ wellFormedType _Γ Type{..} =
                 #{Location.renderError "" location}
                 |]
           where
-            predicate (Context.UnsolvedFields a1  ) = a0 == a1
-            predicate (Context.SolvedFields   a1 _) = a0 == a1
-            predicate  _                            = False
+            predicate (Context.Fields a1 _) = a0 == a1
+            predicate  _                    = False
 
         Type.Record (Type.Fields kAs Monotype.HoleFields) -> do
             traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
@@ -372,8 +371,8 @@ subtype _A0 _B0 = do
         (_, Type.Exists _ a0 Domain.Fields _B) -> do
             a1 <- fresh
 
-            push (Context.MarkerFields   a1)
-            push (Context.UnsolvedFields a1)
+            push (Context.MarkerFields a1)
+            push (Context.Fields a1 Unsolved)
 
             let a1' = Type.Fields [] (Monotype.UnsolvedFields a1)
 
@@ -410,8 +409,8 @@ subtype _A0 _B0 = do
         (Type.Forall _ a0 Domain.Fields _A, _) -> do
             a1 <- fresh
 
-            push (Context.MarkerFields   a1)
-            push (Context.UnsolvedFields a1)
+            push (Context.MarkerFields a1)
+            push (Context.Fields a1 Unsolved)
 
             let a1' = Type.Fields [] (Monotype.UnsolvedFields a1)
 
@@ -482,14 +481,14 @@ subtype _A0 _B0 = do
         (Type.Record (Type.Fields kAs Monotype.HoleFields), _) -> do
             p <- fresh
 
-            push (Context.UnsolvedFields p)
+            push (Context.Fields p Unsolved)
 
             subtype Type{ location = Type.location _A0, node = Type.Record (Type.Fields kAs (Monotype.UnsolvedFields p)) } _B0
 
         (_, Type.Record (Type.Fields kBs Monotype.HoleFields)) -> do
             p <- fresh
 
-            push (Context.UnsolvedFields p)
+            push (Context.Fields p Unsolved)
 
             subtype _A0 Type{ location = Type.location _B0, node = Type.Record (Type.Fields kBs (Monotype.UnsolvedFields p)) }
 
@@ -654,12 +653,12 @@ subtype _A0 _B0 = do
                     let p0First = do
                             (_ΓR, _ΓL) <- Context.splitOnUnsolvedFields p0 _Γ0
 
-                            Monad.guard (Context.UnsolvedFields p1 `elem` _ΓR)
+                            Monad.guard (Context.Fields p1 Unsolved `elem` _ΓR)
 
                             let command =
                                     set (   _ΓR
-                                        <>  ( Context.UnsolvedFields p0
-                                            : Context.UnsolvedFields p2
+                                        <>  ( Context.Fields p0 Unsolved
+                                            : Context.Fields p2 Unsolved
                                             : _ΓL
                                             )
                                         )
@@ -669,12 +668,12 @@ subtype _A0 _B0 = do
                     let p1First = do
                             (_ΓR, _ΓL) <- Context.splitOnUnsolvedFields p1 _Γ0
 
-                            Monad.guard (Context.UnsolvedFields p0 `elem` _ΓR)
+                            Monad.guard (Context.Fields p0 Unsolved `elem` _ΓR)
 
                             let command =
                                     set (   _ΓR
-                                        <>  ( Context.UnsolvedFields p1
-                                            : Context.UnsolvedFields p2
+                                        <>  ( Context.Fields p1 Unsolved
+                                            : Context.Fields p2 Unsolved
                                             : _ΓL
                                             )
                                         )
@@ -689,8 +688,8 @@ subtype _A0 _B0 = do
                             One of the following fields variables:
 
                             #{listToText
-                                [ Context.UnsolvedFields p0
-                                , Context.UnsolvedFields p1
+                                [ Context.Fields p0 Unsolved
+                                , Context.Fields p1 Unsolved
                                 ]
                             }
 
@@ -1120,7 +1119,7 @@ instantiateTypeL a _A0 = do
             b1 <- fresh
 
             push (Context.MarkerFields b1)
-            push (Context.UnsolvedFields b1)
+            push (Context.Fields b1 Unsolved)
 
             let b1' = Type.Fields [] (Monotype.UnsolvedFields b1)
             instantiateTypeR (Type.substituteFields b0 0 b1' _B) a
@@ -1232,7 +1231,7 @@ instantiateTypeL a _A0 = do
 
             p <- fresh
 
-            set (_ΓR <> (Context.Type a (Solved (Monotype.Record (Monotype.Fields [] (Monotype.UnsolvedFields p)))) : Context.UnsolvedFields p : _ΓL))
+            set (_ΓR <> (Context.Type a (Solved (Monotype.Record (Monotype.Fields [] (Monotype.UnsolvedFields p)))) : Context.Fields p Unsolved : _ΓL))
 
             instantiateFieldsL p (Type.location _A0) r
 
@@ -1340,7 +1339,7 @@ instantiateTypeR _A0 a = do
             b1 <- fresh
 
             push (Context.MarkerFields b1)
-            push (Context.UnsolvedFields b1)
+            push (Context.Fields b1 Unsolved)
 
             let b1' = Type.Fields [] (Monotype.UnsolvedFields b1)
             instantiateTypeR (Type.substituteFields b0 0 b1' _B) a
@@ -1383,7 +1382,7 @@ instantiateTypeR _A0 a = do
 
             p <- fresh
 
-            set (_ΓR <> (Context.Type a (Solved (Monotype.Record (Monotype.Fields [] (Monotype.UnsolvedFields p)))) : Context.UnsolvedFields p : _ΓL))
+            set (_ΓR <> (Context.Type a (Solved (Monotype.Record (Monotype.Fields [] (Monotype.UnsolvedFields p)))) : Context.Fields p Unsolved : _ΓL))
 
             instantiateFieldsR (Type.location _A0) r p
 
@@ -1426,16 +1425,16 @@ equateFields p0 p1 = do
     let p0First = do
             (_ΓR, _ΓL) <- Context.splitOnUnsolvedFields p1 _Γ0
 
-            Monad.guard (Context.UnsolvedFields p0 `elem` _ΓL)
+            Monad.guard (Context.Fields p0 Unsolved `elem` _ΓL)
 
-            return (set (_ΓR <> (Context.SolvedFields p1 (Monotype.Fields [] (Monotype.UnsolvedFields p0)) : _ΓL)))
+            return (set (_ΓR <> (Context.Fields p1 (Solved (Monotype.Fields [] (Monotype.UnsolvedFields p0))) : _ΓL)))
 
     let p1First = do
             (_ΓR, _ΓL) <- Context.splitOnUnsolvedFields p0 _Γ0
 
-            Monad.guard (Context.UnsolvedFields p1 `elem` _ΓL)
+            Monad.guard (Context.Fields p1 Unsolved `elem` _ΓL)
 
-            return (set (_ΓR <> (Context.SolvedFields p0 (Monotype.Fields [] (Monotype.UnsolvedFields p1)) : _ΓL)))
+            return (set (_ΓR <> (Context.Fields p0 (Solved (Monotype.Fields [] (Monotype.UnsolvedFields p1))) : _ΓL)))
 
     case p0First <|> p1First of
         Nothing -> do
@@ -1444,7 +1443,7 @@ equateFields p0 p1 = do
 
             One of the following fields variables:
 
-            #{listToText [Context.UnsolvedFields p0, Context.UnsolvedFields p1 ]}
+            #{listToText [Context.Fields p0 Unsolved, Context.Fields p1 Unsolved ]}
 
             … is missing from the following context:
 
@@ -1495,7 +1494,7 @@ instantiateFieldsL p0 location r@(Type.Fields kAs rest) = do
 
         The following unsolved fields variable:
 
-        #{insert (Context.UnsolvedFields p0)}
+        #{insert (Context.Fields p0 Unsolved)}
 
         … cannot be instantiated because the fields variable is missing from the
         context:
@@ -1507,7 +1506,7 @@ instantiateFieldsL p0 location r@(Type.Fields kAs rest) = do
         Monotype.UnsolvedFields p1 -> do
             p2 <- fresh
 
-            set (_ΓR <> (Context.SolvedFields p0 (Monotype.Fields kbs (Monotype.UnsolvedFields p2)) : Context.UnsolvedFields p2 : bs <> _ΓL))
+            set (_ΓR <> (Context.Fields p0 (Solved (Monotype.Fields kbs (Monotype.UnsolvedFields p2))) : Context.Fields p2 Unsolved : bs <> _ΓL))
 
             equateFields p1 p2
 
@@ -1515,7 +1514,7 @@ instantiateFieldsL p0 location r@(Type.Fields kAs rest) = do
             wellFormedType (bs <> _ΓL)
                 Type{ location, node = Type.Record (Type.Fields [] rest) }
 
-            set (_ΓR <> (Context.SolvedFields p0 (Monotype.Fields kbs rest) : bs <> _ΓL))
+            set (_ΓR <> (Context.Fields p0 (Solved (Monotype.Fields kbs rest)) : bs <> _ΓL))
 
     let instantiate (_, _A, b) = do
             _Θ <- get
@@ -1565,7 +1564,7 @@ instantiateFieldsR location r@(Type.Fields kAs rest) p0 = do
 
         The following unsolved fields variable:
 
-        #{insert (Context.UnsolvedFields p0)}
+        #{insert (Context.Fields p0 Unsolved)}
 
         … cannot be instantiated because the fields variable is missing from the
         context:
@@ -1577,7 +1576,7 @@ instantiateFieldsR location r@(Type.Fields kAs rest) p0 = do
         Monotype.UnsolvedFields p1 -> do
             p2 <- fresh
 
-            set (_ΓR <> (Context.SolvedFields p0 (Monotype.Fields kbs (Monotype.UnsolvedFields p2)) : Context.UnsolvedFields p2 : bs <> _ΓL))
+            set (_ΓR <> (Context.Fields p0 (Solved (Monotype.Fields kbs (Monotype.UnsolvedFields p2))) : Context.Fields p2 Unsolved : bs <> _ΓL))
 
             equateFields p1 p2
 
@@ -1585,7 +1584,7 @@ instantiateFieldsR location r@(Type.Fields kAs rest) p0 = do
             wellFormedType (bs <> _ΓL)
                 Type{ location, node = Type.Record (Type.Fields [] rest) }
 
-            set (_ΓR <> (Context.SolvedFields p0 (Monotype.Fields kbs rest) : bs <> _ΓL))
+            set (_ΓR <> (Context.Fields p0 (Solved (Monotype.Fields kbs rest)) : bs <> _ΓL))
 
     let instantiate (_, _A, b) = do
             _Θ <- get
@@ -1909,7 +1908,7 @@ infer e0 = do
         Syntax.Merge record -> do
             p <- fresh
 
-            push (Context.UnsolvedFields p)
+            push (Context.Fields p Unsolved)
 
             let _R = Type{ location = Syntax.location record, node = Type.Record (Type.Fields [] (Monotype.UnsolvedFields p)) }
 
@@ -1998,7 +1997,7 @@ infer e0 = do
             p <- fresh
 
             push (Context.Type a Unsolved)
-            push (Context.UnsolvedFields p)
+            push (Context.Fields p Unsolved)
 
             check record Type
                 { location
@@ -2247,7 +2246,7 @@ check e Type{ node = Type.Exists _ a0 Domain.Fields _A } = do
     a1 <- fresh
 
     push (Context.MarkerFields a1)
-    push (Context.UnsolvedFields a1)
+    push (Context.Fields a1 Unsolved)
 
     let a1' = Type.Fields [] (Monotype.UnsolvedFields a1)
 
@@ -2344,7 +2343,7 @@ inferApplication _A0@Type{ node = Type.Forall nameLocation a0 Domain.Type _A } e
 inferApplication _A0@Type{ node = Type.Forall _ a0 Domain.Fields _A } e = do
     a1 <- fresh
 
-    push (Context.UnsolvedFields a1)
+    push (Context.Fields a1 Unsolved)
 
     let a1' = Type.Fields [] (Monotype.UnsolvedFields a1)
 
