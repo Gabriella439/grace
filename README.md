@@ -938,3 +938,8 @@ character from PlaneScape: Torment, specifically
 Grace is about
 [slaking the intellectual lust](https://torment.fandom.com/wiki/Brothel_for_Slaking_Intellectual_Lusts)
 of people interested in programming language theory.
+
+The name of this package conflicts with
+[another programming language](http://gracelang.org/applications/), which is
+all the more reason why you should not use this project "as is".  At the very
+least rename the language when you fork this project.
