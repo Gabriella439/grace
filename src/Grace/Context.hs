@@ -46,6 +46,7 @@ import qualified Grace.Type                 as Type
    >>> :set -XOverloadedStrings
    >>> :set -XTypeApplications
    >>> import Grace.Type (Type(location,node))
+   >>> import Data.Void (Void)
 -}
 
 -- | This type is used to track whether variables within the `Context` are
@@ -56,63 +57,63 @@ data Solution a = Unsolved | Solved a
     deriving (Eq, Show)
 
 -- | An element of the `Context` list
-data Entry s
+data Entry s a
     = Variable Domain Text
     -- ^ Universally quantified variable
     --
-    -- >>> pretty @(Entry ()) (Variable Domain.Type "a")
+    -- >>> pretty @(Entry Void ()) (Variable Domain.Type "a")
     -- a: Type
-    | Annotation Text (Type.Type s)
+    | Annotation Text (Type.Type a)
     -- ^ A bound variable whose type is known
     --
-    -- >>> pretty @(Entry ()) (Annotation "x" "a")
+    -- >>> pretty @(Entry Void ()) (Annotation "x" "a")
     -- x: a
     | Type (Existential Monotype) (Solution Monotype)
     -- ^ A placeholder type variable which is either `Unsolved` or `Solved`
     --
-    -- >>> pretty @(Entry ()) (Type 0 Unsolved)
+    -- >>> pretty @(Entry Void ()) (Type 0 Unsolved)
     -- a?
-    -- >>> pretty @(Entry ()) (Type 0 (Solved (Monotype.Scalar Monotype.Bool)))
+    -- >>> pretty @(Entry Void ()) (Type 0 (Solved (Monotype.Scalar Monotype.Bool)))
     -- a = Bool
     | Fields (Existential Monotype.Record) (Solution Monotype.Record)
     -- ^ A placeholder fields variable which is either `Unsolved` or `Solved`
     --
-    -- >>> pretty @(Entry ()) (Fields 0 Unsolved)
+    -- >>> pretty @(Entry Void ()) (Fields 0 Unsolved)
     -- a?
-    -- >>> pretty @(Entry ()) (Fields 0 (Solved (Monotype.Fields [("x", "X")] (Monotype.UnsolvedFields 1))))
+    -- >>> pretty @(Entry Void ()) (Fields 0 (Solved (Monotype.Fields [("x", "X")] (Monotype.UnsolvedFields 1))))
     -- a = x: X, b?
     | Alternatives (Existential Monotype.Union) (Solution Monotype.Union)
     -- ^ A placeholder alternatives variable which is either `Unsolved` or
     -- `Solved`
     --
-    -- >>> pretty @(Entry ()) (Alternatives 0 Unsolved)
+    -- >>> pretty @(Entry Void ()) (Alternatives 0 Unsolved)
     -- a?
-    -- >>> pretty @(Entry ()) (Alternatives 0 (Solved (Monotype.Alternatives [("x", "X")] (Monotype.UnsolvedAlternatives 1))))
+    -- >>> pretty @(Entry Void ()) (Alternatives 0 (Solved (Monotype.Alternatives [("x", "X")] (Monotype.UnsolvedAlternatives 1))))
     -- a = x: X | b?
     | MarkerType (Existential Monotype)
     -- ^ This is used by the bidirectional type-checking algorithm to separate
     --   context entries introduced before and after type-checking a universally
     --   quantified type
     --
-    -- >>> pretty @(Entry ()) (MarkerType 0)
+    -- >>> pretty @(Entry Void ()) (MarkerType 0)
     -- ➤ a: Type
     | MarkerFields (Existential Monotype.Record)
     -- ^ This is used by the bidirectional type-checking algorithm to separate
     --   context entries introduced before and after type-checking universally
     --   quantified fields
     --
-    -- >>> pretty @(Entry ()) (MarkerFields 0)
+    -- >>> pretty @(Entry Void ()) (MarkerFields 0)
     -- ➤ a: Fields
     | MarkerAlternatives (Existential Monotype.Union)
     -- ^ This is used by the bidirectional type-checking algorithm to separate
     --   context entries introduced before and after type-checking universally
     --   quantified alternatives
     --
-    -- >>> pretty @(Entry ()) (MarkerAlternatives 0)
+    -- >>> pretty @(Entry Void ()) (MarkerAlternatives 0)
     -- ➤ a: Alternatives
     deriving stock (Eq, Show)
 
-instance Pretty (Entry s) where
+instance Pretty (Entry s a) where
     pretty = prettyEntry
 
 {-| A `Context` is an ordered list of `Entry`s
@@ -142,9 +143,9 @@ instance Pretty (Entry s) where
       in the context past a certain entry to reflect the end of their
       \"lifetime\"
 -}
-type Context s = [Entry s]
+type Context s a = [Entry s a]
 
-prettyEntry :: Entry s -> Doc AnsiStyle
+prettyEntry :: Entry s  a-> Doc AnsiStyle
 prettyEntry (Variable domain a) =
     label (pretty a) <> operator ":" <> " " <> pretty domain
 prettyEntry (Type a Unsolved) =
@@ -243,7 +244,7 @@ prettyAlternativeType (k, τ) =
     >>> pretty (solveType [ Type 1 Unsolved, Type 0 (Solved (Monotype.Scalar Monotype.Bool)) ] original)
     Bool
 -}
-solveType :: Context s -> Type.Type s -> Type.Type s
+solveType :: Context s a -> Type.Type a -> Type.Type a
 solveType context type_ = foldl snoc type_ context
   where
     snoc t (Type         a (Solved τ)) = Type.solveType         a τ t
@@ -264,7 +265,7 @@ solveType context type_ = foldl snoc type_ context
     >>> pretty (solveRecord [ entry ] original)
     { x: Bool }
 -}
-solveRecord :: Context s -> Type.Record s -> Type.Record s
+solveRecord :: Context s a -> Type.Record a -> Type.Record a
 solveRecord context record = record'
   where
     -- TODO: Come up with total solution
@@ -288,7 +289,7 @@ solveRecord context record = record'
     >>> pretty (solveUnion [ entry ] original)
     < A: Bool >
 -}
-solveUnion :: Context s -> Type.Union s -> Type.Union s
+solveUnion :: Context s a -> Type.Union a -> Type.Union a
 solveUnion context union = union'
   where
     -- TODO: Come up with total solution
@@ -312,7 +313,7 @@ solveUnion context union = union'
     >>> pretty (complete [ Type 1 Unsolved, Type 0 (Solved (Monotype.Scalar Monotype.Bool)) ] original)
     forall (a : Type) . a -> Bool
 -}
-complete :: Context s -> Type.Type s -> Type.Type s
+complete :: Context s a -> Type.Type a -> Type.Type a
 complete context type_ = do
     State.evalState (Monad.foldM snoc type_ context) 0
   where
@@ -388,8 +389,8 @@ complete context type_ = do
 splitOnUnsolvedType
     :: Existential Monotype
     -- ^ `Unsolved` `Type` variable to split on
-    -> Context s
-    -> Maybe (Context s, Context s)
+    -> Context s a
+    -> Maybe (Context s a, Context s a)
 splitOnUnsolvedType a0 (Type a1 Unsolved : entries)
     | a0 == a1 = return ([], entries)
 splitOnUnsolvedType a (entry : entries) = do
@@ -411,8 +412,8 @@ splitOnUnsolvedType _ [] = Nothing
 splitOnUnsolvedFields
     :: Existential Monotype.Record
     -- ^ `Unsolved` `Fields` variable to split on
-    -> Context s
-    -> Maybe (Context s, Context s)
+    -> Context s a
+    -> Maybe (Context s a, Context s a)
 splitOnUnsolvedFields p0 (Fields p1 Unsolved : entries)
     | p0 == p1 = return ([], entries)
 splitOnUnsolvedFields p (entry : entries) = do
@@ -434,8 +435,8 @@ splitOnUnsolvedFields _ [] = Nothing
 splitOnUnsolvedAlternatives
     :: Existential Monotype.Union
     -- ^ `Unsolved` `Alternatives` variable to split on
-    -> Context s
-    -> Maybe (Context s, Context s)
+    -> Context s a
+    -> Maybe (Context s a, Context s a)
 splitOnUnsolvedAlternatives p0 (Alternatives p1 Unsolved : entries)
     | p0 == p1 = return ([], entries)
 splitOnUnsolvedAlternatives p (entry : entries) = do
@@ -454,8 +455,8 @@ lookup
     -- ^ Variable label
     -> Int
     -- ^ Variable index (See the documentation of `Value.Variable`)
-    -> Context s
-    -> Maybe (Type.Type s)
+    -> Context s a
+    -> Maybe (Type.Type a)
 lookup _ _ [] =
     Nothing
 lookup x0 n (Annotation x1 _A : _Γ) =
@@ -473,7 +474,7 @@ lookup x n (_ : _Γ) =
     >>> discardUpTo (MarkerType 1) [ Type 1 Unsolved, MarkerType 1, Type 0 Unsolved ]
     [Type 0 Unsolved]
 -}
-discardUpTo :: Eq s => Entry s -> Context s -> Context s
+discardUpTo :: Eq a => Entry s a -> Context s a -> Context s a
 discardUpTo entry0 (entry1 : _Γ)
     | entry0 == entry1 = _Γ
     | otherwise = discardUpTo entry0 _Γ

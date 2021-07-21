@@ -61,10 +61,10 @@ import qualified Grace.Type           as Type
 import qualified Prettyprinter        as Pretty
 
 -- | Type-checking state
-data Status = Status
+data Status s = Status
     { count :: !Int
       -- ^ Used to generate fresh unsolved variables (e.g. α̂, β̂)
-    , context :: Context Location
+    , context :: Context s Location
       -- ^ The type-checking context (e.g. Γ, Δ, Θ)
     }
 
@@ -72,7 +72,7 @@ orDie :: MonadError Text m => Maybe a -> Text -> m a
 Just x  `orDie` _       = return x
 Nothing `orDie` message = Except.throwError message
 
-fresh :: MonadState Status m => m (Existential a)
+fresh :: MonadState (Status s) m => m (Existential a)
 fresh = do
     Status{ count = n, .. } <- State.get
 
@@ -85,19 +85,19 @@ fresh = do
 -- the following utility functions
 
 -- | Push a new `Context` `Entry` onto the stack
-push :: MonadState Status m => Entry Location -> m ()
+push :: MonadState (Status s) m => Entry s Location -> m ()
 push entry = State.modify (\s -> s { context = entry : context s })
 
 -- | Retrieve the current `Context`
-get :: MonadState Status m => m (Context Location)
+get :: MonadState (Status s) m => m (Context s Location)
 get = fmap context State.get
 
 -- | Set the `Context` to a new value
-set :: MonadState Status m => Context Location -> m ()
+set :: MonadState (Status s) m => Context s Location -> m ()
 set context = State.modify (\s -> s{ context })
 
 -- | Discard all `Context` entries up to and including the specified `Entry`
-discardUpTo :: MonadState Status m => Entry Location -> m ()
+discardUpTo :: MonadState (Status s) m => Entry s Location -> m ()
 discardUpTo entry =
     State.modify (\s -> s{ context = Context.discardUpTo entry (context s) })
 
@@ -117,7 +117,8 @@ listToText elements =
 
     … which checks that under context Γ, the type A is well-formed
 -}
-wellFormedType :: MonadError Text m => Context Location -> Type Location -> m ()
+wellFormedType
+    :: MonadError Text m => Context s Location -> Type Location -> m ()
 wellFormedType _Γ Type{..} =
     case node of
         -- UvarWF
@@ -260,7 +261,7 @@ wellFormedType _Γ Type{..} =
     type A is a subtype of type B.
 -}
 subtype
-    :: (MonadState Status m, MonadError Text m)
+    :: (MonadState (Status s) m, MonadError Text m)
     => Type Location -> Type Location -> m ()
 subtype _A0 _B0 = do
     _Γ <- get
@@ -1058,7 +1059,7 @@ subtype _A0 _B0 = do
     However, for consistency with the paper we still name them @instantiate*@.
 -}
 instantiateTypeL
-    :: (MonadState Status m, MonadError Text m)
+    :: (MonadState (Status s) m, MonadError Text m)
     => Existential Monotype -> Type Location -> m ()
 instantiateTypeL a _A0 = do
     _Γ0 <- get
@@ -1254,7 +1255,7 @@ instantiateTypeL a _A0 = do
     α̂ such that A :< α̂.
 -}
 instantiateTypeR
-    :: (MonadState Status m, MonadError Text m)
+    :: (MonadState (Status s) m, MonadError Text m)
     => Type Location -> Existential Monotype -> m ()
 instantiateTypeR _A0 a = do
     _Γ0 <- get
@@ -1416,7 +1417,7 @@ instantiateTypeR _A0 a = do
 -}
 
 equateFields
-    :: (MonadState Status m, MonadError Text m)
+    :: (MonadState (Status s) m, MonadError Text m)
     => Existential Monotype.Record -> Existential Monotype.Record -> m ()
 equateFields p0 p1 = do
     _Γ0 <- get
@@ -1453,7 +1454,7 @@ equateFields p0 p1 = do
             setContext
 
 instantiateFieldsL
-    :: (MonadState Status m, MonadError Text m)
+    :: (MonadState (Status s) m, MonadError Text m)
     => Existential Monotype.Record -> Location -> Type.Record Location -> m ()
 instantiateFieldsL p0 location r@(Type.Fields kAs rest) = do
     if p0 `Type.fieldsFreeIn` Type{ node = Type.Record r, .. }
@@ -1523,7 +1524,7 @@ instantiateFieldsL p0 location r@(Type.Fields kAs rest) = do
     traverse_ instantiate kAbs
 
 instantiateFieldsR
-    :: (MonadState Status m, MonadError Text m)
+    :: (MonadState (Status s) m, MonadError Text m)
     => Location -> Type.Record Location -> Existential Monotype.Record -> m ()
 instantiateFieldsR location r@(Type.Fields kAs rest) p0 = do
     if p0 `Type.fieldsFreeIn` Type{ node = Type.Record r, .. }
@@ -1593,7 +1594,7 @@ instantiateFieldsR location r@(Type.Fields kAs rest) p0 = do
     traverse_ instantiate kAbs
 
 equateAlternatives
-    :: (MonadState Status m, MonadError Text m)
+    :: (MonadState (Status s) m, MonadError Text m)
     => Existential Monotype.Union-> Existential Monotype.Union -> m ()
 equateAlternatives p0 p1 = do
     _Γ0 <- get
@@ -1630,7 +1631,7 @@ equateAlternatives p0 p1 = do
             setContext
 
 instantiateAlternativesL
-    :: (MonadState Status m, MonadError Text m)
+    :: (MonadState (Status s) m, MonadError Text m)
     => Existential Monotype.Union -> Location -> Type.Union Location -> m ()
 instantiateAlternativesL p0 location u@(Type.Alternatives kAs rest) = do
     if p0 `Type.alternativesFreeIn` Type{ node = Type.Union u, .. }
@@ -1700,7 +1701,7 @@ instantiateAlternativesL p0 location u@(Type.Alternatives kAs rest) = do
     traverse_ instantiate kAbs
 
 instantiateAlternativesR
-    :: (MonadState Status m, MonadError Text m)
+    :: (MonadState (Status s) m, MonadError Text m)
     => Location -> Type.Union Location -> Existential Monotype.Union -> m ()
 instantiateAlternativesR location u@(Type.Alternatives kAs rest) p0 = do
     if p0 `Type.alternativesFreeIn` Type{ node = Type.Union u, .. }
@@ -1777,7 +1778,7 @@ instantiateAlternativesR location u@(Type.Alternatives kAs rest) p0 = do
     type of A and an updated context Δ.
 -}
 infer
-    :: (MonadState Status m, MonadError Text m)
+    :: (MonadState (Status s) m, MonadError Text m)
     => Syntax Location (Type Location, Value)
     -> m (Type Location)
 infer e0 = do
@@ -2188,7 +2189,7 @@ infer e0 = do
     context Δ.
 -}
 check
-    :: (MonadState Status m, MonadError Text m)
+    :: (MonadState (Status s) m, MonadError Text m)
     => Syntax Location (Type Location, Value) -> Type Location -> m ()
 -- The check function is the most important function to understand for the
 -- bidirectional type-checking algorithm.
@@ -2326,7 +2327,7 @@ check e _B = do
     input argument e, under input context Γ, producing an updated context Δ.
 -}
 inferApplication
-    :: (MonadState Status m, MonadError Text m)
+    :: (MonadState (Status s) m, MonadError Text m)
     => Type Location
     -> Syntax Location (Type Location, Value)
     -> m (Type Location)
