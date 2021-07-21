@@ -24,7 +24,6 @@ import Grace.Type (Type(..))
 import Options.Applicative (Parser, ParserInfo)
 import Prettyprinter (Doc)
 import Prettyprinter.Render.Terminal (AnsiStyle)
-import System.Console.Terminal.Size (Window(..))
 
 import qualified Control.Monad.Except         as Except
 import qualified Data.Text.IO                 as Text.IO
@@ -38,9 +37,9 @@ import qualified Grace.Pretty
 import qualified Grace.Syntax                 as Syntax
 import qualified Grace.Type                   as Type
 import qualified Grace.Value                  as Value
+import qualified Grace.Repl                   as Repl
 import qualified Options.Applicative          as Options
 import qualified System.Console.ANSI          as ANSI
-import qualified System.Console.Terminal.Size as Size
 import qualified System.Exit                  as Exit
 import qualified System.IO                    as IO
 
@@ -58,6 +57,7 @@ data Options
     | Text { file :: FilePath }
     | Format { highlight :: Highlight, files :: [FilePath] }
     | Builtins { highlight :: Highlight }
+    | Repl {}
 
 parserInfo :: ParserInfo Options
 parserInfo =
@@ -67,7 +67,7 @@ parserInfo =
 parser :: Parser Options
 parser = do
     let interpret = do
-            annotate <- Options.switch 
+            annotate <- Options.switch
                 (   Options.long "annotate"
                 <>  Options.help "Add a type annotation for the inferred type"
                 )
@@ -107,6 +107,9 @@ parser = do
 
             return Builtins{..}
 
+    let repl = do
+            pure Repl{}
+
     Options.hsubparser
         (   Options.command "interpret"
                 (Options.info interpret
@@ -127,6 +130,10 @@ parser = do
                 (Options.info builtins
                     (Options.progDesc "List all built-in functions and their types")
                 )
+        <> Options.command "repl"
+                (Options.info repl
+                    (Options.progDesc "Enter a REPL for Grace")
+                )
         )
   where
     parseHighlight =
@@ -146,21 +153,10 @@ detectColor Color = do return True
 detectColor Plain = do return False
 detectColor Auto  = do ANSI.hSupportsANSI IO.stdout
 
-getWidth :: IO Int
-getWidth = do
-    maybeWindow <- Size.size
-
-    let renderWidth =
-            case maybeWindow of
-                Nothing         -> Grace.Pretty.defaultColumns
-                Just Window{..} -> width
-
-    return renderWidth
-
 getRender :: Highlight -> IO (Doc AnsiStyle -> IO ())
 getRender highlight = do
     color <- detectColor highlight
-    width <- getWidth
+    width <- Grace.Pretty.getWidth
 
     return (Grace.Pretty.renderIO color width IO.stdout)
 
@@ -302,3 +298,6 @@ main = do
                     displayBuiltin b0
 
                     traverse_ (\b -> Text.IO.putStrLn "" >> displayBuiltin b) bs
+
+        Repl{} -> do
+            Repl.repl

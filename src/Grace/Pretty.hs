@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE RecordWildCards #-}
 
 -- | Pretty-printing logic
 module Grace.Pretty
@@ -7,6 +8,7 @@ module Grace.Pretty
     , renderIO
     , toText
     , defaultColumns
+    , getWidth
     , Pretty(..)
 
       -- * Highlighting
@@ -23,11 +25,13 @@ import Data.Void (Void)
 import Numeric.Natural (Natural)
 import Prettyprinter (Doc, LayoutOptions(..), PageWidth(..))
 import Prettyprinter.Render.Terminal (AnsiStyle)
+import System.Console.Terminal.Size (Window(..))
 import System.IO (Handle)
 
 import qualified Prettyprinter                 as Pretty
 import qualified Prettyprinter.Render.Terminal as Pretty.Terminal
 import qualified Prettyprinter.Render.Text     as Pretty.Text
+import qualified System.Console.Terminal.Size as Size
 
 {-| Convenient wrapper around
     "Prettyprinter.Render.Terminal".`Pretty.Terminal.renderStrict`
@@ -69,6 +73,17 @@ renderIO highlight columns handle =
         if highlight
         then Pretty.Terminal.renderIO
         else Pretty.Text.renderIO
+
+getWidth :: IO Int
+getWidth = do
+    maybeWindow <- Size.size
+
+    let renderWidth =
+            case maybeWindow of
+                Nothing         -> defaultColumns
+                Just Window{..} -> width
+
+    return renderWidth
 
 -- | The default column size to use
 defaultColumns :: Int
