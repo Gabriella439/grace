@@ -13,18 +13,21 @@ module Grace.Context
     , Entry(..)
     , Context
 
+      -- * Pretty-printing
+    , prettyEntry
+
       -- * Utilities
     , lookup
     , splitOnUnsolvedType
     , splitOnUnsolvedFields
     , splitOnUnsolvedAlternatives
     , discardUpTo
-    , solveType
-    , solveRecord
-    , solveUnion
     , complete
     ) where
 
+import Control.Monad.ST (ST)
+import Control.Monad.Trans.Class (lift)
+import Data.STRef (STRef)
 import Data.Text (Text)
 import Grace.Domain (Domain)
 import Grace.Existential (Existential)
@@ -36,6 +39,7 @@ import Prettyprinter.Render.Terminal (AnsiStyle)
 
 import qualified Control.Monad              as Monad
 import qualified Control.Monad.State.Strict as State
+import qualified Data.STRef                 as STRef
 import qualified Grace.Domain               as Domain
 import qualified Grace.Existential          as Existential
 import qualified Grace.Monotype             as Monotype
@@ -68,7 +72,7 @@ data Entry s a
     --
     -- >>> pretty @(Entry Void ()) (Annotation "x" "a")
     -- x: a
-    | Type (Existential Monotype) (Solution Monotype)
+    | Type (Existential Monotype) (STRef s (Solution Monotype))
     -- ^ A placeholder type variable which is either `Unsolved` or `Solved`
     --
     -- >>> pretty @(Entry Void ()) (Type 0 Unsolved)
@@ -111,10 +115,7 @@ data Entry s a
     --
     -- >>> pretty @(Entry Void ()) (MarkerAlternatives 0)
     -- ➤ a: Alternatives
-    deriving stock (Eq, Show)
-
-instance Pretty (Entry s a) where
-    pretty = prettyEntry
+    deriving stock (Eq)
 
 {-| A `Context` is an ordered list of `Entry`s
 
@@ -145,87 +146,106 @@ instance Pretty (Entry s a) where
 -}
 type Context s a = [Entry s a]
 
-prettyEntry :: Entry s  a-> Doc AnsiStyle
+prettyEntry :: Entry s a -> ST s (Doc AnsiStyle)
 prettyEntry (Variable domain a) =
-    label (pretty a) <> operator ":" <> " " <> pretty domain
-prettyEntry (Type a Unsolved) =
-    pretty a <> "?"
-prettyEntry (Type a (Solved τ)) =
-    pretty a <> " " <> punctuation "=" <> " " <> pretty τ
+    return (label (pretty a) <> operator ":" <> " " <> pretty domain)
+prettyEntry (Type a ref) = do
+    solution <- STRef.readSTRef ref
+
+    case solution of
+        Unsolved -> do
+            return (pretty a <> "?")
+        Solved τ -> do
+            return (pretty a <> " " <> punctuation "=" <> " " <> pretty τ)
 prettyEntry (Fields p Unsolved) =
-    pretty p <> "?"
+    return (pretty p <> "?")
 prettyEntry (Fields p (Solved (Monotype.Fields [] Monotype.EmptyFields))) =
-    pretty p <> " " <> punctuation "=" <> " " <> punctuation "•"
-prettyEntry (Fields p0 (Solved (Monotype.Fields [] (Monotype.UnsolvedFields p1)))) =
-        pretty p0
-    <>  " "
-    <>  punctuation "="
-    <>  " "
-    <>  pretty p1
-    <>  "?"
-prettyEntry (Fields p0 (Solved (Monotype.Fields [] Monotype.HoleFields))) =
-        pretty p0
-    <>  " "
-    <>  punctuation "="
-    <>  " "
-    <>  "?"
-prettyEntry (Fields p0 (Solved (Monotype.Fields [] (Monotype.VariableFields p1)))) =
-        pretty p0
-    <>  " "
-    <>  punctuation "="
-    <>  " "
-    <>  label (pretty p1)
-prettyEntry (Fields p (Solved (Monotype.Fields ((k0, τ0) : kτs) fields))) =
-        pretty p
-    <>  " = "
-    <>  label (pretty k0)
-    <>  operator ":"
-    <>  " "
-    <>  pretty τ0
-    <>  foldMap prettyFieldType kτs
-    <>  case fields of
-            Monotype.EmptyFields ->
-                ""
-            Monotype.UnsolvedFields p1 ->
-                punctuation "," <> " " <> pretty p1 <> "?"
-            Monotype.HoleFields ->
-                punctuation "," <> " " <> "?"
-            Monotype.VariableFields p1 ->
-                punctuation "," <> " " <> pretty p1
+    return (pretty p <> " " <> punctuation "=" <> " " <> punctuation "•")
+prettyEntry (Fields p0 (Solved (Monotype.Fields [] (Monotype.UnsolvedFields p1)))) = do
+    let document =
+                pretty p0
+            <>  " "
+            <>  punctuation "="
+            <>  " "
+            <>  pretty p1
+            <>  "?"
+
+    return document
+prettyEntry (Fields p0 (Solved (Monotype.Fields [] Monotype.HoleFields))) = do
+    let document =
+                pretty p0
+            <>  " "
+            <>  punctuation "="
+            <>  " "
+            <>  "?"
+
+    return document
+prettyEntry (Fields p0 (Solved (Monotype.Fields [] (Monotype.VariableFields p1)))) = do
+    let document =
+                pretty p0
+            <>  " "
+            <>  punctuation "="
+            <>  " "
+            <>  label (pretty p1)
+
+    return document
+prettyEntry (Fields p (Solved (Monotype.Fields ((k0, τ0) : kτs) fields))) = do
+    let document =
+                pretty p
+            <>  " = "
+            <>  label (pretty k0)
+            <>  operator ":"
+            <>  " "
+            <>  pretty τ0
+            <>  foldMap prettyFieldType kτs
+            <>  case fields of
+                    Monotype.EmptyFields ->
+                        ""
+                    Monotype.UnsolvedFields p1 ->
+                        punctuation "," <> " " <> pretty p1 <> "?"
+                    Monotype.HoleFields ->
+                        punctuation "," <> " " <> "?"
+                    Monotype.VariableFields p1 ->
+                        punctuation "," <> " " <> pretty p1
+
+    return document
 prettyEntry (Alternatives p Unsolved) =
-    pretty p <> "?"
+    return (pretty p <> "?")
 prettyEntry (Alternatives p (Solved (Monotype.Alternatives [] Monotype.EmptyAlternatives))) =
-    pretty p <> " " <> punctuation "=" <> " " <> punctuation "•"
+    return (pretty p <> " " <> punctuation "=" <> " " <> punctuation "•")
 prettyEntry (Alternatives p0 (Solved (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives p1)))) =
-    pretty p0 <> " " <> punctuation "=" <> " " <> pretty p1 <> "?"
+    return (pretty p0 <> " " <> punctuation "=" <> " " <> pretty p1 <> "?")
 prettyEntry (Alternatives p0 (Solved (Monotype.Alternatives [] Monotype.HoleAlternatives))) =
-    pretty p0 <> " " <> punctuation "=" <> " " <> "?"
+    return (pretty p0 <> " " <> punctuation "=" <> " " <> "?")
 prettyEntry (Alternatives p0 (Solved (Monotype.Alternatives [] (Monotype.VariableAlternatives p1)))) =
-    pretty p0 <> " " <> punctuation "=" <> " " <>  label (pretty p1)
-prettyEntry (Alternatives p0 (Solved (Monotype.Alternatives ((k0, τ0) : kτs) fields))) =
-        pretty p0
-    <>  " "
-    <>  punctuation "="
-    <>  " "
-    <>  prettyAlternativeType (k0, τ0)
-    <>  foldMap (\kt -> " " <> punctuation "|" <> " " <> prettyAlternativeType kt) kτs
-    <>  case fields of
-            Monotype.EmptyAlternatives ->
-                ""
-            Monotype.UnsolvedAlternatives p1 ->
-                " " <> punctuation "|" <> " " <> pretty p1 <> "?"
-            Monotype.HoleAlternatives ->
-                " " <> punctuation "|" <> " " <> "?"
-            Monotype.VariableAlternatives p1 ->
-                " " <> punctuation "|" <> " " <> label (pretty p1)
+    return (pretty p0 <> " " <> punctuation "=" <> " " <>  label (pretty p1))
+prettyEntry (Alternatives p0 (Solved (Monotype.Alternatives ((k0, τ0) : kτs) fields))) = do
+    let document =
+                pretty p0
+            <>  " "
+            <>  punctuation "="
+            <>  " "
+            <>  prettyAlternativeType (k0, τ0)
+            <>  foldMap (\kt -> " " <> punctuation "|" <> " " <> prettyAlternativeType kt) kτs
+            <>  case fields of
+                    Monotype.EmptyAlternatives ->
+                        ""
+                    Monotype.UnsolvedAlternatives p1 ->
+                        " " <> punctuation "|" <> " " <> pretty p1 <> "?"
+                    Monotype.HoleAlternatives ->
+                        " " <> punctuation "|" <> " " <> "?"
+                    Monotype.VariableAlternatives p1 ->
+                        " " <> punctuation "|" <> " " <> label (pretty p1)
+
+    return document
 prettyEntry (Annotation x a) =
-    pretty x <> operator ":" <> " " <> pretty a
+    return (pretty x <> operator ":" <> " " <> pretty a)
 prettyEntry (MarkerType a) =
-    "➤ " <> pretty a <> ": Type"
+    return ("➤ " <> pretty a <> ": Type")
 prettyEntry (MarkerFields a) =
-    "➤ " <> pretty a <> ": Fields"
+    return ("➤ " <> pretty a <> ": Fields")
 prettyEntry (MarkerAlternatives a) =
-    "➤ " <> pretty a <> ": Alternatives"
+    return ("➤ " <> pretty a <> ": Alternatives")
 
 prettyFieldType :: (Text, Monotype) -> Doc AnsiStyle
 prettyFieldType (k, τ) =
@@ -234,70 +254,6 @@ prettyFieldType (k, τ) =
 prettyAlternativeType :: (Text, Monotype) -> Doc AnsiStyle
 prettyAlternativeType (k, τ) =
     pretty k <> operator ":" <> " " <> pretty τ
-
-{-| Substitute a `Type` using the solved entries of a `Context`
-
-    >>> original = Type.Type{ location = (), node = Type.UnsolvedType 0 }
-    >>> pretty original
-    a?
-
-    >>> pretty (solveType [ Type 1 Unsolved, Type 0 (Solved (Monotype.Scalar Monotype.Bool)) ] original)
-    Bool
--}
-solveType :: Context s a -> Type.Type a -> Type.Type a
-solveType context type_ = foldl snoc type_ context
-  where
-    snoc t (Type         a (Solved τ)) = Type.solveType         a τ t
-    snoc t (Fields       a (Solved r)) = Type.solveFields       a r t
-    snoc t (Alternatives a (Solved u)) = Type.solveAlternatives a u t
-    snoc t  _                          = t
-
-{-| Substitute a t`Type.Record` using the solved entries of a `Context`
-
-    >>> original = Type.Fields [("x", Type.Type{ location = (), node = Type.Scalar Monotype.Bool })] (Monotype.UnsolvedFields 0)
-    >>> pretty original
-    { x: Bool, a? }
-
-    >>> entry = Fields 0 (Solved (Monotype.Fields [] Monotype.EmptyFields))
-    >>> pretty entry
-    a = •
-
-    >>> pretty (solveRecord [ entry ] original)
-    { x: Bool }
--}
-solveRecord :: Context s a -> Type.Record a -> Type.Record a
-solveRecord context record = record'
-  where
-    -- TODO: Come up with total solution
-    Type.Type{ node = Type.Record record' } =
-        solveType context Type.Type
-            { location = error "Grace.Context.solveRecord: Internal error - Missing location field"
-            , node = Type.Record record
-            }
-
-{-| Substitute a t`Type.Union` using the solved entries of a `Context`
-    `Context`
-
-    >>> original = Type.Alternatives [("A", Type.Type{ location = (), node = Type.Scalar Monotype.Bool })] (Monotype.UnsolvedAlternatives 0)
-    >>> pretty original
-    < A: Bool | a? >
-
-    >>> entry = Alternatives 0 (Solved (Monotype.Alternatives [] Monotype.EmptyAlternatives))
-    >>> pretty entry
-    a = •
-
-    >>> pretty (solveUnion [ entry ] original)
-    < A: Bool >
--}
-solveUnion :: Context s a -> Type.Union a -> Type.Union a
-solveUnion context union = union'
-  where
-    -- TODO: Come up with total solution
-    Type.Type{ node = Type.Union union' }=
-        solveType context Type.Type
-            { location = error "Grace.Context.solveUnion: Internal error - Missing location field"
-            , node = Type.Union union
-            }
 
 {-| This function is used at the end of the bidirectional type-checking
     algorithm to complete the inferred type by:
@@ -313,67 +269,82 @@ solveUnion context union = union'
     >>> pretty (complete [ Type 1 Unsolved, Type 0 (Solved (Monotype.Scalar Monotype.Bool)) ] original)
     forall (a : Type) . a -> Bool
 -}
-complete :: Context s a -> Type.Type a -> Type.Type a
+complete :: Context s a -> Type.Type a -> ST s (Type.Type a)
 complete context type_ = do
-    State.evalState (Monad.foldM snoc type_ context) 0
-  where
-    numUnsolved = fromIntegral (length (filter predicate context)) - 1
-      where
-        predicate (Type         _ Unsolved) = True
-        predicate (Fields       _ Unsolved) = True
-        predicate (Alternatives _ Unsolved) = True
-        predicate  _                        = False
+    let isUnsolved ref = do
+            solution <- STRef.readSTRef ref
 
-    snoc t (Type a (Solved τ)) = do
-        return (Type.solveType a τ t)
+            return (solution == Unsolved)
 
-    snoc t (Fields a (Solved r)) = do
-        return (Type.solveFields a r t)
+    let predicate (Type         _ ref     ) = isUnsolved ref
+        predicate (Fields       _ Unsolved) = return True
+        predicate (Alternatives _ Unsolved) = return True
+        predicate  _                        = return False
 
-    snoc t (Alternatives a (Solved u)) = do
-        return (Type.solveAlternatives a u t)
+    matches <- Monad.filterM predicate context
 
-    snoc t (Type a Unsolved) | a `Type.typeFreeIn` t = do
-        n <- State.get
+    let numUnsolved = fromIntegral (length matches) - 1
 
-        State.put $! n + 1
+    let snoc t (Type a ref) = do
+            solution <- lift (STRef.readSTRef ref)
 
-        let b = Existential.toVariable (numUnsolved - n)
+            case solution of
+                Solved τ -> do
+                    return (Type.solveType a τ t)
 
-        let Type.Type{ location } = t
+                Unsolved | a `Type.typeFreeIn` t -> do
+                    n <- State.get
 
-        let node =
-                Type.Forall location b Domain.Type (Type.solveType a (Monotype.VariableType b) t)
+                    State.put $! n + 1
 
-        return Type.Type{..}
-    snoc t (Fields p Unsolved) | p `Type.fieldsFreeIn` t = do
-        n <- State.get
+                    let b = Existential.toVariable (numUnsolved - n)
 
-        State.put $! n + 1
+                    let Type.Type{ location } = t
 
-        let b = Existential.toVariable (numUnsolved - n)
+                    let node =
+                            Type.Forall location b Domain.Type (Type.solveType a (Monotype.VariableType b) t)
 
-        let Type.Type{ location } = t
+                    return Type.Type{..}
 
-        let node =
-                Type.Forall location b Domain.Fields (Type.solveFields p (Monotype.Fields [] (Monotype.VariableFields b)) t)
+                _ -> do
+                    return t
 
-        return Type.Type{..}
-    snoc t (Alternatives p Unsolved) | p `Type.alternativesFreeIn` t = do
-        n <- State.get
+        snoc t (Fields a (Solved r)) = do
+            return (Type.solveFields a r t)
 
-        State.put $! n + 1
+        snoc t (Alternatives a (Solved u)) = do
+            return (Type.solveAlternatives a u t)
 
-        let b = Existential.toVariable (numUnsolved - n)
+        snoc t (Fields p Unsolved) | p `Type.fieldsFreeIn` t = do
+            n <- State.get
 
-        let Type.Type{ location } = t
+            State.put $! n + 1
 
-        let node =
-                Type.Forall location b Domain.Alternatives (Type.solveAlternatives p (Monotype.Alternatives [] (Monotype.VariableAlternatives b)) t)
+            let b = Existential.toVariable (numUnsolved - n)
 
-        return Type.Type{..}
-    snoc t _ = do
-        return t
+            let Type.Type{ location } = t
+
+            let node =
+                    Type.Forall location b Domain.Fields (Type.solveFields p (Monotype.Fields [] (Monotype.VariableFields b)) t)
+
+            return Type.Type{..}
+        snoc t (Alternatives p Unsolved) | p `Type.alternativesFreeIn` t = do
+            n <- State.get
+
+            State.put $! n + 1
+
+            let b = Existential.toVariable (numUnsolved - n)
+
+            let Type.Type{ location } = t
+
+            let node =
+                    Type.Forall location b Domain.Alternatives (Type.solveAlternatives p (Monotype.Alternatives [] (Monotype.VariableAlternatives b)) t)
+
+            return Type.Type{..}
+        snoc t _ = do
+            return t
+
+    State.evalStateT (Monad.foldM snoc type_ context) 0
 
 {-| Split a `Context` into two `Context`s before and after the given
     `Unsolved` `Type` variable.  Neither `Context` contains the variable
@@ -390,12 +361,14 @@ splitOnUnsolvedType
     :: Existential Monotype
     -- ^ `Unsolved` `Type` variable to split on
     -> Context s a
-    -> Maybe (Context s a, Context s a)
-splitOnUnsolvedType a0 (Type a1 Unsolved : entries)
-    | a0 == a1 = return ([], entries)
-splitOnUnsolvedType a (entry : entries) = do
-    (prefix, suffix) <- splitOnUnsolvedType a entries
-    return (entry : prefix, suffix)
+    -> Maybe (Context s a, STRef s (Solution Monotype), Context s a)
+splitOnUnsolvedType a0 (Type a1 ref : entries)
+    | a0 == a1 = do
+        return ([], ref, entries)
+splitOnUnsolvedType a0 (entry : entries) = do
+        ~(prefix, ref, suffix) <- splitOnUnsolvedType a0 entries
+
+        return (entry : prefix, ref, suffix)
 splitOnUnsolvedType _ [] = Nothing
 
 {-| Split a `Context` into two `Context`s before and after the given

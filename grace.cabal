@@ -24,6 +24,7 @@ library
                      , string-interpolate
                      , terminal-size
                      , text
+                     , transformers
                      , unordered-containers
   exposed-modules:     Grace
                      , Grace.Context
