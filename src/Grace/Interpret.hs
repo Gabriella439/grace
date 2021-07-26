@@ -9,6 +9,7 @@ module Grace.Interpret
     ( -- * Interpret
       Input(..)
     , interpret
+    , interpretWith
     ) where
 
 import Control.Monad.Except (MonadError(..))
@@ -25,6 +26,7 @@ import System.FilePath ((</>))
 import qualified Control.Lens         as Lens
 import qualified Control.Monad.Except as Except
 import qualified Data.Text.IO         as Text.IO
+import qualified Grace.Context        as Context
 import qualified Grace.Infer          as Infer
 import qualified Grace.Normalize      as Normalize
 import qualified Grace.Parser         as Parser
@@ -54,7 +56,18 @@ interpret
     -- ^ Optional expected type for the input
     -> Input
     -> m (Type Location, Value)
-interpret maybeAnnotation input = do
+interpret = interpretWith []
+
+-- | Like `interpret`, but accepts a custom list of bindings
+interpretWith
+    :: (MonadError Text m, MonadIO m)
+    => [(Text, Type Location, Value)]
+    -- ^ @(name, type, value)@ for each custom binding
+    -> Maybe (Type Location)
+    -- ^ Optional expected type for the input
+    -> Input
+    -> m (Type Location, Value)
+interpretWith bindings maybeAnnotation input = do
     code <- case input of
         Path file -> liftIO (Text.IO.readFile file)
         Code text -> return text
@@ -73,7 +86,7 @@ interpret maybeAnnotation input = do
             return (first locate expression)
 
     let resolve (maybeAnnotation', file) =
-            interpret maybeAnnotation' (Path path)
+            interpretWith bindings maybeAnnotation' (Path path)
           where
             path = case input of
                 Path parent -> FilePath.takeDirectory parent </> file
@@ -90,12 +103,22 @@ interpret maybeAnnotation input = do
                         , location = Syntax.location resolvedExpression
                         }
 
-    case Infer.typeOf annotatedExpression of
+    let typeContext = do
+            (variable, type_, _) <- bindings
+
+            return (Context.Annotation variable type_)
+
+    case Infer.typeWith typeContext annotatedExpression of
         Left message -> do
             Except.throwError message
 
         Right inferred -> do
-            return (inferred, Normalize.evaluate [] resolvedExpression)
+            let evaluationContext = do
+                    (variable, _, value) <- bindings
+
+                    return (variable, value)
+
+            return (inferred, Normalize.evaluate evaluationContext resolvedExpression)
 
 {-| We use this utility so that when we resolve an import of the form:
 

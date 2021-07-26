@@ -27,6 +27,7 @@
 module Grace.Infer
     ( -- * Type inference
       typeOf
+    , typeWith
     ) where
 
 import Data.Text (Text)
@@ -2428,8 +2429,15 @@ inferApplication _A@Type{..} _ = do
 typeOf
     :: Syntax Location (Type Location, Value)
     -> Either Text (Type Location)
-typeOf syntax = do
-    let initialStatus = Status{ count = 0, context = [] }
+typeOf = typeWith []
+
+-- | Like `typeOf`, but accepts a custom type-checking `Context`
+typeWith
+    :: Context Location
+    -> Syntax Location (Type Location, Value)
+    -> Either Text (Type Location)
+typeWith context syntax = do
+    let initialStatus = Status{ count = 0, context }
 
     (_A, Status{ context = _Δ }) <- State.runStateT (infer syntax) initialStatus
 
