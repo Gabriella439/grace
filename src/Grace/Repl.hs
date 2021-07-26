@@ -7,9 +7,11 @@ module Grace.Repl
     ) where
 
 import Control.Monad.IO.Class (liftIO, MonadIO)
-import Control.Monad.State (evalStateT, modify, StateT)
+import Control.Monad.State (evalStateT, get, modify, StateT)
 import Data.Text (pack, Text)
 import Grace.Interpret (Input(..))
+import Grace.Location (Location)
+import Grace.Type (Type)
 import Grace.Value (Value)
 import System.Console.Repline (ReplOpts(..))
 
@@ -37,21 +39,22 @@ repl = evalStateT action []
         }
 
 
-type Status = [(Text, Value)]
+type Status = [(Text, Type Location, Value)]
 
 interpret :: MonadIO m => String -> Repline.HaskelineT (StateT Status m) ()
-interpret string = liftIO $ do
+interpret string = do
     let input = Code (pack string)
 
-    eitherResult <- Except.runExceptT (Interpret.interpret Nothing input)
+    context <- get
+    eitherResult <- Except.runExceptT (Interpret.interpretWith context Nothing input)
 
     case eitherResult of
-        Left text -> Text.IO.hPutStrLn IO.stderr text
+        Left text -> liftIO $ Text.IO.hPutStrLn IO.stderr text
         Right (_inferred, value) -> do
             let syntax = Normalize.quote [] value
 
-            width <- Grace.Pretty.getWidth
-            Grace.Pretty.renderIO True width IO.stdout (Grace.Pretty.pretty syntax <> "\n")
+            width <- liftIO $ Grace.Pretty.getWidth
+            liftIO $ Grace.Pretty.renderIO True width IO.stdout (Grace.Pretty.pretty syntax <> "\n")
 
 assignment :: MonadIO m => String -> Repline.HaskelineT (StateT Status m) ()
 assignment input
@@ -60,11 +63,12 @@ assignment input
       let exprc = Code (pack expr)
           variable = pack var
 
-      eitherResult <- Except.runExceptT (Interpret.interpret Nothing exprc)
+      context <- get
+      eitherResult <- Except.runExceptT (Interpret.interpretWith context Nothing exprc)
 
       case eitherResult of
           Left text -> liftIO (Text.IO.hPutStrLn IO.stderr text)
-          Right (_, value) -> modify ((variable, value) :)
+          Right (type', value) -> modify ((variable, type', value) :)
 
     | otherwise
     = liftIO (putStrLn "usage: let = {expression}")
