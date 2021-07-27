@@ -8,7 +8,7 @@ module Grace.Repl
 
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.State (evalStateT, get, modify, StateT)
-import Data.Text (pack, Text)
+import Data.Text (pack, strip, Text)
 import Grace.Interpret (Input(..))
 import Grace.Location (Location)
 import Grace.Type (Type)
@@ -61,7 +61,7 @@ assignment input
     | (var, '=' : expr) <- break (== '=') input
     = do
       let exprc = Code (pack expr)
-          variable = pack var
+          variable = strip (pack var)
 
       context <- get
       eitherResult <- Except.runExceptT (Interpret.interpretWith context Nothing exprc)
