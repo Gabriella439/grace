@@ -57,14 +57,14 @@ interpret string = do
             liftIO $ Grace.Pretty.renderIO True width IO.stdout (Grace.Pretty.pretty syntax <> "\n")
 
 assignment :: MonadIO m => String -> Repline.HaskelineT (StateT Status m) ()
-assignment input
+assignment string
     | (var, '=' : expr) <- break (== '=') input
     = do
-      let exprc = Code (pack expr)
+      let input = Code (pack string)
           variable = strip (pack var)
 
       context <- get
-      eitherResult <- Except.runExceptT (Interpret.interpretWith context Nothing exprc)
+      eitherResult <- Except.runExceptT (Interpret.interpretWith context Nothing input)
 
       case eitherResult of
           Left text -> liftIO (Text.IO.hPutStrLn IO.stderr text)
