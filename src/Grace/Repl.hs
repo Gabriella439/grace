@@ -7,8 +7,12 @@ module Grace.Repl
     ) where
 
 import Control.Monad.IO.Class (liftIO, MonadIO)
-import Data.Text (pack)
+import Control.Monad.State (evalStateT, get, modify, StateT)
+import Data.Text (pack, strip, Text)
 import Grace.Interpret (Input(..))
+import Grace.Location (Location)
+import Grace.Type (Type)
+import Grace.Value (Value)
 import System.Console.Repline (ReplOpts(..))
 
 import qualified Control.Monad.Except         as Except
@@ -20,29 +24,51 @@ import qualified System.Console.Repline       as Repline
 import qualified System.IO                    as IO
 
 repl :: IO ()
-repl =
-  Repline.evalReplOpts ReplOpts
-      { banner = pure (pure ">>> ")
-      , command = interpret
-      , options = []
-      , prefix = Just ':'
-      , multilineCommand = Nothing
-      , tabComplete = Repline.File
-      , initialiser = return ()
-      , finaliser = return Repline.Exit
-      }
+repl = evalStateT action []
+  where
+    action =
+      Repline.evalReplOpts ReplOpts
+        { banner = pure (pure ">>> ")
+        , command = interpret
+        , options = [("let", assignment)]
+        , prefix = Just ':'
+        , multilineCommand = Nothing
+        , tabComplete = Repline.File
+        , initialiser = return ()
+        , finaliser = return Repline.Exit
+        }
 
-interpret :: MonadIO m => String -> Repline.HaskelineT m ()
-interpret string = liftIO $ do
+
+type Status = [(Text, Type Location, Value)]
+
+interpret :: MonadIO m => String -> Repline.HaskelineT (StateT Status m) ()
+interpret string = do
     let input = Code (pack string)
 
-    eitherResult <- do
-        Except.runExceptT (Interpret.interpret Nothing input)
+    context <- get
+    eitherResult <- Except.runExceptT (Interpret.interpretWith context Nothing input)
 
     case eitherResult of
-        Left text -> Text.IO.hPutStrLn IO.stderr text
+        Left text -> liftIO $ Text.IO.hPutStrLn IO.stderr text
         Right (_inferred, value) -> do
             let syntax = Normalize.quote [] value
 
-            width <- Grace.Pretty.getWidth
-            Grace.Pretty.renderIO True width IO.stdout (Grace.Pretty.pretty syntax <> "\n")
+            width <- liftIO $ Grace.Pretty.getWidth
+            liftIO $ Grace.Pretty.renderIO True width IO.stdout (Grace.Pretty.pretty syntax <> "\n")
+
+assignment :: MonadIO m => String -> Repline.HaskelineT (StateT Status m) ()
+assignment string
+    | (var, '=' : expr) <- break (== '=') string
+    = do
+      let input = Code (pack string)
+          variable = strip (pack var)
+
+      context <- get
+      eitherResult <- Except.runExceptT (Interpret.interpretWith context Nothing input)
+
+      case eitherResult of
+          Left text -> liftIO (Text.IO.hPutStrLn IO.stderr text)
+          Right (type', value) -> modify ((variable, type', value) :)
+
+    | otherwise
+    = liftIO (putStrLn "usage: let = {expression}")
