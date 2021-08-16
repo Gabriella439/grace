@@ -60,7 +60,7 @@ assignment :: MonadIO m => String -> Repline.HaskelineT (StateT Status m) ()
 assignment string
     | (var, '=' : expr) <- break (== '=') string
     = do
-      let input = Code (pack string)
+      let input = Code (pack expr)
           variable = strip (pack var)
 
       context <- get
