@@ -23,6 +23,7 @@ module Grace.Lexer
       Token(..)
     , LocatedToken(..)
     , lex
+    , reserved
 
       -- * Miscellaneous
     , validRecordLabel

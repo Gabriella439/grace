@@ -8,8 +8,10 @@ module Grace.Repl
 
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.State (evalStateT, get, modify, StateT)
-import Data.Text (pack, strip, Text)
+import Data.Foldable (toList)
+import Data.Text (pack, strip, unpack, Text)
 import Grace.Interpret (Input(..))
+import Grace.Lexer (reserved)
 import Grace.Location (Location)
 import Grace.Type (Type)
 import Grace.Value (Value)
@@ -33,7 +35,7 @@ repl = evalStateT action []
         , options = [("let", assignment)]
         , prefix = Just ':'
         , multilineCommand = Nothing
-        , tabComplete = Repline.File
+        , tabComplete = Repline.Custom (Repline.listCompleter $ fmap unpack (toList reserved))
         , initialiser = return ()
         , finaliser = return Repline.Exit
         }
