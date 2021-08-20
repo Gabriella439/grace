@@ -276,16 +276,27 @@ subtype _A0 _B0 = do
         (Type.TypeHole, _) -> do
             a <- fresh
 
+            push (Context.MarkerType a)
             push (Context.UnsolvedType a)
 
-            subtype Type{ location = Type.location _A0, node = Type.UnsolvedType a } _B0
+            let _A1 =
+                    Type{ location = Type.location _A0, node = Type.UnsolvedType a }
+
+            subtype _A1 _B0
+
+            discardUpTo (Context.MarkerType a)
 
         (_, Type.TypeHole) -> do
             b <- fresh
 
+            push (Context.MarkerType b)
             push (Context.UnsolvedType b)
 
-            subtype _A0 Type{ location = Type.location _B0, node = Type.UnsolvedType b }
+            let _B1 =
+                    Type{ location = Type.location _B0, node = Type.UnsolvedType b }
+            subtype _A0 _B1
+
+            discardUpTo (Context.MarkerType b)
 
         -- <:Var
         (Type.VariableType a0, Type.VariableType a1)
@@ -484,16 +495,22 @@ subtype _A0 _B0 = do
         (Type.Record (Type.Fields kAs Monotype.HoleFields), _) -> do
             p <- fresh
 
+            push (Context.MarkerFields p)
             push (Context.UnsolvedFields p)
 
             subtype Type{ location = Type.location _A0, node = Type.Record (Type.Fields kAs (Monotype.UnsolvedFields p)) } _B0
 
+            discardUpTo (Context.MarkerFields p)
+
         (_, Type.Record (Type.Fields kBs Monotype.HoleFields)) -> do
             p <- fresh
 
+            push (Context.MarkerFields p)
             push (Context.UnsolvedFields p)
 
             subtype _A0 Type{ location = Type.location _B0, node = Type.Record (Type.Fields kBs (Monotype.UnsolvedFields p)) }
+
+            discardUpTo (Context.MarkerFields p)
 
         (_A@(Type.Record (Type.Fields kAs0 fields0)), _B@(Type.Record (Type.Fields kBs0 fields1))) -> do
             let mapA = Map.fromList kAs0
@@ -782,16 +799,22 @@ subtype _A0 _B0 = do
         (Type.Union (Type.Alternatives kAs Monotype.HoleAlternatives), _) -> do
             p <- fresh
 
+            push (Context.MarkerAlternatives p)
             push (Context.UnsolvedAlternatives p)
 
             subtype Type{ location = Type.location _A0, node = Type.Union (Type.Alternatives kAs (Monotype.UnsolvedAlternatives p)) } _B0
 
+            discardUpTo (Context.MarkerAlternatives p)
+
         (_, Type.Union (Type.Alternatives kBs Monotype.HoleAlternatives)) -> do
             p <- fresh
 
+            push (Context.MarkerAlternatives p)
             push (Context.UnsolvedAlternatives p)
 
             subtype _A0 Type{ location = Type.location _B0, node = Type.Union (Type.Alternatives kBs (Monotype.UnsolvedAlternatives p)) }
+
+            discardUpTo (Context.MarkerAlternatives p)
 
         (_A@(Type.Union (Type.Alternatives kAs0 alternatives0)), _B@(Type.Union (Type.Alternatives kBs0 alternatives1))) -> do
             let mapA = Map.fromList kAs0
