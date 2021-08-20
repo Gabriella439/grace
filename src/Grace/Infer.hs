@@ -527,7 +527,6 @@ subtype _A0 _B0 = do
                 flexible (Monotype.UnsolvedFields _) = True
                 flexible  Monotype.HoleFields        = True
 
-            -- See also the matching `check` code.
             let okayA = Map.null extraA
                     || (flexible fields1 && fields0 /= fields1)
 
