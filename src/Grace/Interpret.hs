@@ -4,7 +4,7 @@
 {-# LANGUAGE RecordWildCards  #-}
 {-# LANGUAGE TypeApplications #-}
 
--- | This module implements support for file-based imports
+-- | This module implements the main interpretation function
 module Grace.Interpret
     ( -- * Interpret
       Input(..)

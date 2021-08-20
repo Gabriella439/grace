@@ -11,9 +11,9 @@
     LR parsers are easier to maintain due to not needing to left-factor the
     grammar.
 
-    The main reason for not using @happy@ is because it uses a separate
-    code generation step, which leads to worse error messages and poor
-    support for interactive type-checking.
+    The main reason for not using @happy@ is because it uses a separate code
+    generation step, which leads to worse type errors and poor support for
+    interactive type-checking.
 -}
 
 module Grace.Parser

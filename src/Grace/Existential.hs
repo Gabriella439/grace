@@ -2,8 +2,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
 
-{-| This module provides newtype wrappers for the different types of
-    existential variables used in the type-checking algorithm.
+{-| This module provides a newtype wrapper for existential variables used in the
+    type-checking algorithm.
 
     We don't use naked `Int`s since (empirically) conflating the various
     existentials is a common source of type-checking errors.
@@ -22,7 +22,16 @@ import Grace.Pretty (Pretty(..), label)
 import qualified Data.Char as Char
 import qualified Data.Text as Text
 
--- | An existential variable
+{-| An existential variable
+
+    The type variable is used to track what type of existential variable we're
+    using, which will be one of these three types:
+
+    * @`Existential` "Grace.Monotype".Monotype@ - An existential type
+    * @`Existential` "Grace.Monotype".Record@ - An existential fields variable
+    * @`Existential` "Grace.Monotype".Union@ - An existential alternatives
+      variable
+-}
 newtype Existential a = UnsafeExistential Int
     deriving newtype (Eq, Num, Show)
 

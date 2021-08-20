@@ -40,7 +40,7 @@ import qualified System.Console.Terminal.Size as Size
 renderStrict
     :: Pretty a
     => Bool
-    -- ^ True to enable syntax highlighting
+    -- ^ `True` enable syntax highlighting
     -> Int
     -- ^ Available columns
     -> a
@@ -60,7 +60,7 @@ renderStrict highlight columns =
 renderIO
     :: Pretty a
     => Bool
-    -- ^ True to enable syntax highlighting
+    -- ^ `True` enables syntax highlighting
     -> Int
     -- ^ Available columns
     -> Handle
@@ -142,7 +142,7 @@ keyword =
         <>  Pretty.Terminal.colorDull Pretty.Terminal.Green
         )
 
--- | Highlight punctuation (e.g. @{@, or @,@}
+-- | Highlight punctuation (e.g. @{@ or @,@)
 punctuation :: Doc AnsiStyle -> Doc AnsiStyle
 punctuation =
     Pretty.annotate

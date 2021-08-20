@@ -13,9 +13,9 @@
     lower-level parsing library that supports efficient bulk parsing
     (@megaparsec@ in this case).
 
-    The main reason for not using @alex@ is because it uses a separate
-    code generation step, which leads to worse error messages and poor
-    support for interactive type-checking.
+    The main reason for not using @alex@ is because it uses a separate code
+    generation step, which leads to worse type errors and poor support for
+    interactive type-checking.
 -}
 
 module Grace.Lexer

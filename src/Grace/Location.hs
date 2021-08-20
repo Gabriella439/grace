@@ -31,7 +31,11 @@ data Location = Location
     { name :: String
     -- ^ The file or name describing where the code came from
     , code :: Text
-    -- ^ The original source code
+    -- ^ The original source code (the entire file)
+    --
+    --   Note that this will not always be the same for each `Location` because
+    --   different subexpressions might originate from different files if they
+    --   were imported
     , offset :: Offset
     -- ^ The offset (in characters) within the code
     }
