@@ -522,14 +522,17 @@ subtype _A0 _B0 = do
 
             let both = Map.intersectionWith (,) mapA mapB
 
-            -- TODO: The `fields* /= Monotype.EmptyFields` might not be correct
-            --
+            let flexible  Monotype.EmptyFields       = False
+                flexible (Monotype.VariableFields _) = False
+                flexible (Monotype.UnsolvedFields _) = True
+                flexible  Monotype.HoleFields        = True
+
             -- See also the matching `check` code.
             let okayA = Map.null extraA
-                    || (fields1 /= Monotype.EmptyFields && fields0 /= fields1)
+                    || (flexible fields1 && fields0 /= fields1)
 
             let okayB = Map.null extraB
-                    || (fields0 /= Monotype.EmptyFields && fields0 /= fields1)
+                    || (flexible fields0 && fields0 /= fields1)
 
             -- First we check that there are no mismatches in the record types
             -- that cannot be resolved by just setting an unsolved Fields
@@ -826,10 +829,15 @@ subtype _A0 _B0 = do
 
             let both = Map.intersectionWith (,) mapA mapB
 
+            let flexible  Monotype.EmptyAlternatives       = False
+                flexible (Monotype.VariableAlternatives _) = False
+                flexible (Monotype.UnsolvedAlternatives _) = True
+                flexible  Monotype.HoleAlternatives        = True
+
             let okayA = Map.null extraA
-                    ||  alternatives1 /= Monotype.EmptyAlternatives
+                    ||  (flexible alternatives1 && alternatives0 /= alternatives1)
             let okayB = Map.null extraB
-                    ||  alternatives0 /= Monotype.EmptyAlternatives
+                    ||  (flexible alternatives0 && alternatives0 /= alternatives1)
 
             if | not okayA && not okayB -> do
                 Except.throwError [__i|
