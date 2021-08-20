@@ -12,6 +12,7 @@ $ cabal build exe:grace                    # Build the `grace` executable
 $ cabal test                               # Run all tests
 $ cabal test tasty                         # Faster: run only tasty tests
 $ cabal test tasty --test-option=--accept  # Update golden tests
+$ cabal test doctest                       # Run only doctests
 $ cabal haddock --hyperlink-source         # Generate Haskell documentation
 ```
 
@@ -62,9 +63,12 @@ then it also must accept all types that are subtypes of `T`, too (e.g.
 has to handle the case where the input to the `Integer/even` function is either
 an `Integer` *or* a `Natural` (since `Natural` is a subtype of `Integer`).
 
-Finally, add support for parsing the built-in by adding a new `Token` for the
-`Builtin` in the [`Lexer`][lexer] module and a new parsing rule in the
-[`Parser`][parser] module.
+Finally, add support for parsing the built-in by:
+
+* Adding a new `Token` for the `Builtin` in the [`Lexer`][lexer] module
+* Adding the built-in name to the `reserved` words in the [`Lexer`][lexer]
+  module
+* Adding a new parsing rule in the [`Parser`][parser] module.
 
 ## Adding a new operator
 
