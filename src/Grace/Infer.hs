@@ -109,8 +109,9 @@ insert :: Pretty a => a -> Text
 insert a = prettyToText ("   " <> Pretty.align (pretty a))
 
 listToText :: Pretty a => [a] -> Text
-listToText elements =
-    Text.intercalate "\n" (map (\entry -> "• " <> prettyToText entry) elements)
+listToText elements = Text.intercalate "\n" (map prettyEntry elements)
+  where
+    prettyEntry entry = prettyToText ("• " <> Pretty.align (pretty entry))
 
 {-| This corresponds to the judgment:
 

@@ -40,6 +40,7 @@ import qualified Grace.Domain               as Domain
 import qualified Grace.Existential          as Existential
 import qualified Grace.Monotype             as Monotype
 import qualified Grace.Type                 as Type
+import qualified Prettyprinter              as Pretty
 
 {- $setup
 
@@ -221,8 +222,18 @@ prettyEntry (SolvedAlternatives p0 (Monotype.Alternatives ((k0, τ0) : kτs) fie
                 " " <> punctuation "|" <> " " <> "?"
             Monotype.VariableAlternatives p1 ->
                 " " <> punctuation "|" <> " " <> label (pretty p1)
-prettyEntry (Annotation x a) =
-    pretty x <> operator ":" <> " " <> pretty a
+prettyEntry (Annotation x a) = Pretty.group (Pretty.flatAlt long short)
+  where
+    long =
+        Pretty.align
+            (   pretty x
+            <>  operator ":"
+            <>  Pretty.hardline
+            <>  "  "
+            <>  pretty a
+            )
+
+    short = pretty x <> operator ":" <> " " <> pretty a
 prettyEntry (MarkerType a) =
     "➤ " <> pretty a <> ": Type"
 prettyEntry (MarkerFields a) =
