@@ -76,7 +76,7 @@ Grace implements the following features so that you don't have to:
 
   … and this doesn't compromise the soundness of the type system.
 
-* [Dhall](https://dhall-lang.org/)-style file-path imports
+* [Dhall](https://dhall-lang.org/)-style filepath imports
 
   You can import subexpressions by referencing their relative or absolute paths.
   You can also import JSON in the way same way since Grace is a superset of
@@ -92,9 +92,7 @@ Grace implements the following features so that you don't have to:
 * Fast evaluation
 
   Grace implements [normalization by evaluation](https://en.wikipedia.org/wiki/Normalisation_by_evaluation)
-  to efficiently interpret code.  Combined with parsing and type-checking
-  optimizations this means that the interpreter will tear through any code you
-  throw at it.
+  to efficiently interpret code.
 
   The interpreter also doesn't need to warm up and has a low startup overhead of
   tens of milliseconds, so Grace is suitable for short-lived command-line
@@ -194,11 +192,6 @@ Grace does not support the following language features:
 
 Grace also does not support the following tooling:
 
-* A REPL
-
-  I would accept a pull request to add this and might even add this myself.  I
-  just haven't gotten around to this.
-
 * A language server
 
   I will accept pull requests for this, but I don't plan on maintaining a
@@ -216,6 +209,8 @@ Grace also does not support the following tooling:
   forked and used as a starting point for your own language, so any
   documentation written for Grace would need to be substantially rewritten as
   you adjust the language to your needs.
+
+  That said, this `README` has a brief tour of the language below.
 
   If you still need an example of a tutorial for a similar language that you can
   adapt, see
@@ -307,47 +302,14 @@ Available options:
   -h,--help                Show this help text
 
 Available commands:
-  format                   Format Grace code
   interpret                Interpret a Grace file
+  text                     Render a Grace text literal
+  format                   Format Grace code
   builtins                 List all built-in functions and their types
+  repl                     Enter a REPL for Grace
 ```
 
-```bash
-$ grace interpret --help
-Usage: grace interpret [--annotate] FILE [--color | --plain]
-  Interpret a Grace file
-
-Available options:
-  --annotate               Add a type annotation for the inferred type
-  FILE                     File to interpret
-  --color                  Enable syntax highlighting
-  --plain                  Disable syntax highlighting
-  -h,--help                Show this help text
-```
-
-```bash
-$ grace format --help
-Usage: grace format [--color | --plain] [FILE]
-  Format Grace code
-
-Available options:
-  --color                  Enable syntax highlighting
-  --plain                  Disable syntax highlighting
-  FILE                     File to format
-  -h,--help                Show this help text
-```
-
-```bash
-Usage: grace builtins [--color | --plain]
-  List all built-in functions and their types
-
-Available options:
-  --color                  Enable syntax highlighting
-  --plain                  Disable syntax highlighting
-  -h,--help                Show this help text
-```
-
-For example:
+You can use the `interpret` subcommand for interpreting a single file:
 
 ```dhall
 # ./example.grace
@@ -371,6 +333,18 @@ $ grace interpret - <<< '2 + 2'
 ```
 ```dhall
 4
+```
+
+You can also use the `repl` subcommand for interactive usage:
+
+```bash
+$ grace repl
+```
+```dhall
+>>> :let x = 1
+>>> :let y = 2
+>>> x + y
+3
 ```
 
 ### Data
