@@ -256,6 +256,7 @@ validRecordLabel text_  =
             &&  Text.all isLabel t
             &&  not (HashSet.member text_ reserved)
 
+-- | Reserved tokens, which can't be used for labels unless they are quoted
 reserved :: HashSet Text
 reserved =
     HashSet.fromList

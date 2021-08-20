@@ -25,6 +25,7 @@ import qualified Grace.Pretty                 as Grace.Pretty
 import qualified System.Console.Repline       as Repline
 import qualified System.IO                    as IO
 
+-- | Entrypoint for the @grace repl@ subcommand
 repl :: IO ()
 repl = evalStateT action []
   where

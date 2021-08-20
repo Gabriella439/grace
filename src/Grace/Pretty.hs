@@ -74,6 +74,7 @@ renderIO highlight columns handle =
         then Pretty.Terminal.renderIO
         else Pretty.Text.renderIO
 
+-- | Get the width of the terminal (in columns)
 getWidth :: IO Int
 getWidth = do
     maybeWindow <- Size.size
