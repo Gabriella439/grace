@@ -1870,7 +1870,12 @@ infer e0 = do
                 y : ys -> do
                     _A <- infer y
 
-                    traverse_ (`check` _A) ys
+                    let process element = do
+                            _Γ <- get
+
+                            check element (Context.solveType _Γ _A)
+
+                    traverse_ process ys
 
                     return _Type{ node = Type.List _A }
 
@@ -2285,7 +2290,12 @@ check Syntax{ node = Syntax.Operator l _ op r } _B@Type{ node = Type.Scalar scal
     check r _B
 
 check Syntax{ node = Syntax.List elements } Type{ node = Type.List a } = do
-    traverse_ (`check` a)  elements
+    let process element = do
+            _Γ <- get
+
+            check element (Context.solveType _Γ a)
+
+    traverse_ process elements
 
 check e@Syntax{ node = Syntax.Record keyValues } _B@Type{ node = Type.Record (Type.Fields keyTypes fields) }
     | let mapValues = Map.fromList keyValues
@@ -2296,7 +2306,10 @@ check e@Syntax{ node = Syntax.Record keyValues } _B@Type{ node = Type.Record (Ty
 
     , let both = Map.intersectionWith (,) mapValues mapTypes
     , not (Map.null both) = do
-        let process (value, type_) = check value type_
+        let process (value, type_) = do
+                _Γ <- get
+
+                check value (Context.solveType _Γ type_)
 
         _ <- traverse process both
 
