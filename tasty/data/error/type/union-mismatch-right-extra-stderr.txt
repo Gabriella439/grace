@@ -4,7 +4,7 @@ The following union type:
 
    [0;32;1m<[0m [0;32;1m>[0m
 
-tasty/data/error/type/union-mismatch-right-extra-input.grace:1:12: 
+tasty/data/error/type/union-mismatch-right-extra-input.ffg:1:12: 
   │
 1 │ \x -> (x : < >) : < A : { } >
   │            ↑
@@ -13,7 +13,7 @@ tasty/data/error/type/union-mismatch-right-extra-input.grace:1:12:
 
    [0;32;1m<[0m [0mA[0m[0;32;1m:[0m [0;32;1m{[0m [0;32;1m}[0m [0;32;1m>[0m
 
-tasty/data/error/type/union-mismatch-right-extra-input.grace:1:19: 
+tasty/data/error/type/union-mismatch-right-extra-input.ffg:1:19: 
   │
 1 │ \x -> (x : < >) : < A : { } >
   │                   ↑

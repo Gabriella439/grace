@@ -1,8 +1,8 @@
 # `grace`
 
-Grace is a ready-to-fork implementation of a JSON-compatible functional
-programming language with type inference.  You will most likely be interested in
-Grace for one of two reasons:
+Grace (short for Fall-from-Grace) is a ready-to-fork implementation of a
+JSON-compatible functional programming language with type inference.  You will
+most likely be interested in Grace for one of two reasons:
 
 * You need to implement a domain-specific language and you would like to begin
   from a quality existing implementation instead of building some half-baked
@@ -312,14 +312,14 @@ Available commands:
 You can use the `interpret` subcommand for interpreting a single file:
 
 ```dhall
-# ./example.grace
+# ./example.ffg
 let greet = \name -> "Hello, " ++ name ++ "!"
 
 in  greet "world"
 ```
 
 ```bash
-$ grace interpret example.grace
+$ grace interpret example.ffg
 ```
 ```dhall
 "Hello, world!"
@@ -601,7 +601,7 @@ The following type:
 
    List Natural
 
-./example.grace:1:19: 
+./example.ffg:1:19: 
   │
 1 │ let twice = \x -> [ x, x ]
   │                   ↑
@@ -610,7 +610,7 @@ The following type:
 
    Natural
 
-./example.grace:1:14: 
+./example.ffg:1:14: 
   │
 1 │ let twice = \x -> [ x, x ]
   │              ↑
@@ -845,7 +845,7 @@ For example, instead of having one large expression like this:
 … you can split the expression into smaller files:
 
 ```dhall
-# ./cake.grace
+# ./cake.ffg
 
 { name: "Cake donut"
 , batters: [ "Regular", "Chocolate", "Blueberry", "Devil's Food" ]
@@ -861,7 +861,7 @@ For example, instead of having one large expression like this:
 ```
 
 ```dhall
-# ./raised.grace
+# ./raised.ffg
 
 { name: "Raised donut"
 , batters: [ "Regular" ]
@@ -870,7 +870,7 @@ For example, instead of having one large expression like this:
 ```
 
 ```dhall
-# ./old-fashioned.grace
+# ./old-fashioned.ffg
 
 { name: "Old Fashioned donut"
 , batters: [ "Regular", "Chocolate" ]
@@ -881,22 +881,22 @@ For example, instead of having one large expression like this:
 … and then reference them within a larger file, like this:
 
 ```dhall
-[ ./cake.grace
-, ./raised.grace
-, ./old-fashioned.grace
+[ ./cake.ffg
+, ./raised.ffg
+, ./old-fashioned.ffg
 ]
 ```
 
 You can also import functions in this way, too.  For example:
 
 ```dhall
-# ./greet.grace
+# ./greet.ffg
 
 \name -> "Hello, " ++ name ++ "!"
 ```
 
 ```bash
-$ grace interpret - <<< './greet.grace "John"'
+$ grace interpret - <<< './greet.ffg "John"'
 ```
 ```dhall
 "Hello, John!"
@@ -913,7 +913,7 @@ Grace is about
 [slaking the intellectual lust](https://torment.fandom.com/wiki/Brothel_for_Slaking_Intellectual_Lusts)
 of people interested in programming language theory.
 
-The name of this package conflicts with
-[another programming language](http://gracelang.org/applications/), which is
-all the more reason why you should not use this project "as is".  At the very
-least rename the language when you fork this project.
+The name of this interpreter conflicts with
+[another programming language](http://gracelang.org/applications/), so use the
+longer name, "Fall-from-Grace", to disambiguate when it's not clear from the
+context.  Either way, you'll want to rename this project when you fork it.

@@ -4,7 +4,7 @@ The following type:
 
    [0;32;1m{[0m [0mb[0m [0;32;1m}[0m
 
-tasty/data/error/type/fields-variable-mismatch-input.grace:1:62: 
+tasty/data/error/type/fields-variable-mismatch-input.ffg:1:62: 
   │
 1 │ let f : forall (a : Fields) . forall (b : Fields) . { a } -> { b } -> { a }
   │                                                              ↑
@@ -13,7 +13,7 @@ tasty/data/error/type/fields-variable-mismatch-input.grace:1:62:
 
    [0;32;1m{[0m [0ma[0m [0;32;1m}[0m
 
-tasty/data/error/type/fields-variable-mismatch-input.grace:1:71: 
+tasty/data/error/type/fields-variable-mismatch-input.ffg:1:71: 
   │
 1 │ let f : forall (a : Fields) . forall (b : Fields) . { a } -> { b } -> { a }
   │                                                                       ↑

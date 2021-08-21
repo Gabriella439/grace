@@ -5,7 +5,7 @@ statically known.  However, you provided an argument of type:
 
    [0;32;1m{[0m [0m[0mc[0m?[0m [0;32;1m}[0m
 
-tasty/data/error/type/abstract-merge-input.grace:1:13: 
+tasty/data/error/type/abstract-merge-input.ffg:1:13: 
   │
 1 │ \x -> merge x
   │             ↑

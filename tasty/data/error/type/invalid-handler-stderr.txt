@@ -5,7 +5,7 @@ but you provided a handler of the following type:
 
    [0;4mNatural[0m
 
-tasty/data/error/type/invalid-handler-input.grace:1:7: 
+tasty/data/error/type/invalid-handler-input.ffg:1:7: 
   │
 1 │ merge { x: 1 }
   │       ↑

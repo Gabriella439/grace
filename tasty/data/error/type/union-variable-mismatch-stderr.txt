@@ -4,7 +4,7 @@ The following type:
 
    [0;32;1m<[0m [0mb[0m [0;32;1m>[0m
 
-tasty/data/error/type/union-variable-mismatch-input.grace:1:74: 
+tasty/data/error/type/union-variable-mismatch-input.ffg:1:74: 
   │
 1 │ let f : forall (a : Alternatives) . forall (b : Alternatives) . < a > -> < b > -> < a >
   │                                                                          ↑
@@ -13,7 +13,7 @@ tasty/data/error/type/union-variable-mismatch-input.grace:1:74:
 
    [0;32;1m<[0m [0ma[0m [0;32;1m>[0m
 
-tasty/data/error/type/union-variable-mismatch-input.grace:1:83: 
+tasty/data/error/type/union-variable-mismatch-input.ffg:1:83: 
   │
 1 │ let f : forall (a : Alternatives) . forall (b : Alternatives) . < a > -> < b > -> < a >
   │                                                                                   ↑

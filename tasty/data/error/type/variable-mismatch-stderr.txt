@@ -4,7 +4,7 @@ The following type:
 
    [0mb[0m
 
-tasty/data/error/type/variable-mismatch-input.grace:1:54: 
+tasty/data/error/type/variable-mismatch-input.ffg:1:54: 
   │
 1 │ let f : forall (a : Type) . forall (b : Type) . a -> b -> a
   │                                                      ↑
@@ -13,7 +13,7 @@ tasty/data/error/type/variable-mismatch-input.grace:1:54:
 
    [0ma[0m
 
-tasty/data/error/type/variable-mismatch-input.grace:1:59: 
+tasty/data/error/type/variable-mismatch-input.ffg:1:59: 
   │
 1 │ let f : forall (a : Type) . forall (b : Type) . a -> b -> a
   │                                                           ↑

@@ -4,7 +4,7 @@ The following type:
 
    [0m[0mf[0m?[0m
 
-tasty/data/error/type/occurs-type-backwards-input.grace:2:2: 
+tasty/data/error/type/occurs-type-backwards-input.ffg:2:2: 
   │
 2 │ \f -> \x -> [ f, f x ]
   │  ↑
@@ -13,7 +13,7 @@ tasty/data/error/type/occurs-type-backwards-input.grace:2:2:
 
    [0m[0me[0m?[0m [0;32;1m->[0m [0m[0mf[0m?[0m
 
-tasty/data/error/type/occurs-type-backwards-input.grace:2:2: 
+tasty/data/error/type/occurs-type-backwards-input.ffg:2:2: 
   │
 2 │ \f -> \x -> [ f, f x ]
   │  ↑

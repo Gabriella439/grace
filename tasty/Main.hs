@@ -35,9 +35,9 @@ pretty_ x =
 
 fileToTestTree :: FilePath -> IO TestTree
 fileToTestTree prefix = do
-    let input              = prefix <> "-input.grace"
-    let expectedTypeFile   = prefix <> "-type.grace"
-    let expectedOutputFile = prefix <> "-output.grace"
+    let input              = prefix <> "-input.ffg"
+    let expectedTypeFile   = prefix <> "-type.ffg"
+    let expectedOutputFile = prefix <> "-output.ffg"
     let expectedStderrFile = prefix <> "-stderr.txt"
 
     let name = FilePath.takeBaseName input
@@ -77,7 +77,7 @@ fileToTestTree prefix = do
 
 inputFileToPrefix :: FilePath -> Maybe FilePath
 inputFileToPrefix inputFile =
-    fmap Text.unpack (Text.stripSuffix "-input.grace" (Text.pack inputFile))
+    fmap Text.unpack (Text.stripSuffix "-input.ffg" (Text.pack inputFile))
 
 directoryToTestTree :: FilePath -> IO TestTree
 directoryToTestTree directory = do
@@ -126,12 +126,12 @@ main = do
 
 interpretCodeWithImport :: TestTree
 interpretCodeWithImport = Tasty.HUnit.testCase "interpret code with import" do
-    actualValue <- Except.runExceptT (Interpret.interpret Nothing (Interpret.Code "./tasty/data/unit/plus-input.grace"))
+    actualValue <- Except.runExceptT (Interpret.interpret Nothing (Interpret.Code "./tasty/data/unit/plus-input.ffg"))
 
     let expectedValue =
             Right (Type{ location, node }, Value.Scalar (Syntax.Natural 5))
           where
-            location = Location{ name = "tasty/data/unit/plus-input.grace", code = "2 + 3\n", offset = 2 }
+            location = Location{ name = "tasty/data/unit/plus-input.ffg", code = "2 + 3\n", offset = 2 }
 
             node = Type.Scalar Monotype.Natural
 

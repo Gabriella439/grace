@@ -122,7 +122,7 @@ interpretWith bindings maybeAnnotation input = do
 
 {-| We use this utility so that when we resolve an import of the form:
 
-    > ./someImport.grace : SomeType
+    > ./someImport.ffg : SomeType
 
     … then the type-annotation is used when type-checking the import.  This
     allows the user to supply an expected type to fix imports that would

@@ -1,6 +1,6 @@
 Unbound variable: [0mx[0m
 
-tasty/data/error/type/unbound-input.grace:1:1: 
+tasty/data/error/type/unbound-input.ffg:1:1: 
   │
 1 │ x
   │ ↑

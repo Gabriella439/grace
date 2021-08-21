@@ -4,7 +4,7 @@ The following record type:
 
    [0;32;1m{[0m [0;32;1m}[0m
 
-tasty/data/error/type/record-mismatch-two-extra-input.grace:1:19: 
+tasty/data/error/type/record-mismatch-two-extra-input.ffg:1:19: 
   │
 1 │ [ { x: 1, y: 2 }, { } ]
   │                   ↑
@@ -13,7 +13,7 @@ tasty/data/error/type/record-mismatch-two-extra-input.grace:1:19:
 
    [0;32;1m{[0m [0mx[0m[0;32;1m:[0m [0;4mNatural[0m[0;32;1m,[0m [0my[0m[0;32;1m:[0m [0;4mNatural[0m [0;32;1m}[0m
 
-tasty/data/error/type/record-mismatch-two-extra-input.grace:1:3: 
+tasty/data/error/type/record-mismatch-two-extra-input.ffg:1:3: 
   │
 1 │ [ { x: 1, y: 2 }, { } ]
   │   ↑

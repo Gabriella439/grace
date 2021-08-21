@@ -4,7 +4,7 @@ The following type:
 
    [0m[0mc[0m?[0m [0;32;1m->[0m [0m[0md[0m?[0m
 
-tasty/data/error/type/occurs-type-input.grace:2:2: 
+tasty/data/error/type/occurs-type-input.ffg:2:2: 
   │
 2 │ \x -> x x
   │  ↑
@@ -13,7 +13,7 @@ tasty/data/error/type/occurs-type-input.grace:2:2:
 
    [0m[0mc[0m?[0m
 
-tasty/data/error/type/occurs-type-input.grace:2:2: 
+tasty/data/error/type/occurs-type-input.ffg:2:2: 
   │
 2 │ \x -> x x
   │  ↑

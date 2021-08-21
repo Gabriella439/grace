@@ -1,6 +1,6 @@
 Unbound type variable: c
 
-tasty/data/error/type/impredicative-instantiation-input.grace:6:62: 
+tasty/data/error/type/impredicative-instantiation-input.ffg:6:62: 
   │
 6 │ let g : (forall (b : Type) . b -> b) -> (forall (c : Type) . c -> c)
   │                                                              ↑

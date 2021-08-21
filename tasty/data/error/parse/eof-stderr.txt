@@ -1,4 +1,4 @@
-tasty/data/error/parse/eof-input.grace:2:1: Invalid input - Parsing failed
+tasty/data/error/parse/eof-input.ffg:2:1: Invalid input - Parsing failed
   │
 2 │ <empty line>
   │ ↑

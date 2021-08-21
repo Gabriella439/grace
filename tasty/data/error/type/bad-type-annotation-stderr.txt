@@ -4,7 +4,7 @@ The following type:
 
    [0;4mNatural[0m
 
-tasty/data/error/type/bad-type-annotation-input.grace:1:1: 
+tasty/data/error/type/bad-type-annotation-input.ffg:1:1: 
   │
 1 │ 1 : Text
   │ ↑
@@ -13,7 +13,7 @@ tasty/data/error/type/bad-type-annotation-input.grace:1:1:
 
    [0;4mText[0m
 
-tasty/data/error/type/bad-type-annotation-input.grace:1:5: 
+tasty/data/error/type/bad-type-annotation-input.ffg:1:5: 
   │
 1 │ 1 : Text
   │     ↑

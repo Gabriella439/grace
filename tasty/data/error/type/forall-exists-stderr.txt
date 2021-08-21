@@ -1,6 +1,6 @@
 Unbound type variable: a
 
-tasty/data/error/type/forall-exists-input.grace:12:35: 
+tasty/data/error/type/forall-exists-input.ffg:12:35: 
    │
 12 │       : List (exists (a : Type) . a)
    │                                   ↑

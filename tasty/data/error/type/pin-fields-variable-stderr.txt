@@ -4,7 +4,7 @@ The following record type:
 
    [0;32;1m{[0m [0ma[0m [0;32;1m}[0m
 
-tasty/data/error/type/pin-fields-variable-input.grace:3:31: 
+tasty/data/error/type/pin-fields-variable-input.ffg:3:31: 
   │
 3 │ let f : forall (a : Fields) . { a } -> { x : Bool, a }
   │                               ↑
@@ -13,7 +13,7 @@ tasty/data/error/type/pin-fields-variable-input.grace:3:31:
 
    [0;32;1m{[0m [0mx[0m[0;32;1m:[0m [0;4mBool[0m[0;32;1m,[0m [0ma[0m [0;32;1m}[0m
 
-tasty/data/error/type/pin-fields-variable-input.grace:3:40: 
+tasty/data/error/type/pin-fields-variable-input.ffg:3:40: 
   │
 3 │ let f : forall (a : Fields) . { a } -> { x : Bool, a }
   │                                        ↑
