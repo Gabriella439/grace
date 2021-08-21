@@ -472,7 +472,45 @@ Grace supports some operators out-of-the-box, such as:
 * Logical disjunction: `true || false`
 * Text concatenation: `"AB" ++ "CD"`
 
-… and you can also consume boolean values using `if` / `then` / `else`
+Note that `+` and `*` only work on `Natural` numbers without a type annotation.
+If either argument is an `Integer` or a `Double` then you will get a type error
+by default:
+
+```bash
+$ grace interpret - <<< '2 + -2'
+```
+```
+Not a subtype
+
+The following type:
+
+   Integer
+
+(input):1:6: 
+  │
+1 │ 2 + -2
+  │      ↑
+
+… cannot be a subtype of:
+
+   Natural
+
+(input):1:3: 
+  │
+1 │ 2 + -2
+  │   ↑
+```
+
+… which you can fix by adding a type annotation:
+
+```bash
+$ grace interpret - <<< '(2 + -2) : Integer'
+```
+```dhall
+0
+```
+
+You can also consume boolean values using `if` / `then` / `else`
 expressions:
 
 ```dhall
