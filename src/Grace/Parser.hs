@@ -165,6 +165,7 @@ render t = case t of
     Lexer.Lambda           -> "\\"
     Lexer.Let              -> "let"
     Lexer.List             -> "list"
+    Lexer.ListAny          -> "List/any"
     Lexer.ListFold         -> "List/fold"
     Lexer.ListLength       -> "List/length"
     Lexer.ListMap          -> "List/map"
@@ -196,7 +197,7 @@ grammar = mdo
         --
         --
         --      location <- locatedToken Lexer.Lambda
-        --      (nameLocation, name) <- locatedLabel 
+        --      (nameLocation, name) <- locatedLabel
         --      token Lexer.Arrow
         --      body <- expression
         --      let node = Syntax.Lambda nameLocation name body
@@ -209,7 +210,7 @@ grammar = mdo
                         node = Syntax.Lambda nameLocation name body
 
                 lambdaOffset <- locatedToken Lexer.Lambda
-                locatedName <- locatedLabel 
+                locatedName <- locatedLabel
                 token Lexer.Arrow
                 body <- expression
                 return (f lambdaOffset locatedName body)
@@ -399,6 +400,10 @@ grammar = mdo
 
                 return Syntax{ node = Syntax.Builtin Syntax.DoubleShow, .. }
 
+        <|> do  location <- locatedToken Lexer.ListAny
+
+                return Syntax{ node = Syntax.Builtin Syntax.ListAny, .. }
+
         <|> do  location <- locatedToken Lexer.ListFold
 
                 return Syntax{ node = Syntax.Builtin Syntax.ListFold, .. }
@@ -450,7 +455,7 @@ grammar = mdo
                       where
                         nameLocation = location
                         annotation = Nothing
-                        
+
                 locatedLet <- locatedToken Lexer.Let
                 name <- label
                 token Lexer.Equals
@@ -573,7 +578,7 @@ grammar = mdo
                 optional (token Lexer.Comma)
 
                 fieldTypes <- fieldType `endBy` token Lexer.Comma
-                
+
                 toFields <-
                     (   do  text_ <- recordLabel
                             pure (\fs -> Type.Fields fs (Monotype.VariableFields text_))

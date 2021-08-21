@@ -313,6 +313,10 @@ data Builtin
     -- ^
     --   >>> pretty DoubleShow
     --   Double/show
+    | ListAny
+    -- ^
+    --   >>> pretty ListAny
+    --   List/any
     | ListFold
     -- ^
     --   >>> pretty ListFold
@@ -341,6 +345,7 @@ data Builtin
 
 instance Pretty Builtin where
     pretty DoubleShow  = builtin "Double/show"
+    pretty ListAny     = builtin "List/any"
     pretty ListFold    = builtin "List/fold"
     pretty ListLength  = builtin "List/length"
     pretty ListMap     = builtin "List/map"

@@ -464,7 +464,7 @@ subtype _A0 _B0 = do
         (Type.Scalar s0, Type.Scalar s1)
             | s0 == s1 -> do
                 return ()
-            
+
         (Type.Optional _A, Type.Optional _B) -> do
             subtype _A _B
 
@@ -1431,7 +1431,7 @@ instantiateTypeR _A0 a = do
             instantiateAlternativesR (Type.location _A0) u p
 
 {- The following `equateFields` / `instantiateFieldsL` / `instantiateFieldsR`,
-   `equateAlternatives` / `instantiateAlternativesL` / 
+   `equateAlternatives` / `instantiateAlternativesL` /
    `instantiateAlternativesR` judgments are not present in the bidirectional
    type-checking paper.  These were added in order to support row polymorphism
    and variant polymorphism, by following the same general type-checking
@@ -1836,7 +1836,7 @@ infer e0 = do
                 #{Location.renderError "" (Syntax.location e0)}
                 |]
 
-        -- →I⇒ 
+        -- →I⇒
         Syntax.Lambda nameLocation x e -> do
             a <- fresh
             b <- fresh
@@ -2148,6 +2148,17 @@ infer e0 = do
                 (   _Type{ node = Type.Scalar Monotype.Double }
                 ~>  _Type{ node = Type.Scalar Monotype.Text }
                 )
+
+        Syntax.Builtin Syntax.ListAny -> do
+            return _Type
+                { node =
+                    Type.Forall (Syntax.location e0) "a" Domain.Type
+                      ( ( _Type{ node = "a" } ~> _Type { node = Type.Scalar Monotype.Bool } ) ~>
+                          ( _Type{ node = Type.List _Type{ node = "a" } }
+                          ~> _Type { node = Type.Scalar Monotype.Bool } )
+                      )
+
+                }
 
         Syntax.Builtin Syntax.ListFold -> do
             return _Type

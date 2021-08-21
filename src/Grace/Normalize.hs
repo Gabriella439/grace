@@ -253,6 +253,15 @@ apply
     | Just f <- lookup alternative alternativeHandlers =
         apply f x
 apply
+    (Value.Application (Value.Builtin Syntax.ListAny) f)
+    (Value.List elements)
+        | Just bools <- traverse toBool (map (apply f) elements) = Value.Scalar (Syntax.Bool (or bools))
+      where toBool :: Value -> Maybe Bool
+            toBool value =
+              case value of
+                Value.Scalar (Syntax.Bool x) -> Just x
+                _ -> Nothing
+apply
     (Value.Application
         (Value.Application
             (Value.Builtin Syntax.ListFold)

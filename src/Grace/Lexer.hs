@@ -98,6 +98,7 @@ parseToken =
 
         , Combinators.choice
             [ DoubleShow  <$ symbol "Double/show"
+            , ListAny     <$ symbol "List/any"
             , ListFold    <$ symbol "List/fold"
             , ListLength  <$ symbol "List/length"
             , ListMap     <$ symbol "List/map"
@@ -315,10 +316,10 @@ alternative = lexeme do
 -- | Tokens produced by lexing
 data Token
     = Alternative Text
-    | And
-    | Arrow
-    | Append
     | Alternatives
+    | And
+    | Append
+    | Arrow
     | At
     | Bar
     | Bool
@@ -348,6 +349,7 @@ data Token
     | IntegerOdd
     | Label Text
     | Lambda
+    | ListAny
     | ListFold
     | ListLength
     | ListMap
