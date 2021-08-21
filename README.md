@@ -1,6 +1,6 @@
 # `grace`
 
-Grace (short for Fall-from-Grace) is a ready-to-fork implementation of a
+Grace (short for [Fall-from-Grace](#name)) is a ready-to-fork implementation of a
 JSON-compatible functional programming language with type inference.  You will
 most likely be interested in Grace for one of two reasons:
 
