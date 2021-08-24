@@ -175,6 +175,10 @@ Grace does not support the following language features:
   These require global coherence, which does not play nice with Dhall-style
   path-based imports
 
+* Type synonyms
+
+  You cannot easily create short-hand synonyms for commonly used types
+
 * User-defined datatypes
 
   All data types in Grace are anonymous (e.g. anonymous records and anonymous
