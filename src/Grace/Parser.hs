@@ -147,6 +147,7 @@ render t = case t of
     Lexer.Dot              -> "."
     Lexer.Double           -> "Double"
     Lexer.DoubleLiteral _  -> "a double literal"
+    Lexer.DoubleEqual      -> "Double/equal"
     Lexer.DoubleShow       -> "Double/show"
     Lexer.Else             -> "else"
     Lexer.Equals           -> "="
@@ -165,6 +166,7 @@ render t = case t of
     Lexer.Lambda           -> "\\"
     Lexer.Let              -> "let"
     Lexer.List             -> "list"
+    Lexer.ListEqual        -> "List/equal"
     Lexer.ListFold         -> "List/fold"
     Lexer.ListLength       -> "List/length"
     Lexer.ListMap          -> "List/map"
@@ -181,6 +183,7 @@ render t = case t of
     Lexer.Plus             -> "+"
     Lexer.Question         -> "?"
     Lexer.Text             -> "Text"
+    Lexer.TextEqual        -> "Text/equal"
     Lexer.TextLiteral _    -> "a text literal"
     Lexer.Then             -> "then"
     Lexer.Type             -> "Type"
@@ -395,9 +398,17 @@ grammar = mdo
 
                 return (f located)
 
+        <|> do  location <- locatedToken Lexer.DoubleEqual
+
+                return Syntax{ node = Syntax.Builtin Syntax.DoubleEqual, .. }
+
         <|> do  location <- locatedToken Lexer.DoubleShow
 
                 return Syntax{ node = Syntax.Builtin Syntax.DoubleShow, .. }
+
+        <|> do  location <- locatedToken Lexer.ListEqual
+
+                return Syntax{ node = Syntax.Builtin Syntax.ListEqual, .. }
 
         <|> do  location <- locatedToken Lexer.ListFold
 
@@ -422,6 +433,10 @@ grammar = mdo
         <|> do  location <- locatedToken Lexer.NaturalFold
 
                 return Syntax{ node = Syntax.Builtin Syntax.NaturalFold, .. }
+
+        <|> do  location <- locatedToken Lexer.TextEqual
+
+                return Syntax{ node = Syntax.Builtin Syntax.TextEqual, .. }
 
         <|> do  let f (location, t) = Syntax{..}
                       where

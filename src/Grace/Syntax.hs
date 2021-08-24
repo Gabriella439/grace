@@ -309,10 +309,18 @@ instance Pretty Operator where
 
 -- | A built-in function
 data Builtin
-    = DoubleShow
+    = DoubleEqual
+    -- ^
+    --   >>> pretty DoubleEqual
+    --   Double/equal
+    | DoubleShow
     -- ^
     --   >>> pretty DoubleShow
     --   Double/show
+    | ListEqual
+    -- ^
+    --   >>> pretty ListEqual
+    --   List/equal
     | ListFold
     -- ^
     --   >>> pretty ListFold
@@ -337,16 +345,23 @@ data Builtin
     -- ^
     --   >>> pretty NaturalFold
     --   Natural/fold
+    | TextEqual
+    -- ^
+    --   >>> pretty TextEqual
+    --   Text/equal
     deriving (Bounded, Enum, Eq, Generic, Show)
 
 instance Pretty Builtin where
+    pretty DoubleEqual = builtin "Double/equal"
     pretty DoubleShow  = builtin "Double/show"
+    pretty ListEqual   = builtin "List/equal"
     pretty ListFold    = builtin "List/fold"
     pretty ListLength  = builtin "List/length"
     pretty ListMap     = builtin "List/map"
     pretty IntegerEven = builtin "Integer/even"
     pretty IntegerOdd  = builtin "Integer/odd"
     pretty NaturalFold = builtin "Natural/fold"
+    pretty TextEqual   = builtin "Text/equal"
 
 -- | Pretty-print an expression
 prettyExpression :: Pretty a => Node s a -> Doc AnsiStyle

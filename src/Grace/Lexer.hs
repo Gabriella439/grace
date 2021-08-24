@@ -97,13 +97,16 @@ parseToken =
             ] <?> "keyword"
 
         , Combinators.choice
-            [ DoubleShow  <$ symbol "Double/show"
+            [ DoubleEqual <$ symbol "Double/equal"
+            , DoubleShow  <$ symbol "Double/show"
+            , ListEqual   <$ symbol "List/equal"
             , ListFold    <$ symbol "List/fold"
             , ListLength  <$ symbol "List/length"
             , ListMap     <$ symbol "List/map"
             , IntegerEven <$ symbol "Integer/even"
             , IntegerOdd  <$ symbol "Integer/odd"
             , NaturalFold <$ symbol "Natural/fold"
+            , TextEqual   <$ symbol "Text/equal"
             , False_      <$ symbol "false"
             , True_       <$ symbol "true"
             , Null        <$ symbol "null"
@@ -330,6 +333,7 @@ data Token
     | Comma
     | Dash
     | DoubleLiteral Double
+    | DoubleEqual
     | DoubleShow
     | Dot
     | Double
@@ -348,6 +352,7 @@ data Token
     | IntegerOdd
     | Label Text
     | Lambda
+    | ListEqual
     | ListFold
     | ListLength
     | ListMap
@@ -366,6 +371,7 @@ data Token
     | Plus
     | Question
     | Text
+    | TextEqual
     | TextLiteral Text
     | Then
     | Times

@@ -2143,11 +2143,36 @@ infer e0 = do
 
             return Type{ location, node = Type.Scalar Monotype.Text }
 
+        Syntax.Builtin Syntax.DoubleEqual-> do
+            return
+                (   _Type{ node = Type.Scalar Monotype.Double }
+                ~>  (   _Type{ node = Type.Scalar Monotype.Double }
+                    ~>  _Type{ node = Type.Scalar Monotype.Bool }
+                    )
+                )
+
         Syntax.Builtin Syntax.DoubleShow -> do
             return
                 (   _Type{ node = Type.Scalar Monotype.Double }
                 ~>  _Type{ node = Type.Scalar Monotype.Text }
                 )
+
+        Syntax.Builtin Syntax.ListEqual -> do
+            return _Type
+                { node =
+                    Type.Forall (Syntax.location e0) "a" Domain.Type
+                        (   (   _Type{ node = "a" }
+                            ~>  (  _Type{ node = "a" }
+                                ~> _Type{ node = Type.Scalar Monotype.Bool }
+                                )
+                            )
+                        ~>  (   _Type{ node = Type.List _Type{ node = "a" } }
+                            ~>  (   _Type{ node = Type.List _Type{ node = "a" } }
+                                ~>  _Type{ node = Type.Scalar Monotype.Bool }
+                                )
+                            )
+                        )
+                }
 
         Syntax.Builtin Syntax.ListFold -> do
             return _Type
@@ -2216,6 +2241,14 @@ infer e0 = do
                             )
                         )
                 }
+
+        Syntax.Builtin Syntax.TextEqual-> do
+            return
+                (   _Type{ node = Type.Scalar Monotype.Text }
+                ~>  (   _Type{ node = Type.Scalar Monotype.Text }
+                    ~>  _Type{ node = Type.Scalar Monotype.Bool }
+                    )
+                )
 
         Syntax.Embed (type_, _) -> do
             return type_
