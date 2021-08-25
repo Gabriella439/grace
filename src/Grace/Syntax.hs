@@ -294,10 +294,6 @@ data Operator
     -- ^
     --   >>> pretty Times
     --   *
-    | Append
-    -- ^
-    --   >>> pretty Append
-    --   ++
     deriving (Eq, Generic, Show)
 
 instance Pretty Operator where
@@ -305,7 +301,6 @@ instance Pretty Operator where
     pretty Or     = operator "||"
     pretty Plus   = operator "+"
     pretty Times  = operator "*"
-    pretty Append = operator "++"
 
 -- | A built-in function
 data Builtin
@@ -356,7 +351,7 @@ data Builtin
     | IntegerAbs
     -- ^
     --   >>> pretty IntegerAbs
-    --   Integer/clamp
+    --   Integer/abs
     | NaturalFold
     -- ^
     --   >>> pretty NaturalFold
@@ -537,10 +532,7 @@ prettyOrExpression :: Pretty a => Node s a -> Doc AnsiStyle
 prettyOrExpression = prettyOperator Or prettyAndExpression
 
 prettyAndExpression :: Pretty a => Node s a -> Doc AnsiStyle
-prettyAndExpression = prettyOperator And prettyAppendExpression
-
-prettyAppendExpression :: Pretty a => Node s a -> Doc AnsiStyle
-prettyAppendExpression = prettyOperator Append prettyApplicationExpression
+prettyAndExpression = prettyOperator And prettyApplicationExpression
 
 prettyApplicationExpression :: Pretty a => Node s a -> Doc AnsiStyle
 prettyApplicationExpression expression

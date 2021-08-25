@@ -76,7 +76,6 @@ parseToken =
         , Combinators.choice
             [ Or     <$ symbol "||"
             , And    <$ symbol "&&"
-            , Append <$ symbol "++"
             , Plus   <$ symbol "+"
             , Times  <$ symbol "*"
             ] <?> "operator"
@@ -324,7 +323,6 @@ data Token
     = Alternative Text
     | Alternatives
     | And
-    | Append
     | Arrow
     | At
     | Bar

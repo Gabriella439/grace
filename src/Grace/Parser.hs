@@ -132,7 +132,6 @@ render t = case t of
     Lexer.Alternative _    -> "an alternative"
     Lexer.Alternatives     -> "Alternatives"
     Lexer.And              -> "&&"
-    Lexer.Append           -> "++"
     Lexer.Arrow            -> "->"
     Lexer.At               -> "@"
     Lexer.Bar              -> "|"
@@ -280,9 +279,7 @@ grammar = mdo
 
     orExpression <- rule (op Lexer.Or Syntax.Or andExpression)
 
-    andExpression <- rule (op Lexer.And Syntax.And appendExpression)
-
-    appendExpression <- rule (op Lexer.Append Syntax.Append applicationExpression)
+    andExpression <- rule (op Lexer.And Syntax.And applicationExpression)
 
     let application left@Syntax{ location } right = Syntax{..}
           where

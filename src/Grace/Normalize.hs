@@ -205,6 +205,10 @@ evaluate env Syntax.Syntax{..} =
                     right'
                 (_, Value.Scalar (Natural 0)) ->
                     left'
+                (Value.Scalar (Text ""), _) ->
+                    right'
+                (_, Value.Scalar (Text "")) ->
+                    left'
                 (Value.Scalar l, Value.Scalar r)
                     | Natural m <- l
                     , Natural n <- r ->
@@ -215,22 +219,11 @@ evaluate env Syntax.Syntax{..} =
                     | Just m <- asDouble l
                     , Just n <- asDouble r ->
                         Value.Scalar (Double (m + n))
+                    | Text m <- l
+                    , Text n <- r ->
+                        Value.Scalar (Text (m <> n))
                 _ ->
                     Value.Operator left' Syntax.Plus right'
-          where
-            left'  = evaluate env left
-            right' = evaluate env right
-
-        Syntax.Operator left _ Syntax.Append right ->
-            case (left', right') of
-                (Value.Scalar (Text ""), _) ->
-                    right'
-                (_, Value.Scalar (Text "")) ->
-                    left'
-                (Value.Scalar (Text l), Value.Scalar (Text r)) ->
-                    Value.Scalar (Text (l <> r))
-                _ ->
-                    Value.Operator left' Syntax.Append right'
           where
             left'  = evaluate env left
             right' = evaluate env right
