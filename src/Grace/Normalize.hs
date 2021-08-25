@@ -315,6 +315,8 @@ apply
     | Just m <- asDouble l
     , Just n <- asDouble r =
         Value.Scalar (Bool (m < n))
+apply (Value.Builtin IntegerAbs) (Value.Scalar x)
+    | Just n <- asInteger x = Value.Scalar (Natural (fromInteger (abs n)))
 apply (Value.Builtin DoubleNegate) (Value.Scalar x)
     | Just n <- asDouble x = Value.Scalar (Double (negate n))
 apply (Value.Builtin IntegerNegate) (Value.Scalar x)

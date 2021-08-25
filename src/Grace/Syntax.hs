@@ -353,6 +353,10 @@ data Builtin
     -- ^
     --   >>> pretty IntegerOdd
     --   Integer/odd
+    | IntegerAbs
+    -- ^
+    --   >>> pretty IntegerAbs
+    --   Integer/clamp
     | NaturalFold
     -- ^
     --   >>> pretty NaturalFold
@@ -372,6 +376,7 @@ instance Pretty Builtin where
     pretty ListFold       = builtin "List/fold"
     pretty ListLength     = builtin "List/length"
     pretty ListMap        = builtin "List/map"
+    pretty IntegerAbs     = builtin "Integer/abs"
     pretty IntegerEven    = builtin "Integer/even"
     pretty IntegerNegate  = builtin "Integer/negate"
     pretty IntegerOdd     = builtin "Integer/odd"

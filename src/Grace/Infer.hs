@@ -2233,6 +2233,12 @@ infer e0 = do
                         }
                 }
 
+        Syntax.Builtin Syntax.IntegerAbs -> do
+            return
+                (   _Type{ node = Type.Scalar Monotype.Integer }
+                ~>  _Type{ node = Type.Scalar Monotype.Natural }
+                )
+
         Syntax.Builtin Syntax.IntegerEven -> do
             return
                 (   _Type{ node = Type.Scalar Monotype.Integer }

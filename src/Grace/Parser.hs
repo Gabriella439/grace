@@ -162,6 +162,7 @@ render t = case t of
     Lexer.In               -> "in"
     Lexer.Int _            -> "an integer literal"
     Lexer.Integer          -> "Integer"
+    Lexer.IntegerAbs       -> "Integer/clamp"
     Lexer.IntegerEven      -> "Integer/even"
     Lexer.IntegerNegate    -> "Integer/negate"
     Lexer.IntegerOdd       -> "Integer/odd"
@@ -432,6 +433,10 @@ grammar = mdo
         <|> do  location <- locatedToken Lexer.ListMap
 
                 return Syntax{ node = Syntax.Builtin Syntax.ListMap, .. }
+
+        <|> do  location <- locatedToken Lexer.IntegerAbs
+
+                return Syntax{ node = Syntax.Builtin Syntax.IntegerAbs, .. }
 
         <|> do  location <- locatedToken Lexer.IntegerEven
 

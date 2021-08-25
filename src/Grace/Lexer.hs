@@ -105,6 +105,7 @@ parseToken =
             , ListFold       <$ symbol "List/fold"
             , ListLength     <$ symbol "List/length"
             , ListMap        <$ symbol "List/map"
+            , IntegerAbs     <$ symbol "Integer/abs"
             , IntegerEven    <$ symbol "Integer/even"
             , IntegerNegate  <$ symbol "Integer/negate"
             , IntegerOdd     <$ symbol "Integer/odd"
@@ -353,6 +354,7 @@ data Token
     | In
     | Int Int
     | Integer
+    | IntegerAbs
     | IntegerEven
     | IntegerNegate
     | IntegerOdd
