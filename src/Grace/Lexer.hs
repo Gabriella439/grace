@@ -99,12 +99,14 @@ parseToken =
         , Combinators.choice
             [ DoubleEqual    <$ symbol "Double/equal"
             , DoubleLessThan <$ symbol "Double/lessThan"
+            , DoubleNegate   <$ symbol "Double/negate"
             , DoubleShow     <$ symbol "Double/show"
             , ListEqual      <$ symbol "List/equal"
             , ListFold       <$ symbol "List/fold"
             , ListLength     <$ symbol "List/length"
             , ListMap        <$ symbol "List/map"
             , IntegerEven    <$ symbol "Integer/even"
+            , IntegerNegate  <$ symbol "Integer/negate"
             , IntegerOdd     <$ symbol "Integer/odd"
             , NaturalFold    <$ symbol "Natural/fold"
             , TextEqual      <$ symbol "Text/equal"
@@ -338,6 +340,7 @@ data Token
     | DoubleEqual
     | DoubleLessThan
     | DoubleLiteral Double
+    | DoubleNegate
     | DoubleShow
     | Else
     | Equals
@@ -351,6 +354,7 @@ data Token
     | Int Int
     | Integer
     | IntegerEven
+    | IntegerNegate
     | IntegerOdd
     | Label Text
     | Lambda

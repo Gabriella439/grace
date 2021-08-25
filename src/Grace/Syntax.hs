@@ -317,6 +317,10 @@ data Builtin
     -- ^
     --   >>> pretty DoubleLessThan
     --   Double/lessThan
+    | DoubleNegate
+    -- ^
+    --   >>> pretty DoubleNegate
+    --   Double/negate
     | DoubleShow
     -- ^
     --   >>> pretty DoubleShow
@@ -341,6 +345,10 @@ data Builtin
     -- ^
     --   >>> pretty IntegerEven
     --   Integer/even
+    | IntegerNegate
+    -- ^
+    --   >>> pretty IntegerNegate
+    --   Integer/negate
     | IntegerOdd
     -- ^
     --   >>> pretty IntegerOdd
@@ -358,12 +366,14 @@ data Builtin
 instance Pretty Builtin where
     pretty DoubleEqual    = builtin "Double/equal"
     pretty DoubleLessThan = builtin "Double/lessThan"
+    pretty DoubleNegate   = builtin "Double/negate"
     pretty DoubleShow     = builtin "Double/show"
     pretty ListEqual      = builtin "List/equal"
     pretty ListFold       = builtin "List/fold"
     pretty ListLength     = builtin "List/length"
     pretty ListMap        = builtin "List/map"
     pretty IntegerEven    = builtin "Integer/even"
+    pretty IntegerNegate  = builtin "Integer/negate"
     pretty IntegerOdd     = builtin "Integer/odd"
     pretty NaturalFold    = builtin "Natural/fold"
     pretty TextEqual      = builtin "Text/equal"

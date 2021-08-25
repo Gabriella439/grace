@@ -2159,6 +2159,12 @@ infer e0 = do
                     )
                 )
 
+        Syntax.Builtin Syntax.DoubleNegate -> do
+            return
+                (   _Type{ node = Type.Scalar Monotype.Double }
+                ~>  _Type{ node = Type.Scalar Monotype.Double }
+                )
+
         Syntax.Builtin Syntax.DoubleShow -> do
             return
                 (   _Type{ node = Type.Scalar Monotype.Double }
@@ -2231,6 +2237,12 @@ infer e0 = do
             return
                 (   _Type{ node = Type.Scalar Monotype.Integer }
                 ~>  _Type{ node = Type.Scalar Monotype.Bool }
+                )
+
+        Syntax.Builtin Syntax.IntegerNegate -> do
+            return
+                (   _Type{ node = Type.Scalar Monotype.Integer }
+                ~>  _Type{ node = Type.Scalar Monotype.Integer }
                 )
 
         Syntax.Builtin Syntax.IntegerOdd -> do

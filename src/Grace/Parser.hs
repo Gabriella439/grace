@@ -149,6 +149,7 @@ render t = case t of
     Lexer.DoubleLiteral _  -> "a double literal"
     Lexer.DoubleEqual      -> "Double/equal"
     Lexer.DoubleLessThan   -> "Double/lessThan"
+    Lexer.DoubleNegate     -> "Double/negate"
     Lexer.DoubleShow       -> "Double/show"
     Lexer.Else             -> "else"
     Lexer.Equals           -> "="
@@ -162,6 +163,7 @@ render t = case t of
     Lexer.Int _            -> "an integer literal"
     Lexer.Integer          -> "Integer"
     Lexer.IntegerEven      -> "Integer/even"
+    Lexer.IntegerNegate    -> "Integer/negate"
     Lexer.IntegerOdd       -> "Integer/odd"
     Lexer.Label _          -> "a label"
     Lexer.Lambda           -> "\\"
@@ -407,6 +409,10 @@ grammar = mdo
 
                 return Syntax{ node = Syntax.Builtin Syntax.DoubleLessThan, .. }
 
+        <|> do  location <- locatedToken Lexer.DoubleNegate
+
+                return Syntax{ node = Syntax.Builtin Syntax.DoubleNegate, .. }
+
         <|> do  location <- locatedToken Lexer.DoubleShow
 
                 return Syntax{ node = Syntax.Builtin Syntax.DoubleShow, .. }
@@ -430,6 +436,10 @@ grammar = mdo
         <|> do  location <- locatedToken Lexer.IntegerEven
 
                 return Syntax{ node = Syntax.Builtin Syntax.IntegerEven, .. }
+
+        <|> do  location <- locatedToken Lexer.IntegerNegate
+
+                return Syntax{ node = Syntax.Builtin Syntax.IntegerNegate, .. }
 
         <|> do  location <- locatedToken Lexer.IntegerOdd
 
