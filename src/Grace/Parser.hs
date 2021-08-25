@@ -148,6 +148,7 @@ render t = case t of
     Lexer.Double           -> "Double"
     Lexer.DoubleLiteral _  -> "a double literal"
     Lexer.DoubleEqual      -> "Double/equal"
+    Lexer.DoubleLessThan   -> "Double/lessThan"
     Lexer.DoubleShow       -> "Double/show"
     Lexer.Else             -> "else"
     Lexer.Equals           -> "="
@@ -401,6 +402,10 @@ grammar = mdo
         <|> do  location <- locatedToken Lexer.DoubleEqual
 
                 return Syntax{ node = Syntax.Builtin Syntax.DoubleEqual, .. }
+
+        <|> do  location <- locatedToken Lexer.DoubleLessThan
+
+                return Syntax{ node = Syntax.Builtin Syntax.DoubleLessThan, .. }
 
         <|> do  location <- locatedToken Lexer.DoubleShow
 

@@ -97,19 +97,20 @@ parseToken =
             ] <?> "keyword"
 
         , Combinators.choice
-            [ DoubleEqual <$ symbol "Double/equal"
-            , DoubleShow  <$ symbol "Double/show"
-            , ListEqual   <$ symbol "List/equal"
-            , ListFold    <$ symbol "List/fold"
-            , ListLength  <$ symbol "List/length"
-            , ListMap     <$ symbol "List/map"
-            , IntegerEven <$ symbol "Integer/even"
-            , IntegerOdd  <$ symbol "Integer/odd"
-            , NaturalFold <$ symbol "Natural/fold"
-            , TextEqual   <$ symbol "Text/equal"
-            , False_      <$ symbol "false"
-            , True_       <$ symbol "true"
-            , Null        <$ symbol "null"
+            [ DoubleEqual    <$ symbol "Double/equal"
+            , DoubleLessThan <$ symbol "Double/lessThan"
+            , DoubleShow     <$ symbol "Double/show"
+            , ListEqual      <$ symbol "List/equal"
+            , ListFold       <$ symbol "List/fold"
+            , ListLength     <$ symbol "List/length"
+            , ListMap        <$ symbol "List/map"
+            , IntegerEven    <$ symbol "Integer/even"
+            , IntegerOdd     <$ symbol "Integer/odd"
+            , NaturalFold    <$ symbol "Natural/fold"
+            , TextEqual      <$ symbol "Text/equal"
+            , False_         <$ symbol "false"
+            , True_          <$ symbol "true"
+            , Null           <$ symbol "null"
             ] <?> "built-in value"
 
         , Combinators.choice
@@ -318,10 +319,10 @@ alternative = lexeme do
 -- | Tokens produced by lexing
 data Token
     = Alternative Text
-    | And
-    | Arrow
-    | Append
     | Alternatives
+    | And
+    | Append
+    | Arrow
     | At
     | Bar
     | Bool
@@ -332,11 +333,12 @@ data Token
     | Colon
     | Comma
     | Dash
-    | DoubleLiteral Double
-    | DoubleEqual
-    | DoubleShow
     | Dot
     | Double
+    | DoubleEqual
+    | DoubleLessThan
+    | DoubleLiteral Double
+    | DoubleShow
     | Else
     | Equals
     | Exists
@@ -352,12 +354,12 @@ data Token
     | IntegerOdd
     | Label Text
     | Lambda
+    | Let
+    | List
     | ListEqual
     | ListFold
     | ListLength
     | ListMap
-    | Let
-    | List
     | Merge
     | Natural
     | NaturalFold

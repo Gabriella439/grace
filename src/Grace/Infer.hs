@@ -2151,6 +2151,14 @@ infer e0 = do
                     )
                 )
 
+        Syntax.Builtin Syntax.DoubleLessThan -> do
+            return
+                (   _Type{ node = Type.Scalar Monotype.Double }
+                ~>  (   _Type{ node = Type.Scalar Monotype.Double }
+                    ~>  _Type{ node = Type.Scalar Monotype.Bool }
+                    )
+                )
+
         Syntax.Builtin Syntax.DoubleShow -> do
             return
                 (   _Type{ node = Type.Scalar Monotype.Double }

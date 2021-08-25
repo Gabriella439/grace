@@ -313,6 +313,10 @@ data Builtin
     -- ^
     --   >>> pretty DoubleEqual
     --   Double/equal
+    | DoubleLessThan
+    -- ^
+    --   >>> pretty DoubleLessThan
+    --   Double/lessThan
     | DoubleShow
     -- ^
     --   >>> pretty DoubleShow
@@ -352,16 +356,17 @@ data Builtin
     deriving (Bounded, Enum, Eq, Generic, Show)
 
 instance Pretty Builtin where
-    pretty DoubleEqual = builtin "Double/equal"
-    pretty DoubleShow  = builtin "Double/show"
-    pretty ListEqual   = builtin "List/equal"
-    pretty ListFold    = builtin "List/fold"
-    pretty ListLength  = builtin "List/length"
-    pretty ListMap     = builtin "List/map"
-    pretty IntegerEven = builtin "Integer/even"
-    pretty IntegerOdd  = builtin "Integer/odd"
-    pretty NaturalFold = builtin "Natural/fold"
-    pretty TextEqual   = builtin "Text/equal"
+    pretty DoubleEqual    = builtin "Double/equal"
+    pretty DoubleLessThan = builtin "Double/lessThan"
+    pretty DoubleShow     = builtin "Double/show"
+    pretty ListEqual      = builtin "List/equal"
+    pretty ListFold       = builtin "List/fold"
+    pretty ListLength     = builtin "List/length"
+    pretty ListMap        = builtin "List/map"
+    pretty IntegerEven    = builtin "Integer/even"
+    pretty IntegerOdd     = builtin "Integer/odd"
+    pretty NaturalFold    = builtin "Natural/fold"
+    pretty TextEqual      = builtin "Text/equal"
 
 -- | Pretty-print an expression
 prettyExpression :: Pretty a => Node s a -> Doc AnsiStyle
