@@ -2163,6 +2163,28 @@ infer e0 = do
                     | Monotype.Text == sL && Monotype.Text == sR ->
 
                         return Type{ location, node = Type.Scalar Monotype.Text }
+                (Type.List eL, Type.List eR) -> do
+                    a <- Except.runExceptT (subtype eL eR)
+                    b <- Except.runExceptT (subtype eR eL)
+
+                    case (a, b) of
+                        (Right _, Right _) -> do
+                            return Type{ location, node = Type.List eL }
+                        (Right _, Left _) -> do
+                            return Type{ location, node = Type.List eR }
+                        (Left _, Right _) -> do
+                            return Type{ location, node = Type.List eL }
+                        (Left message, Left _) -> do
+                            throwError message
+
+                (Type.List _, _) -> do
+                    check r _L
+                    return _L
+
+                (_, Type.List _) -> do
+                    check l _R
+                    return _R
+
                 (Type.Scalar sL, _)
                     | isDouble sL || Monotype.Text == sL -> do
                         check r _L

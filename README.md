@@ -475,6 +475,7 @@ Grace supports some operators out-of-the-box, such as:
 * Logical conjunction: `true && false`
 * Logical disjunction: `true || false`
 * Text concatenation: `"AB" + "CD"`
+* List concatenation: `[ 2, 3 ] + [ 5, 7 ]`
 
 You can also consume boolean values using `if` / `then` / `else`
 expressions:
