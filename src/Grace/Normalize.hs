@@ -205,6 +205,10 @@ evaluate env Syntax.Syntax{..} =
                     right'
                 (_, Value.Scalar (Natural 0)) ->
                     left'
+                (Value.Scalar (Text ""), _) ->
+                    right'
+                (_, Value.Scalar (Text "")) ->
+                    left'
                 (Value.Scalar l, Value.Scalar r)
                     | Natural m <- l
                     , Natural n <- r ->
@@ -215,22 +219,11 @@ evaluate env Syntax.Syntax{..} =
                     | Just m <- asDouble l
                     , Just n <- asDouble r ->
                         Value.Scalar (Double (m + n))
+                    | Text m <- l
+                    , Text n <- r ->
+                        Value.Scalar (Text (m <> n))
                 _ ->
                     Value.Operator left' Syntax.Plus right'
-          where
-            left'  = evaluate env left
-            right' = evaluate env right
-
-        Syntax.Operator left _ Syntax.Append right ->
-            case (left', right') of
-                (Value.Scalar (Text ""), _) ->
-                    right'
-                (_, Value.Scalar (Text "")) ->
-                    left'
-                (Value.Scalar (Text l), Value.Scalar (Text r)) ->
-                    Value.Scalar (Text (l <> r))
-                _ ->
-                    Value.Operator left' Syntax.Append right'
           where
             left'  = evaluate env left
             right' = evaluate env right
@@ -263,8 +256,23 @@ apply
                 _ -> Nothing
 apply
     (Value.Application
+        (Value.Application (Value.Builtin ListEqual) f)
+        (Value.List rs)
+    )
+    (Value.List ls)
+        | length ls /= length rs =
+            Value.Scalar (Bool False)
+        | Just bools <- traverse toBool (zipWith equal ls rs) =
+        Value.Scalar (Bool (and bools))
+      where
+        toBool (Value.Scalar (Bool b)) = Just b
+        toBool  _                      = Nothing
+
+        equal l r = apply (apply f l) r
+apply
+    (Value.Application
         (Value.Application
-            (Value.Builtin Syntax.ListFold)
+            (Value.Builtin ListFold)
             (Value.List elements)
         )
         cons
@@ -274,10 +282,10 @@ apply
   where
     go      []  !result = result
     go (x : xs) !result = go xs (apply (apply cons x) result)
-apply (Value.Builtin Syntax.ListLength) (Value.List elements) =
+apply (Value.Builtin ListLength) (Value.List elements) =
     Value.Scalar (Natural (fromIntegral (length elements)))
 apply
-    (Value.Application (Value.Builtin Syntax.ListMap) f)
+    (Value.Application (Value.Builtin ListMap) f)
     (Value.List elements) =
         Value.List (map (apply f) elements)
 apply
@@ -293,20 +301,40 @@ apply
   where
     go 0 !result = result
     go m !result = go (m - 1) (apply succ result)
-apply (Value.Builtin IntegerEven) (Value.Scalar (Integer n)) =
-    Value.Scalar (Bool (even n))
-apply (Value.Builtin IntegerEven) (Value.Scalar (Natural n)) =
-    Value.Scalar (Bool (even n))
-apply (Value.Builtin IntegerOdd) (Value.Scalar (Integer n)) =
-    Value.Scalar (Bool (odd n))
-apply (Value.Builtin IntegerOdd) (Value.Scalar (Natural n)) =
-    Value.Scalar (Bool (odd n))
+apply (Value.Builtin IntegerEven) (Value.Scalar x)
+    | Just n <- asInteger x = Value.Scalar (Bool (even n))
+apply (Value.Builtin IntegerOdd) (Value.Scalar x)
+    | Just n <- asInteger x = Value.Scalar (Bool (odd n))
+apply
+    (Value.Application (Value.Builtin DoubleEqual) (Value.Scalar l))
+    (Value.Scalar r)
+    | Just m <- asDouble l
+    , Just n <- asDouble r =
+        Value.Scalar (Bool (m == n))
+apply
+    (Value.Application (Value.Builtin DoubleLessThan) (Value.Scalar l))
+    (Value.Scalar r)
+    | Just m <- asDouble l
+    , Just n <- asDouble r =
+        Value.Scalar (Bool (m < n))
+apply (Value.Builtin IntegerAbs) (Value.Scalar x)
+    | Just n <- asInteger x = Value.Scalar (Natural (fromInteger (abs n)))
+apply (Value.Builtin DoubleNegate) (Value.Scalar x)
+    | Just n <- asDouble x = Value.Scalar (Double (negate n))
+apply (Value.Builtin IntegerNegate) (Value.Scalar x)
+    | Just n <- asInteger x = Value.Scalar (Integer (negate n))
+apply (Value.Builtin IntegerNegate) (Value.Scalar (Natural n)) =
+    Value.Scalar (Natural (negate n))
 apply (Value.Builtin DoubleShow) (Value.Scalar (Natural n)) =
     Value.Scalar (Text (Text.pack (show n)))
 apply (Value.Builtin DoubleShow) (Value.Scalar (Integer n)) =
     Value.Scalar (Text (Text.pack (show n)))
 apply (Value.Builtin DoubleShow) (Value.Scalar (Double n)) =
     Value.Scalar (Text (Text.pack (show n)))
+apply
+    (Value.Application (Value.Builtin TextEqual) (Value.Scalar (Text l)))
+    (Value.Scalar (Text r)) =
+        Value.Scalar (Bool (l == r))
 apply function argument =
     Value.Application function argument
 

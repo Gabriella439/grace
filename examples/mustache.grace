@@ -2,14 +2,14 @@
 #
 # https://mustache.github.io/mustache.5.html
 let template = \args ->
-          "Hello " ++ args.name ++ "\n"
-      ++  "You have just won " ++ Double/show args.value ++ " dollars!\n"
-      ++  ( if args.in_ca
-            then      "Well, "
-                  ++  Double/show args.taxed_value
-                  ++ " dollars, after taxes.\n"
-            else ""
-          )
+        "Hello " + args.name + "\n"
+      + "You have just won " + Double/show args.value + " dollars!\n"
+      + ( if args.in_ca
+          then    "Well, "
+                + Double/show args.taxed_value
+                + " dollars, after taxes.\n"
+          else ""
+        )
 
 let arguments =
       { name: "Chris"

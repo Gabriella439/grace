@@ -175,6 +175,10 @@ Grace does not support the following language features:
   These require global coherence, which does not play nice with Dhall-style
   path-based imports
 
+* Type synonyms
+
+  You cannot easily create short-hand synonyms for commonly used types
+
 * User-defined datatypes
 
   All data types in Grace are anonymous (e.g. anonymous records and anonymous
@@ -313,7 +317,7 @@ You can use the `interpret` subcommand for interpreting a single file:
 
 ```dhall
 # ./example.ffg
-let greet = \name -> "Hello, " ++ name ++ "!"
+let greet = \name -> "Hello, " + name + "!"
 
 in  greet "world"
 ```
@@ -470,45 +474,7 @@ Grace supports some operators out-of-the-box, such as:
 * Multiplication: `2 * 3`
 * Logical conjunction: `true && false`
 * Logical disjunction: `true || false`
-* Text concatenation: `"AB" ++ "CD"`
-
-Note that `+` and `*` only work on `Natural` numbers without a type annotation.
-If either argument is an `Integer` or a `Double` then you will get a type error
-by default:
-
-```bash
-$ grace interpret - <<< '2 + -2'
-```
-```
-Not a subtype
-
-The following type:
-
-   Integer
-
-(input):1:6: 
-  │
-1 │ 2 + -2
-  │      ↑
-
-… cannot be a subtype of:
-
-   Natural
-
-(input):1:3: 
-  │
-1 │ 2 + -2
-  │   ↑
-```
-
-… which you can fix by adding a type annotation:
-
-```bash
-$ grace interpret - <<< '(2 + -2) : Integer'
-```
-```dhall
-0
-```
+* Text concatenation: `"AB" + "CD"`
 
 You can also consume boolean values using `if` / `then` / `else`
 expressions:
@@ -526,7 +492,7 @@ let name = "redis"
 
 let version = "6.0.14"
 
-in  name ++ "-" ++ version
+in  name + "-" + version
 ```
 
 You can access record fields using `.`:
@@ -930,7 +896,7 @@ You can also import functions in this way, too.  For example:
 ```dhall
 # ./greet.ffg
 
-\name -> "Hello, " ++ name ++ "!"
+\name -> "Hello, " + name + "!"
 ```
 
 ```bash

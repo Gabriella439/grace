@@ -1804,6 +1804,17 @@ instantiateAlternativesR location u@(Type.Alternatives kAs rest) p0 = do
 
     traverse_ instantiate kAbs
 
+isInteger :: Monotype.Scalar -> Bool
+isInteger Monotype.Natural = True
+isInteger Monotype.Integer = True
+isInteger _                = False
+
+isDouble :: Monotype.Scalar -> Bool
+isDouble Monotype.Natural = True
+isDouble Monotype.Integer = True
+isDouble Monotype.Double  = True
+isDouble _                = False
+
 {-| This corresponds to the judgment:
 
     > Γ ⊢ e ⇒ A ⊣ Δ
@@ -2108,40 +2119,87 @@ infer e0 = do
 
             return Type{ location, node = Type.Scalar Monotype.Bool }
 
-        -- I have no idea how to easily fix `+` and `*` to work on all numeric
-        -- types without a type annotation.  This seems to be a weakness of
-        -- bidirectional type-checking.
-        --
-        -- My understanding is that the idiomatic way to fix this within the
-        -- bidirectional type-checking framework is to permit adding other types
-        -- of values if you provide a type annotation, such as:
-        --
-        --     (-2 + -2) : Integer
-        --
-        -- In other words, you add `check` rules for `Times` and `Plus` so that
-        -- they will expect different argument types depending on the expected
-        -- output types.  For simplicity, I just have it so that `+` and `*`
-        -- only work on `Natural` numbers in the absence of an outer type
-        -- constraint.
         Syntax.Operator l location Syntax.Times r -> do
             _L <- infer l
             _R <- infer r
-            check l Type{ location, node = Type.Scalar Monotype.Natural }
-            check r Type{ location, node = Type.Scalar Monotype.Natural }
 
-            return Type{ location, node = Type.Scalar Monotype.Natural }
+            case (node _L, node _R) of
+                (Type.Scalar sL, Type.Scalar sR)
+                    | Monotype.Natural == sL && Monotype.Natural == sR ->
+                        return Type{ location, node = Type.Scalar Monotype.Natural }
+                    | isInteger sL && isInteger sR ->
+                        return Type{ location, node = Type.Scalar Monotype.Integer }
+                    | isDouble sL && isDouble sR ->
+                        return Type{ location, node = Type.Scalar Monotype.Double }
+
+                (Type.Scalar sL, _)
+                    | isDouble sL -> do
+                        check r _L
+                        return _L
+
+                (_, Type.Scalar sR)
+                    | isDouble sR -> do
+                        check l _R
+                        return _R
+
+                (_, _) -> do
+                    check l Type{ location, node = Type.Scalar Monotype.Natural }
+                    check r Type{ location, node = Type.Scalar Monotype.Natural }
+
+                    return Type{ location, node = Type.Scalar Monotype.Natural }
 
         Syntax.Operator l location Syntax.Plus r -> do
-            check l Type{ location, node = Type.Scalar Monotype.Natural }
-            check r Type{ location, node = Type.Scalar Monotype.Natural }
+            _L <- infer l
+            _R <- infer r
 
-            return Type{ location, node = Type.Scalar Monotype.Natural }
+            case (node _L, node _R) of
+                (Type.Scalar sL, Type.Scalar sR)
+                    | Monotype.Natural == sL && Monotype.Natural == sR ->
+                        return Type{ location, node = Type.Scalar Monotype.Natural }
+                    | isInteger sL && isInteger sR ->
+                        return Type{ location, node = Type.Scalar Monotype.Integer }
+                    | isDouble sL && isDouble sR ->
+                        return Type{ location, node = Type.Scalar Monotype.Double }
+                    | Monotype.Text == sL && Monotype.Text == sR ->
 
-        Syntax.Operator l location Syntax.Append r -> do
-            check l Type{ location, node = Type.Scalar Monotype.Text }
-            check r Type{ location, node = Type.Scalar Monotype.Text }
+                        return Type{ location, node = Type.Scalar Monotype.Text }
+                (Type.Scalar sL, _)
+                    | isDouble sL || Monotype.Text == sL -> do
+                        check r _L
+                        return _L
 
-            return Type{ location, node = Type.Scalar Monotype.Text }
+                (_, Type.Scalar sR)
+                    | isDouble sR || Monotype.Text == sR -> do
+                        check l _R
+                        return _R
+
+                (_, _) -> do
+                    check l Type{ location, node = Type.Scalar Monotype.Natural }
+                    check r Type{ location, node = Type.Scalar Monotype.Natural }
+
+                    return Type{ location, node = Type.Scalar Monotype.Natural }
+
+        Syntax.Builtin Syntax.DoubleEqual-> do
+            return
+                (   _Type{ node = Type.Scalar Monotype.Double }
+                ~>  (   _Type{ node = Type.Scalar Monotype.Double }
+                    ~>  _Type{ node = Type.Scalar Monotype.Bool }
+                    )
+                )
+
+        Syntax.Builtin Syntax.DoubleLessThan -> do
+            return
+                (   _Type{ node = Type.Scalar Monotype.Double }
+                ~>  (   _Type{ node = Type.Scalar Monotype.Double }
+                    ~>  _Type{ node = Type.Scalar Monotype.Bool }
+                    )
+                )
+
+        Syntax.Builtin Syntax.DoubleNegate -> do
+            return
+                (   _Type{ node = Type.Scalar Monotype.Double }
+                ~>  _Type{ node = Type.Scalar Monotype.Double }
+                )
 
         Syntax.Builtin Syntax.DoubleShow -> do
             return
@@ -2153,11 +2211,30 @@ infer e0 = do
             return _Type
                 { node =
                     Type.Forall (Syntax.location e0) "a" Domain.Type
-                      ( ( _Type{ node = "a" } ~> _Type { node = Type.Scalar Monotype.Bool } ) ~>
-                          ( _Type{ node = Type.List _Type{ node = "a" } }
-                          ~> _Type { node = Type.Scalar Monotype.Bool } )
-                      )
+                        (   (   _Type{ node = "a" }
+                            ~>  _Type{ node = Type.Scalar Monotype.Bool }
+                            )
+                        ~>  (   _Type{ node = Type.List _Type{ node = "a" } }
+                            ~>  _Type{ node = Type.Scalar Monotype.Bool }
+                            )
+                        )
+                }
 
+        Syntax.Builtin Syntax.ListEqual -> do
+            return _Type
+                { node =
+                    Type.Forall (Syntax.location e0) "a" Domain.Type
+                        (   (   _Type{ node = "a" }
+                            ~>  (  _Type{ node = "a" }
+                                ~> _Type{ node = Type.Scalar Monotype.Bool }
+                                )
+                            )
+                        ~>  (   _Type{ node = Type.List _Type{ node = "a" } }
+                            ~>  (   _Type{ node = Type.List _Type{ node = "a" } }
+                                ~>  _Type{ node = Type.Scalar Monotype.Bool }
+                                )
+                            )
+                        )
                 }
 
         Syntax.Builtin Syntax.ListFold -> do
@@ -2205,10 +2282,22 @@ infer e0 = do
                         }
                 }
 
+        Syntax.Builtin Syntax.IntegerAbs -> do
+            return
+                (   _Type{ node = Type.Scalar Monotype.Integer }
+                ~>  _Type{ node = Type.Scalar Monotype.Natural }
+                )
+
         Syntax.Builtin Syntax.IntegerEven -> do
             return
                 (   _Type{ node = Type.Scalar Monotype.Integer }
                 ~>  _Type{ node = Type.Scalar Monotype.Bool }
+                )
+
+        Syntax.Builtin Syntax.IntegerNegate -> do
+            return
+                (   _Type{ node = Type.Scalar Monotype.Integer }
+                ~>  _Type{ node = Type.Scalar Monotype.Integer }
                 )
 
         Syntax.Builtin Syntax.IntegerOdd -> do
@@ -2227,6 +2316,14 @@ infer e0 = do
                             )
                         )
                 }
+
+        Syntax.Builtin Syntax.TextEqual-> do
+            return
+                (   _Type{ node = Type.Scalar Monotype.Text }
+                ~>  (   _Type{ node = Type.Scalar Monotype.Text }
+                    ~>  _Type{ node = Type.Scalar Monotype.Bool }
+                    )
+                )
 
         Syntax.Embed (type_, _) -> do
             return type_

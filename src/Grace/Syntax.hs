@@ -294,10 +294,6 @@ data Operator
     -- ^
     --   >>> pretty Times
     --   *
-    | Append
-    -- ^
-    --   >>> pretty Append
-    --   ++
     deriving (Eq, Generic, Show)
 
 instance Pretty Operator where
@@ -305,11 +301,22 @@ instance Pretty Operator where
     pretty Or     = operator "||"
     pretty Plus   = operator "+"
     pretty Times  = operator "*"
-    pretty Append = operator "++"
 
 -- | A built-in function
 data Builtin
-    = DoubleShow
+    = DoubleEqual
+    -- ^
+    --   >>> pretty DoubleEqual
+    --   Double/equal
+    | DoubleLessThan
+    -- ^
+    --   >>> pretty DoubleLessThan
+    --   Double/lessThan
+    | DoubleNegate
+    -- ^
+    --   >>> pretty DoubleNegate
+    --   Double/negate
+    | DoubleShow
     -- ^
     --   >>> pretty DoubleShow
     --   Double/show
@@ -317,6 +324,10 @@ data Builtin
     -- ^
     --   >>> pretty ListAny
     --   List/any
+    | ListEqual
+    -- ^
+    --   >>> pretty ListEqual
+    --   List/equal
     | ListFold
     -- ^
     --   >>> pretty ListFold
@@ -333,25 +344,44 @@ data Builtin
     -- ^
     --   >>> pretty IntegerEven
     --   Integer/even
+    | IntegerNegate
+    -- ^
+    --   >>> pretty IntegerNegate
+    --   Integer/negate
     | IntegerOdd
     -- ^
     --   >>> pretty IntegerOdd
     --   Integer/odd
+    | IntegerAbs
+    -- ^
+    --   >>> pretty IntegerAbs
+    --   Integer/abs
     | NaturalFold
     -- ^
     --   >>> pretty NaturalFold
     --   Natural/fold
+    | TextEqual
+    -- ^
+    --   >>> pretty TextEqual
+    --   Text/equal
     deriving (Bounded, Enum, Eq, Generic, Show)
 
 instance Pretty Builtin where
-    pretty DoubleShow  = builtin "Double/show"
-    pretty ListAny     = builtin "List/any"
-    pretty ListFold    = builtin "List/fold"
-    pretty ListLength  = builtin "List/length"
-    pretty ListMap     = builtin "List/map"
-    pretty IntegerEven = builtin "Integer/even"
-    pretty IntegerOdd  = builtin "Integer/odd"
-    pretty NaturalFold = builtin "Natural/fold"
+    pretty DoubleEqual    = builtin "Double/equal"
+    pretty DoubleLessThan = builtin "Double/lessThan"
+    pretty DoubleNegate   = builtin "Double/negate"
+    pretty DoubleShow     = builtin "Double/show"
+    pretty ListAny        = builtin "List/any"
+    pretty ListEqual      = builtin "List/equal"
+    pretty ListFold       = builtin "List/fold"
+    pretty ListLength     = builtin "List/length"
+    pretty ListMap        = builtin "List/map"
+    pretty IntegerAbs     = builtin "Integer/abs"
+    pretty IntegerEven    = builtin "Integer/even"
+    pretty IntegerNegate  = builtin "Integer/negate"
+    pretty IntegerOdd     = builtin "Integer/odd"
+    pretty NaturalFold    = builtin "Natural/fold"
+    pretty TextEqual      = builtin "Text/equal"
 
 -- | Pretty-print an expression
 prettyExpression :: Pretty a => Node s a -> Doc AnsiStyle
@@ -507,10 +537,7 @@ prettyOrExpression :: Pretty a => Node s a -> Doc AnsiStyle
 prettyOrExpression = prettyOperator Or prettyAndExpression
 
 prettyAndExpression :: Pretty a => Node s a -> Doc AnsiStyle
-prettyAndExpression = prettyOperator And prettyAppendExpression
-
-prettyAppendExpression :: Pretty a => Node s a -> Doc AnsiStyle
-prettyAppendExpression = prettyOperator Append prettyApplicationExpression
+prettyAndExpression = prettyOperator And prettyApplicationExpression
 
 prettyApplicationExpression :: Pretty a => Node s a -> Doc AnsiStyle
 prettyApplicationExpression expression

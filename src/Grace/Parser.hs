@@ -147,6 +147,9 @@ render t = case t of
     Lexer.Dot              -> "."
     Lexer.Double           -> "Double"
     Lexer.DoubleLiteral _  -> "a double literal"
+    Lexer.DoubleEqual      -> "Double/equal"
+    Lexer.DoubleLessThan   -> "Double/lessThan"
+    Lexer.DoubleNegate     -> "Double/negate"
     Lexer.DoubleShow       -> "Double/show"
     Lexer.Else             -> "else"
     Lexer.Equals           -> "="
@@ -159,13 +162,16 @@ render t = case t of
     Lexer.In               -> "in"
     Lexer.Int _            -> "an integer literal"
     Lexer.Integer          -> "Integer"
+    Lexer.IntegerAbs       -> "Integer/clamp"
     Lexer.IntegerEven      -> "Integer/even"
+    Lexer.IntegerNegate    -> "Integer/negate"
     Lexer.IntegerOdd       -> "Integer/odd"
     Lexer.Label _          -> "a label"
     Lexer.Lambda           -> "\\"
     Lexer.Let              -> "let"
     Lexer.List             -> "list"
     Lexer.ListAny          -> "List/any"
+    Lexer.ListEqual        -> "List/equal"
     Lexer.ListFold         -> "List/fold"
     Lexer.ListLength       -> "List/length"
     Lexer.ListMap          -> "List/map"
@@ -182,6 +188,7 @@ render t = case t of
     Lexer.Plus             -> "+"
     Lexer.Question         -> "?"
     Lexer.Text             -> "Text"
+    Lexer.TextEqual        -> "Text/equal"
     Lexer.TextLiteral _    -> "a text literal"
     Lexer.Then             -> "then"
     Lexer.Type             -> "Type"
@@ -274,9 +281,7 @@ grammar = mdo
 
     orExpression <- rule (op Lexer.Or Syntax.Or andExpression)
 
-    andExpression <- rule (op Lexer.And Syntax.And appendExpression)
-
-    appendExpression <- rule (op Lexer.Append Syntax.Append applicationExpression)
+    andExpression <- rule (op Lexer.And Syntax.And applicationExpression)
 
     let application left@Syntax{ location } right = Syntax{..}
           where
@@ -396,6 +401,18 @@ grammar = mdo
 
                 return (f located)
 
+        <|> do  location <- locatedToken Lexer.DoubleEqual
+
+                return Syntax{ node = Syntax.Builtin Syntax.DoubleEqual, .. }
+
+        <|> do  location <- locatedToken Lexer.DoubleLessThan
+
+                return Syntax{ node = Syntax.Builtin Syntax.DoubleLessThan, .. }
+
+        <|> do  location <- locatedToken Lexer.DoubleNegate
+
+                return Syntax{ node = Syntax.Builtin Syntax.DoubleNegate, .. }
+
         <|> do  location <- locatedToken Lexer.DoubleShow
 
                 return Syntax{ node = Syntax.Builtin Syntax.DoubleShow, .. }
@@ -403,6 +420,9 @@ grammar = mdo
         <|> do  location <- locatedToken Lexer.ListAny
 
                 return Syntax{ node = Syntax.Builtin Syntax.ListAny, .. }
+        <|> do  location <- locatedToken Lexer.ListEqual
+
+                return Syntax{ node = Syntax.Builtin Syntax.ListEqual, .. }
 
         <|> do  location <- locatedToken Lexer.ListFold
 
@@ -416,9 +436,17 @@ grammar = mdo
 
                 return Syntax{ node = Syntax.Builtin Syntax.ListMap, .. }
 
+        <|> do  location <- locatedToken Lexer.IntegerAbs
+
+                return Syntax{ node = Syntax.Builtin Syntax.IntegerAbs, .. }
+
         <|> do  location <- locatedToken Lexer.IntegerEven
 
                 return Syntax{ node = Syntax.Builtin Syntax.IntegerEven, .. }
+
+        <|> do  location <- locatedToken Lexer.IntegerNegate
+
+                return Syntax{ node = Syntax.Builtin Syntax.IntegerNegate, .. }
 
         <|> do  location <- locatedToken Lexer.IntegerOdd
 
@@ -427,6 +455,10 @@ grammar = mdo
         <|> do  location <- locatedToken Lexer.NaturalFold
 
                 return Syntax{ node = Syntax.Builtin Syntax.NaturalFold, .. }
+
+        <|> do  location <- locatedToken Lexer.TextEqual
+
+                return Syntax{ node = Syntax.Builtin Syntax.TextEqual, .. }
 
         <|> do  let f (location, t) = Syntax{..}
                       where

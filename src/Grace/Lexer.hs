@@ -76,7 +76,6 @@ parseToken =
         , Combinators.choice
             [ Or     <$ symbol "||"
             , And    <$ symbol "&&"
-            , Append <$ symbol "++"
             , Plus   <$ symbol "+"
             , Times  <$ symbol "*"
             ] <?> "operator"
@@ -97,17 +96,24 @@ parseToken =
             ] <?> "keyword"
 
         , Combinators.choice
-            [ DoubleShow  <$ symbol "Double/show"
-            , ListAny     <$ symbol "List/any"
-            , ListFold    <$ symbol "List/fold"
-            , ListLength  <$ symbol "List/length"
-            , ListMap     <$ symbol "List/map"
-            , IntegerEven <$ symbol "Integer/even"
-            , IntegerOdd  <$ symbol "Integer/odd"
-            , NaturalFold <$ symbol "Natural/fold"
-            , False_      <$ symbol "false"
-            , True_       <$ symbol "true"
-            , Null        <$ symbol "null"
+            [ DoubleEqual    <$ symbol "Double/equal"
+            , DoubleLessThan <$ symbol "Double/lessThan"
+            , DoubleNegate   <$ symbol "Double/negate"
+            , DoubleShow     <$ symbol "Double/show"
+            , ListAny        <$ symbol "List/any"
+            , ListEqual      <$ symbol "List/equal"
+            , ListFold       <$ symbol "List/fold"
+            , ListLength     <$ symbol "List/length"
+            , ListMap        <$ symbol "List/map"
+            , IntegerAbs     <$ symbol "Integer/abs"
+            , IntegerEven    <$ symbol "Integer/even"
+            , IntegerNegate  <$ symbol "Integer/negate"
+            , IntegerOdd     <$ symbol "Integer/odd"
+            , NaturalFold    <$ symbol "Natural/fold"
+            , TextEqual      <$ symbol "Text/equal"
+            , False_         <$ symbol "false"
+            , True_          <$ symbol "true"
+            , Null           <$ symbol "null"
             ] <?> "built-in value"
 
         , Combinators.choice
@@ -330,10 +336,13 @@ data Token
     | Colon
     | Comma
     | Dash
-    | DoubleLiteral Double
-    | DoubleShow
     | Dot
     | Double
+    | DoubleEqual
+    | DoubleLessThan
+    | DoubleLiteral Double
+    | DoubleNegate
+    | DoubleShow
     | Else
     | Equals
     | Exists
@@ -345,16 +354,19 @@ data Token
     | In
     | Int Int
     | Integer
+    | IntegerAbs
     | IntegerEven
+    | IntegerNegate
     | IntegerOdd
     | Label Text
     | Lambda
+    | Let
+    | List
     | ListAny
+    | ListEqual
     | ListFold
     | ListLength
     | ListMap
-    | Let
-    | List
     | Merge
     | Natural
     | NaturalFold
@@ -368,6 +380,7 @@ data Token
     | Plus
     | Question
     | Text
+    | TextEqual
     | TextLiteral Text
     | Then
     | Times
