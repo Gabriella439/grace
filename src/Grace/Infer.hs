@@ -279,8 +279,7 @@ subtype _A0 _B0 = do
             push (Context.MarkerType a)
             push (Context.UnsolvedType a)
 
-            let _A1 =
-                    Type{ location = Type.location _A0, node = Type.UnsolvedType a }
+            let _A1 = _A0{ node = Type.UnsolvedType a }
 
             subtype _A1 _B0
 
@@ -292,8 +291,8 @@ subtype _A0 _B0 = do
             push (Context.MarkerType b)
             push (Context.UnsolvedType b)
 
-            let _B1 =
-                    Type{ location = Type.location _B0, node = Type.UnsolvedType b }
+            let _B1 = _B0{ node = Type.UnsolvedType b }
+
             subtype _A0 _B1
 
             discardUpTo (Context.MarkerType b)
@@ -2541,13 +2540,13 @@ inferApplication Type{ node = Type.Function _A _C } e = do
     return _C
 inferApplication Type{ node = Type.VariableType a, ..} _ = do
     throwError [__i|
-    Internal error: Unexpected type variable in function type
+    Not necessarily a function type
 
     The following type variable:
 
     #{insert a}
 
-    … should have been replaced with an unsolved variable.
+    … could potentially be any type and is not necessarily a function type.
 
     #{Location.renderError "" location}
     |]
