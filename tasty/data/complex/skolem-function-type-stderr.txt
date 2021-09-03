@@ -1,0 +1,12 @@
+Not necessarily a function type
+
+The following type variable:
+
+  a
+
+… could potentially be any type and is not necessarily a function type.
+
+tasty/data/complex/skolem-function-type-input.ffg:3:29: 
+  │
+3 │ let f : forall (a : Type) . a -> a = \x -> x 1 in f
+  │                             ↑

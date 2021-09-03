@@ -1,0 +1,3 @@
+# The following test exercises the case where a universally quantified variable
+# cannot necessarily be treated as a function type
+let f : forall (a : Type) . a -> a = \x -> x 1 in f

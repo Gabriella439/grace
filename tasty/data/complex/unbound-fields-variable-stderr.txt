@@ -1,0 +1,6 @@
+Unbound fields variable: a
+
+tasty/data/complex/unbound-fields-variable-input.ffg:2:7: 
+  │
+2 │ { } : { a }
+  │       ↑

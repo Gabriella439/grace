@@ -2,18 +2,18 @@ Not a subtype
 
 The following type:
 
-   [0;4mBool[0m
-
-tasty/data/error/type/type-mismatch-input.ffg:1:5: 
-  │
-1 │ 1 + true
-  │     ↑
-
-… cannot be a subtype of:
-
-   [0;4mNatural[0m
+  [0;4mNatural[0m
 
 tasty/data/error/type/type-mismatch-input.ffg:1:1: 
   │
 1 │ 1 + true
   │ ↑
+
+… cannot be a subtype of:
+
+  [0;4mBool[0m
+
+tasty/data/error/type/type-mismatch-input.ffg:1:5: 
+  │
+1 │ 1 + true
+  │     ↑

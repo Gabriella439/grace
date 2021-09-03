@@ -2,7 +2,7 @@ Union type mismatch
 
 The following union type:
 
-   [0;32;1m<[0m [0mA[0m[0;32;1m:[0m [0;32;1m{[0m [0;32;1m}[0m [0;32;1m>[0m
+  [0;32;1m<[0m [0mA[0m[0;32;1m:[0m [0;32;1m{[0m [0;32;1m}[0m [0;32;1m>[0m
 
 tasty/data/error/type/union-mismatch-both-extra-input.ffg:1:12: 
   │
@@ -11,7 +11,7 @@ tasty/data/error/type/union-mismatch-both-extra-input.ffg:1:12:
 
 … is not a subtype of the following union type:
 
-   [0;32;1m<[0m [0mB[0m[0;32;1m:[0m [0;32;1m{[0m [0;32;1m}[0m [0;32;1m>[0m
+  [0;32;1m<[0m [0mB[0m[0;32;1m:[0m [0;32;1m{[0m [0;32;1m}[0m [0;32;1m>[0m
 
 tasty/data/error/type/union-mismatch-both-extra-input.ffg:1:27: 
   │

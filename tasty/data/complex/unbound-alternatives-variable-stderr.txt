@@ -1,0 +1,6 @@
+Unbound alternatives variable: a
+
+tasty/data/complex/unbound-alternatives-variable-input.ffg:2:10: 
+  │
+2 │ Left 1 : < Left : Natural | a >
+  │          ↑

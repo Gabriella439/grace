@@ -3,7 +3,7 @@ Invalid handler
 The merge keyword expects a record of handlers where all handlers are functions,
 but you provided a handler of the following type:
 
-   [0;4mNatural[0m
+  [0;4mNatural[0m
 
 tasty/data/error/type/invalid-handler-input.ffg:1:7: 
   │

@@ -47,19 +47,18 @@ import Grace.Syntax (Syntax(Syntax))
 import Grace.Type (Type(..))
 import Grace.Value (Value)
 
-import qualified Control.Monad        as Monad
-import qualified Control.Monad.Except as Except
-import qualified Control.Monad.State  as State
-import qualified Data.Map             as Map
-import qualified Data.Text            as Text
-import qualified Grace.Context        as Context
-import qualified Grace.Domain         as Domain
-import qualified Grace.Location       as Location
-import qualified Grace.Monotype       as Monotype
+import qualified Control.Monad       as Monad
+import qualified Control.Monad.State as State
+import qualified Data.Map            as Map
+import qualified Data.Text           as Text
+import qualified Grace.Context       as Context
+import qualified Grace.Domain        as Domain
+import qualified Grace.Location      as Location
+import qualified Grace.Monotype      as Monotype
 import qualified Grace.Pretty
-import qualified Grace.Syntax         as Syntax
-import qualified Grace.Type           as Type
-import qualified Prettyprinter        as Pretty
+import qualified Grace.Syntax        as Syntax
+import qualified Grace.Type          as Type
+import qualified Prettyprinter       as Pretty
 
 -- | Type-checking state
 data Status = Status
@@ -71,7 +70,7 @@ data Status = Status
 
 orDie :: MonadError Text m => Maybe a -> Text -> m a
 Just x  `orDie` _       = return x
-Nothing `orDie` message = Except.throwError message
+Nothing `orDie` message = throwError message
 
 fresh :: MonadState Status m => m (Existential a)
 fresh = do
@@ -106,7 +105,7 @@ prettyToText :: Pretty a => a -> Text
 prettyToText = Grace.Pretty.renderStrict True Grace.Pretty.defaultColumns
 
 insert :: Pretty a => a -> Text
-insert a = prettyToText ("   " <> Pretty.align (pretty a))
+insert a = prettyToText ("  " <> Pretty.align (pretty a))
 
 listToText :: Pretty a => [a] -> Text
 listToText elements = Text.intercalate "\n" (map prettyEntry elements)
@@ -127,7 +126,7 @@ wellFormedType _Γ Type{..} =
             | Context.Variable Domain.Type a `elem` _Γ -> do
                 return ()
             | otherwise -> do
-                Except.throwError [__i|
+                throwError [__i|
                 Unbound type variable: #{a}
 
                 #{Location.renderError "" location}
@@ -151,7 +150,7 @@ wellFormedType _Γ Type{..} =
             | any predicate _Γ -> do
                 return ()
             | otherwise -> do
-                Except.throwError [__i|
+                throwError [__i|
                 Internal error: Invalid context
 
                 The following type:
@@ -185,7 +184,7 @@ wellFormedType _Γ Type{..} =
             | any predicate _Γ -> do
                 traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
             | otherwise -> do
-                Except.throwError [__i|
+                throwError [__i|
                 Internal error: Invalid context
 
                 The following unsolved fields variable:
@@ -210,7 +209,7 @@ wellFormedType _Γ Type{..} =
             | Context.Variable Domain.Fields a `elem` _Γ -> do
                 traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
             | otherwise -> do
-                Except.throwError [__i|
+                throwError [__i|
                 Unbound fields variable: #{a}
 
                 #{Location.renderError "" location}
@@ -223,7 +222,7 @@ wellFormedType _Γ Type{..} =
             | any predicate _Γ -> do
                 traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
             | otherwise -> do
-                Except.throwError [__i|
+                throwError [__i|
                 Internal error: Invalid context
 
                 The following unsolved alternatives variable:
@@ -248,7 +247,7 @@ wellFormedType _Γ Type{..} =
             | Context.Variable Domain.Alternatives a `elem` _Γ -> do
                 traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
             | otherwise -> do
-                Except.throwError [__i|
+                throwError [__i|
                 Unbound alternatives variable: #{a}
 
                 #{Location.renderError "" location}
@@ -280,8 +279,7 @@ subtype _A0 _B0 = do
             push (Context.MarkerType a)
             push (Context.UnsolvedType a)
 
-            let _A1 =
-                    Type{ location = Type.location _A0, node = Type.UnsolvedType a }
+            let _A1 = _A0{ node = Type.UnsolvedType a }
 
             subtype _A1 _B0
 
@@ -293,8 +291,8 @@ subtype _A0 _B0 = do
             push (Context.MarkerType b)
             push (Context.UnsolvedType b)
 
-            let _B1 =
-                    Type{ location = Type.location _B0, node = Type.UnsolvedType b }
+            let _B1 = _B0{ node = Type.UnsolvedType b }
+
             subtype _A0 _B1
 
             discardUpTo (Context.MarkerType b)
@@ -542,7 +540,7 @@ subtype _A0 _B0 = do
             -- `{ y: Text, b }` if we solve `a` to be `{ y: Text }` and solve
             -- `b` to be `{ x : Bool }`.
             if | not okayA && not okayB -> do
-                Except.throwError [__i|
+                throwError [__i|
                 Record type mismatch
 
                 The following record type:
@@ -567,7 +565,7 @@ subtype _A0 _B0 = do
                 |]
 
                | not okayA -> do
-                Except.throwError [__i|
+                throwError [__i|
                 Record type mismatch
 
                 The following record type:
@@ -588,7 +586,7 @@ subtype _A0 _B0 = do
                 |]
 
                | not okayB -> do
-                Except.throwError [__i|
+                throwError [__i|
                 Record type mismatch
 
                 The following record type:
@@ -705,7 +703,7 @@ subtype _A0 _B0 = do
 
                     case p0First <|> p1First of
                         Nothing -> do
-                            Except.throwError [__i|
+                            throwError [__i|
                             Internal error: Invalid context
 
                             One of the following fields variables:
@@ -780,7 +778,7 @@ subtype _A0 _B0 = do
                         p1
 
                 (_, _) -> do
-                    Except.throwError [__i|
+                    throwError [__i|
                     Not a record subtype
 
                     The following type:
@@ -839,7 +837,7 @@ subtype _A0 _B0 = do
                     ||  (flexible alternatives0 && alternatives0 /= alternatives1)
 
             if | not okayA && not okayB -> do
-                Except.throwError [__i|
+                throwError [__i|
                 Union type mismatch
 
                 The following union type:
@@ -864,7 +862,7 @@ subtype _A0 _B0 = do
                 |]
 
                | not okayA && okayB -> do
-                Except.throwError [__i|
+                throwError [__i|
                 Union type mismatch
 
                 The following union type:
@@ -885,7 +883,7 @@ subtype _A0 _B0 = do
                 |]
 
                | okayA && not okayB -> do
-                Except.throwError [__i|
+                throwError [__i|
                 Union type mismatch
 
                 The following union type:
@@ -955,7 +953,7 @@ subtype _A0 _B0 = do
 
                     case p0First <|> p1First of
                         Nothing -> do
-                            Except.throwError [__i|
+                            throwError [__i|
                             Internal error: Invalid context
 
                             One of the following alternatives variables:
@@ -1032,7 +1030,7 @@ subtype _A0 _B0 = do
                         p1
 
                 (_, _) -> do
-                    Except.throwError [__i|
+                    throwError [__i|
                     Not a union subtype
 
                     The following type:
@@ -1065,7 +1063,7 @@ subtype _A0 _B0 = do
         -- `subtype` function and then I'll remember to add a case for my new
         -- complex type here.
         (_A, _B) -> do
-            Except.throwError [__i|
+            throwError [__i|
             Not a subtype
 
             The following type:
@@ -1472,7 +1470,7 @@ equateFields p0 p1 = do
 
     case p0First <|> p1First of
         Nothing -> do
-            Except.throwError [__i|
+            throwError [__i|
             Internal error: Invalid context
 
             One of the following fields variables:
@@ -1493,7 +1491,7 @@ instantiateFieldsL
 instantiateFieldsL p0 location r@(Type.Fields kAs rest) = do
     if p0 `Type.fieldsFreeIn` Type{ node = Type.Record r, .. }
         then do
-            Except.throwError [__i|
+            throwError [__i|
             Not a fields subtype
 
             The following fields variable:
@@ -1563,7 +1561,7 @@ instantiateFieldsR
 instantiateFieldsR location r@(Type.Fields kAs rest) p0 = do
     if p0 `Type.fieldsFreeIn` Type{ node = Type.Record r, .. }
         then do
-            Except.throwError [__i|
+            throwError [__i|
             Not a fields subtype
 
             The following fields variable:
@@ -1649,7 +1647,7 @@ equateAlternatives p0 p1 = do
 
     case p0First <|> p1First of
         Nothing -> do
-            Except.throwError [__i|
+            throwError [__i|
             Internal error: Invalid context
 
             One of the following alternatives variables:
@@ -1670,7 +1668,7 @@ instantiateAlternativesL
 instantiateAlternativesL p0 location u@(Type.Alternatives kAs rest) = do
     if p0 `Type.alternativesFreeIn` Type{ node = Type.Union u, .. }
         then do
-            Except.throwError [__i|
+            throwError [__i|
             Not an alternatives subtype
 
             The following alternatives variable:
@@ -1740,7 +1738,7 @@ instantiateAlternativesR
 instantiateAlternativesR location u@(Type.Alternatives kAs rest) p0 = do
     if p0 `Type.alternativesFreeIn` Type{ node = Type.Union u, .. }
         then do
-            Except.throwError [__i|
+            throwError [__i|
             Not an alternatives subtype
 
             The following alternatives variable:
@@ -1803,17 +1801,6 @@ instantiateAlternativesR location u@(Type.Alternatives kAs rest) p0 = do
             instantiateTypeR (Context.solveType _Θ _A) b
 
     traverse_ instantiate kAbs
-
-isInteger :: Monotype.Scalar -> Bool
-isInteger Monotype.Natural = True
-isInteger Monotype.Integer = True
-isInteger _                = False
-
-isDouble :: Monotype.Scalar -> Bool
-isDouble Monotype.Natural = True
-isDouble Monotype.Integer = True
-isDouble Monotype.Double  = True
-isDouble _                = False
 
 {-| This corresponds to the judgment:
 
@@ -1985,7 +1972,7 @@ infer e0 = do
 
                             return (key, _A)
                         process (_, _A) = do
-                            Except.throwError [__i|
+                            throwError [__i|
                                 Invalid handler
 
                                 The merge keyword expects a record of handlers where all handlers are functions,
@@ -2015,7 +2002,7 @@ infer e0 = do
                         }
 
                 Type.Record _ -> do
-                    Except.throwError [__i|
+                    throwError [__i|
                         Must merge a concrete record
 
                         The first argument to a merge expression must be a record where all fields are
@@ -2029,7 +2016,7 @@ infer e0 = do
                     |]
 
                 _ -> do
-                    Except.throwError [__i|
+                    throwError [__i|
                         Must merge a record
 
                         The first argument to a merge expression must be a record, but you provided an
@@ -2119,65 +2106,74 @@ infer e0 = do
 
             return Type{ location, node = Type.Scalar Monotype.Bool }
 
-        Syntax.Operator l location Syntax.Times r -> do
+        Syntax.Operator l _ Syntax.Times r -> do
             _L <- infer l
             _R <- infer r
 
-            case (node _L, node _R) of
-                (Type.Scalar sL, Type.Scalar sR)
-                    | Monotype.Natural == sL && Monotype.Natural == sR ->
-                        return Type{ location, node = Type.Scalar Monotype.Natural }
-                    | isInteger sL && isInteger sR ->
-                        return Type{ location, node = Type.Scalar Monotype.Integer }
-                    | isDouble sL && isDouble sR ->
-                        return Type{ location, node = Type.Scalar Monotype.Double }
+            check l _R
+            check r _L
 
-                (Type.Scalar sL, _)
-                    | isDouble sL -> do
-                        check r _L
-                        return _L
+            _Γ <- get
 
-                (_, Type.Scalar sR)
-                    | isDouble sR -> do
-                        check l _R
-                        return _R
+            let _L' = Context.solveType _Γ _L
+            let _R' = Context.solveType _Γ _R
 
-                (_, _) -> do
-                    check l Type{ location, node = Type.Scalar Monotype.Natural }
-                    check r Type{ location, node = Type.Scalar Monotype.Natural }
+            case node _L' of
+                Type.Scalar Monotype.Natural -> return _L
+                Type.Scalar Monotype.Integer -> return _L
+                Type.Scalar Monotype.Double  -> return _L
+                _ -> do
+                    throwError [__i|
+                    Invalid operands
 
-                    return Type{ location, node = Type.Scalar Monotype.Natural }
+                    You cannot add a value of type:
 
-        Syntax.Operator l location Syntax.Plus r -> do
+                    #{insert _L'}
+
+                    #{Location.renderError "" (Syntax.location l)}
+
+                    … with a value of type:
+
+                    #{insert _R'}
+
+                    #{Location.renderError "" (Syntax.location r)}
+                    |]
+
+        Syntax.Operator l _ Syntax.Plus r -> do
             _L <- infer l
             _R <- infer r
 
-            case (node _L, node _R) of
-                (Type.Scalar sL, Type.Scalar sR)
-                    | Monotype.Natural == sL && Monotype.Natural == sR ->
-                        return Type{ location, node = Type.Scalar Monotype.Natural }
-                    | isInteger sL && isInteger sR ->
-                        return Type{ location, node = Type.Scalar Monotype.Integer }
-                    | isDouble sL && isDouble sR ->
-                        return Type{ location, node = Type.Scalar Monotype.Double }
-                    | Monotype.Text == sL && Monotype.Text == sR ->
+            check l _R
+            check r _L
 
-                        return Type{ location, node = Type.Scalar Monotype.Text }
-                (Type.Scalar sL, _)
-                    | isDouble sL || Monotype.Text == sL -> do
-                        check r _L
-                        return _L
+            _Γ <- get
 
-                (_, Type.Scalar sR)
-                    | isDouble sR || Monotype.Text == sR -> do
-                        check l _R
-                        return _R
+            let _L' = Context.solveType _Γ _L
+            let _R' = Context.solveType _Γ _R
 
-                (_, _) -> do
-                    check l Type{ location, node = Type.Scalar Monotype.Natural }
-                    check r Type{ location, node = Type.Scalar Monotype.Natural }
+            case node _L' of
+                Type.Scalar Monotype.Natural -> return _L
+                Type.Scalar Monotype.Integer -> return _L
+                Type.Scalar Monotype.Double  -> return _L
+                Type.Scalar Monotype.Text    -> return _L
+                Type.List   _                -> return _L
 
-                    return Type{ location, node = Type.Scalar Monotype.Natural }
+                _ -> do
+                    throwError [__i|
+                    Invalid operands
+
+                    You cannot add a value of type:
+
+                    #{insert _L'}
+
+                    #{Location.renderError "" (Syntax.location l)}
+
+                    … with a value of type:
+
+                    #{insert _R'}
+
+                    #{Location.renderError "" (Syntax.location r)}
+                    |]
 
         Syntax.Builtin Syntax.DoubleEqual-> do
             return
@@ -2420,11 +2416,15 @@ check e Type{ node = Type.Forall _ a domain _A } = do
 
     discardUpTo (Context.Variable domain a)
 
--- This rules lets you add numbers other than `Natural`s if you provide a type
--- annotation
-check Syntax{ node = Syntax.Operator l _ op r } _B@Type{ node = Type.Scalar scalar }
-    | scalar `elem` [ Monotype.Double, Monotype.Integer, Monotype.Natural ]
-    , op `elem` [ Syntax.Times, Syntax.Plus ] = do
+check Syntax{ node = Syntax.Operator l _ Syntax.Times r } _B@Type{ node = Type.Scalar scalar }
+    | scalar `elem` [ Monotype.Natural, Monotype.Integer, Monotype.Double ] = do
+    check l _B
+    check r _B
+check Syntax{ node = Syntax.Operator l _ Syntax.Plus r } _B@Type{ node = Type.Scalar scalar }
+    | scalar `elem` [ Monotype.Natural, Monotype.Integer, Monotype.Double, Monotype.Text ] = do
+    check l _B
+    check r _B
+check Syntax{ node = Syntax.Operator l _ Syntax.Plus r } _B@Type{ node = Type.List _ } = do
     check l _B
     check r _B
 
@@ -2552,19 +2552,19 @@ inferApplication Type{ node = Type.Function _A _C } e = do
 
     return _C
 inferApplication Type{ node = Type.VariableType a, ..} _ = do
-    Except.throwError [__i|
-    Internal error: Unexpected type variable in function type
+    throwError [__i|
+    Not necessarily a function type
 
     The following type variable:
 
     #{insert a}
 
-    … should have been replaced with an unsolved variable.
+    … could potentially be any type and is not necessarily a function type.
 
     #{Location.renderError "" location}
     |]
 inferApplication _A@Type{..} _ = do
-    Except.throwError [__i|
+    throwError [__i|
     Not a function type
 
     An expression of the following type:

@@ -1,0 +1,2 @@
+# This test exercises the error message for unbound fields variables
+{ } : { a }

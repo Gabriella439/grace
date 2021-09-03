@@ -2,7 +2,7 @@ Not a subtype
 
 The following type:
 
-   [0mb[0m
+  [0mb[0m
 
 tasty/data/error/type/variable-mismatch-input.ffg:1:54: 
   │
@@ -11,7 +11,7 @@ tasty/data/error/type/variable-mismatch-input.ffg:1:54:
 
 … cannot be a subtype of:
 
-   [0ma[0m
+  [0ma[0m
 
 tasty/data/error/type/variable-mismatch-input.ffg:1:59: 
   │

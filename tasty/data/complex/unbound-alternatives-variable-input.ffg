@@ -1,0 +1,2 @@
+# This test exercises the error message for unbound alternatives variables
+Left 1 : < Left : Natural | a >
