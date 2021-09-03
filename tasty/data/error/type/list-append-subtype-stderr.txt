@@ -2,7 +2,7 @@ Not a subtype
 
 The following type:
 
-   [0;4mInteger[0m
+  [0;4mInteger[0m
 
 tasty/data/error/type/list-append-subtype-input.ffg:1:4: 
   │
@@ -11,7 +11,7 @@ tasty/data/error/type/list-append-subtype-input.ffg:1:4:
 
 … cannot be a subtype of:
 
-   [0;4mNatural[0m
+  [0;4mNatural[0m
 
 tasty/data/error/type/list-append-subtype-input.ffg:1:12: 
   │

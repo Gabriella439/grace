@@ -105,7 +105,7 @@ prettyToText :: Pretty a => a -> Text
 prettyToText = Grace.Pretty.renderStrict True Grace.Pretty.defaultColumns
 
 insert :: Pretty a => a -> Text
-insert a = prettyToText ("   " <> Pretty.align (pretty a))
+insert a = prettyToText ("  " <> Pretty.align (pretty a))
 
 listToText :: Pretty a => [a] -> Text
 listToText elements = Text.intercalate "\n" (map prettyEntry elements)

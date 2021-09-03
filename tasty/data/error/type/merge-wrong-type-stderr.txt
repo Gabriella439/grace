@@ -2,7 +2,7 @@ Not a subtype
 
 The following type:
 
-   [0;4mNatural[0m
+  [0;4mNatural[0m
 
 tasty/data/error/type/merge-wrong-type-input.ffg:1:7: 
   │
@@ -11,7 +11,7 @@ tasty/data/error/type/merge-wrong-type-input.ffg:1:7:
 
 … cannot be a subtype of:
 
-   [0;32;1m{[0m [0m[0ma[0m?[0m [0;32;1m}[0m
+  [0;32;1m{[0m [0m[0ma[0m?[0m [0;32;1m}[0m
 
 tasty/data/error/type/merge-wrong-type-input.ffg:1:7: 
   │

@@ -2,7 +2,7 @@ Not a function type
 
 An expression of the following type:
 
-   [0;4mNatural[0m
+  [0;4mNatural[0m
 
 tasty/data/error/type/not-a-function-input.ffg:1:1: 
   │

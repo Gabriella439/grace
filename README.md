@@ -1,12 +1,12 @@
 # `grace`
 
-Grace (short for [Fall-from-Grace](#name)) is a ready-to-fork implementation of a
-JSON-compatible functional programming language with type inference.  You will
+Grace (short for [Fall-from-Grace](#name)) is a ready-to-fork implementation of
+a JSON-compatible functional programming language with type inference.  You will
 most likely be interested in Grace for one of two reasons:
 
 * You need to implement a domain-specific language and you would like to begin
-  from a quality existing implementation instead of building some half-baked
-  language using JSON/YAML as a syntax tree
+  from a quality existing implementation instead of embedding a syntax tree in
+  JSON/YAML
 
 * You're interested in learning more about state-of-the-art algorithms for
   programming language theory by studying a clear and realistic reference
@@ -20,12 +20,12 @@ If you're interested in code samples, then you can either jump down to the
 
 Grace implements the following features so that you don't have to:
 
-* Fast and maintainable parsing
+* Efficient and maintainable parsing
 
-  Grace uses a high-performance lexer in conjunction with an LR parsing package
-  in order to guarantee efficient and predictable parsing performance.  This
-  means that you can easily extend or amend Grace's grammar without taking
-  special precautions to avoid performance pitfalls.
+  Grace uses a lexer in conjunction with an LR parsing package in order to
+  guarantee efficient and predictable parsing performance.  This means that you
+  can easily extend or amend Grace's grammar without taking special precautions
+  to avoid performance pitfalls.
 
 * JSON-compatible syntax
 
@@ -41,14 +41,14 @@ Grace implements the following features so that you don't have to:
         "age": 36,
         "name": "Dunlap Hubbard",
         "email": "dunlaphubbard@cedward.com",
-        "phone": "+1 (890) 543-2508",
+        "phone": "+1 (890) 543-2508"
       },
       {
         "isActive": true,
         "age": 24,
         "name": "Kirsten Sellers",
         "email": "kirstensellers@emergent.com",
-        "phone": "+1 (831) 564-2190",
+        "phone": "+1 (831) 564-2190"
       }
     ]
   }
@@ -116,7 +116,7 @@ Grace implements the following features so that you don't have to:
 
   The following type:
 
-     Bool
+    Bool
 
   (input):1:18: 
     │
@@ -125,7 +125,7 @@ Grace implements the following features so that you don't have to:
 
   … cannot be a subtype of:
 
-     Natural
+    Natural
 
   (input):1:8: 
     │
@@ -159,7 +159,8 @@ Grace implements the following features so that you don't have to:
   and open unions.
 
 Also, the package and the code is extensively commented and documented to help
-you get started making changes.
+you get started making changes.  You can also read the
+[CONTRIBUTING](./CONTRIBUTING.md) guide for instructions on how to get started.
 
 ## Notable omissions
 
@@ -284,8 +285,8 @@ These are the issues and pull requests that I'm most likely to reject:
 
 Your fork doesn't need to credit me or this project, beyond what the
 [BSD 3-clause license](./LICENSE) requires.  The only thanks I need is for
-people to use Grace instead of creating yet another half-baked domain-specific
-language using JSON or YAML.
+people to use Grace instead of creating yet another domain-specific language
+embedded in JSON or YAML.
 
 ## Quick tour
 
@@ -464,6 +465,8 @@ Left 1 : forall (a : Alternatives) . < Left: Natural | a >
 
 [ Left 1, Right true ]
   : forall (a : Alternatives) . List < Left: Natural | Right: Bool | a >
+
+Integer/even : Integer -> Bool
 ```
 
 ### Control
