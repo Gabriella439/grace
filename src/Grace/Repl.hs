@@ -1,5 +1,6 @@
--- | This module contains the implementation of the @grace repl@ subcommand
 {-# LANGUAGE OverloadedStrings #-}
+
+-- | This module contains the implementation of the @grace repl@ subcommand
 
 module Grace.Repl
     ( -- * REPL
@@ -33,14 +34,13 @@ repl = evalStateT action []
       Repline.evalReplOpts ReplOpts
         { banner = pure (pure ">>> ")
         , command = interpret
-        , options = [("let", assignment)]
+        , options = [ ("let", assignment), ("type", infer) ]
         , prefix = Just ':'
         , multilineCommand = Nothing
         , tabComplete = Repline.Custom (Repline.listCompleter $ fmap unpack (toList reserved))
         , initialiser = return ()
         , finaliser = return Repline.Exit
         }
-
 
 type Status = [(Text, Type Location, Value)]
 
@@ -64,14 +64,35 @@ assignment string
     | (var, '=' : expr) <- break (== '=') string
     = do
       let input = Code (pack expr)
-          variable = strip (pack var)
+
+      let variable = strip (pack var)
 
       context <- get
-      eitherResult <- Except.runExceptT (Interpret.interpretWith context Nothing input)
+
+      eitherResult <- do
+          Except.runExceptT (Interpret.interpretWith context Nothing input)
 
       case eitherResult of
           Left text -> liftIO (Text.IO.hPutStrLn IO.stderr text)
-          Right (type', value) -> modify ((variable, type', value) :)
+          Right (type_, value) -> modify ((variable, type_, value) :)
 
     | otherwise
     = liftIO (putStrLn "usage: let = {expression}")
+
+infer :: MonadIO m => String -> Repline.HaskelineT (StateT Status m) ()
+infer expr = do
+    let input = Code (pack expr)
+
+    context <- get
+
+    eitherResult <- do
+        Except.runExceptT (Interpret.interpretWith context Nothing input)
+
+    case eitherResult of
+        Left text -> do
+            liftIO (Text.IO.hPutStrLn IO.stderr text)
+
+        Right (type_, _) -> do
+            width <- liftIO $ Grace.Pretty.getWidth
+
+            liftIO (Grace.Pretty.renderIO True width IO.stdout (Grace.Pretty.pretty type_ <> "\n"))
