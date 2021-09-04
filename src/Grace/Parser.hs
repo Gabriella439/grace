@@ -634,6 +634,8 @@ grammar = mdo
                 toAlternatives <-
                     (   do  text_ <- label
                             return (\as -> Type.Alternatives as (Monotype.VariableAlternatives text_))
+                    <|> do  token Lexer.Question
+                            pure (\as -> Type.Alternatives as Monotype.HoleAlternatives)
                     <|> do  pure (\as -> Type.Alternatives as Monotype.EmptyAlternatives)
                     <|> do  a <- alternativeType
                             return (\as -> Type.Alternatives (as <> [ a ]) Monotype.EmptyAlternatives)
