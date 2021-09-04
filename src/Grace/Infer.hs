@@ -2116,7 +2116,6 @@ infer e0 = do
             _Γ <- get
 
             let _L' = Context.solveType _Γ _L
-            let _R' = Context.solveType _Γ _R
 
             case node _L' of
                 Type.Scalar Monotype.Natural -> return _L
@@ -2126,17 +2125,11 @@ infer e0 = do
                     throwError [__i|
                     Invalid operands
 
-                    You cannot add a value of type:
+                    You cannot add values of type:
 
                     #{insert _L'}
 
                     #{Location.renderError "" (Syntax.location l)}
-
-                    … with a value of type:
-
-                    #{insert _R'}
-
-                    #{Location.renderError "" (Syntax.location r)}
                     |]
 
         Syntax.Operator l _ Syntax.Plus r -> do
@@ -2149,7 +2142,6 @@ infer e0 = do
             _Γ <- get
 
             let _L' = Context.solveType _Γ _L
-            let _R' = Context.solveType _Γ _R
 
             case node _L' of
                 Type.Scalar Monotype.Natural -> return _L
@@ -2162,17 +2154,11 @@ infer e0 = do
                     throwError [__i|
                     Invalid operands
 
-                    You cannot add a value of type:
+                    You cannot add values of type:
 
                     #{insert _L'}
 
                     #{Location.renderError "" (Syntax.location l)}
-
-                    … with a value of type:
-
-                    #{insert _R'}
-
-                    #{Location.renderError "" (Syntax.location r)}
                     |]
 
         Syntax.Builtin Syntax.DoubleEqual-> do

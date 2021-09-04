@@ -1,0 +1,5 @@
+# This exercises the check judgment's handling of existential quantification
+{ a: 1 : exists (a : Type) . a
+, b: { } : exists (a : Fields) . { a }
+, c: Left 1 : exists (a : Alternatives) . < a >
+}

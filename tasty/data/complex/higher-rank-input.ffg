@@ -1,0 +1,9 @@
+# This test verifies that higher-rank functions work
+let f : (forall (a : Type) . a -> a) -> Natural -> Natural
+      = \g -> g
+
+let id
+      : forall (a : Type) . a -> a
+      = \x -> x
+
+in  f id

@@ -1,0 +1,5 @@
+# This test illustrates how a type annotation is necessary for higher-rank
+# functions.  In the absence of the annotation the example fails with an
+# unbound type variable error.
+( \id -> [ id : forall (a : Type) . a -> a , \x -> x ]
+) : (forall (a : Type) . a -> a) -> List (forall (a : Type) . a -> a)

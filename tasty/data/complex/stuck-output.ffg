@@ -1,0 +1,6 @@
+{ "a": \x -> \y -> x || y
+, "b": \x -> \y -> x && y
+, "c": \x -> \y -> x + y
+, "d": \x -> \y -> x * y
+, "e": \f -> \x -> List/equal f [ x ] [ x ]
+}

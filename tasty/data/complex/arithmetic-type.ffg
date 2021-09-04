@@ -1,0 +1,17 @@
+{ a: Natural
+, b: Integer
+, c: Double
+, d: Text
+, e: List Bool
+, f: Natural
+, g: Integer
+, h: Double
+, i: Natural
+, j: Integer
+, k: Double
+, l: Text
+, m: List Bool
+, n: Natural
+, o: Integer
+, p: Double
+}

@@ -1,0 +1,5 @@
+# This exercises instantiation of an unsolved variable to a type variable
+{ a: null : forall (a : Type) . Optional a
+, b: null : forall (a : Fields) . Optional { a }
+, c: null : forall (a : Alternatives) . Optional < a >
+}

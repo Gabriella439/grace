@@ -1,0 +1,15 @@
+# This test exercises instantiation of unsolved variable to existentially
+# quantified types
+{ a: null : Optional (exists (a : Type) . a)
+, b: null : Optional (exists (a : Fields) . { a })
+, c: null : Optional (exists (a : Alternatives) . < a >)
+, d: null : Optional (forall (a : Type) . { })
+, e: null : Optional (forall (a : Fields) . { })
+, f: null : Optional (forall (a : Alternatives) . { })
+, g: (null : Optional (exists (a : Type) . { })) : Optional ?
+, h: (null : Optional (exists (a : Fields) . { })) : Optional ?
+, i: (null : Optional (exists (a : Alternatives) . { })) : Optional ?
+, j: (null : Optional (forall (a : Type) . { })) : Optional ?
+, k: (null : Optional (forall (a : Fields) . { })) : Optional ?
+, l: (null : Optional (forall (a : Alternatives) . { })) : Optional ?
+}
