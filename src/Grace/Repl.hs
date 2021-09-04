@@ -16,7 +16,7 @@ import Grace.Lexer (reserved)
 import Grace.Location (Location)
 import Grace.Type (Type)
 import Grace.Value (Value)
-import System.Console.Repline (ReplOpts(..))
+import System.Console.Repline (MultiLine(..), ReplOpts(..))
 
 import qualified Control.Monad.Except         as Except
 import qualified Data.Text.IO                 as Text.IO
@@ -32,15 +32,19 @@ repl = evalStateT action []
   where
     action =
       Repline.evalReplOpts ReplOpts
-        { banner = pure (pure ">>> ")
+        { banner = prompt
         , command = interpret
         , options = [ ("let", assignment), ("type", infer) ]
         , prefix = Just ':'
-        , multilineCommand = Nothing
+        , multilineCommand = Just "paste"
         , tabComplete = Repline.Custom (Repline.listCompleter $ fmap unpack (toList reserved))
         , initialiser = return ()
         , finaliser = return Repline.Exit
         }
+
+prompt :: Monad m => MultiLine -> m String
+prompt MultiLine  = return "... "
+prompt SingleLine = return ">>> "
 
 type Status = [(Text, Type Location, Value)]
 
