@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications  #-}
 
 -- | This module contains the implementation of the @grace repl@ subcommand
 
@@ -9,7 +10,7 @@ module Grace.Repl
     ) where
 
 import Control.Monad.IO.Class (liftIO, MonadIO)
-import Control.Monad.State (MonadState(..))
+import Control.Monad.State (MonadState(..), StateT)
 import Data.Foldable (toList)
 import Data.Text (pack, strip, unpack, Text)
 import Grace.Interpret (Input(..))
@@ -17,7 +18,14 @@ import Grace.Lexer (reserved)
 import Grace.Location (Location)
 import Grace.Type (Type)
 import Grace.Value (Value)
-import System.Console.Repline (MultiLine(..), ReplOpts(..))
+
+import System.Console.Repline
+    ( Cmd
+    , CompleterStyle(..)
+    , MultiLine(..)
+    , Options
+    , ReplOpts(..)
+    )
 
 import qualified Control.Monad.Except   as Except
 import qualified Control.Monad.State    as State
@@ -36,10 +44,10 @@ repl = State.evalStateT action []
       Repline.evalReplOpts ReplOpts
         { banner = prompt
         , command = interpret
-        , options = [ ("let", assignment), ("type", infer) ]
+        , options = commands
         , prefix = Just ':'
         , multilineCommand = Just "paste"
-        , tabComplete = Repline.Custom (Repline.listCompleter $ fmap unpack (toList reserved))
+        , tabComplete = complete
         , initialiser = return ()
         , finaliser = return Repline.Exit
         }
@@ -50,7 +58,10 @@ prompt SingleLine = return ">>> "
 
 type Status = [(Text, Type Location, Value)]
 
-interpret :: (MonadState Status m, MonadIO m) => String -> m ()
+commands :: (MonadState Status m, MonadIO m) => Options m
+commands = [ ("let", assignment), ("type", infer) ]
+
+interpret :: (MonadState Status m, MonadIO m) => Cmd m
 interpret string = do
     let input = Code (pack string)
 
@@ -65,7 +76,7 @@ interpret string = do
             width <- liftIO $ Grace.Pretty.getWidth
             liftIO $ Grace.Pretty.renderIO True width IO.stdout (Grace.Pretty.pretty syntax <> "\n")
 
-assignment :: (MonadState Status m, MonadIO m) => String -> m ()
+assignment :: (MonadState Status m, MonadIO m) => Cmd m
 assignment string
     | (var, '=' : expr) <- break (== '=') string
     = do
@@ -85,7 +96,7 @@ assignment string
     | otherwise
     = liftIO (putStrLn "usage: let = {expression}")
 
-infer :: (MonadState Status m, MonadIO m) => String -> m ()
+infer :: (MonadState Status m, MonadIO m) => Cmd m
 infer expr = do
     let input = Code (pack expr)
 
@@ -102,3 +113,14 @@ infer expr = do
             width <- liftIO $ Grace.Pretty.getWidth
 
             liftIO (Grace.Pretty.renderIO True width IO.stdout (Grace.Pretty.pretty type_ <> "\n"))
+
+complete :: Monad m => CompleterStyle m
+complete =
+    Custom (Repline.runMatcher [ (":", completeCommands) ] completeIdentifiers)
+  where
+    completeCommands =
+        Repline.listCompleter (fmap adapt (commands @(StateT Status IO)))
+      where
+        adapt (c, _) = ":" <> c
+
+    completeIdentifiers = Repline.listCompleter (fmap unpack (toList reserved))
