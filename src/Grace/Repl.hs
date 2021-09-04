@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 -- | This module contains the implementation of the @grace repl@ subcommand
@@ -8,7 +9,7 @@ module Grace.Repl
     ) where
 
 import Control.Monad.IO.Class (liftIO, MonadIO)
-import Control.Monad.State (evalStateT, get, modify, StateT)
+import Control.Monad.State (MonadState(..))
 import Data.Foldable (toList)
 import Data.Text (pack, strip, unpack, Text)
 import Grace.Interpret (Input(..))
@@ -18,17 +19,18 @@ import Grace.Type (Type)
 import Grace.Value (Value)
 import System.Console.Repline (MultiLine(..), ReplOpts(..))
 
-import qualified Control.Monad.Except         as Except
-import qualified Data.Text.IO                 as Text.IO
-import qualified Grace.Interpret              as Interpret
-import qualified Grace.Normalize              as Normalize
-import qualified Grace.Pretty                 as Grace.Pretty
-import qualified System.Console.Repline       as Repline
-import qualified System.IO                    as IO
+import qualified Control.Monad.Except   as Except
+import qualified Control.Monad.State    as State
+import qualified Data.Text.IO           as Text.IO
+import qualified Grace.Interpret        as Interpret
+import qualified Grace.Normalize        as Normalize
+import qualified Grace.Pretty           as Grace.Pretty
+import qualified System.Console.Repline as Repline
+import qualified System.IO              as IO
 
 -- | Entrypoint for the @grace repl@ subcommand
 repl :: IO ()
-repl = evalStateT action []
+repl = State.evalStateT action []
   where
     action =
       Repline.evalReplOpts ReplOpts
@@ -48,7 +50,7 @@ prompt SingleLine = return ">>> "
 
 type Status = [(Text, Type Location, Value)]
 
-interpret :: MonadIO m => String -> Repline.HaskelineT (StateT Status m) ()
+interpret :: (MonadState Status m, MonadIO m) => String -> m ()
 interpret string = do
     let input = Code (pack string)
 
@@ -63,7 +65,7 @@ interpret string = do
             width <- liftIO $ Grace.Pretty.getWidth
             liftIO $ Grace.Pretty.renderIO True width IO.stdout (Grace.Pretty.pretty syntax <> "\n")
 
-assignment :: MonadIO m => String -> Repline.HaskelineT (StateT Status m) ()
+assignment :: (MonadState Status m, MonadIO m) => String -> m ()
 assignment string
     | (var, '=' : expr) <- break (== '=') string
     = do
@@ -78,12 +80,12 @@ assignment string
 
       case eitherResult of
           Left text -> liftIO (Text.IO.hPutStrLn IO.stderr text)
-          Right (type_, value) -> modify ((variable, type_, value) :)
+          Right (type_, value) -> State.modify ((variable, type_, value) :)
 
     | otherwise
     = liftIO (putStrLn "usage: let = {expression}")
 
-infer :: MonadIO m => String -> Repline.HaskelineT (StateT Status m) ()
+infer :: (MonadState Status m, MonadIO m) => String -> m ()
 infer expr = do
     let input = Code (pack expr)
 
