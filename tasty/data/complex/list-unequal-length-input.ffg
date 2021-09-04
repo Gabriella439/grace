@@ -1,1 +1,2 @@
+# This verifies that `List/equal` returns `false` for lists of unequal length
 \f -> \x -> List/equal f [ x ] [ ]

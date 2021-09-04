@@ -1,1 +1,2 @@
+# This test checks that subtyping works for `List/equal`
 List/equal Double/equal [ 2.0, 3 ] [ 2, 3.0 ]
