@@ -120,6 +120,7 @@ parseToken =
             , Optional <$ symbol "Optional"
             , Double   <$ symbol "Double"
             , Integer  <$ symbol "Integer"
+            , JSON     <$ symbol "JSON"
             , Natural  <$ symbol "Natural"
             , Bool     <$ symbol "Bool"
             , Text     <$ symbol "Text"
@@ -364,6 +365,7 @@ data Token
     | IntegerEven
     | IntegerNegate
     | IntegerOdd
+    | JSON
     | Label Text
     | Lambda
     | Let

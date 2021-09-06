@@ -165,6 +165,7 @@ render t = case t of
     Lexer.IntegerEven      -> "Integer/even"
     Lexer.IntegerNegate    -> "Integer/negate"
     Lexer.IntegerOdd       -> "Integer/odd"
+    Lexer.JSON             -> "JSON"
     Lexer.Label _          -> "a label"
     Lexer.Lambda           -> "\\"
     Lexer.Let              -> "let"
@@ -586,6 +587,8 @@ grammar = mdo
                 return Type{ node = Type.Scalar Monotype.Double, .. }
         <|> do  location <- locatedToken Lexer.Integer
                 return Type{ node = Type.Scalar Monotype.Integer, .. }
+        <|> do  location <- locatedToken Lexer.JSON
+                return Type{ node = Type.Scalar Monotype.JSON, .. }
         <|> do  location <- locatedToken Lexer.Natural
                 return Type{ node = Type.Scalar Monotype.Natural, .. }
         <|> do  location <- locatedToken Lexer.Text

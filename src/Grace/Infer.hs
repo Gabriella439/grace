@@ -2439,6 +2439,25 @@ check e@Syntax{ node = Syntax.Record keyValues } _B@Type{ node = Type.Record (Ty
 
         check e' _B'
 
+check Syntax{ node = Syntax.Record keyValues } _B@Type{ node = Type.Scalar Monotype.JSON } = do
+    let process (_, value) = check value _B
+
+    traverse_ process keyValues
+check Syntax{ node = Syntax.List elements } _B@Type{ node = Type.Scalar Monotype.JSON } = do
+    traverse_ (`check` _B) elements
+check Syntax{ node = Syntax.Scalar (Syntax.Text _) } _B@Type{ node = Type.Scalar Monotype.JSON } = do
+    return ()
+check Syntax{ node = Syntax.Scalar (Syntax.Natural _) } _B@Type{ node = Type.Scalar Monotype.JSON } = do
+    return ()
+check Syntax{ node = Syntax.Scalar (Syntax.Integer _) } _B@Type{ node = Type.Scalar Monotype.JSON } = do
+    return ()
+check Syntax{ node = Syntax.Scalar (Syntax.Double _) } _B@Type{ node = Type.Scalar Monotype.JSON } = do
+    return ()
+check Syntax{ node = Syntax.Scalar (Syntax.Bool _) } _B@Type{ node = Type.Scalar Monotype.JSON } = do
+    return ()
+check Syntax{ node = Syntax.Scalar Syntax.Null } _B@Type{ node = Type.Scalar Monotype.JSON } = do
+    return ()
+
 -- Sub
 check e _B = do
     _A <- infer e

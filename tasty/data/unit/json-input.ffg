@@ -1,0 +1,8 @@
+{ array: [ 2, 3, 5 ]
+, string: "ABC"
+, natural: 0
+, integer: -1
+, double: 1.0
+, bool: true
+, "null": null
+} : JSON
