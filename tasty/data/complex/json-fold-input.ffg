@@ -6,6 +6,6 @@ JSON/fold
   , "string": \_ -> 2
   , "null": 3
   , "object": List/length
-  , "array": \vs -> List/fold vs (\x -> \y -> x + y : Natural) 0
+  , "array": List/fold { cons: \x -> \y -> x + y : Natural, nil: 0 }
   }
   [ true, 1, [ -2, false, "" ], null, { foo: { } } ]

@@ -2212,19 +2212,23 @@ infer e0 = do
                     Type.Forall (Syntax.location e0) "a" Domain.Type _Type
                         { node =
                             Type.Forall (Syntax.location e0) "b" Domain.Type
-                                (   _Type{ node = Type.List _Type{ node = "a" } }
-                                ~>  (   (   _Type{ node = "a" }
-                                        ~>  ( _Type{ node = "b" }
-                                            ~>  _Type{ node = "b" }
-                                            )
-                                        )
-                                    ~>  (   _Type{ node = "b" }
-                                        ~>  _Type{ node = "b" }
-                                        )
+                                (   _Type
+                                        { node =
+                                            Type.Record
+                                                (Type.Fields
+                                                    [ ("cons", _Type{ node = "a" } ~> (_Type{ node = "b" } ~> _Type{ node = "b" }))
+                                                    , ("nil", _Type{ node = "b" })
+                                                    ]
+                                                    Monotype.EmptyFields
+                                                )
+                                        }
+                                ~>  (   _Type{ node = Type.List _Type{ node = "a" } }
+                                    ~>  _Type{ node = "b" }
                                     )
                                 )
                         }
                 }
+
 
         Syntax.Builtin Syntax.ListLength -> do
             return _Type

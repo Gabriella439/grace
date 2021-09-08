@@ -1,1 +1,1 @@
-List/fold [ 2, 3 ] (\x -> \y -> x + y) 0
+List/fold { cons: \x -> \y -> (x + y) : Natural, nil: 0 } [ 2, 3 ]

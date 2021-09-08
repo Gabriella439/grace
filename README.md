@@ -187,8 +187,8 @@ Grace does not support the following language features:
 
 * Recursion or recursive data types
 
-  Grace only supports one built-in recursive type, which is `JSON`, but does
-  not support user-defined recursion or anonymous recursion.
+  Grace only supports two built-in recursive types, which are `List` and `JSON`,
+  but does not support user-defined recursion or anonymous recursion.
 
 * String interpolation
 
@@ -565,7 +565,7 @@ You can also use the built-in functions, including:
   mainly included as reference implementations for how to implement a simple
   function.
 
-* `List/fold : forall (a : Type) . forall (b : Type) . List a -> (a -> b -> b) -> b -> b`
+* `List/fold : forall (a : Type) .  forall (b : Type) .  { cons: a -> b -> b, nil: b } -> List a -> b`
 
   Canonical fold for a `List`, also known as a "right fold" or `foldr` in many
   languages

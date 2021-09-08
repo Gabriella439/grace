@@ -271,17 +271,19 @@ apply
         equal l r = apply (apply f l) r
 apply
     (Value.Application
-        (Value.Application
-            (Value.Builtin ListFold)
-            (Value.List elements)
+        (Value.Builtin ListFold)
+        (Value.Record
+            (List.sortBy (Ord.comparing fst) ->
+                [ ("cons"  , cons)
+                , ("nil"   , nil)
+                ]
+            )
         )
-        cons
     )
-    nil =
-        go elements nil
+    (Value.List elements) = loop elements nil
   where
-    go      []  !result = result
-    go (x : xs) !result = go xs (apply (apply cons x) result)
+    loop      []  !result = result
+    loop (x : xs) !result = loop xs (apply (apply cons x) result)
 apply (Value.Builtin ListLength) (Value.List elements) =
     Value.Scalar (Natural (fromIntegral (length elements)))
 apply
