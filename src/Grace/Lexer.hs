@@ -108,6 +108,7 @@ parseToken =
             , IntegerEven    <$ symbol "Integer/even"
             , IntegerNegate  <$ symbol "Integer/negate"
             , IntegerOdd     <$ symbol "Integer/odd"
+            , JSONFold       <$ symbol "JSON/fold"
             , NaturalFold    <$ symbol "Natural/fold"
             , TextEqual      <$ symbol "Text/equal"
             , False_         <$ symbol "false"
@@ -366,6 +367,7 @@ data Token
     | IntegerNegate
     | IntegerOdd
     | JSON
+    | JSONFold
     | Label Text
     | Lambda
     | Let

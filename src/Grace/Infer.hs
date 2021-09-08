@@ -2275,6 +2275,48 @@ infer e0 = do
                 ~>  _Type{ node = Type.Scalar Monotype.Bool }
                 )
 
+        Syntax.Builtin Syntax.JSONFold -> do
+            return _Type
+                { node =
+                    Type.Forall (Syntax.location e0) "a" Domain.Type
+                        (   _Type
+                                { node =
+                                    Type.Record
+                                        (Type.Fields
+                                            [ ( "array", _Type{ node = Type.List _Type{ node = "a" } } ~> _Type{ node = "a" })
+                                            , ("bool", _Type{ node = Type.Scalar Monotype.Bool } ~> _Type{ node = "a" })
+                                            , ("double", _Type{ node = Type.Scalar Monotype.Double } ~> _Type{ node = "a" })
+                                            , ("integer", _Type{ node = Type.Scalar Monotype.Integer } ~> _Type{ node = "a" })
+                                            , ("natural", _Type{ node = Type.Scalar Monotype.Natural } ~> _Type{ node = "a" })
+                                            , ("null", _Type{ node = "a" })
+                                            , ( "object"
+                                              ,     _Type
+                                                        { node =
+                                                            Type.List
+                                                                _Type
+                                                                    { node =
+                                                                        Type.Record
+                                                                            (Type.Fields
+                                                                                [ ("key", _Type{ node = Type.Scalar Monotype.Text })
+                                                                                , ("value", _Type{ node = "a" })
+                                                                                ]
+                                                                                Monotype.EmptyFields
+                                                                            )
+                                                                    }
+                                                        }
+                                                ~>  _Type{ node = "a" }
+                                              )
+                                            , ("string", _Type{ node = Type.Scalar Monotype.Text } ~> _Type{ node = "a" })
+                                            ]
+                                            Monotype.EmptyFields
+                                        )
+                                }
+                        ~>  (   _Type{ node = Type.Scalar Monotype.JSON }
+                            ~>  _Type{ node = "a" }
+                            )
+                        )
+                }
+
         Syntax.Builtin Syntax.NaturalFold -> do
             return _Type
                 { node =

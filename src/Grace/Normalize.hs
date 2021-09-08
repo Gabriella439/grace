@@ -3,6 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms   #-}
 {-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE ViewPatterns      #-}
 
 -- | This module contains the logic for efficiently evaluating an expression
 module Grace.Normalize
@@ -19,6 +20,8 @@ import Grace.Type (Type)
 import Grace.Value (Closure(..), Value)
 import Prelude hiding (succ)
 
+import qualified Data.List    as List
+import qualified Data.Ord     as Ord
 import qualified Data.Text    as Text
 import qualified Grace.Value  as Value
 import qualified Grace.Syntax as Syntax
@@ -330,6 +333,45 @@ apply
     (Value.Application (Value.Builtin TextEqual) (Value.Scalar (Text l)))
     (Value.Scalar (Text r)) =
         Value.Scalar (Bool (l == r))
+apply
+    (Value.Application
+        (Value.Builtin JSONFold)
+        (Value.Record
+            (List.sortBy (Ord.comparing fst) ->
+                [ ("array"  , arrayHandler )
+                , ("bool"   , boolHandler  )
+                , ("double" , doubleHandler)
+                , ("integer", integerHandler)
+                , ("natural", naturalHandler)
+                , ("null"   , nullHandler   )
+                , ("object" , objectHandler )
+                , ("string" , stringHandler )
+                ]
+            )
+        )
+    )
+    v = loop v
+  where
+    loop (Value.Scalar (Bool b)) =
+        apply boolHandler (Value.Scalar (Bool b))
+    loop (Value.Scalar (Natural n)) =
+        apply naturalHandler (Value.Scalar (Natural n))
+    loop (Value.Scalar (Integer n)) =
+        apply integerHandler (Value.Scalar (Integer n))
+    loop (Value.Scalar (Double n)) =
+        apply doubleHandler (Value.Scalar (Double n))
+    loop (Value.Scalar (Text t)) =
+        apply stringHandler (Value.Scalar (Text t))
+    loop (Value.Scalar Null) =
+        nullHandler
+    loop (Value.List elements) =
+        apply arrayHandler (Value.List (fmap loop elements))
+    loop (Value.Record keyValues) =
+        apply objectHandler (Value.List keyValues')
+      where
+        keyValues' = do
+            (key, value) <- keyValues
+            return (Value.Record [("key", Value.Scalar (Text key)), ("value", loop value)])
 apply function argument =
     Value.Application function argument
 

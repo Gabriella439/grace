@@ -166,6 +166,7 @@ render t = case t of
     Lexer.IntegerNegate    -> "Integer/negate"
     Lexer.IntegerOdd       -> "Integer/odd"
     Lexer.JSON             -> "JSON"
+    Lexer.JSONFold         -> "JSON/fold"
     Lexer.Label _          -> "a label"
     Lexer.Lambda           -> "\\"
     Lexer.Let              -> "let"
@@ -447,6 +448,10 @@ grammar = mdo
         <|> do  location <- locatedToken Lexer.IntegerOdd
 
                 return Syntax{ node = Syntax.Builtin Syntax.IntegerOdd, .. }
+
+        <|> do  location <- locatedToken Lexer.JSONFold
+
+                return Syntax{ node = Syntax.Builtin Syntax.JSONFold, .. }
 
         <|> do  location <- locatedToken Lexer.NaturalFold
 

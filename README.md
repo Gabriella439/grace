@@ -187,8 +187,8 @@ Grace does not support the following language features:
 
 * Recursion or recursive data types
 
-  This is the feature I'd most like to add, especially if there were some way
-  to implement anonymous recursion, but I couldn't find a simple solution.
+  Grace only supports one built-in recursive type, which is `JSON`, but does
+  not support user-defined recursion or anonymous recursion.
 
 * String interpolation
 
@@ -396,6 +396,10 @@ Grace supports the following Scalar types:
   need to specify the type of the union, since union types are open and
   inferred.
 
+* JSON, such as `[ 1, [ true, "" ] ]`
+
+  … which is a supertype of all expressions that are also valid JSON.
+
 Note that unions are the only data structure that is not JSON-compatible,
 since JSON does not support unions.
 
@@ -467,6 +471,8 @@ Left 1 : forall (a : Alternatives) . < Left: Natural | a >
   : forall (a : Alternatives) . List < Left: Natural | Right: Bool | a >
 
 Integer/even : Integer -> Bool
+
+[ 1, true ] : JSON  # Any expression that is valid JSON type-checks as `JSON`
 ```
 
 ### Control
@@ -819,6 +825,62 @@ $ grace interpret --annotate - <<< '[ Left 1, Right true ]'
 The type is universally quantified over the extra union alternatives, meaning
 that the union is "open" and we can keep adding new alternatives.  We don't
 need to specify the desired type or set of alternatives in advance.
+
+### JSON
+
+You can make all sorts of weird expressions type-check by adding a type
+annotation of `JSON`:
+
+```dhall
+[ true, 1, [ -2, false, "" ], null, { foo: { } } ] : JSON
+```
+
+… but the only way you can consume an expression of type `JSON` is to use
+`JSON/fold`, which has the following type:
+
+```dhall
+JSON/fold
+  : forall (a : Type) .
+      { array: List a -> a
+      , bool: Bool -> a
+      , double: Double -> a
+      , integer: Integer -> a
+      , natural: Natural -> a
+      , "null": a
+      , object: List { key: Text, value: a } -> a
+      , string: Text -> a
+      } ->
+      JSON ->
+        a
+```
+
+This is similar in spirit to a `merge` expression where you need to specify how
+to handle every possible case that the JSON value could possibly be.
+
+For example, the following expression
+
+```dhall
+JSON/fold
+  { "bool": \b -> if b then 1 else 0
+  , "natural": \x -> x
+  , "integer": Integer/abs
+  , "double": \_ -> 1
+  , "string": \_ -> 2
+  , "null": 3
+  , "object": List/length
+  , "array": \vs -> List/fold vs (\x -> \y -> x + y : Natural) 0
+  }
+  [ true, 1, [ -2, false, "" ], null, { foo: { } } ]
+```
+
+… evaluates to `10`.
+
+There is no other way to consume a `JSON` value other than to specify how to
+handle every single case, because once you annotate a value as having type
+`JSON` then the interpreter can no longer guarantee that the value is a `List`,
+record, or a specific scalar value.  This is why you should prefer to use a
+more precise type annotation if possible and only use `JSON` as a type
+annotation as a last resort.
 
 ### Imports
 

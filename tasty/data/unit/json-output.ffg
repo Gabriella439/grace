@@ -5,4 +5,5 @@
 , "double": 1.0
 , "bool": true
 , "null": null
+, "mixed": [ 1, -1, true ]
 }

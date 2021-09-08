@@ -352,6 +352,10 @@ data Builtin
     -- ^
     --   >>> pretty IntegerAbs
     --   Integer/abs
+    | JSONFold
+    -- ^
+    --   >>> pretty JSONFold
+    --   JSON/fold
     | NaturalFold
     -- ^
     --   >>> pretty NaturalFold
@@ -367,14 +371,15 @@ instance Pretty Builtin where
     pretty DoubleLessThan = builtin "Double/lessThan"
     pretty DoubleNegate   = builtin "Double/negate"
     pretty DoubleShow     = builtin "Double/show"
-    pretty ListEqual      = builtin "List/equal"
-    pretty ListFold       = builtin "List/fold"
-    pretty ListLength     = builtin "List/length"
-    pretty ListMap        = builtin "List/map"
     pretty IntegerAbs     = builtin "Integer/abs"
     pretty IntegerEven    = builtin "Integer/even"
     pretty IntegerNegate  = builtin "Integer/negate"
     pretty IntegerOdd     = builtin "Integer/odd"
+    pretty JSONFold       = builtin "JSON/fold"
+    pretty ListEqual      = builtin "List/equal"
+    pretty ListFold       = builtin "List/fold"
+    pretty ListLength     = builtin "List/length"
+    pretty ListMap        = builtin "List/map"
     pretty NaturalFold    = builtin "Natural/fold"
     pretty TextEqual      = builtin "Text/equal"
 
