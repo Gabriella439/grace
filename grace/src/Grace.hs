@@ -10,6 +10,7 @@
 module Grace
     ( -- * Main
       main
+    , mainWith
     ) where
 
 import Control.Applicative (many, (<|>))
@@ -170,7 +171,11 @@ throws (Right result) = do
 
 -- | Command-line entrypoint
 main :: IO ()
-main = do
+main = mainWith Interpret.defaultInterpretSettings
+
+-- | Command-line entrypoint
+mainWith :: Interpret.InterpretSettings -> IO ()
+mainWith settings = do
     options <- Options.execParser parserInfo
 
     case options of
@@ -183,7 +188,7 @@ main = do
                     return (Path file)
 
             eitherResult <- do
-                Except.runExceptT (Interpret.interpret Nothing input)
+                Except.runExceptT (Interpret.interpretWith settings [] Nothing input)
 
             (inferred, value) <- throws eitherResult
 
@@ -222,7 +227,7 @@ main = do
             let expected = Type{ node = Type.Scalar Monotype.Text, .. }
 
             eitherResult <- do
-                Except.runExceptT (Interpret.interpret (Just expected) input)
+                Except.runExceptT (Interpret.interpretWith settings [] (Just expected) input)
 
             (_, value) <- throws eitherResult
 
@@ -301,4 +306,4 @@ main = do
                     traverse_ (\b -> Text.IO.putStrLn "" >> displayBuiltin b) bs
 
         Repl{} -> do
-            Repl.repl
+            Repl.replWith settings
