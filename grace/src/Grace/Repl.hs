@@ -9,9 +9,8 @@ module Grace.Repl
       repl
     ) where
 
-import Control.Monad.Catch (MonadCatch)
-import Control.Exception (displayException)
-import Control.Monad.IO.Class (liftIO, MonadIO)
+import Control.Exception.Safe (MonadThrow, displayException)
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.State (MonadState(..), StateT)
 import Data.Foldable (toList)
 import Data.Text (pack, strip, unpack, Text)
@@ -60,15 +59,12 @@ prompt SingleLine = return ">>> "
 
 type Status = [(Text, Type Location, Value)]
 
-commands :: (MonadState Status m, MonadCatch m, MonadIO m) => Options m
-commands =
-    [ ("let", Repline.dontCrash . assignment)
-    , ("type", Repline.dontCrash . infer)
-    ]
+commands :: (MonadIO m, MonadState Status m, MonadThrow m) => Options m
+commands = [ ("let", assignment), ("type", infer) ]
 
-interpret :: (MonadState Status m, MonadIO m) => Cmd m
+interpret :: (MonadIO m, MonadState Status m, MonadThrow m) => Cmd m
 interpret string = do
-    let input = Code (pack string)
+    let input = Code "(input)" (pack string)
 
     context <- get
     eitherResult <- Except.runExceptT (Interpret.interpretWith context Nothing input)
@@ -81,11 +77,11 @@ interpret string = do
             width <- liftIO Grace.Pretty.getWidth
             liftIO (Grace.Pretty.renderIO True width IO.stdout (Grace.Pretty.pretty syntax <> "\n"))
 
-assignment :: (MonadState Status m, MonadIO m) => Cmd m
+assignment :: (MonadIO m, MonadState Status m, MonadThrow m) => Cmd m
 assignment string
     | (var, '=' : expr) <- break (== '=') string
     = do
-      let input = Code (pack expr)
+      let input = Code "(input)" (pack expr)
 
       let variable = strip (pack var)
 
@@ -101,9 +97,9 @@ assignment string
     | otherwise
     = liftIO (putStrLn "usage: let = {expression}")
 
-infer :: (MonadState Status m, MonadIO m) => Cmd m
+infer :: (MonadIO m, MonadState Status m, MonadThrow m) => Cmd m
 infer expr = do
-    let input = Code (pack expr)
+    let input = Code "(input)" (pack expr)
 
     context <- get
 

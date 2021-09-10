@@ -18,19 +18,23 @@ library
                      , insert-ordered-containers
                      , lens
                      , megaparsec
+                     , modern-uri
                      , mtl
                      , parser-combinators
                      , prettyprinter
                      , prettyprinter-ansi-terminal
+                     , safe-exceptions
                      , scientific
                      , string-interpolate
                      , template-haskell
                      , terminal-size
                      , text
+                     , typed-process
                      , unordered-containers
   exposed-modules:     Grace.Context
                      , Grace.Domain
                      , Grace.Existential
+                     , Grace.Import
                      , Grace.Interpret
                      , Grace.Infer
                      , Grace.Lexer

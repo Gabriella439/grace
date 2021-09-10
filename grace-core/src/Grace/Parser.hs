@@ -31,6 +31,7 @@ import Data.Functor (void)
 import Data.List.NonEmpty (NonEmpty(..), some1)
 import Data.Scientific (Scientific)
 import Data.Text (Text)
+import Grace.Import (Import)
 import Grace.Lexer (LocatedToken(LocatedToken), ParseError(ParsingFailed), Token)
 import Grace.Location (Location(..), Offset(..))
 import Grace.Syntax (Binding(..), Syntax(..))
@@ -41,11 +42,13 @@ import qualified Data.List.NonEmpty     as NonEmpty
 import qualified Data.Sequence          as Seq
 import qualified Data.Text              as Text
 import qualified Grace.Domain           as Domain
+import qualified Grace.Import           as Import
 import qualified Grace.Lexer            as Lexer
 import qualified Grace.Monotype         as Monotype
 import qualified Grace.Syntax           as Syntax
 import qualified Grace.Type             as Type
 import qualified Text.Earley            as Earley
+import qualified Text.URI               as URI
 
 type Parser r = Prod r Text LocatedToken
 
@@ -72,6 +75,10 @@ matchText  _                    = Nothing
 matchFile :: Token -> Maybe FilePath
 matchFile (Lexer.File f) = Just f
 matchFile  _             = Nothing
+
+matchURI :: Token -> Maybe URI.URI
+matchURI (Lexer.URI t) = Just t
+matchURI  _            = Nothing
 
 terminal :: (Token -> Maybe a) -> Parser r a
 terminal match = Earley.terminal match'
@@ -119,6 +126,9 @@ locatedText = locatedTerminal matchText
 
 locatedFile :: Parser r (Offset, FilePath)
 locatedFile = locatedTerminal matchFile
+
+locatedURI :: Parser r (Offset, URI.URI)
+locatedURI = locatedTerminal matchURI
 
 locatedToken :: Token -> Parser r Offset
 locatedToken expectedToken =
@@ -204,8 +214,9 @@ render t = case t of
     Lexer.Type             -> "Type"
     Lexer.Times            -> "*"
     Lexer.True_            -> "True"
+    Lexer.URI _            -> "an URI"
 
-grammar :: Grammar r (Parser r (Syntax Offset FilePath))
+grammar :: Grammar r (Parser r (Syntax Offset Import))
 grammar = mdo
     expression <- rule
         -- The reason all of these rules use a `let f … = …` at the beginning
@@ -505,9 +516,17 @@ grammar = mdo
 
         <|> do  let f (location, file) = Syntax{..}
                       where
-                        node = Syntax.Embed file
+                        node = Syntax.Embed (Import.File file)
 
                 located <- locatedFile
+
+                return (f located)
+
+        <|> do  let f (location, uri) = Syntax{..}
+                      where
+                        node = Syntax.Embed (Import.URI uri)
+
+                located <- locatedURI
 
                 return (f located)
 
@@ -713,7 +732,7 @@ parse
     -- ^ Name of the input (used for error messages)
     -> Text
     -- ^ Source code
-    -> Either ParseError (Syntax Offset FilePath)
+    -> Either ParseError (Syntax Offset Import)
 parse name code = do
     tokens <- Lexer.lex name code
 

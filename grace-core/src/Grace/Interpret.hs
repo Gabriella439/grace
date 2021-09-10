@@ -15,9 +15,9 @@ module Grace.Interpret
     , InterpretError(..)
     ) where
 
-import Control.Exception (Exception(..))
+import Control.Exception.Safe (Exception(..), MonadThrow)
 import Control.Monad.Except (MonadError(..))
-import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Bifunctor (Bifunctor(..))
 import Data.Generics.Product (the)
 import Data.Text (Text)
@@ -31,11 +31,13 @@ import qualified Control.Lens         as Lens
 import qualified Control.Monad.Except as Except
 import qualified Data.Text.IO         as Text.IO
 import qualified Grace.Context        as Context
+import qualified Grace.Import         as Import
 import qualified Grace.Infer          as Infer
 import qualified Grace.Normalize      as Normalize
 import qualified Grace.Parser         as Parser
 import qualified Grace.Syntax         as Syntax
 import qualified System.FilePath      as FilePath
+import qualified Text.URI             as URI
 
 {-| Input to the `interpret` function
 
@@ -46,8 +48,8 @@ import qualified System.FilePath      as FilePath
 data Input
     = Path FilePath
     -- ^ The path to the code
-    | Code Text
-    -- ^ Source code
+    | Code String Text
+    -- ^ Source code: @Code name content@
 
 {-| Interpret Grace source code, return the inferred type and the evaluated
     result
@@ -55,7 +57,7 @@ data Input
     This is the top-level function for the Grace interpreter
 -}
 interpret
-    :: (MonadError InterpretError m, MonadIO m)
+    :: (MonadError InterpretError m, MonadIO m, MonadThrow m)
     => Maybe (Type Location)
     -- ^ Optional expected type for the input
     -> Input
@@ -64,7 +66,7 @@ interpret = interpretWith []
 
 -- | Like `interpret`, but accepts a custom list of bindings
 interpretWith
-    :: (MonadError InterpretError m, MonadIO m)
+    :: (MonadError InterpretError m, MonadIO m, MonadThrow m)
     => [(Text, Type Location, Value)]
     -- ^ @(name, type, value)@ for each custom binding
     -> Maybe (Type Location)
@@ -73,12 +75,12 @@ interpretWith
     -> m (Type Location, Value)
 interpretWith bindings maybeAnnotation input = do
     code <- case input of
-        Path file -> liftIO (Text.IO.readFile file)
-        Code text -> return text
+        Path file   -> liftIO (Text.IO.readFile file)
+        Code _ text -> return text
 
     let name = case input of
             Path file -> file
-            Code _    -> "(input)"
+            Code n _  -> n
 
     expression <- case Parser.parse name code of
         Left message -> do
@@ -89,12 +91,15 @@ interpretWith bindings maybeAnnotation input = do
 
             return (first locate expression)
 
-    let resolve (maybeAnnotation', file) =
+    let resolve (maybeAnnotation', Import.File file) =
             interpretWith bindings maybeAnnotation' (Path path)
           where
             path = case input of
                 Path parent -> FilePath.takeDirectory parent </> file
-                Code _      -> file
+                Code _ _    -> file
+        resolve (maybeAnnotation', Import.URI uri) = do
+            text <- Import.resolveURI uri
+            interpretWith bindings maybeAnnotation' (Code (URI.renderStr uri) text)
 
     resolvedExpression <- traverse resolve (annotate expression)
 

@@ -127,7 +127,7 @@ main = do
 
 interpretCodeWithImport :: TestTree
 interpretCodeWithImport = Tasty.HUnit.testCase "interpret code with import" do
-    actualValue <- Except.runExceptT (Interpret.interpret Nothing (Interpret.Code "./tasty/data/unit/plus-input.ffg"))
+    actualValue <- Except.runExceptT (Interpret.interpret Nothing (Interpret.Code "(input)" "./tasty/data/unit/plus-input.ffg"))
 
     let expectedValue =
             Right (Type{ location, node }, Value.Scalar (Syntax.Natural 5))
@@ -140,7 +140,7 @@ interpretCodeWithImport = Tasty.HUnit.testCase "interpret code with import" do
 
 interpretCode :: TestTree
 interpretCode = Tasty.HUnit.testCase "interpret code with import" do
-    actualValue <- Except.runExceptT (Interpret.interpret Nothing (Interpret.Code "2 + 2"))
+    actualValue <- Except.runExceptT (Interpret.interpret Nothing (Interpret.Code "(input)" "2 + 2"))
 
     let expectedValue =
             Right (Type{ location, node }, Value.Scalar (Syntax.Natural 4))

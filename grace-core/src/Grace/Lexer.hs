@@ -59,6 +59,7 @@ import qualified Text.Megaparsec            as Megaparsec
 import qualified Text.Megaparsec.Char       as Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as Lexer
 import qualified Text.Megaparsec.Error      as Error
+import qualified Text.URI                   as URI
 
 -- | Short-hand type synonym used by lexing utilities
 type Parser = Megaparsec.Parsec Void Text
@@ -78,6 +79,7 @@ parseToken =
         [ -- `file` has to come before the lexer for `.` so that a file
           -- prefix of `.` or `..` is not lexed as a field access
           file
+        , uri
         , label
 
         , Combinators.choice
@@ -221,6 +223,14 @@ file = lexeme do
     suffix <- pathComponent `sepBy1` "/"
 
     return (File (concat (map Text.unpack (prefix : List.intersperse "/" suffix))))
+
+uri :: Parser Token
+uri = lexeme do
+    x <- Megaparsec.lookAhead URI.parser
+    case URI.uriScheme x of
+        Nothing -> fail "Missing URI scheme !"
+        Just _ -> return ()
+    URI <$> URI.parser
 
 text :: Parser Token
 text = lexeme do
@@ -420,6 +430,7 @@ data Token
     | Times
     | True_
     | Type
+    | URI URI.URI
     deriving stock (Eq, Show)
 
 {-| A token with offset information attached, used for reporting line and

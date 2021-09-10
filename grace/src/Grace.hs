@@ -178,7 +178,7 @@ main = do
             input <- case file of
                 "-" -> do
                     text <- Text.IO.getContents
-                    return (Code text)
+                    return (Code "(input)" text)
                 _ -> do
                     return (Path file)
 
@@ -208,7 +208,7 @@ main = do
                 "-" -> do
                     text <- Text.IO.getContents
 
-                    return (Code text)
+                    return (Code "(input)" text)
                 _ -> do
                     return (Path file)
 
