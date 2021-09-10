@@ -403,7 +403,7 @@ substituteAlternatives ρ0 n r@(Alternatives kτs ρ1) Type{ node = old, .. } =
             | otherwise ->
                 Union (Alternatives (map (\(k, _A) -> (k, substituteAlternatives ρ0 n r _A)) kAs0) ρ)
           where
-            kAs1 = kAs0 <> map (\(k, τ) -> (k, fmap (\_ -> location) τ)) kτs
+            kAs1 = kAs0 <> map (\(k, τ) -> (k, fmap (const location) τ)) kτs
         Scalar scalar ->
             Scalar scalar
 

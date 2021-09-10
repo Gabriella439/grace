@@ -1,6 +1,5 @@
 {-# LANGUAGE DataKinds        #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE NamedFieldPuns   #-}
 {-# LANGUAGE RecordWildCards  #-}
 {-# LANGUAGE TypeApplications #-}
 

@@ -168,7 +168,7 @@ parseToken =
 
 parseLocatedToken :: Parser LocatedToken
 parseLocatedToken = do
-    start <- fmap Offset (Megaparsec.getOffset)
+    start <- fmap Offset Megaparsec.getOffset
     token <- parseToken
     return LocatedToken{..}
 
@@ -222,7 +222,7 @@ file = lexeme do
 
     suffix <- pathComponent `sepBy1` "/"
 
-    return (File (concat (map Text.unpack (prefix : List.intersperse "/" suffix))))
+    return (File (concatMap Text.unpack (prefix : List.intersperse "/" suffix)))
 
 uri :: Parser Token
 uri = lexeme do

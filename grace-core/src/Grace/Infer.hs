@@ -1,3 +1,4 @@
+{-# LANGUAGE BlockArguments    #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE MultiWayIf        #-}
 {-# LANGUAGE NamedFieldPuns    #-}
@@ -37,7 +38,8 @@ module Grace.Infer
 import Data.Text (Text)
 
 import Control.Applicative ((<|>))
-import Control.Exception (Exception(..))
+import Control.Exception.Safe (Exception(..))
+import Control.Monad (when)
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.State.Strict (MonadState)
 import Data.Foldable (traverse_)
@@ -508,7 +510,7 @@ subtype _A0 _B0 = do
             -- mismatched fields present only in one record type we have to
             -- skip to the next step of resolving the mismatch by solving Fields
             -- variables.
-            _ <- traverse process both
+            traverse_ process both
 
             -- Here is where we handle fields that were only present in one
             -- record type.  They still might be okay if one or both of the
@@ -709,7 +711,7 @@ subtype _A0 _B0 = do
                         (Context.solveType _Θ _A1)
                         (Context.solveType _Θ _B1)
 
-            _ <- traverse process both
+            traverse_ process both
 
             case (alternatives0, alternatives1) of
                 (Monotype.UnsolvedAlternatives p0, Monotype.UnsolvedAlternatives p1) -> do
@@ -1328,10 +1330,8 @@ instantiateAlternativesL
     :: (MonadState Status m, MonadError TypeInferenceError m)
     => Existential Monotype.Union -> Location -> Type.Union Location -> m ()
 instantiateAlternativesL p0 location u@(Type.Alternatives kAs rest) = do
-    if p0 `Type.alternativesFreeIn` Type{ node = Type.Union u, .. }
-        then do
-            throwError (NotAlternativesSubtype location p0 u)
-        else return ()
+    when (p0 `Type.alternativesFreeIn` Type{ node = Type.Union u, .. }) do
+        throwError (NotAlternativesSubtype location p0 u)
 
     let process (k, _A) = do
             b <- fresh
@@ -2138,7 +2138,7 @@ check e@Syntax{ node = Syntax.Record keyValues } _B@Type{ node = Type.Record (Ty
 
                 check value (Context.solveType _Γ type_)
 
-        _ <- traverse process both
+        traverse_ process both
 
         let e' =
                 Syntax
