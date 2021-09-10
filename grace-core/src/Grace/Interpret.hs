@@ -10,6 +10,8 @@ module Grace.Interpret
       Input(..)
     , interpret
     , interpretWith
+    , InterpretSettings(..)
+    , defaultInterpretSettings
 
       -- * Errors related to interpretation
     , InterpretError(..)
@@ -51,6 +53,15 @@ data Input
     | Code String Text
     -- ^ Source code: @Code name content@
 
+newtype InterpretSettings = InterpretSettings
+    { resolvers :: [Import.Resolver]
+    }
+
+defaultInterpretSettings :: InterpretSettings
+defaultInterpretSettings = InterpretSettings
+    { resolvers = Import.defaultResolvers
+    }
+
 {-| Interpret Grace source code, return the inferred type and the evaluated
     result
 
@@ -62,18 +73,20 @@ interpret
     -- ^ Optional expected type for the input
     -> Input
     -> m (Type Location, Value)
-interpret = interpretWith []
+interpret = interpretWith defaultInterpretSettings []
 
 -- | Like `interpret`, but accepts a custom list of bindings
 interpretWith
     :: (MonadError InterpretError m, MonadIO m, MonadThrow m)
-    => [(Text, Type Location, Value)]
+    => InterpretSettings
+    -- ^ Settings controlling how the interpreter behaves
+    -> [(Text, Type Location, Value)]
     -- ^ @(name, type, value)@ for each custom binding
     -> Maybe (Type Location)
     -- ^ Optional expected type for the input
     -> Input
     -> m (Type Location, Value)
-interpretWith bindings maybeAnnotation input = do
+interpretWith settings bindings maybeAnnotation input = do
     code <- case input of
         Path file   -> liftIO (Text.IO.readFile file)
         Code _ text -> return text
@@ -92,14 +105,14 @@ interpretWith bindings maybeAnnotation input = do
             return (first locate expression)
 
     let resolve (maybeAnnotation', Import.File file) =
-            interpretWith bindings maybeAnnotation' (Path path)
+            interpretWith settings bindings maybeAnnotation' (Path path)
           where
             path = case input of
                 Path parent -> FilePath.takeDirectory parent </> file
                 Code _ _    -> file
         resolve (maybeAnnotation', Import.URI uri) = do
-            text <- Import.resolveURI uri
-            interpretWith bindings maybeAnnotation' (Code (URI.renderStr uri) text)
+            text <- Import.findResolver uri (resolvers settings)
+            interpretWith settings bindings maybeAnnotation' (Code (URI.renderStr uri) text)
 
     resolvedExpression <- traverse resolve (annotate expression)
 

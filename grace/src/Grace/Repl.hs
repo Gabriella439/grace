@@ -7,6 +7,7 @@
 module Grace.Repl
     ( -- * REPL
       repl
+    , replWith
     ) where
 
 import Control.Exception.Safe (MonadThrow, displayException)
@@ -39,16 +40,20 @@ import qualified System.IO              as IO
 
 -- | Entrypoint for the @grace repl@ subcommand
 repl :: IO ()
-repl = State.evalStateT action []
+repl = replWith Interpret.defaultInterpretSettings
+
+-- | Entrypoint for the @grace repl@ subcommand
+replWith :: Interpret.InterpretSettings -> IO ()
+replWith settings = State.evalStateT action []
   where
     action =
       Repline.evalReplOpts ReplOpts
         { banner = prompt
-        , command = interpret
-        , options = commands
+        , command = interpret settings
+        , options = commands settings
         , prefix = Just ':'
         , multilineCommand = Just "paste"
-        , tabComplete = complete
+        , tabComplete = complete settings
         , initialiser = return ()
         , finaliser = return Repline.Exit
         }
@@ -59,15 +64,18 @@ prompt SingleLine = return ">>> "
 
 type Status = [(Text, Type Location, Value)]
 
-commands :: (MonadIO m, MonadState Status m, MonadThrow m) => Options m
-commands = [ ("let", assignment), ("type", infer) ]
+commands :: (MonadIO m, MonadState Status m, MonadThrow m) => Interpret.InterpretSettings -> Options m
+commands settings =
+    [ ("let", assignment settings)
+    , ("type", infer settings)
+    ]
 
-interpret :: (MonadIO m, MonadState Status m, MonadThrow m) => Cmd m
-interpret string = do
+interpret :: (MonadIO m, MonadState Status m, MonadThrow m) => Interpret.InterpretSettings -> Cmd m
+interpret settings string = do
     let input = Code "(input)" (pack string)
 
     context <- get
-    eitherResult <- Except.runExceptT (Interpret.interpretWith context Nothing input)
+    eitherResult <- Except.runExceptT (Interpret.interpretWith settings context Nothing input)
 
     case eitherResult of
         Left e -> liftIO (Text.IO.hPutStrLn IO.stderr (pack (displayException e)))
@@ -77,8 +85,8 @@ interpret string = do
             width <- liftIO Grace.Pretty.getWidth
             liftIO (Grace.Pretty.renderIO True width IO.stdout (Grace.Pretty.pretty syntax <> "\n"))
 
-assignment :: (MonadIO m, MonadState Status m, MonadThrow m) => Cmd m
-assignment string
+assignment :: (MonadIO m, MonadState Status m, MonadThrow m) => Interpret.InterpretSettings -> Cmd m
+assignment settings string
     | (var, '=' : expr) <- break (== '=') string
     = do
       let input = Code "(input)" (pack expr)
@@ -88,7 +96,7 @@ assignment string
       context <- get
 
       eitherResult <- do
-          Except.runExceptT (Interpret.interpretWith context Nothing input)
+          Except.runExceptT (Interpret.interpretWith settings context Nothing input)
 
       case eitherResult of
           Left e -> liftIO (Text.IO.hPutStrLn IO.stderr (pack (displayException e)))
@@ -97,14 +105,14 @@ assignment string
     | otherwise
     = liftIO (putStrLn "usage: let = {expression}")
 
-infer :: (MonadIO m, MonadState Status m, MonadThrow m) => Cmd m
-infer expr = do
+infer :: (MonadIO m, MonadState Status m, MonadThrow m) => Interpret.InterpretSettings -> Cmd m
+infer settings expr = do
     let input = Code "(input)" (pack expr)
 
     context <- get
 
     eitherResult <- do
-        Except.runExceptT (Interpret.interpretWith context Nothing input)
+        Except.runExceptT (Interpret.interpretWith settings context Nothing input)
 
     case eitherResult of
         Left e -> do
@@ -115,13 +123,12 @@ infer expr = do
 
             liftIO (Grace.Pretty.renderIO True width IO.stdout (Grace.Pretty.pretty type_ <> "\n"))
 
-complete :: Monad m => CompleterStyle m
-complete =
-    Combine File
-      (Custom (Repline.runMatcher [ (":", completeCommands) ] completeIdentifiers))
+complete :: Monad m => Interpret.InterpretSettings -> CompleterStyle m
+complete settings =
+    Custom (Repline.runMatcher [ (":", completeCommands) ] completeIdentifiers)
   where
     completeCommands =
-        Repline.listCompleter (fmap adapt (commands @(StateT Status IO)))
+        Repline.listCompleter (fmap adapt (commands @(StateT Status IO) settings))
       where
         adapt (c, _) = ":" <> c
 
