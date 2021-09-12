@@ -116,7 +116,8 @@ infer expr = do
 
 complete :: Monad m => CompleterStyle m
 complete =
-    Custom (Repline.runMatcher [ (":", completeCommands) ] completeIdentifiers)
+    Combine File
+      (Custom (Repline.runMatcher [ (":", completeCommands) ] completeIdentifiers))
   where
     completeCommands =
         Repline.listCompleter (fmap adapt (commands @(StateT Status IO)))
