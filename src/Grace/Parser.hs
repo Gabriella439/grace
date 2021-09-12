@@ -171,10 +171,12 @@ render t = case t of
     Lexer.Lambda           -> "\\"
     Lexer.Let              -> "let"
     Lexer.List             -> "list"
+    Lexer.ListDrop         -> "List/drop"
     Lexer.ListEqual        -> "List/equal"
     Lexer.ListFold         -> "List/fold"
     Lexer.ListLength       -> "List/length"
     Lexer.ListMap          -> "List/map"
+    Lexer.ListTake         -> "List/take"
     Lexer.Merge            -> "merge"
     Lexer.Natural          -> "Natural"
     Lexer.NaturalFold      -> "Natural/fold"
@@ -417,6 +419,10 @@ grammar = mdo
 
                 return Syntax{ node = Syntax.Builtin Syntax.DoubleShow, .. }
 
+        <|> do  location <- locatedToken Lexer.ListDrop
+
+                return Syntax{ node = Syntax.Builtin Syntax.ListDrop, .. }
+
         <|> do  location <- locatedToken Lexer.ListEqual
 
                 return Syntax{ node = Syntax.Builtin Syntax.ListEqual, .. }
@@ -432,6 +438,10 @@ grammar = mdo
         <|> do  location <- locatedToken Lexer.ListMap
 
                 return Syntax{ node = Syntax.Builtin Syntax.ListMap, .. }
+
+        <|> do  location <- locatedToken Lexer.ListTake
+
+                return Syntax{ node = Syntax.Builtin Syntax.ListTake, .. }
 
         <|> do  location <- locatedToken Lexer.IntegerAbs
 

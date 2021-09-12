@@ -256,6 +256,20 @@ apply
         apply f x
 apply
     (Value.Application
+        (Value.Builtin ListDrop)
+        (Value.Scalar (Natural n))
+    )
+    (Value.List elements) =
+        Value.List (drop (fromIntegral n) elements)
+apply
+    (Value.Application
+        (Value.Builtin ListTake)
+        (Value.Scalar (Natural n))
+    )
+    (Value.List elements) =
+        Value.List (take (fromIntegral n) elements)
+apply
+    (Value.Application
         (Value.Application (Value.Builtin ListEqual) f)
         (Value.List rs)
     )

@@ -2195,6 +2195,17 @@ infer e0 = do
                 ~>  _Type{ node = Type.Scalar Monotype.Text }
                 )
 
+        Syntax.Builtin Syntax.ListDrop -> do
+            return _Type
+                { node =
+                    Type.Forall (Syntax.location e0) "a" Domain.Type
+                        (   _Type{ node = Type.Scalar Monotype.Natural }
+                        ~> (   _Type{ node = Type.List _Type{ node = "a" } }
+                           ~>  _Type{ node = Type.List _Type{ node = "a" } }
+                           )
+                        )
+                }
+
         Syntax.Builtin Syntax.ListEqual -> do
             return _Type
                 { node =
@@ -2284,6 +2295,17 @@ infer e0 = do
                 (   _Type{ node = Type.Scalar Monotype.Integer }
                 ~>  _Type{ node = Type.Scalar Monotype.Bool }
                 )
+
+        Syntax.Builtin Syntax.ListTake -> do
+            return _Type
+                { node =
+                    Type.Forall (Syntax.location e0) "a" Domain.Type
+                        (   _Type{ node = Type.Scalar Monotype.Natural }
+                        ~> (   _Type{ node = Type.List _Type{ node = "a" } }
+                           ~>  _Type{ node = Type.List _Type{ node = "a" } }
+                           )
+                        )
+                }
 
         Syntax.Builtin Syntax.JSONFold -> do
             return _Type

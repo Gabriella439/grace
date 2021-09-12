@@ -4,6 +4,7 @@
 {-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE QuasiQuotes        #-}
 {-# LANGUAGE RecordWildCards    #-}
+{-# LANGUAGE TypeApplications   #-}
 
 {-| This module contains the logic for lexing Grace files.
 
@@ -100,10 +101,12 @@ parseToken =
             , DoubleLessThan <$ symbol "Double/lessThan"
             , DoubleNegate   <$ symbol "Double/negate"
             , DoubleShow     <$ symbol "Double/show"
+            , ListDrop       <$ symbol "List/drop"
             , ListEqual      <$ symbol "List/equal"
             , ListFold       <$ symbol "List/fold"
             , ListLength     <$ symbol "List/length"
             , ListMap        <$ symbol "List/map"
+            , ListTake       <$ symbol "List/take"
             , IntegerAbs     <$ symbol "Integer/abs"
             , IntegerEven    <$ symbol "Integer/even"
             , IntegerNegate  <$ symbol "Integer/negate"
@@ -283,10 +286,12 @@ reserved =
         , "Double/lessThan"
         , "Double/negate"
         , "Double/show"
+        , "List/drop"
         , "List/equal"
         , "List/fold"
         , "List/length"
         , "List/map"
+        , "List/take"
         , "Integer/abs"
         , "Integer/even"
         , "Integer/negate"
@@ -372,10 +377,12 @@ data Token
     | Lambda
     | Let
     | List
+    | ListDrop
     | ListEqual
     | ListFold
     | ListLength
     | ListMap
+    | ListTake
     | Merge
     | Natural
     | NaturalFold
