@@ -14,7 +14,7 @@ most likely be interested in Grace for one of two reasons:
 
 If you're interested in code samples, then you can either jump down to the
 [Quick tour](#quick-tour) section or check out the
-[examples directory](./examples).
+[examples directory](./grace/examples).
 
 ## Features
 
@@ -284,9 +284,9 @@ These are the issues and pull requests that I'm most likely to reject:
 ## Acknowledgments
 
 Your fork doesn't need to credit me or this project, beyond what the
-[BSD 3-clause license](./LICENSE) requires.  The only thanks I need is for
-people to use Grace instead of creating yet another domain-specific language
-embedded in JSON or YAML.
+[BSD 3-clause license](./grace-core/LICENSE) requires.  The only thanks I need
+is for people to use Grace instead of creating yet another domain-specific
+language embedded in JSON or YAML.
 
 ## Quick tour
 
