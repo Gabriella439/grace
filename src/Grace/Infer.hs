@@ -1118,9 +1118,12 @@ instantiateTypeL a _A0 = do
         Type.TypeHole -> do
             b <- fresh
 
-            push (Context.UnsolvedType a)
+            push (Context.MarkerType b)
+            push (Context.UnsolvedType b)
 
             instantiateTypeL a Type{ location = Type.location _A0, node = Type.UnsolvedType b }
+
+            discardUpTo (Context.MarkerType b)
 
         -- InstLReach
         Type.UnsolvedType b
@@ -1314,9 +1317,12 @@ instantiateTypeR _A0 a = do
         Type.TypeHole -> do
             b <- fresh
 
-            push (Context.UnsolvedType a)
+            push (Context.MarkerType b)
+            push (Context.UnsolvedType b)
 
             instantiateTypeL a Type{ location = Type.location _A0, node = Type.UnsolvedType b }
+
+            discardUpTo (Context.MarkerType b)
 
         -- InstRReach
         Type.UnsolvedType b
@@ -2384,6 +2390,16 @@ check
 -- type annotations to fix any type errors that they might encounter, which is
 -- a desirable property!
 
+check e _A@Type{ node = Type.TypeHole } = do
+    a <- fresh
+
+    push (Context.MarkerType a)
+    push (Context.UnsolvedType a)
+
+    check e _A{ node = Type.UnsolvedType a }
+
+    discardUpTo (Context.MarkerType a)
+
 -- →I
 check Syntax{ node = Syntax.Lambda _ x e } Type{ node = Type.Function _A _B } = do
     push (Context.Annotation x _A)
@@ -2438,14 +2454,23 @@ check e Type{ node = Type.Forall _ a domain _A } = do
 check Syntax{ node = Syntax.Operator l _ Syntax.Times r } _B@Type{ node = Type.Scalar scalar }
     | scalar `elem` [ Monotype.Natural, Monotype.Integer, Monotype.Double ] = do
     check l _B
-    check r _B
+
+    _Γ <- get
+
+    check r (Context.solveType _Γ _B)
 check Syntax{ node = Syntax.Operator l _ Syntax.Plus r } _B@Type{ node = Type.Scalar scalar }
     | scalar `elem` [ Monotype.Natural, Monotype.Integer, Monotype.Double, Monotype.Text ] = do
     check l _B
-    check r _B
+
+    _Γ <- get
+
+    check r (Context.solveType _Γ _B)
 check Syntax{ node = Syntax.Operator l _ Syntax.Plus r } _B@Type{ node = Type.List _ } = do
     check l _B
-    check r _B
+
+    _Γ <- get
+
+    check r (Context.solveType _Γ _B)
 
 check Syntax{ node = Syntax.List elements } Type{ node = Type.List a } = do
     let process element = do
@@ -2483,10 +2508,15 @@ check e@Syntax{ node = Syntax.Record keyValues } _B@Type{ node = Type.Record (Ty
                     , location = Type.location _B
                     }
 
-        check e' _B'
+        _Γ <- get
+
+        check e' (Context.solveType _Γ _B')
 
 check Syntax{ node = Syntax.Record keyValues } _B@Type{ node = Type.Scalar Monotype.JSON } = do
-    let process (_, value) = check value _B
+    let process (_, value) = do
+            _Γ <- get
+
+            check value (Context.solveType _Γ _B)
 
     traverse_ process keyValues
 check Syntax{ node = Syntax.List elements } _B@Type{ node = Type.Scalar Monotype.JSON } = do
