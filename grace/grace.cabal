@@ -1,0 +1,40 @@
+cabal-version:       >=1.10
+name:                grace
+version:             1.0.0
+license-file:        LICENSE
+author:              Gabriel Gonzalez
+maintainer:          Gabriel439@gmail.com
+build-type:          Simple
+
+tested-with:         GHC ==8.8.4 || ==8.10.7 || ==9.0.1 || ==9.2.0.20210821
+
+library
+  hs-source-dirs:      src
+  build-depends:       base
+                     , ansi-terminal
+                     , grace-core
+                     , mtl
+                     , optparse-applicative
+                     , prettyprinter
+                     , prettyprinter-ansi-terminal
+                     , string-interpolate
+                     , text
+  exposed-modules:     Grace
+  default-language:    Haskell2010
+  ghc-options:         -Wall
+
+executable grace
+  main-is:             Main.hs
+  build-depends:       base
+                     , grace
+  hs-source-dirs:      grace
+  default-language:    Haskell2010
+
+test-suite doctest
+  type:                exitcode-stdio-1.0
+  main-is:             Main.hs
+  build-depends:       base
+                     , doctest
+  hs-source-dirs:      doctest
+  default-language:    Haskell2010
+  ghc-options:         -Wall

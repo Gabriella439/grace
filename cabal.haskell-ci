@@ -1,0 +1,7 @@
+branches:       main
+
+doctest:        <9.2
+tests:          True
+benchmarks:     True
+
+ghcup-jobs:     >=9.2
