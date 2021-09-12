@@ -352,6 +352,10 @@ data Builtin
     -- ^
     --   >>> pretty ListMap
     --   List/map
+    | ListReverse
+    -- ^
+    --   >>> pretty ListReverse
+    --   List/reverse
     | ListTake
     -- ^
     --   >>> pretty ListTake
@@ -404,6 +408,7 @@ instance Pretty Builtin where
     pretty ListLast       = builtin "List/last"
     pretty ListLength     = builtin "List/length"
     pretty ListMap        = builtin "List/map"
+    pretty ListReverse    = builtin "List/reverse"
     pretty ListTake       = builtin "List/take"
     pretty NaturalFold    = builtin "Natural/fold"
     pretty TextEqual      = builtin "Text/equal"

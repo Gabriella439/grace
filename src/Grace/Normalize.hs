@@ -270,6 +270,8 @@ apply (Value.Builtin ListLast) (Value.List []) =
     Value.Application (Value.Alternative "None") (Value.Record [])
 apply (Value.Builtin ListLast) (Value.List (reverse -> (x : _))) =
     Value.Application (Value.Alternative "Some") x
+apply (Value.Builtin ListReverse) (Value.List xs) =
+    Value.List (reverse xs)
 apply
     (Value.Application
         (Value.Application (Value.Builtin ListEqual) f)

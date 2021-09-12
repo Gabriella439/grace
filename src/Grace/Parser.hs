@@ -179,6 +179,7 @@ render t = case t of
     Lexer.ListLast         -> "List/last"
     Lexer.ListLength       -> "List/length"
     Lexer.ListMap          -> "List/map"
+    Lexer.ListReverse      -> "List/reverse"
     Lexer.ListTake         -> "List/take"
     Lexer.Merge            -> "merge"
     Lexer.Natural          -> "Natural"
@@ -453,6 +454,10 @@ grammar = mdo
         <|> do  location <- locatedToken Lexer.ListMap
 
                 return Syntax{ node = Syntax.Builtin Syntax.ListMap, .. }
+
+        <|> do  location <- locatedToken Lexer.ListReverse
+
+                return Syntax{ node = Syntax.Builtin Syntax.ListReverse, .. }
 
         <|> do  location <- locatedToken Lexer.ListTake
 
