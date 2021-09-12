@@ -2206,6 +2206,27 @@ infer e0 = do
                         )
                 }
 
+        Syntax.Builtin Syntax.ListHead -> do
+            return _Type
+                { node =
+                    Type.Forall (Syntax.location e0) "a" Domain.Type _Type
+                        { node =
+                            Type.Forall (Syntax.location e0) "b" Domain.Alternatives
+                                (   _Type{ node = Type.List _Type{ node = "a" } }
+                                ~>  _Type
+                                        { node =
+                                            Type.Union
+                                                (Type.Alternatives
+                                                    [ ("Some", _Type{ node = "a" })
+                                                    , ("None", _Type{ node = Type.Record (Type.Fields [] Monotype.EmptyFields) })
+                                                    ]
+                                                    (Monotype.VariableAlternatives "b")
+                                                )
+                                        }
+                                )
+                        }
+                }
+
         Syntax.Builtin Syntax.ListEqual -> do
             return _Type
                 { node =
@@ -2266,6 +2287,27 @@ infer e0 = do
                                         }
                                 }
                         )
+                }
+
+        Syntax.Builtin Syntax.ListLast -> do
+            return _Type
+                { node =
+                    Type.Forall (Syntax.location e0) "a" Domain.Type _Type
+                        { node =
+                            Type.Forall (Syntax.location e0) "b" Domain.Alternatives
+                                (   _Type{ node = Type.List _Type{ node = "a" } }
+                                ~>  _Type
+                                        { node =
+                                            Type.Union
+                                                (Type.Alternatives
+                                                    [ ("Some", _Type{ node = "a" })
+                                                    , ("None", _Type{ node = Type.Record (Type.Fields [] Monotype.EmptyFields) })
+                                                    ]
+                                                    (Monotype.VariableAlternatives "b")
+                                                )
+                                        }
+                                )
+                        }
                 }
 
         Syntax.Builtin Syntax.ListLength -> do

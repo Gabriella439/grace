@@ -255,19 +255,21 @@ apply
     | Just f <- lookup alternative alternativeHandlers =
         apply f x
 apply
-    (Value.Application
-        (Value.Builtin ListDrop)
-        (Value.Scalar (Natural n))
-    )
+    (Value.Application (Value.Builtin ListDrop) (Value.Scalar (Natural n)))
     (Value.List elements) =
         Value.List (drop (fromIntegral n) elements)
 apply
-    (Value.Application
-        (Value.Builtin ListTake)
-        (Value.Scalar (Natural n))
-    )
+    (Value.Application (Value.Builtin ListTake) (Value.Scalar (Natural n)))
     (Value.List elements) =
         Value.List (take (fromIntegral n) elements)
+apply (Value.Builtin ListHead) (Value.List []) =
+    Value.Application (Value.Alternative "None") (Value.Record [])
+apply (Value.Builtin ListHead) (Value.List (x : _)) =
+    Value.Application (Value.Alternative "Some") x
+apply (Value.Builtin ListLast) (Value.List []) =
+    Value.Application (Value.Alternative "None") (Value.Record [])
+apply (Value.Builtin ListLast) (Value.List (reverse -> (x : _))) =
+    Value.Application (Value.Alternative "Some") x
 apply
     (Value.Application
         (Value.Application (Value.Builtin ListEqual) f)

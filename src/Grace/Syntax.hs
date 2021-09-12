@@ -332,14 +332,22 @@ data Builtin
     -- ^
     --   >>> pretty ListFold
     --   List/fold
-    | ListLength
+    | ListHead
     -- ^
-    --   >>> pretty ListLength
-    --   List/length
+    --   >>> pretty ListHead
+    --   List/head
     | ListIndexed
     -- ^
     --   >>> pretty ListIndexed
     --   List/indexed
+    | ListLast
+    -- ^
+    --   >>> pretty ListLast
+    --   List/last
+    | ListLength
+    -- ^
+    --   >>> pretty ListLength
+    --   List/length
     | ListMap
     -- ^
     --   >>> pretty ListMap
@@ -391,7 +399,9 @@ instance Pretty Builtin where
     pretty ListDrop       = builtin "List/drop"
     pretty ListEqual      = builtin "List/equal"
     pretty ListFold       = builtin "List/fold"
+    pretty ListHead       = builtin "List/head"
     pretty ListIndexed    = builtin "List/indexed"
+    pretty ListLast       = builtin "List/last"
     pretty ListLength     = builtin "List/length"
     pretty ListMap        = builtin "List/map"
     pretty ListTake       = builtin "List/take"
