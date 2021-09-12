@@ -352,7 +352,7 @@ apply
             )
         )
     )
-    v = loop v
+    v0 = loop v0
   where
     loop (Value.Scalar (Bool b)) =
         apply boolHandler (Value.Scalar (Bool b))
@@ -374,6 +374,8 @@ apply
         keyValues' = do
             (key, value) <- keyValues
             return (Value.Record [("key", Value.Scalar (Text key)), ("value", loop value)])
+    loop v =
+        v
 apply function argument =
     Value.Application function argument
 
