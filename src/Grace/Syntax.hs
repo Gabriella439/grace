@@ -425,7 +425,7 @@ prettyExpression (Let bindings body) = Pretty.group (Pretty.flatAlt long short)
 
     long =
         Pretty.align
-            (   foldMap (\binding -> pretty binding <> Pretty.hardline) bindings
+            (   foldMap (\binding -> pretty binding <> Pretty.hardline <> Pretty.hardline) bindings
             <>  keyword "in"
             <>  "  "
             <>  liftSyntax prettyExpression body
