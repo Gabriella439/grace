@@ -9,6 +9,7 @@ module Grace.Repl
       repl
     ) where
 
+import Control.Monad.Catch (MonadCatch)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.State (MonadState(..), StateT)
 import Data.Foldable (toList)
@@ -58,8 +59,11 @@ prompt SingleLine = return ">>> "
 
 type Status = [(Text, Type Location, Value)]
 
-commands :: (MonadState Status m, MonadIO m) => Options m
-commands = [ ("let", assignment), ("type", infer) ]
+commands :: (MonadState Status m, MonadCatch m, MonadIO m) => Options m
+commands =
+    [ ("let", Repline.dontCrash . assignment)
+    , ("type", Repline.dontCrash . infer)
+    ]
 
 interpret :: (MonadState Status m, MonadIO m) => Cmd m
 interpret string = do

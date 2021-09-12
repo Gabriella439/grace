@@ -12,6 +12,7 @@ library
                      , ansi-terminal
                      , containers
                      , Earley
+                     , exceptions
                      , filepath
                      , generic-lens
                      , lens
