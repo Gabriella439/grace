@@ -2247,6 +2247,27 @@ infer e0 = do
                 }
 
 
+        Syntax.Builtin Syntax.ListIndexed -> do
+            return _Type
+                { node =
+                    Type.Forall (Syntax.location e0) "a" Domain.Type
+                        (   _Type{ node = Type.List _Type{ node = "a" } }
+                        ~>  _Type
+                                { node =
+                                    Type.List _Type
+                                        { node =
+                                            Type.Record
+                                                (Type.Fields
+                                                    [ ("index", _Type{ node = Type.Scalar Monotype.Natural })
+                                                    , ("value", _Type{ node = "a" })
+                                                    ]
+                                                    Monotype.EmptyFields
+                                                )
+                                        }
+                                }
+                        )
+                }
+
         Syntax.Builtin Syntax.ListLength -> do
             return _Type
                 { node =

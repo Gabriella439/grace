@@ -298,6 +298,14 @@ apply
   where
     loop      []  !result = result
     loop (x : xs) !result = loop xs (apply (apply cons x) result)
+apply (Value.Builtin ListIndexed) (Value.List elements) =
+    Value.List (zipWith adapt [0..] elements)
+  where
+    adapt index value =
+        Value.Record
+            [ ("index", Value.Scalar (Natural index))
+            , ("value", value)
+            ]
 apply (Value.Builtin ListLength) (Value.List elements) =
     Value.Scalar (Natural (fromIntegral (length elements)))
 apply

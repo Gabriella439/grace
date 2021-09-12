@@ -104,6 +104,7 @@ parseToken =
             , ListDrop       <$ symbol "List/drop"
             , ListEqual      <$ symbol "List/equal"
             , ListFold       <$ symbol "List/fold"
+            , ListIndexed    <$ symbol "List/indexed"
             , ListLength     <$ symbol "List/length"
             , ListMap        <$ symbol "List/map"
             , ListTake       <$ symbol "List/take"
@@ -289,6 +290,7 @@ reserved =
         , "List/drop"
         , "List/equal"
         , "List/fold"
+        , "List/indexed"
         , "List/length"
         , "List/map"
         , "List/take"
@@ -380,6 +382,7 @@ data Token
     | ListDrop
     | ListEqual
     | ListFold
+    | ListIndexed
     | ListLength
     | ListMap
     | ListTake
