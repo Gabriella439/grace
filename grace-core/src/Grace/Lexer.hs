@@ -28,9 +28,13 @@ module Grace.Lexer
 
       -- * Miscellaneous
     , validRecordLabel
+
+      -- * Errors related to parsing
+    , ParseError(..)
     ) where
 
 import Control.Applicative (empty, (<|>))
+import Control.Exception (Exception(..))
 import Control.Monad.Combinators (many, manyTill, sepBy1)
 import Data.HashSet (HashSet)
 import Data.List.NonEmpty (NonEmpty(..))
@@ -176,7 +180,7 @@ lex :: String
     -- ^ Name of the input (used for error messages)
     -> Text
     -- ^ Source code
-    -> Either Text [LocatedToken]
+    -> Either ParseError [LocatedToken]
 lex name code =
     case Megaparsec.parse parseLocatedTokens name code of
         Left ParseErrorBundle{..} -> do
@@ -184,7 +188,7 @@ lex name code =
 
             let offset = Offset (Error.errorOffset bundleError)
 
-            Left (Location.renderError "Invalid input - Lexing failed" Location{..})
+            Left (LexingFailed (Location{..}))
         Right tokens -> do
             return tokens
 
@@ -423,3 +427,15 @@ data Token
 -}
 data LocatedToken = LocatedToken { token :: Token, start :: Offset }
     deriving (Show)
+
+-- | Errors related to lexing and parsing
+data ParseError
+    = LexingFailed Location
+    | ParsingFailed Location
+    deriving (Eq, Show)
+
+instance Exception ParseError where
+    displayException (LexingFailed location) = Text.unpack
+        (Location.renderError "Invalid input - Lexing failed" location)
+    displayException (ParsingFailed location) = Text.unpack
+        (Location.renderError "Invalid input - Parsing failed" location)

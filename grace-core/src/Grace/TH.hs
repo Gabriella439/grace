@@ -12,6 +12,7 @@ module Grace.TH
     , typeOfInput
     ) where
 
+import Control.Exception (displayException)
 import Data.Functor (void)
 import Data.Text (Text)
 import Data.Void (Void)
@@ -92,10 +93,10 @@ typeOfInput = helperFunction fst
 
 helperFunction :: Lift r => ((Type (), Syntax () Void) -> r) -> Input -> Q (TExp r)
 helperFunction f input = do
-    eitherResult <- Except.runExceptT $ Interpret.interpret Nothing input
+    eitherResult <- Except.runExceptT (Interpret.interpret Nothing input)
 
     (inferred, value) <- case eitherResult of
-        Left e -> fail $ Text.unpack e
+        Left e -> fail (displayException e)
         Right result -> return result
 
     let type_ = void inferred

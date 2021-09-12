@@ -4,6 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes       #-}
 {-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE TypeApplications  #-}
 
 {-| This module implements the bidirectional type-checking algorithm from:
 
@@ -28,17 +29,21 @@ module Grace.Infer
     ( -- * Type inference
       typeOf
     , typeWith
+
+      -- * Errors related to type inference
+    , TypeInferenceError(..)
     ) where
 
 import Data.Text (Text)
 
 import Control.Applicative ((<|>))
+import Control.Exception (Exception(..))
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.State.Strict (MonadState)
 import Data.Foldable (traverse_)
-import Data.Functor (void)
 import Data.Sequence (ViewL(..))
 import Data.String.Interpolate (__i)
+import Data.Void (Void)
 import Grace.Context (Context, Entry)
 import Grace.Existential (Existential)
 import Grace.Location (Location(..))
@@ -70,9 +75,9 @@ data Status = Status
       -- ^ The type-checking context (e.g. Γ, Δ, Θ)
     }
 
-orDie :: MonadError Text m => Maybe a -> Text -> m a
-Just x  `orDie` _       = return x
-Nothing `orDie` message = throwError message
+orDie :: MonadError e m => Maybe a -> e -> m a
+Just x  `orDie` _ = return x
+Nothing `orDie` e = throwError e
 
 fresh :: MonadState Status m => m (Existential a)
 fresh = do
@@ -103,36 +108,20 @@ discardUpTo :: MonadState Status m => Entry Location -> m ()
 discardUpTo entry =
     State.modify (\s -> s{ context = Context.discardUpTo entry (context s) })
 
-prettyToText :: Pretty a => a -> Text
-prettyToText = Grace.Pretty.renderStrict True Grace.Pretty.defaultColumns
-
-insert :: Pretty a => a -> Text
-insert a = prettyToText ("  " <> Pretty.align (pretty a))
-
-listToText :: Pretty a => [a] -> Text
-listToText elements = Text.intercalate "\n" (map prettyEntry elements)
-  where
-    prettyEntry entry = prettyToText ("• " <> Pretty.align (pretty entry))
-
 {-| This corresponds to the judgment:
 
     > Γ ⊢ A
 
     … which checks that under context Γ, the type A is well-formed
 -}
-wellFormedType :: MonadError Text m => Context Location -> Type Location -> m ()
+wellFormedType :: MonadError TypeInferenceError m => Context Location -> Type Location -> m ()
 wellFormedType _Γ Type{..} =
     case node of
         -- UvarWF
         Type.VariableType a
             | Context.Variable Domain.Type a `elem` _Γ -> do
                 return ()
-            | otherwise -> do
-                throwError [__i|
-                Unbound type variable: #{a}
-
-                #{Location.renderError "" location}
-                |]
+            | otherwise -> throwError (UnboundTypeVariable location a)
 
         -- ArrowWF
         Type.Function _A _B -> do
@@ -152,19 +141,7 @@ wellFormedType _Γ Type{..} =
             | any predicate _Γ -> do
                 return ()
             | otherwise -> do
-                throwError [__i|
-                Internal error: Invalid context
-
-                The following type:
-
-                #{insert _A}
-
-                … is not well-formed within the following context:
-
-                #{listToText _Γ}
-
-                #{Location.renderError "" location}
-                |]
+                throwError (IllFormedType location _A _Γ)
           where
             predicate (Context.UnsolvedType a1  ) = a0 == a1
             predicate (Context.SolvedType   a1 _) = a0 == a1
@@ -186,19 +163,7 @@ wellFormedType _Γ Type{..} =
             | any predicate _Γ -> do
                 traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
             | otherwise -> do
-                throwError [__i|
-                Internal error: Invalid context
-
-                The following unsolved fields variable:
-
-                #{insert (Context.UnsolvedFields a0)}
-
-                … is not well-formed within the following context:
-
-                #{listToText _Γ}
-
-                #{Location.renderError "" location}
-                |]
+                throwError (IllFormedFields location a0 _Γ)
           where
             predicate (Context.UnsolvedFields a1  ) = a0 == a1
             predicate (Context.SolvedFields   a1 _) = a0 == a1
@@ -211,11 +176,7 @@ wellFormedType _Γ Type{..} =
             | Context.Variable Domain.Fields a `elem` _Γ -> do
                 traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
             | otherwise -> do
-                throwError [__i|
-                Unbound fields variable: #{a}
-
-                #{Location.renderError "" location}
-                |]
+                throwError (UnboundFields location a)
 
         Type.Union (Type.Alternatives kAs Monotype.EmptyAlternatives) -> do
             traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
@@ -224,19 +185,7 @@ wellFormedType _Γ Type{..} =
             | any predicate _Γ -> do
                 traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
             | otherwise -> do
-                throwError [__i|
-                Internal error: Invalid context
-
-                The following unsolved alternatives variable:
-
-                #{insert (Context.UnsolvedAlternatives a0)}
-
-                … is not well-formed within the following context:
-
-                #{listToText _Γ}
-
-                #{Location.renderError "" location}
-                |]
+                throwError (IllFormedAlternatives location a0 _Γ)
           where
             predicate (Context.UnsolvedAlternatives a1  ) = a0 == a1
             predicate (Context.SolvedAlternatives   a1 _) = a0 == a1
@@ -249,11 +198,7 @@ wellFormedType _Γ Type{..} =
             | Context.Variable Domain.Alternatives a `elem` _Γ -> do
                 traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
             | otherwise -> do
-                throwError [__i|
-                Unbound alternatives variable: #{a}
-
-                #{Location.renderError "" location}
-                |]
+                throwError (UnboundAlternatives location a)
 
         Type.Scalar _ -> do
             return ()
@@ -266,13 +211,10 @@ wellFormedType _Γ Type{..} =
     type A is a subtype of type B.
 -}
 subtype
-    :: (MonadState Status m, MonadError Text m)
+    :: (MonadState Status m, MonadError TypeInferenceError m)
     => Type Location -> Type Location -> m ()
 subtype _A0 _B0 = do
     _Γ <- get
-
-    let locA0 = Location.renderError "" (Type.location _A0)
-    let locB0 = Location.renderError "" (Type.location _B0)
 
     case (Type.node _A0, Type.node _B0) of
         (Type.TypeHole, _) -> do
@@ -464,7 +406,7 @@ subtype _A0 _B0 = do
         (Type.Scalar s0, Type.Scalar s1)
             | s0 == s1 -> do
                 return ()
-            
+
         (Type.Optional _A, Type.Optional _B) -> do
             subtype _A _B
 
@@ -542,71 +484,13 @@ subtype _A0 _B0 = do
             -- `{ y: Text, b }` if we solve `a` to be `{ y: Text }` and solve
             -- `b` to be `{ x : Bool }`.
             if | not okayA && not okayB -> do
-                throwError [__i|
-                Record type mismatch
-
-                The following record type:
-
-                #{insert _A0}
-
-                #{locA0}
-
-                … is not a subtype of the following record type:
-
-                #{insert _B0}
-
-                #{locB0}
-
-                The former record has the following extra fields:
-
-                #{listToText (Map.keys extraA)}
-
-                … while the latter record has the following extra fields:
-
-                #{listToText (Map.keys extraB)}
-                |]
+                throwError (RecordTypeMismatch _A0 _B0 extraA extraB)
 
                | not okayA -> do
-                throwError [__i|
-                Record type mismatch
-
-                The following record type:
-
-                #{insert _A0}
-
-                #{locA0}
-
-                … is not a subtype of the following record type:
-
-                #{insert _B0}
-
-                #{locB0}
-
-                The former record has the following extra fields:
-
-                #{listToText (Map.keys extraA)}
-                |]
+                throwError (RecordTypeMismatch _A0 _B0 extraA mempty)
 
                | not okayB -> do
-                throwError [__i|
-                Record type mismatch
-
-                The following record type:
-
-                #{insert _A0}
-
-                #{locA0}
-
-                … is not a subtype of the following record type:
-
-                #{insert _B0}
-
-                #{locB0}
-
-                The latter record has the following extra fields:
-
-                #{listToText (Map.keys extraB)}
-                |]
+                throwError (RecordTypeMismatch _A0 _B0 mempty extraB)
 
                | otherwise -> do
                    return ()
@@ -705,25 +589,7 @@ subtype _A0 _B0 = do
 
                     case p0First <|> p1First of
                         Nothing -> do
-                            throwError [__i|
-                            Internal error: Invalid context
-
-                            One of the following fields variables:
-
-                            #{listToText
-                                [ Context.UnsolvedFields p0
-                                , Context.UnsolvedFields p1
-                                ]
-                            }
-
-                            … is missing from the following context:
-
-                            #{listToText _Γ}
-
-                            #{locA0}
-
-                            #{locB0}
-                            |]
+                            throwError (MissingOneOfFields [Type.location _A0, Type.location _B0] p0 p1 _Γ)
 
                         Just setContext -> do
                             setContext
@@ -780,21 +646,7 @@ subtype _A0 _B0 = do
                         p1
 
                 (_, _) -> do
-                    throwError [__i|
-                    Not a record subtype
-
-                    The following type:
-
-                    #{insert _A}
-
-                    #{locA0}
-
-                    … cannot be a subtype of:
-
-                    #{insert _B}
-
-                    #{locB0}
-                    |]
+                    throwError (NotRecordSubtype (Type.location _A0) _A (Type.location _B0) _B)
 
         -- Checking if one union is a subtype of another union is basically the
         -- exact same as the logic for checking if a record is a subtype of
@@ -839,71 +691,13 @@ subtype _A0 _B0 = do
                     ||  (flexible alternatives0 && alternatives0 /= alternatives1)
 
             if | not okayA && not okayB -> do
-                throwError [__i|
-                Union type mismatch
-
-                The following union type:
-
-                #{insert _A0}
-
-                #{locA0}
-
-                … is not a subtype of the following union type:
-
-                #{insert _B0}
-
-                #{locB0}
-
-                The former union has the following extra alternatives:
-
-                #{listToText (Map.keys extraA)}
-
-                … while the latter union has the following extra alternatives:
-
-                #{listToText (Map.keys extraB)}
-                |]
+                throwError (UnionTypeMismatch _A0 _B0 extraA extraB)
 
                | not okayA && okayB -> do
-                throwError [__i|
-                Union type mismatch
-
-                The following union type:
-
-                #{insert _A0}
-
-                #{locA0}
-
-                … is not a subtype of the following union type:
-
-                #{insert _B0}
-
-                #{locB0}
-
-                The former union has the following extra alternatives:
-
-                #{listToText (Map.keys extraA)}
-                |]
+                throwError (UnionTypeMismatch _A0 _B0 extraA mempty)
 
                | okayA && not okayB -> do
-                throwError [__i|
-                Union type mismatch
-
-                The following union type:
-
-                #{insert _A0}
-
-                #{locA0}
-
-                … is not a subtype of the following union type:
-
-                #{insert _B0}
-
-                #{locB0}
-
-                The latter union has the following extra alternatives:
-
-                #{listToText (Map.keys extraB)}
-                |]
+                throwError (UnionTypeMismatch _A0 _B0 mempty extraB)
 
                | otherwise -> do
                 return ()
@@ -955,25 +749,7 @@ subtype _A0 _B0 = do
 
                     case p0First <|> p1First of
                         Nothing -> do
-                            throwError [__i|
-                            Internal error: Invalid context
-
-                            One of the following alternatives variables:
-
-                            #{listToText
-                                [ Context.UnsolvedAlternatives p0
-                                , Context.UnsolvedAlternatives p1
-                                ]
-                            }
-
-                            … is missing from the following context:
-
-                            #{listToText _Γ}
-
-                            #{locA0}
-
-                            #{locB0}
-                            |]
+                            throwError (MissingOneOfAlternatives [Type.location _A0, Type.location _B0] p0 p1 _Γ)
 
                         Just setContext -> do
                             setContext
@@ -1032,21 +808,7 @@ subtype _A0 _B0 = do
                         p1
 
                 (_, _) -> do
-                    throwError [__i|
-                    Not a union subtype
-
-                    The following type:
-
-                    #{insert _A}
-
-                    #{locA0}
-
-                    … cannot be a subtype of:
-
-                    #{insert _B}
-
-                    #{locB0}
-                    |]
+                    throwError (NotUnionSubtype (Type.location _A0) _A (Type.location _B0) _B)
 
         -- Unfortunately, we need to have this wildcard match at the end,
         -- otherwise we'd have to specify a number of cases that is quadratic
@@ -1065,21 +827,7 @@ subtype _A0 _B0 = do
         -- `subtype` function and then I'll remember to add a case for my new
         -- complex type here.
         (_A, _B) -> do
-            throwError [__i|
-            Not a subtype
-
-            The following type:
-
-            #{insert _A}
-
-            #{locA0}
-
-            … cannot be a subtype of:
-
-            #{insert _B}
-
-            #{locB0}
-            |]
+            throwError (NotSubtype (Type.location _A0) _A (Type.location _B0) _B)
 
 {-| This corresponds to the judgment:
 
@@ -1093,23 +841,12 @@ subtype _A0 _B0 = do
     However, for consistency with the paper we still name them @instantiate*@.
 -}
 instantiateTypeL
-    :: (MonadState Status m, MonadError Text m)
+    :: (MonadState Status m, MonadError TypeInferenceError m)
     => Existential Monotype -> Type Location -> m ()
 instantiateTypeL a _A0 = do
     _Γ0 <- get
 
-    (_Γ', _Γ) <- Context.splitOnUnsolvedType a _Γ0 `orDie`
-        [__i|
-        Internal error: Invalid context
-
-        The following unsolved variable:
-
-        #{insert (Context.UnsolvedType a)}
-
-        … cannot be instantiated because the variable is missing from the context:
-
-        #{listToText _Γ0}
-        |]
+    (_Γ', _Γ) <- Context.splitOnUnsolvedType a _Γ0 `orDie` MissingVariable a _Γ0
 
     let instLSolve τ = do
             wellFormedType _Γ _A0
@@ -1292,23 +1029,12 @@ instantiateTypeL a _A0 = do
     α̂ such that A :< α̂.
 -}
 instantiateTypeR
-    :: (MonadState Status m, MonadError Text m)
+    :: (MonadState Status m, MonadError TypeInferenceError m)
     => Type Location -> Existential Monotype -> m ()
 instantiateTypeR _A0 a = do
     _Γ0 <- get
 
-    (_Γ', _Γ) <- Context.splitOnUnsolvedType a _Γ0 `orDie`
-        [__i|
-        Internal error: Invalid context
-
-        The following unsolved variable:
-
-        #{insert (Context.UnsolvedType a)}
-
-        … cannot be instantiated because the variable is missing from the context:
-
-        #{listToText _Γ0}
-        |]
+    (_Γ', _Γ) <- Context.splitOnUnsolvedType a _Γ0 `orDie` MissingVariable a _Γ0
 
     let instRSolve τ = do
             wellFormedType _Γ _A0
@@ -1437,7 +1163,7 @@ instantiateTypeR _A0 a = do
             instantiateAlternativesR (Type.location _A0) u p
 
 {- The following `equateFields` / `instantiateFieldsL` / `instantiateFieldsR`,
-   `equateAlternatives` / `instantiateAlternativesL` / 
+   `equateAlternatives` / `instantiateAlternativesL` /
    `instantiateAlternativesR` judgments are not present in the bidirectional
    type-checking paper.  These were added in order to support row polymorphism
    and variant polymorphism, by following the same general type-checking
@@ -1457,7 +1183,7 @@ instantiateTypeR _A0 a = do
 -}
 
 equateFields
-    :: (MonadState Status m, MonadError Text m)
+    :: (MonadState Status m, MonadError TypeInferenceError m)
     => Existential Monotype.Record -> Existential Monotype.Record -> m ()
 equateFields p0 p1 = do
     _Γ0 <- get
@@ -1478,42 +1204,18 @@ equateFields p0 p1 = do
 
     case p0First <|> p1First of
         Nothing -> do
-            throwError [__i|
-            Internal error: Invalid context
-
-            One of the following fields variables:
-
-            #{listToText [Context.UnsolvedFields p0, Context.UnsolvedFields p1 ]}
-
-            … is missing from the following context:
-
-            #{listToText _Γ0}
-            |]
+            throwError (MissingOneOfFields [] p0 p1 _Γ0)
 
         Just setContext -> do
             setContext
 
 instantiateFieldsL
-    :: (MonadState Status m, MonadError Text m)
+    :: (MonadState Status m, MonadError TypeInferenceError m)
     => Existential Monotype.Record -> Location -> Type.Record Location -> m ()
 instantiateFieldsL p0 location r@(Type.Fields kAs rest) = do
     if p0 `Type.fieldsFreeIn` Type{ node = Type.Record r, .. }
         then do
-            throwError [__i|
-            Not a fields subtype
-
-            The following fields variable:
-
-            #{insert p0}
-
-            … cannot be instantiated to the following record type:
-
-            #{insert (Type.Record r)}
-
-            #{Location.renderError "" location}
-
-            … because the same fields variable appears within that record type.
-            |]
+            throwError (NotFieldsSubtype location p0 r)
         else return ()
 
     let process (k, _A) = do
@@ -1528,19 +1230,7 @@ instantiateFieldsL p0 location r@(Type.Fields kAs rest) = do
 
     _Γ <- get
 
-    (_ΓR, _ΓL) <- Context.splitOnUnsolvedFields p0 _Γ `orDie`
-        [__i|
-        Internal error: Invalid context
-
-        The following unsolved fields variable:
-
-        #{insert (Context.UnsolvedFields p0)}
-
-        … cannot be instantiated because the fields variable is missing from the
-        context:
-
-        #{listToText _Γ}
-        |]
+    (_ΓR, _ΓL) <- Context.splitOnUnsolvedFields p0 _Γ `orDie` MissingAllFields p0 _Γ
 
     case rest of
         Monotype.UnsolvedFields p1 -> do
@@ -1564,26 +1254,12 @@ instantiateFieldsL p0 location r@(Type.Fields kAs rest) = do
     traverse_ instantiate kAbs
 
 instantiateFieldsR
-    :: (MonadState Status m, MonadError Text m)
+    :: (MonadState Status m, MonadError TypeInferenceError m)
     => Location -> Type.Record Location -> Existential Monotype.Record -> m ()
 instantiateFieldsR location r@(Type.Fields kAs rest) p0 = do
     if p0 `Type.fieldsFreeIn` Type{ node = Type.Record r, .. }
         then do
-            throwError [__i|
-            Not a fields subtype
-
-            The following fields variable:
-
-            #{insert p0}
-
-            … cannot be instantiated to the following record type:
-
-            #{insert (Type.Record r)}
-
-            #{Location.renderError "" location}
-
-            … because the same fields variable appears within that record type.
-            |]
+            throwError (NotFieldsSubtype location p0 r)
         else return ()
 
     let process (k, _A) = do
@@ -1598,19 +1274,7 @@ instantiateFieldsR location r@(Type.Fields kAs rest) p0 = do
 
     _Γ <- get
 
-    (_ΓR, _ΓL) <- Context.splitOnUnsolvedFields p0 _Γ `orDie`
-        [__i|
-        Internal error: Invalid context
-
-        The following unsolved fields variable:
-
-        #{insert (Context.UnsolvedFields p0)}
-
-        … cannot be instantiated because the fields variable is missing from the
-        context:
-
-        #{listToText _Γ}
-        |]
+    (_ΓR, _ΓL) <- Context.splitOnUnsolvedFields p0 _Γ `orDie` MissingAllFields p0 _Γ
 
     case rest of
         Monotype.UnsolvedFields p1 -> do
@@ -1634,7 +1298,7 @@ instantiateFieldsR location r@(Type.Fields kAs rest) p0 = do
     traverse_ instantiate kAbs
 
 equateAlternatives
-    :: (MonadState Status m, MonadError Text m)
+    :: (MonadState Status m, MonadError TypeInferenceError m)
     => Existential Monotype.Union-> Existential Monotype.Union -> m ()
 equateAlternatives p0 p1 = do
     _Γ0 <- get
@@ -1655,42 +1319,18 @@ equateAlternatives p0 p1 = do
 
     case p0First <|> p1First of
         Nothing -> do
-            throwError [__i|
-            Internal error: Invalid context
-
-            One of the following alternatives variables:
-
-            #{listToText [Context.UnsolvedAlternatives p0, Context.UnsolvedAlternatives p1 ]}
-
-            … is missing from the following context:
-
-            #{listToText _Γ0}
-            |]
+            throwError (MissingOneOfAlternatives [] p0 p1 _Γ0)
 
         Just setContext -> do
             setContext
 
 instantiateAlternativesL
-    :: (MonadState Status m, MonadError Text m)
+    :: (MonadState Status m, MonadError TypeInferenceError m)
     => Existential Monotype.Union -> Location -> Type.Union Location -> m ()
 instantiateAlternativesL p0 location u@(Type.Alternatives kAs rest) = do
     if p0 `Type.alternativesFreeIn` Type{ node = Type.Union u, .. }
         then do
-            throwError [__i|
-            Not an alternatives subtype
-
-            The following alternatives variable:
-
-            #{insert p0}
-
-            … cannot be instantiated to the following union type:
-
-            #{insert (Type.Union u)}
-
-            #{Location.renderError "" location}
-
-            … because the same alternatives variable appears within that record type.
-            |]
+            throwError (NotAlternativesSubtype location p0 u)
         else return ()
 
     let process (k, _A) = do
@@ -1705,19 +1345,7 @@ instantiateAlternativesL p0 location u@(Type.Alternatives kAs rest) = do
 
     _Γ <- get
 
-    (_ΓR, _ΓL) <- Context.splitOnUnsolvedAlternatives p0 _Γ `orDie`
-        [__i|
-        Internal error: Invalid context
-
-        The following unsolved alternatives variable:
-
-        #{insert (Context.UnsolvedAlternatives p0)}}
-
-        … cannot be instantiated because the alternatives variable is missing from the
-        context:
-
-        #{listToText _Γ}
-        |]
+    (_ΓR, _ΓL) <- Context.splitOnUnsolvedAlternatives p0 _Γ `orDie` MissingAllAlternatives p0 _Γ
 
     case rest of
         Monotype.UnsolvedAlternatives p1 -> do
@@ -1741,26 +1369,12 @@ instantiateAlternativesL p0 location u@(Type.Alternatives kAs rest) = do
     traverse_ instantiate kAbs
 
 instantiateAlternativesR
-    :: (MonadState Status m, MonadError Text m)
+    :: (MonadState Status m, MonadError TypeInferenceError m)
     => Location -> Type.Union Location -> Existential Monotype.Union -> m ()
 instantiateAlternativesR location u@(Type.Alternatives kAs rest) p0 = do
     if p0 `Type.alternativesFreeIn` Type{ node = Type.Union u, .. }
         then do
-            throwError [__i|
-            Not an alternatives subtype
-
-            The following alternatives variable:
-
-            #{insert p0}
-
-            … cannot be instantiated to the following union type:
-
-            #{insert (Type.Union u)}
-
-            #{Location.renderError "" location}
-
-            … because the same alternatives variable appears within that union type.
-            |]
+            throwError (NotAlternativesSubtype location p0 u)
         else return ()
 
     let process (k, _A) = do
@@ -1775,19 +1389,7 @@ instantiateAlternativesR location u@(Type.Alternatives kAs rest) p0 = do
 
     _Γ <- get
 
-    (_ΓR, _ΓL) <- Context.splitOnUnsolvedAlternatives p0 _Γ `orDie`
-        [__i|
-        Internal error: Invalid context
-
-        The following unsolved alternatives variable:
-
-        #{insert (Context.UnsolvedAlternatives p0)}
-
-        … cannot be instantiated because the alternatives variable is missing from the
-        context:
-
-        #{listToText _Γ}
-        |]
+    (_ΓR, _ΓL) <- Context.splitOnUnsolvedAlternatives p0 _Γ `orDie` MissingAllAlternatives p0 _Γ
 
     case rest of
         Monotype.UnsolvedAlternatives p1 -> do
@@ -1818,7 +1420,7 @@ instantiateAlternativesR location u@(Type.Alternatives kAs rest) p0 = do
     type of A and an updated context Δ.
 -}
 infer
-    :: (MonadState Status m, MonadError Text m)
+    :: (MonadState Status m, MonadError TypeInferenceError m)
     => Syntax Location (Type Location, Value)
     -> m (Type Location)
 infer e0 = do
@@ -1835,14 +1437,9 @@ infer e0 = do
         _A@(Syntax.Variable x0 n) -> do
             _Γ <- get
 
-            Context.lookup x0 n _Γ `orDie`
-                [__i|
-                Unbound variable: #{prettyToText (void _A)}
+            Context.lookup x0 n _Γ `orDie` UnboundVariable (Syntax.location e0) x0 n
 
-                #{Location.renderError "" (Syntax.location e0)}
-                |]
-
-        -- →I⇒ 
+        -- →I⇒
         Syntax.Lambda nameLocation x e -> do
             a <- fresh
             b <- fresh
@@ -1980,18 +1577,7 @@ infer e0 = do
 
                             return (key, _A)
                         process (_, _A) = do
-                            throwError [__i|
-                                Invalid handler
-
-                                The merge keyword expects a record of handlers where all handlers are functions,
-                                but you provided a handler of the following type:
-
-                                #{insert _A}
-
-                                #{Location.renderError "" (Type.location _A)}
-
-                                … which is not a function type.
-                            |]
+                            throwError (MergeInvalidHandler (Type.location _A) _A)
 
                     keyTypes' <- traverse process keyTypes
 
@@ -2010,32 +1596,10 @@ infer e0 = do
                         }
 
                 Type.Record _ -> do
-                    throwError [__i|
-                        Must merge a concrete record
-
-                        The first argument to a merge expression must be a record where all fields are
-                        statically known.  However, you provided an argument of type:
-
-                        #{insert _R}
-
-                        #{Location.renderError "" (Type.location _R)}
-
-                        … where not all fields could be inferred.
-                    |]
+                    throwError (MergeConcreteRecord (Type.location _R) _R)
 
                 _ -> do
-                    throwError [__i|
-                        Must merge a record
-
-                        The first argument to a merge expression must be a record, but you provided an
-                        expression of the following type:
-
-                        #{insert _R}
-
-                        #{Location.renderError "" (Type.location _R)}
-
-                        … which is not a record type.
-                    |]
+                    throwError (MergeRecord (Type.location _R) _R)
 
         Syntax.Field record location key -> do
             a <- fresh
@@ -2130,15 +1694,7 @@ infer e0 = do
                 Type.Scalar Monotype.Integer -> return _L
                 Type.Scalar Monotype.Real    -> return _L
                 _ -> do
-                    throwError [__i|
-                    Invalid operands
-
-                    You cannot add values of type:
-
-                    #{insert _L'}
-
-                    #{Location.renderError "" (Syntax.location l)}
-                    |]
+                    throwError (InvalidOperands (Syntax.location l) _L')
 
         Syntax.Operator l _ Syntax.Plus r -> do
             _L <- infer l
@@ -2159,15 +1715,7 @@ infer e0 = do
                 Type.List   _                -> return _L
 
                 _ -> do
-                    throwError [__i|
-                    Invalid operands
-
-                    You cannot add values of type:
-
-                    #{insert _L'}
-
-                    #{Location.renderError "" (Syntax.location l)}
-                    |]
+                    throwError (InvalidOperands (Syntax.location l) _L')
 
         Syntax.Builtin Syntax.RealEqual-> do
             return
@@ -2453,7 +2001,7 @@ infer e0 = do
     context Δ.
 -}
 check
-    :: (MonadState Status m, MonadError Text m)
+    :: (MonadState Status m, MonadError TypeInferenceError m)
     => Syntax Location (Type Location, Value) -> Type Location -> m ()
 -- The check function is the most important function to understand for the
 -- bidirectional type-checking algorithm.
@@ -2646,7 +2194,7 @@ check e _B = do
     input argument e, under input context Γ, producing an updated context Δ.
 -}
 inferApplication
-    :: (MonadState Status m, MonadError Text m)
+    :: (MonadState Status m, MonadError TypeInferenceError m)
     => Type Location
     -> Syntax Location (Type Location, Value)
     -> m (Type Location)
@@ -2690,18 +2238,7 @@ inferApplication _A0@Type{ node = Type.Exists _ a domain _A } e = do
 inferApplication Type{ node = Type.UnsolvedType a, .. } e = do
     _Γ <- get
 
-    (_ΓR, _ΓL) <- Context.splitOnUnsolvedType a _Γ `orDie`
-        [__i|
-        Internal error: Invalid context
-
-        The following unsolved variable:
-
-        #{insert (Context.UnsolvedType a)}
-
-        … cannot be solved because the variable is missing from the context:
-
-        #{listToText _Γ}
-        |]
+    (_ΓR, _ΓL) <- Context.splitOnUnsolvedType a _Γ `orDie` MissingVariable a _Γ
 
     a1 <- fresh
     a2 <- fresh
@@ -2716,45 +2253,494 @@ inferApplication Type{ node = Type.Function _A _C } e = do
 
     return _C
 inferApplication Type{ node = Type.VariableType a, ..} _ = do
-    throwError [__i|
-    Not necessarily a function type
-
-    The following type variable:
-
-    #{insert a}
-
-    … could potentially be any type and is not necessarily a function type.
-
-    #{Location.renderError "" location}
-    |]
+    throwError (NotNecessarilyFunctionType location a)
 inferApplication _A@Type{..} _ = do
-    throwError [__i|
-    Not a function type
-
-    An expression of the following type:
-
-    #{insert _A}
-
-    #{Location.renderError "" location}
-
-    … was invoked as if it were a function, but the above type is not a function
-    type.
-    |]
+    throwError (NotFunctionType location _A)
 
 -- | Infer the `Type` of the given `Syntax` tree
 typeOf
     :: Syntax Location (Type Location, Value)
-    -> Either Text (Type Location)
+    -> Either TypeInferenceError (Type Location)
 typeOf = typeWith []
 
 -- | Like `typeOf`, but accepts a custom type-checking `Context`
 typeWith
     :: Context Location
     -> Syntax Location (Type Location, Value)
-    -> Either Text (Type Location)
+    -> Either TypeInferenceError (Type Location)
 typeWith context syntax = do
     let initialStatus = Status{ count = 0, context }
 
     (_A, Status{ context = _Δ }) <- State.runStateT (infer syntax) initialStatus
 
     return (Context.complete _Δ _A)
+
+-- | A data type holding all errors related to type inference
+data TypeInferenceError
+    = IllFormedAlternatives Location (Existential Monotype.Union) (Context Location)
+    | IllFormedFields Location (Existential Monotype.Record) (Context Location)
+    | IllFormedType Location (Type.Node Location) (Context Location)
+    --
+    | InvalidOperands Location (Type Location)
+    --
+    | MergeConcreteRecord Location (Type Location)
+    | MergeInvalidHandler Location (Type Location)
+    | MergeRecord Location (Type Location)
+    --
+    | MissingAllAlternatives (Existential Monotype.Union) (Context Location)
+    | MissingAllFields (Existential Monotype.Record) (Context Location)
+    | MissingOneOfAlternatives [Location] (Existential Monotype.Union) (Existential Monotype.Union) (Context Location)
+    | MissingOneOfFields [Location] (Existential Monotype.Record) (Existential Monotype.Record) (Context Location)
+    | MissingVariable (Existential Monotype) (Context Location)
+    --
+    | NotFunctionType Location (Type Location)
+    | NotNecessarilyFunctionType Location Text
+    --
+    | NotAlternativesSubtype Location (Existential Monotype.Union) (Type.Union Location)
+    | NotFieldsSubtype Location (Existential Monotype.Record) (Type.Record Location)
+    | NotRecordSubtype Location (Type.Node Location) Location (Type.Node Location)
+    | NotUnionSubtype Location (Type.Node Location) Location (Type.Node Location)
+    | NotSubtype Location (Type.Node Location) Location (Type.Node Location)
+    --
+    | UnboundAlternatives Location Text
+    | UnboundFields Location Text
+    | UnboundTypeVariable Location Text
+    | UnboundVariable Location Text Int
+    --
+    | RecordTypeMismatch (Type Location) (Type Location) (Map.Map Text (Type Location)) (Map.Map Text (Type Location))
+    | UnionTypeMismatch (Type Location) (Type Location) (Map.Map Text (Type Location)) (Map.Map Text (Type Location))
+    deriving (Eq, Show)
+
+instance Exception TypeInferenceError where
+    displayException (IllFormedAlternatives location a0 _Γ) = [__i|
+        Internal error: Invalid context
+
+        The following unsolved alternatives variable:
+
+        #{insert (Context.UnsolvedAlternatives a0)}
+
+        … is not well-formed within the following context:
+
+        #{listToText _Γ}
+
+        #{Location.renderError "" location}
+        |]
+
+    displayException (IllFormedFields location a0 _Γ) = [__i|
+        Internal error: Invalid context
+
+        The following unsolved fields variable:
+
+        #{insert (Context.UnsolvedFields a0)}
+
+        … is not well-formed within the following context:
+
+        #{listToText _Γ}
+
+        #{Location.renderError "" location}
+        |]
+
+    displayException (IllFormedType location _A _Γ) = [__i|
+        Internal error: Invalid context
+
+        The following type:
+
+        #{insert _A}
+
+        … is not well-formed within the following context:
+
+        #{listToText _Γ}
+
+        #{Location.renderError "" location}
+        |]
+
+    displayException (InvalidOperands location _L') = [__i|
+        Invalid operands
+
+        You cannot add values of type:
+
+        #{insert _L'}
+
+        #{Location.renderError "" location}
+        |]
+
+    displayException (MergeConcreteRecord location _R) = [__i|
+        Must merge a concrete record
+
+        The first argument to a merge expression must be a record where all fields are
+        statically known.  However, you provided an argument of type:
+
+        #{insert _R}
+
+        #{Location.renderError "" location}
+
+        … where not all fields could be inferred.
+        |]
+
+    displayException (MergeInvalidHandler location _A) = [__i|
+        Invalid handler
+
+        The merge keyword expects a record of handlers where all handlers are functions,
+        but you provided a handler of the following type:
+
+        #{insert _A}
+
+        #{Location.renderError "" location}
+
+        … which is not a function type.
+        |]
+
+    displayException (MergeRecord location _R) = [__i|
+        Must merge a record
+
+        The first argument to a merge expression must be a record, but you provided an
+        expression of the following type:
+
+        #{insert _R}
+
+        #{Location.renderError "" location}
+
+        … which is not a record type.
+        |]
+
+    displayException (MissingAllAlternatives p0 _Γ) = [__i|
+        Internal error: Invalid context
+
+        The following unsolved alternatives variable:
+
+        #{insert (Context.UnsolvedAlternatives p0)}}
+
+        … cannot be instantiated because the alternatives variable is missing from the
+        context:
+
+        #{listToText _Γ}
+        |]
+
+    displayException (MissingAllFields p0 _Γ) = [__i|
+        Internal error: Invalid context
+
+        The following unsolved fields variable:
+
+        #{insert (Context.UnsolvedFields p0)}
+
+        … cannot be instantiated because the fields variable is missing from the
+        context:
+
+        #{listToText _Γ}
+        |]
+
+    displayException (MissingOneOfAlternatives locations p0 p1 _Γ) = [__i|
+        Internal error: Invalid context
+
+        One of the following alternatives variables:
+
+        #{listToText [Context.UnsolvedAlternatives p0, Context.UnsolvedAlternatives p1 ]}
+
+        … is missing from the following context:
+
+        #{listToText _Γ}
+
+        #{locations'}
+        |]
+        where
+            locations' = Text.unlines (map (Location.renderError "") locations)
+
+    displayException (MissingOneOfFields locations p0 p1 _Γ) = [__i|
+        Internal error: Invalid context
+
+        One of the following fields variables:
+
+        #{listToText [Context.UnsolvedFields p0, Context.UnsolvedFields p1 ]}
+
+        … is missing from the following context:
+
+        #{listToText _Γ}
+
+        #{locations'}
+        |]
+        where
+            locations' = Text.unlines (map (Location.renderError "") locations)
+
+    displayException (MissingVariable a _Γ) = [__i|
+        Internal error: Invalid context
+
+        The following unsolved variable:
+
+        #{insert (Context.UnsolvedType a)}
+
+        … cannot be solved because the variable is missing from the context:
+
+        #{listToText _Γ}
+        |]
+
+    displayException (NotFunctionType location _A) = [__i|
+        Not a function type
+
+        An expression of the following type:
+
+        #{insert _A}
+
+        #{Location.renderError "" location}
+
+        … was invoked as if it were a function, but the above type is not a function
+        type.
+        |]
+
+    displayException (NotNecessarilyFunctionType location a) = [__i|
+        Not necessarily a function type
+
+        The following type variable:
+
+        #{insert a}
+
+        … could potentially be any type and is not necessarily a function type.
+
+        #{Location.renderError "" location}
+        |]
+
+    displayException (NotAlternativesSubtype location p0 u) = [__i|
+        Not an alternatives subtype
+
+        The following alternatives variable:
+
+        #{insert p0}
+
+        … cannot be instantiated to the following union type:
+
+        #{insert (Type.Union u)}
+
+        #{Location.renderError "" location}
+
+        … because the same alternatives variable appears within that union type.
+        |]
+
+    displayException (NotFieldsSubtype location p0 r) = [__i|
+        Not a fields subtype
+
+        The following fields variable:
+
+        #{insert p0}
+
+        … cannot be instantiated to the following record type:
+
+        #{insert (Type.Record r)}
+
+        #{Location.renderError "" location}
+
+        … because the same fields variable appears within that record type.
+        |]
+
+    displayException (NotRecordSubtype locA0 _A locB0 _B) = [__i|
+        Not a record subtype
+
+        The following type:
+
+        #{insert _A}
+
+        #{Location.renderError "" locA0}
+
+        … cannot be a subtype of:
+
+        #{insert _B}
+
+        #{Location.renderError "" locB0}
+        |]
+
+    displayException (NotUnionSubtype locA0 _A locB0 _B) = [__i|
+        Not a union subtype
+
+        The following type:
+
+        #{insert _A}
+
+        #{Location.renderError "" locA0}
+
+        … cannot be a subtype of:
+
+        #{insert _B}
+
+        #{Location.renderError "" locB0}
+        |]
+
+    displayException (NotSubtype locA0 _A locB0 _B) = [__i|
+        Not a subtype
+
+        The following type:
+
+        #{insert _A}
+
+        #{Location.renderError "" locA0}
+
+        … cannot be a subtype of:
+
+        #{insert _B}
+
+        #{Location.renderError "" locB0}
+        |]
+
+    displayException (UnboundAlternatives location a) = [__i|
+        Unbound alternatives variable: #{a}
+
+        #{Location.renderError "" location}
+        |]
+
+    displayException (UnboundFields location a) = [__i|
+        Unbound fields variable: #{a}
+
+        #{Location.renderError "" location}
+        |]
+
+    displayException (UnboundTypeVariable location a) = [__i|
+        Unbound type variable: #{a}
+
+        #{Location.renderError "" location}
+        |]
+
+    displayException (UnboundVariable location x n) = [__i|
+        Unbound variable: #{var}
+
+        #{Location.renderError "" location }
+        |]
+        where
+            var = prettyToText @(Syntax.Node () Void) (Syntax.Variable x n)
+
+    displayException (RecordTypeMismatch _A0 _B0 extraA extraB) | extraB == mempty = [__i|
+        Record type mismatch
+
+        The following record type:
+
+        #{insert _A0}
+
+        #{Location.renderError "" (Type.location _A0)}
+
+        … is not a subtype of the following record type:
+
+        #{insert _B0}
+
+        #{Location.renderError "" (Type.location _B0)}
+
+        The former record has the following extra fields:
+
+        #{listToText (Map.keys extraA)}
+        |]
+
+    displayException (RecordTypeMismatch _A0 _B0 extraA extraB) | extraA == mempty = [__i|
+        Record type mismatch
+
+        The following record type:
+
+        #{insert _A0}
+
+        #{Location.renderError "" (Type.location _A0)}
+
+        … is not a subtype of the following record type:
+
+        #{insert _B0}
+
+        #{Location.renderError "" (Type.location _B0)}
+
+        The latter record has the following extra fields:
+
+        #{listToText (Map.keys extraB)}
+        |]
+
+    displayException (RecordTypeMismatch _A0 _B0 extraA extraB) = [__i|
+        Record type mismatch
+
+        The following record type:
+
+        #{insert _A0}
+
+        #{Location.renderError "" (Type.location _A0)}
+
+        … is not a subtype of the following record type:
+
+        #{insert _B0}
+
+        #{Location.renderError "" (Type.location _B0)}
+
+        The former record has the following extra fields:
+
+        #{listToText (Map.keys extraA)}
+
+        … while the latter record has the following extra fields:
+
+        #{listToText (Map.keys extraB)}
+        |]
+
+    displayException (UnionTypeMismatch _A0 _B0 extraA extraB) | extraB == mempty = [__i|
+        Union type mismatch
+
+        The following union type:
+
+        #{insert _A0}
+
+        #{Location.renderError "" (Type.location _A0)}
+
+        … is not a subtype of the following union type:
+
+        #{insert _B0}
+
+        #{Location.renderError "" (Type.location _B0)}
+
+        The former union has the following extra alternatives:
+
+        #{listToText (Map.keys extraA)}
+        |]
+
+    displayException (UnionTypeMismatch _A0 _B0 extraA extraB) | extraA == mempty = [__i|
+        Union type mismatch
+
+        The following union type:
+
+        #{insert _A0}
+
+        #{Location.renderError "" (Type.location _A0)}
+
+        … is not a subtype of the following union type:
+
+        #{insert _B0}
+
+        #{Location.renderError "" (Type.location _B0)}
+
+        The latter union has the following extra alternatives:
+
+        #{listToText (Map.keys extraB)}
+        |]
+
+    displayException (UnionTypeMismatch _A0 _B0 extraA extraB) = [__i|
+        Union type mismatch
+
+        The following union type:
+
+        #{insert _A0}
+
+        #{Location.renderError "" (Type.location _A0)}
+
+        … is not a subtype of the following union type:
+
+        #{insert _B0}
+
+        #{Location.renderError "" (Type.location _B0)}
+
+        The former union has the following extra alternatives:
+
+        #{listToText (Map.keys extraA)}
+
+        … while the latter union has the following extra alternatives:
+
+        #{listToText (Map.keys extraB)}
+        |]
+
+-- Helper functions for displaying errors
+
+insert :: Pretty a => a -> Text
+insert a = prettyToText ("  " <> Pretty.align (pretty a))
+
+listToText :: Pretty a => [a] -> Text
+listToText elements = Text.intercalate "\n" (map prettyEntry elements)
+  where
+    prettyEntry entry = prettyToText ("• " <> Pretty.align (pretty entry))
+
+prettyToText :: Pretty a => a -> Text
+prettyToText = Grace.Pretty.renderStrict True Grace.Pretty.defaultColumns
