@@ -294,7 +294,7 @@ apply
             )
         )
     )
-    (Value.List elements) = loop elements nil
+    (Value.List elements) = loop (reverse elements) nil
   where
     loop      []  !result = result
     loop (x : xs) !result = loop xs (apply (apply cons x) result)
