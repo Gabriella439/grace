@@ -1,0 +1,6 @@
+# Create a `List` from `n` copies of an element
+let replicate
+      : forall (a : Type) . Natural -> a -> List a
+      = \n -> \x -> Natural/fold n (\xs -> [ x ] + xs) []
+
+in  replicate

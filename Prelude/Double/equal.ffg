@@ -1,0 +1,6 @@
+# Returns `true` if two `Double`s are equal, false otherwise
+let equal
+      : Double -> Double -> Bool
+      = Double/equal
+
+in  equal

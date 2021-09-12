@@ -1,0 +1,5 @@
+{ concat: ./concat.ffg
+, concatMap: ./concatMap.ffg
+, concatMapSep: ./concatMapSep.ffg
+, concatSep: ./concatSep.ffg
+}

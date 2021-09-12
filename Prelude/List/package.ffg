@@ -1,0 +1,21 @@
+{ all: ./all.ffg
+, any: ./any.ffg
+, concat: ./concat.ffg
+, concatMap: ./concatMap.ffg
+, drop: ./drop.ffg
+, equal: ./equal.ffg
+, fold: ./fold.ffg
+, generate: ./generate.ffg
+, head: ./head.ffg
+, index: ./index.ffg
+, indexed: ./indexed.ffg
+, last: ./last.ffg
+, length: ./length.ffg
+, map: ./map.ffg
+, "null": ./null.ffg
+, reject: ./reject.ffg
+, replicate: ./replicate.ffg
+, reverse: ./reverse.ffg
+, select: ./select.ffg
+, take: ./take.ffg
+}

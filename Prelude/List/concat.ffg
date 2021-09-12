@@ -1,0 +1,6 @@
+# Concate a list of lists into a single list
+let concat
+      : forall (a : Type) . List (List a) -> List a
+      = List/fold { cons: \x -> \y -> (x + y : List ?), nil: [] }
+
+in  concat

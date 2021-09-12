@@ -1,0 +1,6 @@
+# Returns `true` if the `Integer` is odd, and `false` otherwise
+let odd
+      : Integer -> Bool
+      = Integer/odd
+
+in  odd

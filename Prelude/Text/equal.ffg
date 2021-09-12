@@ -1,0 +1,6 @@
+# Returns `true` if two `Text` values are equal, `false` otherwise
+let equal
+      : Text -> Text -> Bool
+      = Text/equal
+
+in  equal

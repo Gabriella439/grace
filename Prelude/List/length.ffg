@@ -1,0 +1,6 @@
+# Compute the length of a list
+let length
+      : forall (a : Type) . List a -> Natural
+      = List/length
+
+in  length

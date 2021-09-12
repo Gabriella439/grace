@@ -1,0 +1,8 @@
+# Only keep elements of the list where the supplied functions returns `true`
+let select
+      : forall (a : Type) . (a -> Bool) -> List a -> List a
+      = \f ->
+          List/fold
+            { "cons": \x -> \xs -> if f x then [ x ] + xs else xs, "nil": [ ] }
+
+in  select

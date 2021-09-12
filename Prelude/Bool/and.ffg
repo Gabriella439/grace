@@ -1,0 +1,7 @@
+# Returns `true` if there are no `false`s in the input `List` and `false`
+# otherwise
+let and
+      : List Bool -> Bool
+      = List/fold { cons: \x -> \y -> x && y, nil: true }
+
+in  and

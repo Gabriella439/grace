@@ -1,0 +1,8 @@
+# Only keep elements of the list where the supplied functions returns `false`
+let reject
+      : forall (a : Type) . (a -> Bool) -> List a -> List a
+      = \f ->
+          List/fold
+            { "cons": \x -> \xs -> if f x then xs else [ x ] + xs, "nil": [ ] }
+
+in  reject

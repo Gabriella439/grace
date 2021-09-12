@@ -1,0 +1,8 @@
+# Returns `true` if two `Bool`s are equal, `false` otherwise
+let not = ./not.ffg
+
+let equal
+      : Bool -> Bool -> Bool
+      = \l -> \r -> (l && r) || (not l && not r)
+
+in  equal

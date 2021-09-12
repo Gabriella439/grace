@@ -1,0 +1,10 @@
+# Returns `true` if a `Double` is non-negative, and `false` otherwise
+let not = ../Bool/not.ffg
+
+let negative = ./negative.ffg
+
+let nonNegative
+      : Double -> Bool
+      = \n -> not (negative n)
+
+in  nonNegative

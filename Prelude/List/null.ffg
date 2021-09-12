@@ -1,0 +1,6 @@
+# Returns `true` if the `List` is empty and `false` otherwise
+let null_
+      : forall (a : Type) . List a -> Bool
+      = \xs -> Double/equal (List/length xs) 0
+
+in  null_

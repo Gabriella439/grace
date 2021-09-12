@@ -1,0 +1,10 @@
+# Check if all elements satisfy the given predicate
+let all
+      : forall (a : Type) . (a -> Bool) -> List a -> Bool
+      = \predicate ->
+          List/fold
+            { cons: \element -> \result -> predicate element && result
+            , nil: true
+            }
+
+in  all
