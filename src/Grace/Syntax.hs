@@ -25,6 +25,7 @@ module Grace.Syntax
 import Control.Lens (Plated(..))
 import Data.Bifunctor (Bifunctor(..))
 import Data.List.NonEmpty (NonEmpty(..))
+import Data.Scientific (Scientific)
 import Data.Sequence (Seq((:<|)))
 import Data.String (IsString(..))
 import Data.Text (Text)
@@ -242,9 +243,9 @@ instance Pretty a => Pretty (Node s a) where
 
 -- | A scalar value
 data Scalar
-    = Double Double
+    = Real Scientific
     -- ^
-    --   >>> pretty (Double 1.0)
+    --   >>> pretty (Real 1.0)
     --   1.0
     | Integer Integer
     -- ^
@@ -273,7 +274,7 @@ data Scalar
 instance Pretty Scalar where
     pretty (Bool True )     = scalar "true"
     pretty (Bool False)     = scalar "false"
-    pretty (Double number)  = scalar (pretty number)
+    pretty (Real number)    = scalar (pretty number)
     pretty (Integer number) = scalar (pretty number)
     pretty (Natural number) = scalar (pretty number)
     pretty (Text text)      = scalar (Type.prettyTextLiteral text)
@@ -307,22 +308,22 @@ instance Pretty Operator where
 
 -- | A built-in function
 data Builtin
-    = DoubleEqual
+    = RealEqual
     -- ^
-    --   >>> pretty DoubleEqual
-    --   Double/equal
-    | DoubleLessThan
+    --   >>> pretty RealEqual
+    --   Real/equal
+    | RealLessThan
     -- ^
-    --   >>> pretty DoubleLessThan
-    --   Double/lessThan
-    | DoubleNegate
+    --   >>> pretty RealLessThan
+    --   Real/lessThan
+    | RealNegate
     -- ^
-    --   >>> pretty DoubleNegate
-    --   Double/negate
-    | DoubleShow
+    --   >>> pretty RealNegate
+    --   Real/negate
+    | RealShow
     -- ^
-    --   >>> pretty DoubleShow
-    --   Double/show
+    --   >>> pretty RealShow
+    --   Real/show
     | ListDrop
     -- ^
     --   >>> pretty ListDrop
@@ -394,10 +395,10 @@ data Builtin
     deriving (Bounded, Enum, Eq, Generic, Show)
 
 instance Pretty Builtin where
-    pretty DoubleEqual    = builtin "Double/equal"
-    pretty DoubleLessThan = builtin "Double/lessThan"
-    pretty DoubleNegate   = builtin "Double/negate"
-    pretty DoubleShow     = builtin "Double/show"
+    pretty RealEqual      = builtin "Real/equal"
+    pretty RealLessThan   = builtin "Real/lessThan"
+    pretty RealNegate     = builtin "Real/negate"
+    pretty RealShow       = builtin "Real/show"
     pretty IntegerAbs     = builtin "Integer/abs"
     pretty IntegerEven    = builtin "Integer/even"
     pretty IntegerNegate  = builtin "Integer/negate"

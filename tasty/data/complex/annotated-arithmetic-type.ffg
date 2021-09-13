@@ -1,1 +1,1 @@
-{ example0: Integer, example1: Double, example2: Integer, example3: Double }
+{ example0: Integer, example1: Real, example2: Integer, example3: Real }

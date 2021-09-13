@@ -26,6 +26,7 @@ import Control.Applicative.Combinators.NonEmpty (sepBy1)
 import Control.Applicative.Combinators (endBy, sepBy)
 import Data.Functor (void)
 import Data.List.NonEmpty (NonEmpty(..), some1)
+import Data.Scientific (Scientific)
 import Data.Text (Text)
 import Grace.Lexer (LocatedToken(LocatedToken), Token)
 import Grace.Location (Location(..), Offset(..))
@@ -54,9 +55,9 @@ matchAlternative :: Token -> Maybe Text
 matchAlternative (Lexer.Alternative a) = Just a
 matchAlternative  _                    = Nothing
 
-matchDouble :: Token -> Maybe Double
-matchDouble (Lexer.DoubleLiteral n) = Just n
-matchDouble  _                      = Nothing
+matchReal :: Token -> Maybe Scientific
+matchReal (Lexer.RealLiteral n) = Just n
+matchReal  _                    = Nothing
 
 matchInt :: Token -> Maybe Int
 matchInt (Lexer.Int n) = Just n
@@ -105,8 +106,8 @@ locatedLabel = locatedTerminal matchLabel
 locatedAlternative :: Parser r (Offset, Text)
 locatedAlternative = locatedTerminal matchAlternative
 
-locatedDouble :: Parser r (Offset, Double)
-locatedDouble = locatedTerminal matchDouble
+locatedReal :: Parser r (Offset, Scientific)
+locatedReal = locatedTerminal matchReal
 
 locatedInt :: Parser r (Offset, Int)
 locatedInt = locatedTerminal matchInt
@@ -145,12 +146,12 @@ render t = case t of
     Lexer.Comma            -> ","
     Lexer.Dash             -> "-"
     Lexer.Dot              -> "."
-    Lexer.Double           -> "Double"
-    Lexer.DoubleLiteral _  -> "a double literal"
-    Lexer.DoubleEqual      -> "Double/equal"
-    Lexer.DoubleLessThan   -> "Double/lessThan"
-    Lexer.DoubleNegate     -> "Double/negate"
-    Lexer.DoubleShow       -> "Double/show"
+    Lexer.Real             -> "Real"
+    Lexer.RealLiteral _    -> "a real number literal"
+    Lexer.RealEqual        -> "Real/equal"
+    Lexer.RealLessThan     -> "Real/lessThan"
+    Lexer.RealNegate       -> "Real/negate"
+    Lexer.RealShow         -> "Real/show"
     Lexer.Else             -> "else"
     Lexer.Equals           -> "="
     Lexer.Exists           -> "exists"
@@ -381,11 +382,11 @@ grammar = mdo
 
         <|> do  let f sign (location, n) = Syntax{..}
                       where
-                        node = Syntax.Scalar (Syntax.Double (sign n))
+                        node = Syntax.Scalar (Syntax.Real (sign n))
 
                 sign <- (token Lexer.Dash *> pure negate) <|> pure id
 
-                located <- locatedDouble
+                located <- locatedReal
 
                 return (f sign located)
 
@@ -408,21 +409,21 @@ grammar = mdo
 
                 return (f located)
 
-        <|> do  location <- locatedToken Lexer.DoubleEqual
+        <|> do  location <- locatedToken Lexer.RealEqual
 
-                return Syntax{ node = Syntax.Builtin Syntax.DoubleEqual, .. }
+                return Syntax{ node = Syntax.Builtin Syntax.RealEqual, .. }
 
-        <|> do  location <- locatedToken Lexer.DoubleLessThan
+        <|> do  location <- locatedToken Lexer.RealLessThan
 
-                return Syntax{ node = Syntax.Builtin Syntax.DoubleLessThan, .. }
+                return Syntax{ node = Syntax.Builtin Syntax.RealLessThan, .. }
 
-        <|> do  location <- locatedToken Lexer.DoubleNegate
+        <|> do  location <- locatedToken Lexer.RealNegate
 
-                return Syntax{ node = Syntax.Builtin Syntax.DoubleNegate, .. }
+                return Syntax{ node = Syntax.Builtin Syntax.RealNegate, .. }
 
-        <|> do  location <- locatedToken Lexer.DoubleShow
+        <|> do  location <- locatedToken Lexer.RealShow
 
-                return Syntax{ node = Syntax.Builtin Syntax.DoubleShow, .. }
+                return Syntax{ node = Syntax.Builtin Syntax.RealShow, .. }
 
         <|> do  location <- locatedToken Lexer.ListDrop
 
@@ -619,8 +620,8 @@ grammar = mdo
                 return Type{ node = Type.TypeHole, .. }
         <|> do  location <- locatedToken Lexer.Bool
                 return Type{ node = Type.Scalar Monotype.Bool, .. }
-        <|> do  location <- locatedToken Lexer.Double
-                return Type{ node = Type.Scalar Monotype.Double, .. }
+        <|> do  location <- locatedToken Lexer.Real
+                return Type{ node = Type.Scalar Monotype.Real, .. }
         <|> do  location <- locatedToken Lexer.Integer
                 return Type{ node = Type.Scalar Monotype.Integer, .. }
         <|> do  location <- locatedToken Lexer.JSON

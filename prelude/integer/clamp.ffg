@@ -1,6 +1,6 @@
 # Convert an `Integer` to a `Natural` number, clamping negative values to `0`
 let clamp
       : Integer -> Natural
-      = \n -> if Double/lessThan n 0 then 0 else Integer/abs n
+      = \n -> if Real/lessThan n 0 then 0 else Integer/abs n
 
 in  clamp

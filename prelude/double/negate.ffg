@@ -1,6 +1,0 @@
-# Negate a `Double`
-let negate
-      : Double -> Double
-      = Double/negate
-
-in  negate

@@ -473,14 +473,14 @@ subtype _A0 _B0 = do
 
         -- This is where you need to add any non-trivial subtypes.  For example,
         -- the following three rules specify that `Natural` is a subtype of
-        -- `Integer`, which is in turn a subtype of `Double`.
+        -- `Integer`, which is in turn a subtype of `Real`.
         (Type.Scalar Monotype.Natural, Type.Scalar Monotype.Integer) -> do
             return ()
 
-        (Type.Scalar Monotype.Natural, Type.Scalar Monotype.Double) -> do
+        (Type.Scalar Monotype.Natural, Type.Scalar Monotype.Real) -> do
             return ()
 
-        (Type.Scalar Monotype.Integer, Type.Scalar Monotype.Double) -> do
+        (Type.Scalar Monotype.Integer, Type.Scalar Monotype.Real) -> do
             return ()
 
         -- Similarly, this is the rule that says that `T` is a subtype of
@@ -2078,8 +2078,8 @@ infer e0 = do
         Syntax.Scalar (Syntax.Bool _) -> do
             return _Type{ node = Type.Scalar Monotype.Bool }
 
-        Syntax.Scalar (Syntax.Double _) -> do
-            return _Type{ node = Type.Scalar Monotype.Double }
+        Syntax.Scalar (Syntax.Real _) -> do
+            return _Type{ node = Type.Scalar Monotype.Real }
 
         Syntax.Scalar (Syntax.Integer _) -> do
             return _Type{ node = Type.Scalar Monotype.Integer }
@@ -2128,7 +2128,7 @@ infer e0 = do
             case node _L' of
                 Type.Scalar Monotype.Natural -> return _L
                 Type.Scalar Monotype.Integer -> return _L
-                Type.Scalar Monotype.Double  -> return _L
+                Type.Scalar Monotype.Real    -> return _L
                 _ -> do
                     throwError [__i|
                     Invalid operands
@@ -2154,7 +2154,7 @@ infer e0 = do
             case node _L' of
                 Type.Scalar Monotype.Natural -> return _L
                 Type.Scalar Monotype.Integer -> return _L
-                Type.Scalar Monotype.Double  -> return _L
+                Type.Scalar Monotype.Real    -> return _L
                 Type.Scalar Monotype.Text    -> return _L
                 Type.List   _                -> return _L
 
@@ -2169,31 +2169,31 @@ infer e0 = do
                     #{Location.renderError "" (Syntax.location l)}
                     |]
 
-        Syntax.Builtin Syntax.DoubleEqual-> do
+        Syntax.Builtin Syntax.RealEqual-> do
             return
-                (   _Type{ node = Type.Scalar Monotype.Double }
-                ~>  (   _Type{ node = Type.Scalar Monotype.Double }
+                (   _Type{ node = Type.Scalar Monotype.Real }
+                ~>  (   _Type{ node = Type.Scalar Monotype.Real }
                     ~>  _Type{ node = Type.Scalar Monotype.Bool }
                     )
                 )
 
-        Syntax.Builtin Syntax.DoubleLessThan -> do
+        Syntax.Builtin Syntax.RealLessThan -> do
             return
-                (   _Type{ node = Type.Scalar Monotype.Double }
-                ~>  (   _Type{ node = Type.Scalar Monotype.Double }
+                (   _Type{ node = Type.Scalar Monotype.Real }
+                ~>  (   _Type{ node = Type.Scalar Monotype.Real }
                     ~>  _Type{ node = Type.Scalar Monotype.Bool }
                     )
                 )
 
-        Syntax.Builtin Syntax.DoubleNegate -> do
+        Syntax.Builtin Syntax.RealNegate -> do
             return
-                (   _Type{ node = Type.Scalar Monotype.Double }
-                ~>  _Type{ node = Type.Scalar Monotype.Double }
+                (   _Type{ node = Type.Scalar Monotype.Real }
+                ~>  _Type{ node = Type.Scalar Monotype.Real }
                 )
 
-        Syntax.Builtin Syntax.DoubleShow -> do
+        Syntax.Builtin Syntax.RealShow -> do
             return
-                (   _Type{ node = Type.Scalar Monotype.Double }
+                (   _Type{ node = Type.Scalar Monotype.Real }
                 ~>  _Type{ node = Type.Scalar Monotype.Text }
                 )
 
@@ -2391,7 +2391,7 @@ infer e0 = do
                                         (Type.Fields
                                             [ ( "array", _Type{ node = Type.List _Type{ node = "a" } } ~> _Type{ node = "a" })
                                             , ("bool", _Type{ node = Type.Scalar Monotype.Bool } ~> _Type{ node = "a" })
-                                            , ("double", _Type{ node = Type.Scalar Monotype.Double } ~> _Type{ node = "a" })
+                                            , ("double", _Type{ node = Type.Scalar Monotype.Real } ~> _Type{ node = "a" })
                                             , ("integer", _Type{ node = Type.Scalar Monotype.Integer } ~> _Type{ node = "a" })
                                             , ("natural", _Type{ node = Type.Scalar Monotype.Natural } ~> _Type{ node = "a" })
                                             , ("null", _Type{ node = "a" })
@@ -2548,14 +2548,14 @@ check e Type{ node = Type.Forall _ a domain _A } = do
     discardUpTo (Context.Variable domain a)
 
 check Syntax{ node = Syntax.Operator l _ Syntax.Times r } _B@Type{ node = Type.Scalar scalar }
-    | scalar `elem` ([ Monotype.Natural, Monotype.Integer, Monotype.Double ] :: [Monotype.Scalar])= do
+    | scalar `elem` ([ Monotype.Natural, Monotype.Integer, Monotype.Real ] :: [Monotype.Scalar])= do
     check l _B
 
     _Γ <- get
 
     check r (Context.solveType _Γ _B)
 check Syntax{ node = Syntax.Operator l _ Syntax.Plus r } _B@Type{ node = Type.Scalar scalar }
-    | scalar `elem` ([ Monotype.Natural, Monotype.Integer, Monotype.Double, Monotype.Text ] :: [Monotype.Scalar]) = do
+    | scalar `elem` ([ Monotype.Natural, Monotype.Integer, Monotype.Real, Monotype.Text ] :: [Monotype.Scalar]) = do
     check l _B
 
     _Γ <- get
@@ -2623,7 +2623,7 @@ check Syntax{ node = Syntax.Scalar (Syntax.Natural _) } _B@Type{ node = Type.Sca
     return ()
 check Syntax{ node = Syntax.Scalar (Syntax.Integer _) } _B@Type{ node = Type.Scalar Monotype.JSON } = do
     return ()
-check Syntax{ node = Syntax.Scalar (Syntax.Double _) } _B@Type{ node = Type.Scalar Monotype.JSON } = do
+check Syntax{ node = Syntax.Scalar (Syntax.Real _) } _B@Type{ node = Type.Scalar Monotype.JSON } = do
     return ()
 check Syntax{ node = Syntax.Scalar (Syntax.Bool _) } _B@Type{ node = Type.Scalar Monotype.JSON } = do
     return ()

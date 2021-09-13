@@ -34,6 +34,7 @@ import Control.Applicative (empty, (<|>))
 import Control.Monad.Combinators (many, manyTill, sepBy1)
 import Data.HashSet (HashSet)
 import Data.List.NonEmpty (NonEmpty(..))
+import Data.Scientific (Scientific)
 import Data.String.Interpolate (__i)
 import Data.Text (Text)
 import Data.Void (Void)
@@ -44,8 +45,9 @@ import Text.Megaparsec (ParseErrorBundle(..), (<?>), try)
 import qualified Control.Monad              as Monad
 import qualified Control.Monad.Combinators  as Combinators
 import qualified Data.Char                  as Char
-import qualified Data.List                  as List
 import qualified Data.HashSet               as HashSet
+import qualified Data.List                  as List
+import qualified Data.Scientific            as Scientific
 import qualified Data.Text                  as Text
 import qualified Data.Text.Read             as Read
 import qualified Grace.Location             as Location
@@ -97,10 +99,10 @@ parseToken =
             ] <?> "keyword"
 
         , Combinators.choice
-            [ DoubleEqual    <$ symbol "Double/equal"
-            , DoubleLessThan <$ symbol "Double/lessThan"
-            , DoubleNegate   <$ symbol "Double/negate"
-            , DoubleShow     <$ symbol "Double/show"
+            [ RealEqual      <$ symbol "Real/equal"
+            , RealLessThan   <$ symbol "Real/lessThan"
+            , RealNegate     <$ symbol "Real/negate"
+            , RealShow       <$ symbol "Real/show"
             , ListDrop       <$ symbol "List/drop"
             , ListEqual      <$ symbol "List/equal"
             , ListFold       <$ symbol "List/fold"
@@ -126,7 +128,7 @@ parseToken =
         , Combinators.choice
             [ List     <$ symbol "List"
             , Optional <$ symbol "Optional"
-            , Double   <$ symbol "Double"
+            , Real     <$ symbol "Real"
             , Integer  <$ symbol "Integer"
             , JSON     <$ symbol "JSON"
             , Natural  <$ symbol "Natural"
@@ -153,8 +155,7 @@ parseToken =
         , Equals           <$ symbol "="
         , Lambda           <$ symbol "\\"
 
-        , double
-        , int
+        , number
         , text
         , alternative
         ]
@@ -187,11 +188,13 @@ lex name code =
         Right tokens -> do
             return tokens
 
-int :: Parser Token
-int = fmap Int (lexeme Lexer.decimal)
+number :: Parser Token
+number = do
+    scientific <- lexeme Lexer.scientific
 
-double :: Parser Token
-double = fmap DoubleLiteral (try (lexeme Lexer.float))
+    case Scientific.toBoundedInteger scientific of
+        Nothing  -> return (RealLiteral scientific)
+        Just int -> return (Int int)
 
 file :: Parser Token
 file = lexeme do
@@ -277,11 +280,11 @@ reserved =
     HashSet.fromList
         [ "Alternatives"
         , "Bool"
-        , "Double"
-        , "Double/equal"
-        , "Double/lessThan"
-        , "Double/negate"
-        , "Double/show"
+        , "Real"
+        , "Real/equal"
+        , "Real/lessThan"
+        , "Real/negate"
+        , "Real/show"
         , "Fields"
         , "Integer"
         , "Integer/abs"
@@ -357,12 +360,12 @@ data Token
     | Comma
     | Dash
     | Dot
-    | Double
-    | DoubleEqual
-    | DoubleLessThan
-    | DoubleLiteral Double
-    | DoubleNegate
-    | DoubleShow
+    | Real
+    | RealEqual
+    | RealLessThan
+    | RealLiteral Scientific
+    | RealNegate
+    | RealShow
     | Else
     | Equals
     | Exists

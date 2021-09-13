@@ -24,6 +24,7 @@ library
                      , prettyprinter
                      , prettyprinter-ansi-terminal
                      , repline
+                     , scientific
                      , string-interpolate
                      , terminal-size
                      , text

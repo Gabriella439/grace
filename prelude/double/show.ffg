@@ -1,6 +1,0 @@
-# Render a `Double` as `Text`
-let show
-      : Double -> Text
-      = Double/show
-
-in  show

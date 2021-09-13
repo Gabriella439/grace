@@ -1,1 +1,1 @@
-List/equal Double/equal [ 2, 3 ] [ 2, 3 ]
+List/equal Real/equal [ 2, 3 ] [ 2, 3 ]

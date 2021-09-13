@@ -1,17 +1,17 @@
 { a: Natural
 , b: Integer
-, c: Double
+, c: Real
 , d: Text
 , e: List Bool
 , f: Natural
 , g: Integer
-, h: Double
+, h: Real
 , i: Natural
 , j: Integer
-, k: Double
+, k: Real
 , l: Text
 , m: List Bool
 , n: Natural
 , o: Integer
-, p: Double
+, p: Real
 }

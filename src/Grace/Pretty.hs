@@ -20,6 +20,7 @@ module Grace.Pretty
     , operator
     ) where
 
+import Data.Scientific (Scientific)
 import Data.Text (Text)
 import Data.Void (Void)
 import Numeric.Natural (Natural)
@@ -102,6 +103,9 @@ class Pretty a where
 
 instance Pretty Double where
     pretty = Pretty.pretty
+
+instance Pretty Scientific where
+    pretty = Pretty.pretty . show
 
 instance Pretty Int where
     pretty = Pretty.pretty

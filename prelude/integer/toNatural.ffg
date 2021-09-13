@@ -2,6 +2,6 @@
 # number is negative
 let toNatural
       : forall (a : Alternatives) . Integer -> < Some : Natural | None : { } | a >
-      = \n -> if Double/lessThan n 0 then None { } else Some (Integer/abs n)
+      = \n -> if Real/lessThan n 0 then None { } else Some (Integer/abs n)
 
 in  toNatural

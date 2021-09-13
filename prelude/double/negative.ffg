@@ -1,6 +1,0 @@
-# Returns `true` if a `Double` is negative, and `false` otherwise
-let negative
-      : Double -> Bool
-      = \n -> Double/lessThan n 0
-
-in  negative

@@ -1,4 +1,4 @@
 # This verifies that list subtyping works in the presence of a type annotation
 { example0: [ 1, -1 ] : List Integer
-, example1: [ 1, -1, 1.0 ] : List Double
+, example1: [ 1, -1, 1.1 ] : List Real
 }

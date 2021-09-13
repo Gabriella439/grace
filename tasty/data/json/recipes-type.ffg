@@ -2,7 +2,7 @@ List
   { id: Text
   , type: Text
   , name: Text
-  , ppu: Double
+  , ppu: Real
   , batters: { batter: List { id: Text, type: Text } }
   , topping: List { id: Text, type: Text }
   }

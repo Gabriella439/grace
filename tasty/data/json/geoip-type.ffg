@@ -3,8 +3,8 @@
 , country: Text
 , countryCode: Text
 , isp: Text
-, lat: Double
-, lon: Double
+, lat: Real
+, lon: Real
 , org: Text
 , query: Text
 , region: Text

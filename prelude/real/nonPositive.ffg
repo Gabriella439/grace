@@ -1,10 +1,10 @@
-# Returns `true` if a `Double` is non-positive, and `false` otherwise
+# Returns `true` if a `Real` is non-positive, and `false` otherwise
 let not = ../Bool/not.ffg
 
 let positive = ./positive.ffg
 
 let nonPositive
-      : Double -> Bool
+      : Real -> Bool
       = \n -> not (positive n)
 
 in  nonPositive

@@ -1,4 +1,4 @@
-# This verifies that subtyping works for `{Double,Integer}/negate`
-{ example0: Double/negate 1
+# This verifies that subtyping works for `{Real,Integer}/negate`
+{ example0: Real/negate 1
 , example1: Integer/negate 1
 }

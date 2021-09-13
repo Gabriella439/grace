@@ -1,2 +1,0 @@
-# This test checks that subtyping works for `Double/lessThan`
-Double/lessThan 1 -2

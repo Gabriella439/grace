@@ -13,6 +13,7 @@ module Grace.Normalize
     , quote
     ) where
 
+import Data.Scientific (Scientific)
 import Data.Sequence (Seq(..), ViewL(..))
 import Data.Text (Text)
 import Data.Void (Void)
@@ -79,11 +80,11 @@ asInteger (Natural n) = Just (fromIntegral n)
 asInteger (Integer n) = Just n
 asInteger  _          = Nothing
 
-asDouble :: Scalar -> Maybe Double
-asDouble (Natural n) = Just (fromIntegral n)
-asDouble (Integer n) = Just (fromInteger  n)
-asDouble (Double  n) = Just n
-asDouble  _          = Nothing
+asReal :: Scalar -> Maybe Scientific
+asReal (Natural n) = Just (fromIntegral n)
+asReal (Integer n) = Just (fromInteger  n)
+asReal (Real    n) = Just n
+asReal  _          = Nothing
 
 {-| Evaluate an expression, leaving behind a `Value` free of reducible
     sub-expressions
@@ -197,9 +198,9 @@ evaluate env Syntax.Syntax{..} =
                     | Just m <- asInteger l
                     , Just n <- asInteger r ->
                         Value.Scalar (Integer (m * n))
-                    | Just m <- asDouble l
-                    , Just n <- asDouble r ->
-                        Value.Scalar (Double (m * n))
+                    | Just m <- asReal l
+                    , Just n <- asReal r ->
+                        Value.Scalar (Real (m * n))
                 _ ->
                     Value.Operator left' Syntax.Times right'
           where
@@ -227,9 +228,9 @@ evaluate env Syntax.Syntax{..} =
                     | Just m <- asInteger l
                     , Just n <- asInteger r ->
                         Value.Scalar (Integer (m + n))
-                    | Just m <- asDouble l
-                    , Just n <- asDouble r ->
-                        Value.Scalar (Double (m + n))
+                    | Just m <- asReal l
+                    , Just n <- asReal r ->
+                        Value.Scalar (Real (m + n))
                     | Text m <- l
                     , Text n <- r ->
                         Value.Scalar (Text (m <> n))
@@ -340,28 +341,28 @@ apply (Value.Builtin IntegerEven) (Value.Scalar x)
 apply (Value.Builtin IntegerOdd) (Value.Scalar x)
     | Just n <- asInteger x = Value.Scalar (Bool (odd n))
 apply
-    (Value.Application (Value.Builtin DoubleEqual) (Value.Scalar l))
+    (Value.Application (Value.Builtin RealEqual) (Value.Scalar l))
     (Value.Scalar r)
-    | Just m <- asDouble l
-    , Just n <- asDouble r =
+    | Just m <- asReal l
+    , Just n <- asReal r =
         Value.Scalar (Bool (m == n))
 apply
-    (Value.Application (Value.Builtin DoubleLessThan) (Value.Scalar l))
+    (Value.Application (Value.Builtin RealLessThan) (Value.Scalar l))
     (Value.Scalar r)
-    | Just m <- asDouble l
-    , Just n <- asDouble r =
+    | Just m <- asReal l
+    , Just n <- asReal r =
         Value.Scalar (Bool (m < n))
 apply (Value.Builtin IntegerAbs) (Value.Scalar x)
     | Just n <- asInteger x = Value.Scalar (Natural (fromInteger (abs n)))
-apply (Value.Builtin DoubleNegate) (Value.Scalar x)
-    | Just n <- asDouble x = Value.Scalar (Double (negate n))
+apply (Value.Builtin RealNegate) (Value.Scalar x)
+    | Just n <- asReal x = Value.Scalar (Real (negate n))
 apply (Value.Builtin IntegerNegate) (Value.Scalar x)
     | Just n <- asInteger x = Value.Scalar (Integer (negate n))
-apply (Value.Builtin DoubleShow) (Value.Scalar (Natural n)) =
+apply (Value.Builtin RealShow) (Value.Scalar (Natural n)) =
     Value.Scalar (Text (Text.pack (show n)))
-apply (Value.Builtin DoubleShow) (Value.Scalar (Integer n)) =
+apply (Value.Builtin RealShow) (Value.Scalar (Integer n)) =
     Value.Scalar (Text (Text.pack (show n)))
-apply (Value.Builtin DoubleShow) (Value.Scalar (Double n)) =
+apply (Value.Builtin RealShow) (Value.Scalar (Real n)) =
     Value.Scalar (Text (Text.pack (show n)))
 apply
     (Value.Application (Value.Builtin TextEqual) (Value.Scalar (Text l)))
@@ -392,8 +393,8 @@ apply
         apply naturalHandler (Value.Scalar (Natural n))
     loop (Value.Scalar (Integer n)) =
         apply integerHandler (Value.Scalar (Integer n))
-    loop (Value.Scalar (Double n)) =
-        apply doubleHandler (Value.Scalar (Double n))
+    loop (Value.Scalar (Real n)) =
+        apply doubleHandler (Value.Scalar (Real n))
     loop (Value.Scalar (Text t)) =
         apply stringHandler (Value.Scalar (Text t))
     loop (Value.Scalar Null) =

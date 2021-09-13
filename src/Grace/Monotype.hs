@@ -47,11 +47,11 @@ data Scalar
     --
     -- >>> pretty Bool
     -- Bool
-    | Double
-    -- ^ Double type
+    | Real
+    -- ^ Real number type
     --
-    -- >>> pretty Double
-    -- Double
+    -- >>> pretty Real
+    -- Real
     | Integer
     -- ^ Integer number type
     --
@@ -76,7 +76,7 @@ data Scalar
 
 instance Pretty Scalar where
     pretty Bool    = builtin "Bool"
-    pretty Double  = builtin "Double"
+    pretty Real    = builtin "Real"
     pretty JSON    = builtin "JSON"
     pretty Natural = builtin "Natural"
     pretty Integer = builtin "Integer"
