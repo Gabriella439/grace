@@ -24,6 +24,7 @@ library
                      , prettyprinter-ansi-terminal
                      , scientific
                      , string-interpolate
+                     , template-haskell
                      , terminal-size
                      , text
                      , unordered-containers
@@ -39,6 +40,7 @@ library
                      , Grace.Parser
                      , Grace.Pretty
                      , Grace.Syntax
+                     , Grace.TH
                      , Grace.Type
                      , Grace.Value
   default-language:    Haskell2010

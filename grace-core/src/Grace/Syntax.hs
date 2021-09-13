@@ -1,5 +1,6 @@
 {-# LANGUAGE ApplicativeDo      #-}
 {-# LANGUAGE DeriveGeneric      #-}
+{-# LANGUAGE DeriveLift         #-}
 {-# LANGUAGE DeriveTraversable  #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleInstances  #-}
@@ -31,6 +32,7 @@ import Data.String (IsString(..))
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Grace.Type (Type)
+import Language.Haskell.TH.Syntax (Lift)
 import Numeric.Natural (Natural)
 import Prettyprinter (Doc)
 import Prettyprinter.Render.Terminal (AnsiStyle)
@@ -60,7 +62,7 @@ import qualified Prettyprinter as Pretty
 
 -- | The surface syntax for the language
 data Syntax s a = Syntax { location :: s, node :: Node s a }
-    deriving stock (Eq, Foldable, Functor, Generic, Show, Traversable)
+    deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
 
 instance Bifunctor Syntax where
     first f Syntax{ location, node } =
@@ -197,7 +199,7 @@ data Node s a
     --   x + y
     | Builtin Builtin
     | Embed a
-    deriving stock (Eq, Foldable, Generic, Functor, Show, Traversable)
+    deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
 
 instance Bifunctor Node where
     first _ (Variable name index) =
@@ -269,7 +271,7 @@ data Scalar
     -- ^
     --   >>> pretty Null
     --   null
-    deriving (Eq, Generic, Show)
+    deriving (Eq, Generic, Lift, Show)
 
 instance Pretty Scalar where
     pretty (Bool True )     = scalar "true"
@@ -298,7 +300,7 @@ data Operator
     -- ^
     --   >>> pretty Times
     --   *
-    deriving (Eq, Generic, Show)
+    deriving (Eq, Generic, Lift, Show)
 
 instance Pretty Operator where
     pretty And    = operator "&&"
@@ -392,7 +394,7 @@ data Builtin
     -- ^
     --   >>> pretty TextEqual
     --   Text/equal
-    deriving (Bounded, Enum, Eq, Generic, Show)
+    deriving (Bounded, Enum, Eq, Generic, Lift, Show)
 
 instance Pretty Builtin where
     pretty RealEqual      = builtin "Real/equal"
@@ -728,7 +730,7 @@ data Binding s a = Binding
     , name :: Text
     , annotation :: Maybe (Type s)
     , assignment :: Syntax s a
-    } deriving stock (Eq, Foldable, Functor, Generic, Show, Traversable)
+    } deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
 
 instance Bifunctor Binding where
     first f Binding{ nameLocation, annotation, assignment, .. } =

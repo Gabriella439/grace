@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveGeneric      #-}
+{-# LANGUAGE DeriveLift         #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE OverloadedStrings  #-}
 
@@ -20,6 +21,7 @@ import Data.Text (Text)
 import GHC.Generics (Generic)
 import Grace.Existential (Existential)
 import Grace.Pretty (Pretty(..), builtin)
+import Language.Haskell.TH.Syntax (Lift)
 
 {-| A monomorphic type
 
@@ -72,7 +74,7 @@ data Scalar
     --
     -- >>> pretty Text
     -- Text
-    deriving stock (Eq, Generic, Show)
+    deriving stock (Eq, Generic, Lift, Show)
 
 instance Pretty Scalar where
     pretty Bool    = builtin "Bool"
@@ -99,7 +101,7 @@ data RemainingFields
     | VariableFields Text
     -- ^ Same as `UnsolvedFields`, except that the user has given the fields
     --   variable an explicit name in the source code
-    deriving stock (Eq, Generic, Show)
+    deriving stock (Eq, Generic, Lift, Show)
 
 -- | A monomorphic union type
 data Union = Alternatives [(Text, Monotype)] RemainingAlternatives
@@ -118,4 +120,4 @@ data RemainingAlternatives
     | VariableAlternatives Text
     -- ^ Same as `UnsolvedAlternatives`, except that the user has given the
     --   alternatives variable an explicit name in the source code
-    deriving stock (Eq, Generic, Show)
+    deriving stock (Eq, Generic, Lift, Show)

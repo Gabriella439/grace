@@ -1,6 +1,7 @@
 {-# LANGUAGE ApplicativeDo      #-}
 {-# LANGUAGE DataKinds          #-}
 {-# LANGUAGE DeriveGeneric      #-}
+{-# LANGUAGE DeriveLift         #-}
 {-# LANGUAGE DeriveTraversable  #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleInstances  #-}
@@ -46,6 +47,7 @@ import GHC.Generics (Generic)
 import Grace.Domain (Domain)
 import Grace.Existential (Existential)
 import Grace.Pretty (Pretty(..), keyword, punctuation, label, builtin, operator)
+import Language.Haskell.TH.Syntax (Lift)
 import Prettyprinter (Doc)
 import Prettyprinter.Render.Terminal (AnsiStyle)
 
@@ -71,7 +73,7 @@ import qualified Prettyprinter  as Pretty
 
 -- | A potentially polymorphic type
 data Type s = Type { location :: s, node :: Node s }
-    deriving stock (Eq, Functor, Generic, Show)
+    deriving stock (Eq, Functor, Generic, Lift, Show)
 
 instance IsString (Type ()) where
     fromString string = Type{ location = (), node = fromString string }
@@ -180,7 +182,7 @@ data Node s
     -- >>> pretty @(Node ()) (Union (Alternatives [("x", "X"), ("y", "Y")] (Monotype.UnsolvedAlternatives 0)))
     -- < x: X | y: Y | a? >
     | Scalar Scalar
-    deriving stock (Eq, Functor, Generic, Show)
+    deriving stock (Eq, Functor, Generic, Lift, Show)
 
 instance IsString (Node s) where
     fromString string = VariableType (fromString string)
@@ -190,14 +192,14 @@ instance Pretty (Node s) where
 
 -- | A potentially polymorphic record type
 data Record s = Fields [(Text, Type s)] RemainingFields
-    deriving stock (Eq, Functor, Generic, Show)
+    deriving stock (Eq, Functor, Generic, Lift, Show)
 
 instance Pretty (Record s) where
     pretty = prettyRecordType
 
 -- | A potentially polymorphic union type
 data Union s = Alternatives [(Text, Type s)] RemainingAlternatives
-    deriving stock (Eq, Functor, Generic, Show)
+    deriving stock (Eq, Functor, Generic, Lift, Show)
 
 instance Pretty (Union s) where
     pretty = prettyUnionType
