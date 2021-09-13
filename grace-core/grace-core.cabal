@@ -13,7 +13,6 @@ library
   build-depends:       base
                      , containers
                      , Earley
-                     , exceptions
                      , filepath
                      , generic-lens
                      , insert-ordered-containers

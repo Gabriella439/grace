@@ -12,6 +12,7 @@ library
   hs-source-dirs:      src
   build-depends:       base
                      , ansi-terminal
+                     , exceptions
                      , grace-core
                      , mtl
                      , optparse-applicative
