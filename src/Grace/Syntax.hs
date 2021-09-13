@@ -4,6 +4,7 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleInstances  #-}
 {-# LANGUAGE NamedFieldPuns     #-}
+{-# LANGUAGE OverloadedLists    #-}
 {-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE RecordWildCards    #-}
 
@@ -24,6 +25,7 @@ module Grace.Syntax
 import Control.Lens (Plated(..))
 import Data.Bifunctor (Bifunctor(..))
 import Data.List.NonEmpty (NonEmpty(..))
+import Data.Sequence (Seq((:<|)))
 import Data.String (IsString(..))
 import Data.Text (Text)
 import GHC.Generics (Generic)
@@ -50,6 +52,7 @@ import qualified Prettyprinter as Pretty
 {- $setup
 
    >>> :set -XOverloadedStrings
+   >>> :set -XOverloadedLists
    >>> :set -XTypeApplications
    >>> import Data.Void (Void)
 -}
@@ -160,7 +163,7 @@ data Node s a
     --   let x : X = y in z
     --   >>> pretty @(Node () Void) (Let (Binding () "a" Nothing "b" :| [ Binding () "c" Nothing "d" ]) "e")
     --   let a = b let c = d in e
-    | List [Syntax s a]
+    | List (Seq (Syntax s a))
     -- ^
     --   >>> pretty @(Node () Void) (List [ "x", "y", "z" ])
     --   [ x, y, z ]
@@ -638,7 +641,7 @@ prettyPrimitiveExpression (Alternative name) =
     label (pretty name)
 prettyPrimitiveExpression (List []) =
     punctuation "[" <> " " <> punctuation "]"
-prettyPrimitiveExpression (List (element : elements)) =
+prettyPrimitiveExpression (List (element :<| elements)) =
     Pretty.group (Pretty.flatAlt long short)
   where
     short =

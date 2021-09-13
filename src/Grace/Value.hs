@@ -9,6 +9,7 @@ module Grace.Value
     , Value(..)
     ) where
 
+import Data.Sequence (Seq)
 import Data.String (IsString(..))
 import Data.Text (Text)
 import Grace.Location (Location)
@@ -78,7 +79,7 @@ data Value
       -- input is known.  This is essentially the key optimization that powers
       -- the fast normalization-by-evaluation algorithm.
     | Application Value Value
-    | List [Value]
+    | List (Seq Value)
     | Record [(Text, Value)]
     | Field Value Text
     | Alternative Text

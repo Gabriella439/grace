@@ -1,5 +1,6 @@
 {-# LANGUAGE BangPatterns      #-}
 {-# LANGUAGE NamedFieldPuns    #-}
+{-# LANGUAGE OverloadedLists   #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms   #-}
 {-# LANGUAGE RecordWildCards   #-}
@@ -12,6 +13,7 @@ module Grace.Normalize
     , quote
     ) where
 
+import Data.Sequence (Seq(..), ViewL(..))
 import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Location (Location)
@@ -20,11 +22,12 @@ import Grace.Type (Type)
 import Grace.Value (Closure(..), Value)
 import Prelude hiding (succ)
 
-import qualified Data.List    as List
-import qualified Data.Ord     as Ord
-import qualified Data.Text    as Text
-import qualified Grace.Value  as Value
-import qualified Grace.Syntax as Syntax
+import qualified Data.List     as List
+import qualified Data.Ord      as Ord
+import qualified Data.Sequence as Seq
+import qualified Data.Text     as Text
+import qualified Grace.Value   as Value
+import qualified Grace.Syntax  as Syntax
 
 {- $setup
 
@@ -118,7 +121,7 @@ evaluate env Syntax.Syntax{..} =
                 (name, evaluate environment assignment) : environment
 
         Syntax.List elements ->
-            Value.List (map (evaluate env) elements)
+            Value.List (fmap (evaluate env) elements)
 
         Syntax.Record keyValues ->
             Value.Record (map adapt keyValues)
@@ -257,21 +260,21 @@ apply
 apply
     (Value.Application (Value.Builtin ListDrop) (Value.Scalar (Natural n)))
     (Value.List elements) =
-        Value.List (drop (fromIntegral n) elements)
+        Value.List (Seq.drop (fromIntegral n) elements)
 apply
     (Value.Application (Value.Builtin ListTake) (Value.Scalar (Natural n)))
     (Value.List elements) =
-        Value.List (take (fromIntegral n) elements)
+        Value.List (Seq.take (fromIntegral n) elements)
 apply (Value.Builtin ListHead) (Value.List []) =
     Value.Application (Value.Alternative "None") (Value.Record [])
-apply (Value.Builtin ListHead) (Value.List (x : _)) =
+apply (Value.Builtin ListHead) (Value.List (x :<| _)) =
     Value.Application (Value.Alternative "Some") x
 apply (Value.Builtin ListLast) (Value.List []) =
     Value.Application (Value.Alternative "None") (Value.Record [])
-apply (Value.Builtin ListLast) (Value.List (reverse -> (x : _))) =
+apply (Value.Builtin ListLast) (Value.List (_ :|> x)) =
     Value.Application (Value.Alternative "Some") x
 apply (Value.Builtin ListReverse) (Value.List xs) =
-    Value.List (reverse xs)
+    Value.List (Seq.reverse xs)
 apply
     (Value.Application
         (Value.Application (Value.Builtin ListEqual) f)
@@ -280,7 +283,7 @@ apply
     (Value.List ls)
         | length ls /= length rs =
             Value.Scalar (Bool False)
-        | Just bools <- traverse toBool (zipWith equal ls rs) =
+        | Just bools <- traverse toBool (Seq.zipWith equal ls rs) =
         Value.Scalar (Bool (and bools))
       where
         toBool (Value.Scalar (Bool b)) = Just b
@@ -298,16 +301,18 @@ apply
             )
         )
     )
-    (Value.List elements) = loop (reverse elements) nil
+    (Value.List elements) = loop (Seq.reverse elements) nil
   where
-    loop      []  !result = result
-    loop (x : xs) !result = loop xs (apply (apply cons x) result)
+    loop xs !result =
+        case Seq.viewl xs of
+            EmptyL  -> result
+            y :< ys -> loop ys (apply (apply cons y) result)
 apply (Value.Builtin ListIndexed) (Value.List elements) =
-    Value.List (zipWith adapt [0..] elements)
+    Value.List (Seq.mapWithIndex adapt elements)
   where
     adapt index value =
         Value.Record
-            [ ("index", Value.Scalar (Natural index))
+            [ ("index", Value.Scalar (Natural (fromIntegral index)))
             , ("value", value)
             ]
 apply (Value.Builtin ListLength) (Value.List elements) =
@@ -315,7 +320,7 @@ apply (Value.Builtin ListLength) (Value.List elements) =
 apply
     (Value.Application (Value.Builtin ListMap) f)
     (Value.List elements) =
-        Value.List (map (apply f) elements)
+        Value.List (fmap (apply f) elements)
 apply
     (Value.Application
         (Value.Application
@@ -395,11 +400,11 @@ apply
     loop (Value.List elements) =
         apply arrayHandler (Value.List (fmap loop elements))
     loop (Value.Record keyValues) =
-        apply objectHandler (Value.List keyValues')
+        apply objectHandler (Value.List (Seq.fromList (fmap adapt keyValues)))
       where
-        keyValues' = do
-            (key, value) <- keyValues
-            return (Value.Record [("key", Value.Scalar (Text key)), ("value", loop value)])
+        adapt (key, value) =
+            Value.Record
+                [("key", Value.Scalar (Text key)), ("value", loop value)]
     loop v =
         v
 apply function argument =
@@ -453,7 +458,7 @@ quote names value = Syntax.Syntax{..}
                 Syntax.Application (quote names function) (quote names argument)
 
             Value.List elements ->
-                Syntax.List (map (quote names) elements)
+                Syntax.List (fmap (quote names) elements)
 
             Value.Record keyValues ->
                 Syntax.Record (map adapt keyValues)

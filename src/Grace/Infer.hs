@@ -37,6 +37,7 @@ import Control.Monad.Except (MonadError(..))
 import Control.Monad.State.Strict (MonadState)
 import Data.Foldable (traverse_)
 import Data.Functor (void)
+import Data.Sequence (ViewL(..))
 import Data.String.Interpolate (__i)
 import Grace.Context (Context, Entry)
 import Grace.Existential (Existential)
@@ -50,6 +51,7 @@ import Grace.Value (Value)
 import qualified Control.Monad       as Monad
 import qualified Control.Monad.State as State
 import qualified Data.Map            as Map
+import qualified Data.Sequence       as Seq
 import qualified Data.Text           as Text
 import qualified Grace.Context       as Context
 import qualified Grace.Domain        as Domain
@@ -1893,8 +1895,8 @@ infer e0 = do
             infer b
 
         Syntax.List xs -> do
-            case xs of
-                [] -> do
+            case Seq.viewl xs of
+                EmptyL -> do
                     a <- fresh
 
                     push (Context.UnsolvedType a)
@@ -1902,7 +1904,7 @@ infer e0 = do
                     return _Type
                         { node = Type.List _Type{ node = Type.UnsolvedType a }
                         }
-                y : ys -> do
+                y :< ys -> do
                     _A <- infer y
 
                     let process element = do
@@ -2546,14 +2548,14 @@ check e Type{ node = Type.Forall _ a domain _A } = do
     discardUpTo (Context.Variable domain a)
 
 check Syntax{ node = Syntax.Operator l _ Syntax.Times r } _B@Type{ node = Type.Scalar scalar }
-    | scalar `elem` [ Monotype.Natural, Monotype.Integer, Monotype.Double ] = do
+    | scalar `elem` ([ Monotype.Natural, Monotype.Integer, Monotype.Double ] :: [Monotype.Scalar])= do
     check l _B
 
     _Γ <- get
 
     check r (Context.solveType _Γ _B)
 check Syntax{ node = Syntax.Operator l _ Syntax.Plus r } _B@Type{ node = Type.Scalar scalar }
-    | scalar `elem` [ Monotype.Natural, Monotype.Integer, Monotype.Double, Monotype.Text ] = do
+    | scalar `elem` ([ Monotype.Natural, Monotype.Integer, Monotype.Double, Monotype.Text ] :: [Monotype.Scalar]) = do
     check l _B
 
     _Γ <- get
