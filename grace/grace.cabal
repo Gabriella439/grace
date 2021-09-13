@@ -17,9 +17,11 @@ library
                      , optparse-applicative
                      , prettyprinter
                      , prettyprinter-ansi-terminal
+                     , repline
                      , string-interpolate
                      , text
   exposed-modules:     Grace
+                     , Grace.Repl
   default-language:    Haskell2010
   ghc-options:         -Wall
 
