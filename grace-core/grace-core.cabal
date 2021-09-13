@@ -11,7 +11,6 @@ tested-with:         GHC ==8.8.4 || ==8.10.7 || ==9.0.1 || ==9.2.0.20210821
 library
   hs-source-dirs:      src
   build-depends:       base
-                     , ansi-terminal
                      , containers
                      , Earley
                      , exceptions
@@ -21,7 +20,6 @@ library
                      , lens
                      , megaparsec
                      , mtl
-                     , optparse-applicative
                      , parser-combinators
                      , prettyprinter
                      , prettyprinter-ansi-terminal
@@ -68,9 +66,7 @@ test-suite doctest
   type:                exitcode-stdio-1.0
   main-is:             Main.hs
   build-depends:       base
-                     , directory
                      , doctest
-                     , filepath
   hs-source-dirs:      doctest
   default-language:    Haskell2010
   ghc-options:         -Wall
