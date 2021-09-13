@@ -5,6 +5,6 @@ forall (b : Alternatives) .
   , example2: forall (a : Fields) .
                 { x: Integer, y: Bool, a } -> { x: Integer, y: Bool, a }
   , example3: < A: Natural | B: Bool > -> < A: Natural | B: Bool >
-  , example3: forall (a : Alternatives) .
+  , example4: forall (a : Alternatives) .
                 < A: Natural | B: Bool | a > -> < A: Natural | B: Bool | a >
   }

@@ -7,7 +7,7 @@
     : forall (a : Fields)
     . { , x : Integer, y: Bool, a, } -> { , x : Integer, y: Bool, a, }
 , example3: \x -> x : < | A : Natural | B : Bool | >
-, example3:
+, example4:
       (\x -> x)
     : forall (a : Alternatives)
     . < | A : Natural | B : Bool | a | > -> < | A : Natural | B : Bool | a | >

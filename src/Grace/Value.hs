@@ -9,6 +9,7 @@ module Grace.Value
     , Value(..)
     ) where
 
+import Data.HashMap.Strict.InsOrd (InsOrdHashMap)
 import Data.Sequence (Seq)
 import Data.String (IsString(..))
 import Data.Text (Text)
@@ -80,7 +81,7 @@ data Value
       -- the fast normalization-by-evaluation algorithm.
     | Application Value Value
     | List (Seq Value)
-    | Record [(Text, Value)]
+    | Record (InsOrdHashMap Text Value)
     | Field Value Text
     | Alternative Text
     | Merge Value

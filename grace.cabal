@@ -15,6 +15,7 @@ library
                      , exceptions
                      , filepath
                      , generic-lens
+                     , insert-ordered-containers
                      , lens
                      , megaparsec
                      , mtl

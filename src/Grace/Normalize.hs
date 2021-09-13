@@ -22,12 +22,13 @@ import Grace.Type (Type)
 import Grace.Value (Closure(..), Value)
 import Prelude hiding (succ)
 
-import qualified Data.List     as List
-import qualified Data.Ord      as Ord
-import qualified Data.Sequence as Seq
-import qualified Data.Text     as Text
-import qualified Grace.Value   as Value
-import qualified Grace.Syntax  as Syntax
+import qualified Data.HashMap.Strict.InsOrd as HashMap
+import qualified Data.List                  as List
+import qualified Data.Ord                   as Ord
+import qualified Data.Sequence              as Seq
+import qualified Data.Text                  as Text
+import qualified Grace.Value                as Value
+import qualified Grace.Syntax               as Syntax
 
 {- $setup
 
@@ -124,14 +125,14 @@ evaluate env Syntax.Syntax{..} =
             Value.List (fmap (evaluate env) elements)
 
         Syntax.Record keyValues ->
-            Value.Record (map adapt keyValues)
+            Value.Record (HashMap.fromList (map adapt keyValues))
           where
             adapt (key, value) = (key, evaluate env value)
 
         Syntax.Field record _ key ->
             case evaluate env record of
                 Value.Record keyValues
-                    | Just value <- lookup key keyValues ->
+                    | Just value <- HashMap.lookup key keyValues ->
                         value
                 other ->
                     Value.Field other key
@@ -255,7 +256,7 @@ apply (Value.Lambda (Closure name capturedEnv body)) argument =
 apply
     (Value.Merge (Value.Record alternativeHandlers))
     (Value.Application (Value.Alternative alternative) x)
-    | Just f <- lookup alternative alternativeHandlers =
+    | Just f <- HashMap.lookup alternative alternativeHandlers =
         apply f x
 apply
     (Value.Application (Value.Builtin ListDrop) (Value.Scalar (Natural n)))
@@ -294,7 +295,7 @@ apply
     (Value.Application
         (Value.Builtin ListFold)
         (Value.Record
-            (List.sortBy (Ord.comparing fst) ->
+            (List.sortBy (Ord.comparing fst) . HashMap.toList ->
                 [ ("cons"  , cons)
                 , ("nil"   , nil)
                 ]
@@ -370,7 +371,7 @@ apply
     (Value.Application
         (Value.Builtin JSONFold)
         (Value.Record
-            (List.sortBy (Ord.comparing fst) ->
+            (List.sortBy (Ord.comparing fst) . HashMap.toList ->
                 [ ("array"  , arrayHandler )
                 , ("bool"   , boolHandler  )
                 , ("double" , doubleHandler)
@@ -400,7 +401,7 @@ apply
     loop (Value.List elements) =
         apply arrayHandler (Value.List (fmap loop elements))
     loop (Value.Record keyValues) =
-        apply objectHandler (Value.List (Seq.fromList (fmap adapt keyValues)))
+        apply objectHandler (Value.List (Seq.fromList (map adapt (HashMap.toList keyValues))))
       where
         adapt (key, value) =
             Value.Record
@@ -461,7 +462,7 @@ quote names value = Syntax.Syntax{..}
                 Syntax.List (fmap (quote names) elements)
 
             Value.Record keyValues ->
-                Syntax.Record (map adapt keyValues)
+                Syntax.Record (map adapt (HashMap.toList keyValues))
               where
                 adapt (key, value_) = (key, quote names value_)
 
