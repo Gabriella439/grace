@@ -1,36 +1,33 @@
 cabal-version:       >=1.10
-name:                grace
+name:                grace-core
 version:             1.0.0
 license-file:        LICENSE
 author:              Gabriel Gonzalez
 maintainer:          Gabriel439@gmail.com
 build-type:          Simple
 
+tested-with:         GHC ==8.8.4 || ==8.10.7 || ==9.0.1 || ==9.2.0.20210821
+
 library
   hs-source-dirs:      src
   build-depends:       base
-                     , ansi-terminal
                      , containers
                      , Earley
-                     , exceptions
                      , filepath
                      , generic-lens
                      , insert-ordered-containers
                      , lens
                      , megaparsec
                      , mtl
-                     , optparse-applicative
                      , parser-combinators
                      , prettyprinter
                      , prettyprinter-ansi-terminal
-                     , repline
                      , scientific
                      , string-interpolate
                      , terminal-size
                      , text
                      , unordered-containers
-  exposed-modules:     Grace
-                     , Grace.Context
+  exposed-modules:     Grace.Context
                      , Grace.Domain
                      , Grace.Existential
                      , Grace.Interpret
@@ -44,15 +41,8 @@ library
                      , Grace.Syntax
                      , Grace.Type
                      , Grace.Value
-                     , Grace.Repl
   default-language:    Haskell2010
   ghc-options:         -Wall
-
-executable grace
-  main-is:             Main.hs
-  build-depends:       base, grace
-  hs-source-dirs:      grace
-  default-language:    Haskell2010
 
 test-suite tasty
   type:                exitcode-stdio-1.0
@@ -60,7 +50,7 @@ test-suite tasty
   build-depends:       base
                      , directory
                      , filepath
-                     , grace
+                     , grace-core
                      , mtl
                      , prettyprinter
                      , tasty
