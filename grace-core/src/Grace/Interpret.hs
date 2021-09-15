@@ -1,7 +1,8 @@
-{-# LANGUAGE DataKinds        #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE RecordWildCards  #-}
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE DataKinds          #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleContexts   #-}
+{-# LANGUAGE RecordWildCards    #-}
+{-# LANGUAGE TypeApplications   #-}
 
 -- | This module implements the main interpretation function
 module Grace.Interpret
@@ -16,7 +17,7 @@ module Grace.Interpret
     , InterpretError(..)
     ) where
 
-import Control.Exception.Safe (Exception(..), MonadThrow)
+import Control.Exception.Safe (Exception(..))
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Bifunctor (Bifunctor(..))
@@ -52,10 +53,16 @@ data Input
     | Code String Text
     -- ^ Source code: @Code name content@
 
+-- | Settings for the interpreter
 newtype InterpretSettings = InterpretSettings
     { resolvers :: [Import.Resolver]
     }
 
+{- | The default `InterpretSettings` used by the `interpret` function.
+     Those settings are:
+
+     * The resolvers from `Import.defaultResolvers`.
+-}
 defaultInterpretSettings :: InterpretSettings
 defaultInterpretSettings = InterpretSettings
     { resolvers = Import.defaultResolvers
@@ -67,7 +74,7 @@ defaultInterpretSettings = InterpretSettings
     This is the top-level function for the Grace interpreter
 -}
 interpret
-    :: (MonadError InterpretError m, MonadIO m, MonadThrow m)
+    :: (MonadError InterpretError m, MonadIO m)
     => Maybe (Type Location)
     -- ^ Optional expected type for the input
     -> Input
@@ -76,7 +83,7 @@ interpret = interpretWith defaultInterpretSettings []
 
 -- | Like `interpret`, but accepts a custom list of bindings
 interpretWith
-    :: (MonadError InterpretError m, MonadIO m, MonadThrow m)
+    :: (MonadError InterpretError m, MonadIO m)
     => InterpretSettings
     -- ^ Settings controlling how the interpreter behaves
     -> [(Text, Type Location, Value)]
@@ -103,7 +110,8 @@ interpretWith settings bindings maybeAnnotation input = do
 
             return (first locate expression)
 
-    let resolve (maybeAnnotation', Import.File file) =
+    let resolve :: (MonadError InterpretError m, MonadIO m) => (Maybe (Type Location), Import.Import) -> m (Type Location, Value)
+        resolve (maybeAnnotation', Import.File file) =
             interpretWith settings bindings maybeAnnotation' (Path path)
           where
             path = case input of
@@ -111,6 +119,7 @@ interpretWith settings bindings maybeAnnotation input = do
                 Code _ _    -> file
         resolve (maybeAnnotation', Import.URI uri) = do
             text <- Import.findResolver uri (resolvers settings)
+
             interpretWith settings bindings maybeAnnotation' (Code (URI.renderStr uri) text)
 
     resolvedExpression <- traverse resolve (annotate expression)
@@ -180,7 +189,7 @@ annotate = Lens.transform transformSyntax . fmap ((,) Nothing)
 data InterpretError
     = TypeInferenceError Infer.TypeInferenceError
     | ParseError Parser.ParseError
-    deriving (Eq, Show)
+    deriving stock (Eq, Show)
 
 instance Exception InterpretError where
     displayException (TypeInferenceError e) = displayException e
