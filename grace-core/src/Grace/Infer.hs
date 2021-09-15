@@ -99,7 +99,7 @@ push entry = State.modify (\s -> s { context = entry : context s })
 
 -- | Retrieve the current `Context`
 get :: MonadState Status m => m (Context Location)
-get = fmap context State.get
+get = State.gets context
 
 -- | Set the `Context` to a new value
 set :: MonadState Status m => Context Location -> m ()
@@ -1215,10 +1215,8 @@ instantiateFieldsL
     :: (MonadState Status m, MonadError TypeInferenceError m)
     => Existential Monotype.Record -> Location -> Type.Record Location -> m ()
 instantiateFieldsL p0 location r@(Type.Fields kAs rest) = do
-    if p0 `Type.fieldsFreeIn` Type{ node = Type.Record r, .. }
-        then do
-            throwError (NotFieldsSubtype location p0 r)
-        else return ()
+    when (p0 `Type.fieldsFreeIn` Type{ node = Type.Record r, .. }) do
+        throwError (NotFieldsSubtype location p0 r)
 
     let process (k, _A) = do
             b <- fresh
@@ -1259,10 +1257,8 @@ instantiateFieldsR
     :: (MonadState Status m, MonadError TypeInferenceError m)
     => Location -> Type.Record Location -> Existential Monotype.Record -> m ()
 instantiateFieldsR location r@(Type.Fields kAs rest) p0 = do
-    if p0 `Type.fieldsFreeIn` Type{ node = Type.Record r, .. }
-        then do
-            throwError (NotFieldsSubtype location p0 r)
-        else return ()
+    when (p0 `Type.fieldsFreeIn` Type{ node = Type.Record r, .. }) do
+        throwError (NotFieldsSubtype location p0 r)
 
     let process (k, _A) = do
             b <- fresh
@@ -1372,10 +1368,8 @@ instantiateAlternativesR
     :: (MonadState Status m, MonadError TypeInferenceError m)
     => Location -> Type.Union Location -> Existential Monotype.Union -> m ()
 instantiateAlternativesR location u@(Type.Alternatives kAs rest) p0 = do
-    if p0 `Type.alternativesFreeIn` Type{ node = Type.Union u, .. }
-        then do
-            throwError (NotAlternativesSubtype location p0 u)
-        else return ()
+    when (p0 `Type.alternativesFreeIn` Type{ node = Type.Union u, .. }) do
+        throwError (NotAlternativesSubtype location p0 u)
 
     let process (k, _A) = do
             b <- fresh

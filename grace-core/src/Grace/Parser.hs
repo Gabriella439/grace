@@ -27,7 +27,7 @@ module Grace.Parser
 import Control.Applicative (many, optional, (<|>))
 import Control.Applicative.Combinators.NonEmpty (sepBy1)
 import Control.Applicative.Combinators (endBy, sepBy)
-import Data.Functor (void)
+import Data.Functor (($>), void)
 import Data.List.NonEmpty (NonEmpty(..), some1)
 import Data.Scientific (Scientific)
 import Data.Text (Text)
@@ -241,6 +241,7 @@ grammar = mdo
                 locatedName <- locatedLabel
                 token Lexer.Arrow
                 body <- expression
+
                 return (f lambdaOffset locatedName body)
 
         <|> do  let f bindings body = Syntax{..}
@@ -397,7 +398,7 @@ grammar = mdo
                       where
                         node = Syntax.Scalar (Syntax.Real (sign n))
 
-                sign <- (token Lexer.Dash *> pure negate) <|> pure id
+                sign <- (token Lexer.Dash $> negate) <|> pure id
 
                 located <- locatedReal
 

@@ -57,6 +57,7 @@
 # - ignore: {name: Use let}
 # - ignore: {name: Use const, within: SpecialModule} # Only within certain modules
 - ignore: {name: Use fmap, within: Grace.Parser}
+- ignore: {name: Use <$>, within: Grace.Parser}
 
 
 # Define some custom infix operators
