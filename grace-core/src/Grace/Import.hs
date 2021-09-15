@@ -1,3 +1,4 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -31,7 +32,11 @@ import Data.Foldable (foldl')
 import Data.Text (Text)
 import Data.Text.Encoding.Error (UnicodeException)
 import Grace.Pretty (Pretty(..))
+import System.FilePath ((</>))
+import Text.URI (Authority)
 
+import qualified Data.List.NonEmpty      as NonEmpty
+import qualified Data.Maybe              as Unsafe (fromJust)
 import qualified Data.Text               as Text
 import qualified Data.Text.IO            as Text.IO
 import qualified Data.Text.Lazy          as Text.Lazy
@@ -95,7 +100,7 @@ data ImportError
 
 instance Exception ImportError where
     displayException (MissingResolver uri) = Text.unpack ("Cannot resolve uri: " <> URI.render uri)
-    displayException (ResolverException uri e) = "Resolver for " <> Text.unpack (URI.render uri) <> "failed with: " <> displayException e
+    displayException (ResolverException uri e) = "Resolver for " <> Text.unpack (URI.render uri) <> " failed with: " <> displayException e
 
 -- Builtin resolvers
 
@@ -122,10 +127,10 @@ defaultResolvers =
      It will fail if the URI has an authority component.
 -}
 envResolver :: Resolver
-envResolver = Resolver $ \case
+envResolver = Resolver \case
     uri@URI.URI{ URI.uriScheme = Just (URI.unRText -> "env") } -> do
         case URI.uriAuthority uri of
-            Right _ -> throw EnvUnexpectedAuthority
+            Right auth | auth /= emptyAuthority -> throw EnvUnexpectedAuthority
             _ -> return ()
 
         pieces <- case URI.uriPath uri of
@@ -141,7 +146,7 @@ envResolver = Resolver $ \case
         return (Just (Text.pack v))
     _ -> return Nothing
     where
-        pathPiecesToName = foldl' (\memo x -> memo <> "_" <> URI.unRText x) ""
+        pathPiecesToName = Text.intercalate "_" . map URI.unRText . NonEmpty.toList
 
 -- | Errors raised by `envResolver`
 data EnvResolverError
@@ -163,20 +168,20 @@ instance Exception EnvResolverError where
      It will fail if the URI has an authority component.
 -}
 fileResolver :: Resolver
-fileResolver = Resolver $ \case
+fileResolver = Resolver \case
     uri@URI.URI{ URI.uriScheme = Just (URI.unRText -> "file") } -> do
         case URI.uriAuthority uri of
-            Right _ -> throw FileUnexpectedAuthority
+            Right auth | auth /= emptyAuthority -> throw FileUnexpectedAuthority
             _ -> return ()
 
         pieces <- case URI.uriPath uri of
             Nothing -> throw FileMissingPath
             Just (_, pieces) -> return pieces
 
-        Just <$> Text.IO.readFile (Text.unpack (pathPiecesToFilePath pieces))
+        Just <$> Text.IO.readFile (pathPiecesToFilePath pieces)
     _ -> return Nothing
     where
-        pathPiecesToFilePath = foldl' (\memo x -> memo <> "/" <> URI.unRText x) "/"
+        pathPiecesToFilePath = foldl' (</>) "/" . map (Text.unpack . URI.unRText) . NonEmpty.toList
 
 -- | Errors raised by `fileResolver`
 data FileResolverError
@@ -200,8 +205,8 @@ instance Exception FileResolverError where
      It will fail if the URI has an authority component.
 -}
 externalResolver :: Resolver
-externalResolver = Resolver $ \case
-    uri@URI.URI{ URI.uriScheme = Just scheme } -> handleDoesNotExist $ do
+externalResolver = Resolver \case
+    uri@URI.URI{ URI.uriScheme = Just scheme } -> handleDoesNotExist do
         let cmd = "grace-resolver-" <> Text.unpack (URI.unRText scheme)
 
         let args = [URI.renderStr uri]
@@ -217,7 +222,7 @@ externalResolver = Resolver $ \case
         return (Just text)
     _ -> return Nothing
     where
-        handleDoesNotExist = handleIO $ \e ->
+        handleDoesNotExist = handleIO \e ->
             if Error.isDoesNotExistError e
                 then return Nothing
                 else throw e
@@ -228,3 +233,12 @@ data ExternalResolverError = ExternalFailedDecodeStdout UnicodeException
 
 instance Exception ExternalResolverError where
     displayException (ExternalFailedDecodeStdout e) = "Failed to decode stdout: " <> displayException e
+
+-- Internal helper functions
+
+emptyAuthority :: Authority
+emptyAuthority = URI.Authority
+    { URI.authUserInfo = Nothing
+    , URI.authHost = Unsafe.fromJust (URI.mkHost "")
+    , URI.authPort = Nothing
+    }
