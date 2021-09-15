@@ -10,6 +10,7 @@ module Grace.Repl
     ) where
 
 import Control.Monad.Catch (MonadCatch)
+import Control.Exception (displayException)
 import Control.Monad.IO.Class (liftIO, MonadIO)
 import Control.Monad.State (MonadState(..), StateT)
 import Data.Foldable (toList)
@@ -73,12 +74,12 @@ interpret string = do
     eitherResult <- Except.runExceptT (Interpret.interpretWith context Nothing input)
 
     case eitherResult of
-        Left text -> liftIO $ Text.IO.hPutStrLn IO.stderr text
+        Left e -> liftIO (Text.IO.hPutStrLn IO.stderr (pack (displayException e)))
         Right (_inferred, value) -> do
             let syntax = Normalize.quote [] value
 
-            width <- liftIO $ Grace.Pretty.getWidth
-            liftIO $ Grace.Pretty.renderIO True width IO.stdout (Grace.Pretty.pretty syntax <> "\n")
+            width <- liftIO Grace.Pretty.getWidth
+            liftIO (Grace.Pretty.renderIO True width IO.stdout (Grace.Pretty.pretty syntax <> "\n"))
 
 assignment :: (MonadState Status m, MonadIO m) => Cmd m
 assignment string
@@ -94,7 +95,7 @@ assignment string
           Except.runExceptT (Interpret.interpretWith context Nothing input)
 
       case eitherResult of
-          Left text -> liftIO (Text.IO.hPutStrLn IO.stderr text)
+          Left e -> liftIO (Text.IO.hPutStrLn IO.stderr (pack (displayException e)))
           Right (type_, value) -> State.modify ((variable, type_, value) :)
 
     | otherwise
@@ -110,11 +111,11 @@ infer expr = do
         Except.runExceptT (Interpret.interpretWith context Nothing input)
 
     case eitherResult of
-        Left text -> do
-            liftIO (Text.IO.hPutStrLn IO.stderr text)
+        Left e -> do
+            liftIO (Text.IO.hPutStrLn IO.stderr (pack (displayException e)))
 
         Right (type_, _) -> do
-            width <- liftIO $ Grace.Pretty.getWidth
+            width <- liftIO Grace.Pretty.getWidth
 
             liftIO (Grace.Pretty.renderIO True width IO.stdout (Grace.Pretty.pretty type_ <> "\n"))
 

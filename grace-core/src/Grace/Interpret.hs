@@ -10,8 +10,12 @@ module Grace.Interpret
       Input(..)
     , interpret
     , interpretWith
+
+      -- * Errors related to interpretation
+    , InterpretError(..)
     ) where
 
+import Control.Exception (Exception(..))
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.Bifunctor (Bifunctor(..))
@@ -51,7 +55,7 @@ data Input
     This is the top-level function for the Grace interpreter
 -}
 interpret
-    :: (MonadError Text m, MonadIO m)
+    :: (MonadError InterpretError m, MonadIO m)
     => Maybe (Type Location)
     -- ^ Optional expected type for the input
     -> Input
@@ -60,7 +64,7 @@ interpret = interpretWith []
 
 -- | Like `interpret`, but accepts a custom list of bindings
 interpretWith
-    :: (MonadError Text m, MonadIO m)
+    :: (MonadError InterpretError m, MonadIO m)
     => [(Text, Type Location, Value)]
     -- ^ @(name, type, value)@ for each custom binding
     -> Maybe (Type Location)
@@ -78,7 +82,7 @@ interpretWith bindings maybeAnnotation input = do
 
     expression <- case Parser.parse name code of
         Left message -> do
-            Except.throwError message
+            Except.throwError (ParseError message)
 
         Right expression -> do
             let locate offset = Location{..}
@@ -110,7 +114,7 @@ interpretWith bindings maybeAnnotation input = do
 
     case Infer.typeWith typeContext annotatedExpression of
         Left message -> do
-            Except.throwError message
+            Except.throwError (TypeInferenceError message)
 
         Right inferred -> do
             let evaluationContext = do
@@ -154,3 +158,13 @@ annotate = Lens.transform transformSyntax . fmap ((,) Nothing)
         Embed (Just annotation, a)
     transformNode node =
         node
+
+-- | Errors related to interpretation of an expression
+data InterpretError
+    = TypeInferenceError Infer.TypeInferenceError
+    | ParseError Parser.ParseError
+    deriving (Eq, Show)
+
+instance Exception InterpretError where
+    displayException (TypeInferenceError e) = displayException e
+    displayException (ParseError e) = displayException e

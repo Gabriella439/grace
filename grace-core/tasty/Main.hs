@@ -4,6 +4,7 @@
 
 module Main where
 
+import Control.Exception (displayException)
 import Data.Text (Text)
 import Grace.Interpret (Input(..))
 import Grace.Location (Location(..))
@@ -45,13 +46,13 @@ fileToTestTree prefix = do
     eitherResult <- Except.runExceptT (Interpret.interpret Nothing (Path input))
 
     case eitherResult of
-        Left message -> do
+        Left e -> do
             return
                 (Tasty.testGroup name
                     [ Silver.goldenVsAction
                         (name <> " - error")
                         expectedStderrFile
-                        (return message)
+                        (return (Text.pack (displayException e)))
                         id
                     ]
                 )

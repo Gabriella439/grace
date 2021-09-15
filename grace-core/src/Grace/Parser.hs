@@ -19,6 +19,9 @@
 module Grace.Parser
     ( -- * Parsing
       parse
+
+      -- * Errors related to parsing
+    , ParseError(..)
     ) where
 
 import Control.Applicative (many, optional, (<|>))
@@ -28,7 +31,7 @@ import Data.Functor (void)
 import Data.List.NonEmpty (NonEmpty(..), some1)
 import Data.Scientific (Scientific)
 import Data.Text (Text)
-import Grace.Lexer (LocatedToken(LocatedToken), Token)
+import Grace.Lexer (LocatedToken(LocatedToken), ParseError(ParsingFailed), Token)
 import Grace.Location (Location(..), Offset(..))
 import Grace.Syntax (Binding(..), Syntax(..))
 import Grace.Type (Type(..))
@@ -39,7 +42,6 @@ import qualified Data.Sequence          as Seq
 import qualified Data.Text              as Text
 import qualified Grace.Domain           as Domain
 import qualified Grace.Lexer            as Lexer
-import qualified Grace.Location         as Location
 import qualified Grace.Monotype         as Monotype
 import qualified Grace.Syntax           as Syntax
 import qualified Grace.Type             as Type
@@ -212,7 +214,7 @@ grammar = mdo
         --
         --
         --      location <- locatedToken Lexer.Lambda
-        --      (nameLocation, name) <- locatedLabel 
+        --      (nameLocation, name) <- locatedLabel
         --      token Lexer.Arrow
         --      body <- expression
         --      let node = Syntax.Lambda nameLocation name body
@@ -225,7 +227,7 @@ grammar = mdo
                         node = Syntax.Lambda nameLocation name body
 
                 lambdaOffset <- locatedToken Lexer.Lambda
-                locatedName <- locatedLabel 
+                locatedName <- locatedLabel
                 token Lexer.Arrow
                 body <- expression
                 return (f lambdaOffset locatedName body)
@@ -520,7 +522,7 @@ grammar = mdo
                       where
                         nameLocation = location
                         annotation = Nothing
-                        
+
                 locatedLet <- locatedToken Lexer.Let
                 name <- label
                 token Lexer.Equals
@@ -645,7 +647,7 @@ grammar = mdo
                 optional (token Lexer.Comma)
 
                 fieldTypes <- fieldType `endBy` token Lexer.Comma
-                
+
                 toFields <-
                     (   do  text_ <- recordLabel
                             pure (\fs -> Type.Fields fs (Monotype.VariableFields text_))
@@ -711,7 +713,7 @@ parse
     -- ^ Name of the input (used for error messages)
     -> Text
     -- ^ Source code
-    -> Either Text (Syntax Offset FilePath)
+    -> Either ParseError (Syntax Offset FilePath)
 parse name code = do
     tokens <- Lexer.lex name code
 
@@ -722,7 +724,7 @@ parse name code = do
                         []                -> Offset (Text.length code)
                         locatedToken_ : _ -> Lexer.start locatedToken_
 
-            Left (Location.renderError "Invalid input - Parsing failed" Location{..})
+            Left (ParsingFailed (Location{..}))
 
         (result : _, _) -> do
             return result

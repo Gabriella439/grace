@@ -13,9 +13,9 @@ module Grace
     ) where
 
 import Control.Applicative (many, (<|>))
+import Control.Exception (Exception(..))
 import Data.Foldable (traverse_)
 import Data.String.Interpolate (__i)
-import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Interpret (Input(..))
 import Grace.Location (Location(..))
@@ -26,6 +26,7 @@ import Prettyprinter (Doc)
 import Prettyprinter.Render.Terminal (AnsiStyle)
 
 import qualified Control.Monad.Except         as Except
+import qualified Data.Text                    as Text
 import qualified Data.Text.IO                 as Text.IO
 import qualified Prettyprinter                as Pretty
 import qualified Grace.Infer                  as Infer
@@ -160,9 +161,9 @@ getRender highlight = do
 
     return (Grace.Pretty.renderIO color width IO.stdout)
 
-throws :: Either Text a -> IO a
-throws (Left text) = do
-    Text.IO.hPutStrLn IO.stderr text
+throws :: Exception e => Either e a -> IO a
+throws (Left e) = do
+    Text.IO.hPutStrLn IO.stderr (Text.pack (displayException e))
     Exit.exitFailure
 throws (Right result) = do
     return result
