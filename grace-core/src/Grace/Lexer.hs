@@ -225,12 +225,15 @@ file = lexeme do
     return (File (concatMap Text.unpack (prefix : List.intersperse "/" suffix)))
 
 uri :: Parser Token
-uri = lexeme do
-    x <- Megaparsec.lookAhead URI.parser
+uri = (try . lexeme) do
+    x <- URI.parser
     case URI.uriScheme x of
         Nothing -> fail "Missing URI scheme !"
-        Just _ -> return ()
-    URI <$> URI.parser
+        _ -> return ()
+    case URI.uriAuthority x of
+        Left False -> fail "Relative path in URI !"
+        _ -> return ()
+    return (URI x)
 
 text :: Parser Token
 text = lexeme do
