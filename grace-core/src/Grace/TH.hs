@@ -45,9 +45,9 @@ import qualified Language.Haskell.TH.Syntax as TH
 grace :: QuasiQuoter
 grace = QuasiQuoter
     { quoteExp = fmap TH.unType . expressionFromCode . Text.pack
-    , quoteDec = error "Declaration quoting not supported !"
-    , quotePat = error "Pattern quoting not supported !"
-    , quoteType = error "Type quoting not supported !"
+    , quoteDec = error "Declaration quoting not supported"
+    , quotePat = error "Pattern quoting not supported"
+    , quoteType = error "Type quoting not supported"
     }
 
 {- | Evaluate an expression at compile time.
