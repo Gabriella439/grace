@@ -1,3 +1,7 @@
+{- | This module provides Template Haskell functions to embed expression and
+     their times at compile-time.
+-}
+
 module Grace.TH
     ( grace
 

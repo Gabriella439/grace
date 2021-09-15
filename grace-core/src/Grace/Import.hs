@@ -7,6 +7,10 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ViewPatterns #-}
 
+{- | This module contains the functions and types that power to URI-base imports
+     as well as the builtin resolvers for those imports.
+-}
+
 module Grace.Import
     ( -- * Resolving imports
       Import(..)
