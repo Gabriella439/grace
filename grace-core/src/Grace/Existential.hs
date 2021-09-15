@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveLift                 #-}
 {-# LANGUAGE DerivingStrategies         #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
@@ -18,6 +19,7 @@ module Grace.Existential
 
 import Data.Text (Text)
 import Grace.Pretty (Pretty(..), label)
+import Language.Haskell.TH.Syntax (Lift)
 
 import qualified Data.Char as Char
 import qualified Data.Text as Text
@@ -33,6 +35,7 @@ import qualified Data.Text as Text
       variable
 -}
 newtype Existential a = UnsafeExistential Int
+    deriving stock Lift
     deriving newtype (Eq, Num, Show)
 
 instance Pretty (Existential a) where

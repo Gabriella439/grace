@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveGeneric      #-}
+{-# LANGUAGE DeriveLift         #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE OverloadedStrings  #-}
 
@@ -12,6 +13,7 @@ module Grace.Domain
 
 import GHC.Generics (Generic)
 import Grace.Pretty (Pretty(..), builtin)
+import Language.Haskell.TH.Syntax (Lift)
 
 -- | The domain over which a @forall@ is quantified
 data Domain
@@ -21,7 +23,7 @@ data Domain
     -- ^ @forall (a : Fields) . …@
     | Alternatives
     -- ^ @forall (a : Alternatives) . …@
-    deriving stock (Eq, Generic, Show)
+    deriving stock (Eq, Generic, Lift, Show)
 
 instance Pretty Domain where
     pretty Type         = builtin "Type"
