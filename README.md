@@ -884,6 +884,11 @@ annotation as a last resort.
 
 ### Imports
 
+Grace has two ways to import expressions from other sources: Filepath-based
+imports and imports using URIs.
+
+#### Imports from files
+
 You can import a Grace subexpression stored within a separate file by
 referencing the file's relative or absolute path.
 
@@ -973,6 +978,91 @@ $ grace interpret - <<< './greet.ffg "John"'
 ```
 
 Any subexpression can be imported in this way.
+
+#### Imports using URIs
+
+Imports with URIs work similar to the ones using a simple filepath.
+
+Suppose you do not have the `greet.ffg` stored locally but instead it resides
+on a web server: `http://my-cool-domain.code/grace/greet.ffg`
+You could either download it and reference it by its filepath like demonstrated
+in the example above or let the Grace interpreter do the job:
+
+```bash
+$ grace interpret - <<< 'http://my-cool-domain.code/grace/greet.ffg "John"'
+```
+```dhall
+"Hello, John!"
+```
+
+Note that if a particular URI can be handled by the Grace interpreter depends
+on its (compile-time) configuration: Internally it relies on a set of _resolvers_
+that take care of all the things related to networking like downloading, caching
+, verifying the integrity of retrieved file on so on.
+For instance, the motivating example will unfortunately not work out-of-the box
+since the grace executable has no builtin resolver for HTTP (yet).
+
+Grace comes with three builtin resolvers:
+
+1. One to resolve `env://` URIs,
+2. one to resolve `file://` URIs.
+3. and one that delegates the resolving to an external program.
+
+Lets have a look at the `env://` resolver first:
+```bash
+$ MY_VAR='"Hello !"' grace interpret - <<< 'env:///MY_VAR'
+```
+```dhall
+"Hello !"
+```
+
+The resolver replaces '/' in the URIs path with '_':
+```bash
+$ MY_VAR='"Hello !"' grace interpret - <<< 'env:///MY/VAR'
+```
+```dhall
+"Hello !"
+```
+
+The `file://` resolver is similar to the filepath-based imports we already know:
+```bash
+$ grace interpret - <<< 'file:///path/to/greet.ffg "John"'
+```
+```dhall
+"Hello, John!"
+```
+
+Last but not least we'll have at look at third resolver: The one using external
+programs to resolve URIs. This resolver is somewhat different compared to the
+other two: It is not bound to a particular URI scheme.
+Instead, it tries to find the right executable to process the URI: Suppose our
+`greet.ffg` is on a remote machine called `my-server` and all we got is SSH
+access. Now a resolver capable of receiving that file might look something like
+this:
+
+```bash
+#!/usr/bin/bash
+
+# The URI to resolve is passed as $1
+
+set -e
+
+no_scheme="${1#ssh://}"
+host="${no_scheme%%/*}"
+path="${1#ssh://$host/}"
+
+ssh "$host" cat "$path"
+```
+
+We store that file under `/usr/local/bin/grace-resolver-ssh` (or in another
+directory in `$PATH` - but the name is important). Now the following will work:
+
+```bash
+$ grace interpret - <<< 'ssh://my-server/greet.ffg "John"'
+```
+```dhall
+"Hello, John!"
+```
 
 ## Name
 
