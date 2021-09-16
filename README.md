@@ -984,12 +984,12 @@ Any subexpression can be imported in this way.
 Imports with URIs work similar to the ones using a simple filepath.
 
 Suppose you do not have the `greet.ffg` stored locally but instead it resides
-on a web server: `http://my-cool-domain.code/grace/greet.ffg`
+on a web server: `http://example.com/grace/greet.ffg`
 You could either download it and reference it by its filepath like demonstrated
 in the example above or let the Grace interpreter do the job:
 
 ```bash
-$ grace interpret - <<< 'http://my-cool-domain.code/grace/greet.ffg "John"'
+$ grace interpret - <<< 'http://example.com/grace/greet.ffg "John"'
 ```
 ```dhall
 "Hello, John!"
@@ -1036,9 +1036,9 @@ Last but not least we'll have at look at third resolver: The one using external
 programs to resolve URIs. This resolver is somewhat different compared to the
 other two: It is not bound to a particular URI scheme.
 Instead, it tries to find the right executable to process the URI: Suppose our
-`greet.ffg` is on a remote machine called `my-server` and all we got is SSH
-access. Now a resolver capable of receiving that file might look something like
-this:
+`greet.ffg` is on a remote machine reachable at `example.com` and all we got is
+SSH access. Now a resolver capable of receiving that file might look something
+like this:
 
 ```bash
 #!/usr/bin/bash
@@ -1058,7 +1058,7 @@ We store that file under `/usr/local/bin/grace-resolver-ssh` (or in another
 directory in `$PATH` - but the name is important). Now the following will work:
 
 ```bash
-$ grace interpret - <<< 'ssh://my-server/greet.ffg "John"'
+$ grace interpret - <<< 'ssh://example.com/greet.ffg "John"'
 ```
 ```dhall
 "Hello, John!"
