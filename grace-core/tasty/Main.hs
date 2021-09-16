@@ -6,7 +6,7 @@ module Main where
 
 import Control.Exception (displayException)
 import Data.Text (Text)
-import Grace.Interpret (Input(..), InterpretError, InterpretSettings(..))
+import Grace.Interpret (Input(..), InterpretError)
 import Grace.Location (Location(..))
 import Grace.Pretty (Pretty(..))
 import Grace.Type (Type(..))
@@ -37,14 +37,12 @@ pretty_ x =
         (pretty x <> Pretty.hardline)
 
 interpret :: Input -> IO (Either InterpretError (Type Location, Value.Value))
-interpret input = Except.runExceptT (Interpret.interpretWith settings [] Nothing input)
+interpret input = Except.runExceptT (Interpret.interpretWith importCb [] Nothing input)
     where
-        settings = InterpretSettings
-            { resolvers =
-                [ Import.envResolver
-                , Import.fileResolver
-                ]
-            }
+        importCb = Import.resolverToCallback
+            (  Import.envResolver
+            <> Import.fileResolver
+            )
 
 fileToTestTree :: FilePath -> IO TestTree
 fileToTestTree prefix = do

@@ -18,6 +18,7 @@ import Control.Exception (Exception(..))
 import Data.Foldable (traverse_)
 import Data.String.Interpolate (__i)
 import Data.Void (Void)
+import Grace.Import (ImportCallback)
 import Grace.Interpret (Input(..))
 import Grace.Location (Location(..))
 import Grace.Syntax (Builtin(..), Node(..), Syntax(..))
@@ -30,6 +31,7 @@ import qualified Control.Monad.Except         as Except
 import qualified Data.Text                    as Text
 import qualified Data.Text.IO                 as Text.IO
 import qualified Prettyprinter                as Pretty
+import qualified Grace.Import                 as Import
 import qualified Grace.Infer                  as Infer
 import qualified Grace.Interpret              as Interpret
 import qualified Grace.Monotype               as Monotype
@@ -171,10 +173,10 @@ throws (Right result) = do
 
 -- | Command-line entrypoint
 main :: IO ()
-main = mainWith Interpret.defaultInterpretSettings
+main = mainWith (Import.resolverToCallback Import.defaultResolver)
 
 -- | Command-line entrypoint
-mainWith :: Interpret.InterpretSettings -> IO ()
+mainWith :: ImportCallback -> IO ()
 mainWith settings = do
     options <- Options.execParser parserInfo
 

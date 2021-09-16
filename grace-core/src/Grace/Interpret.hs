@@ -1,3 +1,4 @@
+{-# LANGUAGE BlockArguments     #-}
 {-# LANGUAGE DataKinds          #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts   #-}
@@ -8,21 +9,23 @@
 module Grace.Interpret
     ( -- * Interpret
       Input(..)
+    , ImportCallback
     , interpret
     , interpretWith
-    , InterpretSettings(..)
-    , defaultInterpretSettings
+    --, InterpretSettings(..)
+    --, defaultInterpretSettings
 
       -- * Errors related to interpretation
     , InterpretError(..)
     ) where
 
-import Control.Exception.Safe (Exception(..))
+import Control.Exception.Safe (Exception(..), catchAny, throw)
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Bifunctor (Bifunctor(..))
 import Data.Generics.Product (the)
 import Data.Text (Text)
+import Grace.Import (ImportCallback)
 import Grace.Location (Location(..))
 import Grace.Syntax (Node(..), Syntax(..))
 import Grace.Type (Type)
@@ -31,6 +34,7 @@ import System.FilePath ((</>))
 
 import qualified Control.Lens         as Lens
 import qualified Control.Monad.Except as Except
+import qualified Data.Text            as Text
 import qualified Data.Text.IO         as Text.IO
 import qualified Grace.Context        as Context
 import qualified Grace.Import         as Import
@@ -53,21 +57,6 @@ data Input
     | Code String Text
     -- ^ Source code: @Code name content@
 
--- | Settings for the interpreter
-newtype InterpretSettings = InterpretSettings
-    { resolvers :: [Import.Resolver]
-    }
-
-{- | The default `InterpretSettings` used by the `interpret` function.
-     Those settings are:
-
-     * The resolvers from `Import.defaultResolvers`.
--}
-defaultInterpretSettings :: InterpretSettings
-defaultInterpretSettings = InterpretSettings
-    { resolvers = Import.defaultResolvers
-    }
-
 {-| Interpret Grace source code, return the inferred type and the evaluated
     result
 
@@ -79,20 +68,20 @@ interpret
     -- ^ Optional expected type for the input
     -> Input
     -> m (Type Location, Value)
-interpret = interpretWith defaultInterpretSettings []
+interpret = interpretWith (const (throw ImportsNotSupported)) []
 
 -- | Like `interpret`, but accepts a custom list of bindings
 interpretWith
     :: (MonadError InterpretError m, MonadIO m)
-    => InterpretSettings
-    -- ^ Settings controlling how the interpreter behaves
+    => ImportCallback
+    -- ^ How to resolve URI imports
     -> [(Text, Type Location, Value)]
     -- ^ @(name, type, value)@ for each custom binding
     -> Maybe (Type Location)
     -- ^ Optional expected type for the input
     -> Input
     -> m (Type Location, Value)
-interpretWith settings bindings maybeAnnotation input = do
+interpretWith resolveImport bindings maybeAnnotation input = do
     code <- case input of
         Path file   -> liftIO (Text.IO.readFile file)
         Code _ text -> return text
@@ -112,15 +101,20 @@ interpretWith settings bindings maybeAnnotation input = do
 
     let resolve :: (MonadError InterpretError m, MonadIO m) => (Maybe (Type Location), Import.Import) -> m (Type Location, Value)
         resolve (maybeAnnotation', Import.File file) =
-            interpretWith settings bindings maybeAnnotation' (Path path)
+            interpretWith resolveImport bindings maybeAnnotation' (Path path)
           where
             path = case input of
                 Path parent -> FilePath.takeDirectory parent </> file
                 Code _ _    -> file
         resolve (maybeAnnotation', Import.URI uri) = do
-            text <- Import.findResolver uri (resolvers settings)
+            eitherText <- liftIO do
+                (Right <$> resolveImport uri) `catchAny` (return . Left)
 
-            interpretWith settings bindings maybeAnnotation' (Code (URI.renderStr uri) text)
+            text <- case eitherText of
+                Left e -> throwError (ImportError uri (displayException e))
+                Right text -> return text
+
+            interpretWith resolveImport bindings maybeAnnotation' (Code (URI.renderStr uri) text)
 
     resolvedExpression <- traverse resolve (annotate expression)
 
@@ -187,10 +181,20 @@ annotate = Lens.transform transformSyntax . fmap ((,) Nothing)
 
 -- | Errors related to interpretation of an expression
 data InterpretError
-    = TypeInferenceError Infer.TypeInferenceError
+    = ImportError URI.URI String
     | ParseError Parser.ParseError
+    | TypeInferenceError Infer.TypeInferenceError
     deriving stock (Eq, Show)
 
 instance Exception InterpretError where
-    displayException (TypeInferenceError e) = displayException e
+    displayException (ImportError uri e) =
+        "The import of " <> Text.unpack (URI.render uri) <> " failed with: " <>
+        e
     displayException (ParseError e) = displayException e
+    displayException (TypeInferenceError e) = displayException e
+
+data ImportsNotSupported = ImportsNotSupported
+    deriving Show
+
+instance Exception ImportsNotSupported where
+    displayException ImportsNotSupported = "URI imports are not supported by this interpreter"

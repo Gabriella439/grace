@@ -13,12 +13,13 @@
 module Grace.Import
     ( -- * Resolving imports
       Import(..)
+    , ImportCallback
     , Resolver(..)
-    , findResolver
+    , resolverToCallback
     , ImportError(..)
 
-      -- * Builtin resolvers
-    , defaultResolvers
+      -- * Builtin default resolver
+    , defaultResolver
       -- ** env:// resolver
     , envResolver
     , EnvResolverError(..)
@@ -29,8 +30,7 @@ module Grace.Import
     , externalResolver
     ) where
 
-import Control.Exception.Safe (Exception(..), SomeException, catchAny, handleIO, throw)
-import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Exception.Safe (Exception(..), handleIO, throw)
 import Data.Foldable (foldl')
 import Data.Text (Text)
 import Data.Text.Encoding.Error (UnicodeException)
@@ -60,6 +60,9 @@ instance Pretty Import where
     pretty (File file) = pretty file
     pretty (URI uri) = pretty uri
 
+-- | Type of the callback function used to resolve URI imports
+type ImportCallback = URI.URI -> IO Text
+
 {- | A resolver for an URI.
 
      When the interpreter tries to resolve an URI pointing to some source code
@@ -80,30 +83,31 @@ instance Pretty Import where
 -}
 newtype Resolver = Resolver { runResolver :: URI.URI -> IO (Maybe Text) }
 
-{- | Given an URI, find a matching resolver in a list of resolvers and return
-     its result.
--}
-findResolver :: MonadIO m => URI.URI -> [Resolver] -> m Text
-findResolver uri = liftIO . loop
-    where
-        loop [] = throw (MissingResolver uri)
-        loop (resolver:xs) = do
-            maybeResult <- runResolver resolver uri `catchAny` \e ->
-                throw (ResolverException uri e)
+instance Semigroup Resolver where
+    x <> y = Resolver \uri -> do
+        maybeResult <- runResolver x uri
+        case maybeResult of
+            Nothing -> runResolver y uri
+            _ -> return maybeResult
 
-            case maybeResult of
-                Nothing -> loop xs
-                Just result -> return result
+instance Monoid Resolver where
+    mempty = Resolver (const (return Nothing))
+
+-- | Convert a resolver to a callback function
+resolverToCallback :: Resolver -> ImportCallback
+resolverToCallback resolver uri = do
+    maybeResult <- runResolver resolver uri
+    case maybeResult of
+        Nothing -> throw UnsupportedURI
+        Just result -> return result
 
 -- | Errors that might be raised during import resolution.
 data ImportError
-    = MissingResolver URI.URI
-    | ResolverException URI.URI SomeException
+    = UnsupportedURI
     deriving stock Show
 
 instance Exception ImportError where
-    displayException (MissingResolver uri) = Text.unpack ("Cannot resolve uri: " <> URI.render uri)
-    displayException (ResolverException uri e) = "Resolver for " <> Text.unpack (URI.render uri) <> " failed with: " <> displayException e
+    displayException UnsupportedURI = "Resolving this URI is not supported"
 
 -- Builtin resolvers
 
@@ -113,12 +117,11 @@ instance Exception ImportError where
      * `fileResolver`
      * `externalResolver`
 -}
-defaultResolvers :: [Resolver]
-defaultResolvers =
-    [ envResolver
-    , fileResolver
-    , externalResolver
-    ]
+defaultResolver :: Resolver
+defaultResolver
+    =  envResolver
+    <> fileResolver
+    <> externalResolver
 
 {- | A resolver for environment variables.
 
