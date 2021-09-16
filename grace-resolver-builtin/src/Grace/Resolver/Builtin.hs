@@ -27,6 +27,7 @@ module Grace.Resolver.Builtin
 
 import Control.Exception.Safe (Exception(..), handleIO, throw)
 import Data.Foldable (foldl')
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text)
 import Data.Text.Encoding.Error (UnicodeException)
 import Grace.Import (Resolver(..))
@@ -64,26 +65,26 @@ defaultResolver
      each \"/\" with \"_\". The value of the environment variable is the
      source code returned by this resolver.
 
-     It will fail if the URI has an authority component.
+     It will fail if the URI has an authority component, a trailing slash or
+     more than one path components. I.e. a valid URI looks like @env:///NAME@.
 -}
 envResolver :: Resolver
 envResolver = Resolver \case
     uri@URI.URI{ URI.uriScheme = Just (URI.unRText -> "env") } -> do
         case URI.uriAuthority uri of
-            Right auth | auth /= emptyAuthority -> throw EnvUnexpectedAuthority
+            Right auth | auth /= emptyAuthority -> throw EnvInvalidURI
             _ -> return ()
 
-        pieces <- case URI.uriPath uri of
+        name <- case URI.uriPath uri of
             Nothing -> throw EnvMissingVarName
-            Just (_, pieces) -> return pieces
+            Just (False, name :| []) -> return (URI.unRText name)
+            _ -> throw EnvInvalidURI
 
-        let n = pathPiecesToName pieces
+        value <- Environment.lookupEnv (Text.unpack name) >>= \case
+            Nothing -> throw (EnvVarNotFound name)
+            Just value -> return value
 
-        v <- Environment.lookupEnv (Text.unpack n) >>= \case
-            Nothing -> throw (EnvVarNotFound n)
-            Just v -> return v
-
-        let input = Interpret.Code "(environment)" (Text.pack v)
+        let input = Interpret.Code "(environment)" (Text.pack value)
 
         eitherResult <- Except.runExceptT (Interpret.parseInput input)
 
@@ -93,20 +94,18 @@ envResolver = Resolver \case
 
         return (Just result)
     _ -> return Nothing
-    where
-        pathPiecesToName = Text.intercalate "_" . map URI.unRText . NonEmpty.toList
 
 -- | Errors raised by `envResolver`
 data EnvResolverError
-    = EnvMissingVarName
-    | EnvUnexpectedAuthority
+    = EnvInvalidURI
+    | EnvMissingVarName
     | EnvVarNotFound Text
     deriving stock Show
 
 instance Exception EnvResolverError where
-    displayException EnvUnexpectedAuthority = "Unexpected authority component"
-    displayException (EnvVarNotFound k) = Text.unpack ("Environment variable not found: " <> k)
+    displayException EnvInvalidURI = "Invalid URI"
     displayException EnvMissingVarName = "Environment variable name is missing"
+    displayException (EnvVarNotFound k) = Text.unpack ("Environment variable not found: " <> k)
 
 {- | A resolver for files.
 
@@ -119,7 +118,7 @@ fileResolver :: Resolver
 fileResolver = Resolver \case
     uri@URI.URI{ URI.uriScheme = Just (URI.unRText -> "file") } -> do
         case URI.uriAuthority uri of
-            Right auth | auth /= emptyAuthority -> throw FileUnexpectedAuthority
+            Right auth | auth /= emptyAuthority -> throw FileInvalidURI
             _ -> return ()
 
         pieces <- case URI.uriPath uri of
@@ -141,13 +140,13 @@ fileResolver = Resolver \case
 
 -- | Errors raised by `fileResolver`
 data FileResolverError
-    = FileMissingPath
-    | FileUnexpectedAuthority
+    = FileInvalidURI
+    | FileMissingPath
     deriving stock Show
 
 instance Exception FileResolverError where
+    displayException FileInvalidURI = "Invalid URI"
     displayException FileMissingPath = "Filepath is missing"
-    displayException FileUnexpectedAuthority = "Unexpected authority component"
 
 {- | A resolver that uses external programs to resolve the URI.
 

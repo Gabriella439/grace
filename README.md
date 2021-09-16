@@ -1016,14 +1016,6 @@ $ MY_VAR='"Hello !"' grace interpret - <<< 'env:///MY_VAR'
 "Hello !"
 ```
 
-The resolver replaces '/' in the URIs path with '_':
-```bash
-$ MY_VAR='"Hello !"' grace interpret - <<< 'env:///MY/VAR'
-```
-```dhall
-"Hello !"
-```
-
 The `file://` resolver is similar to the filepath-based imports we already know:
 ```bash
 $ grace interpret - <<< 'file:///path/to/greet.ffg "John"'

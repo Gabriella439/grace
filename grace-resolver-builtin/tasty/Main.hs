@@ -138,7 +138,7 @@ main = do
 
 interpretCodeWithEnvURI :: TestTree
 interpretCodeWithEnvURI = Tasty.HUnit.testCase "interpret code with env:// import" do
-    let uri = "env:///GRACE_TEST/VAR"
+    let uri = "env:///GRACE_TEST_VAR"
 
     Environment.setEnv "GRACE_TEST_VAR" "true"
     actualValue <- interpret (Code "(input)" (Text.pack uri))
