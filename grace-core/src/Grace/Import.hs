@@ -18,8 +18,9 @@ module Grace.Import
     ) where
 
 import Control.Exception.Safe (Exception(..), throw)
-import Data.Text (Text)
+import Grace.Location (Location)
 import Grace.Pretty (Pretty(..))
+import Grace.Syntax (Syntax)
 import Text.URI (URI)
 
 {- | A reference to external source code that will be imported by the
@@ -34,7 +35,7 @@ instance Pretty Import where
     pretty (URI uri) = pretty uri
 
 -- | Type of the callback function used to resolve URI imports
-type ImportCallback = URI -> IO Text
+type ImportCallback = URI -> IO (Syntax Location Import)
 
 {- | A resolver for an URI.
 
@@ -54,7 +55,7 @@ type ImportCallback = URI -> IO Text
      * Exceptions thrown in resolvers will be caught and rethrown as an
        `ImportError` by the interpreter.
 -}
-newtype Resolver = Resolver { runResolver :: URI -> IO (Maybe Text) }
+newtype Resolver = Resolver { runResolver :: URI -> IO (Maybe (Syntax Location Import)) }
 
 instance Semigroup Resolver where
     x <> y = Resolver \uri -> do

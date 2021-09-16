@@ -14,6 +14,7 @@ library
                      , filepath
                      , grace-core
                      , modern-uri
+                     , mtl
                      , safe-exceptions
                      , text
                      , typed-process

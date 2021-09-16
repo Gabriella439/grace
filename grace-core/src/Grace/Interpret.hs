@@ -12,6 +12,8 @@ module Grace.Interpret
     , ImportCallback
     , interpret
     , interpretWith
+    , interpretExprWith
+    , parseInput
 
       -- * Errors related to interpretation
     , InterpretError(..)
@@ -23,7 +25,7 @@ import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Bifunctor (Bifunctor(..))
 import Data.Generics.Product (the)
 import Data.Text (Text)
-import Grace.Import (ImportCallback)
+import Grace.Import (Import, ImportCallback)
 import Grace.Location (Location(..))
 import Grace.Syntax (Node(..), Syntax(..))
 import Grace.Type (Type)
@@ -80,39 +82,46 @@ interpretWith
     -> Input
     -> m (Type Location, Value)
 interpretWith resolveImport bindings maybeAnnotation input = do
-    code <- case input of
-        Path file   -> liftIO (Text.IO.readFile file)
-        Code _ text -> return text
+    let directory = case input of
+            Path file -> FilePath.takeDirectory file
+            Code _ _  -> "."
 
-    let name = case input of
-            Path file -> file
-            Code n _  -> n
+    expression <- parseInput input
 
-    expression <- case Parser.parse name code of
-        Left message -> do
-            Except.throwError (ParseError message)
+    interpretExprWith resolveImport bindings maybeAnnotation directory expression
 
-        Right expression -> do
-            let locate offset = Location{..}
-
-            return (first locate expression)
-
-    let resolve :: (MonadError InterpretError m, MonadIO m) => (Maybe (Type Location), Import.Import) -> m (Type Location, Value)
+{- | Like `interpretWith`, but takes a pre-parsed expression instead of some
+     source code
+-}
+interpretExprWith
+    :: (MonadError InterpretError m, MonadIO m)
+    => ImportCallback
+    -- ^ How to resolve URI imports
+    -> [(Text, Type Location, Value)]
+    -- ^ @(name, type, value)@ for each custom binding
+    -> Maybe (Type Location)
+    -- ^ Optional expected type for the input
+    -> FilePath
+    -- ^ The base directory used when resolving filepath imports of relative paths
+    -> Syntax Location Import
+    -> m (Type Location, Value)
+interpretExprWith resolveImport bindings maybeAnnotation directory expression = do
+    let resolve :: (MonadError InterpretError m, MonadIO m) => (Maybe (Type Location), Import) -> m (Type Location, Value)
         resolve (maybeAnnotation', Import.File file) =
             interpretWith resolveImport bindings maybeAnnotation' (Path path)
           where
-            path = case input of
-                Path parent -> FilePath.takeDirectory parent </> file
-                Code _ _    -> file
+            path = FilePath.normalise (directory </> file)
         resolve (maybeAnnotation', Import.URI uri) = do
-            eitherText <- liftIO do
+            eitherResult <- liftIO do
                 (Right <$> resolveImport uri) `catchAny` (return . Left)
 
-            text <- case eitherText of
+            importExpression <- case eitherResult of
                 Left e -> throwError (ImportError uri (displayException e))
-                Right text -> return text
+                Right result -> return result
 
-            interpretWith resolveImport bindings maybeAnnotation' (Code (URI.renderStr uri) text)
+            let relocate location = location { name = Text.unpack (URI.render uri) }
+
+            interpretExprWith resolveImport bindings maybeAnnotation' directory (first relocate importExpression)
 
     resolvedExpression <- traverse resolve (annotate expression)
 
@@ -141,6 +150,29 @@ interpretWith resolveImport bindings maybeAnnotation input = do
                     return (variable, value)
 
             return (inferred, Normalize.evaluate evaluationContext resolvedExpression)
+
+-- | Like `Parser.parse`, but expects an `Input` and returns a located expression
+parseInput
+    :: (MonadError InterpretError m, MonadIO m)
+    => Input
+    -> m (Syntax Location Import)
+parseInput input = do
+    code <- case input of
+        Path file   -> liftIO (Text.IO.readFile file)
+        Code _ text -> return text
+
+    let name = case input of
+            Path file -> file
+            Code n _  -> n
+
+    case Parser.parse name code of
+        Left message -> do
+            Except.throwError (ParseError message)
+
+        Right expression -> do
+            let locate offset = Location{..}
+
+            return (first locate expression)
 
 {-| We use this utility so that when we resolve an import of the form:
 
