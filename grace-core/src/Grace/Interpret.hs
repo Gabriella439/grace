@@ -12,14 +12,12 @@ module Grace.Interpret
     , ImportCallback
     , interpret
     , interpretWith
-    --, InterpretSettings(..)
-    --, defaultInterpretSettings
 
       -- * Errors related to interpretation
     , InterpretError(..)
     ) where
 
-import Control.Exception.Safe (Exception(..), catchAny, throw)
+import Control.Exception.Safe (Exception(..), catchAny)
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Bifunctor (Bifunctor(..))
@@ -68,7 +66,7 @@ interpret
     -- ^ Optional expected type for the input
     -> Input
     -> m (Type Location, Value)
-interpret = interpretWith (const (throw ImportsNotSupported)) []
+interpret = interpretWith (Import.resolverToCallback mempty) []
 
 -- | Like `interpret`, but accepts a custom list of bindings
 interpretWith
@@ -192,9 +190,3 @@ instance Exception InterpretError where
         e
     displayException (ParseError e) = displayException e
     displayException (TypeInferenceError e) = displayException e
-
-data ImportsNotSupported = ImportsNotSupported
-    deriving Show
-
-instance Exception ImportsNotSupported where
-    displayException ImportsNotSupported = "URI imports are not supported by this interpreter"

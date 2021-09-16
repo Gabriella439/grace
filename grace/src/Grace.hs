@@ -38,6 +38,7 @@ import qualified Grace.Monotype               as Monotype
 import qualified Grace.Normalize              as Normalize
 import qualified Grace.Parser                 as Parser
 import qualified Grace.Pretty
+import qualified Grace.Resolver.Builtin       as Resolver
 import qualified Grace.Syntax                 as Syntax
 import qualified Grace.Type                   as Type
 import qualified Grace.Value                  as Value
@@ -173,7 +174,7 @@ throws (Right result) = do
 
 -- | Command-line entrypoint
 main :: IO ()
-main = mainWith (Import.resolverToCallback Import.defaultResolver)
+main = mainWith (Import.resolverToCallback Resolver.defaultResolver)
 
 -- | Command-line entrypoint
 mainWith :: ImportCallback -> IO ()

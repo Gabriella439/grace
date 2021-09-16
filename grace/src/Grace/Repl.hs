@@ -37,12 +37,13 @@ import qualified Grace.Import           as Import
 import qualified Grace.Interpret        as Interpret
 import qualified Grace.Normalize        as Normalize
 import qualified Grace.Pretty           as Grace.Pretty
+import qualified Grace.Resolver.Builtin as Resolver
 import qualified System.Console.Repline as Repline
 import qualified System.IO              as IO
 
 -- | Entrypoint for the @grace repl@ subcommand
 repl :: IO ()
-repl = replWith (Import.resolverToCallback Import.defaultResolver)
+repl = replWith (Import.resolverToCallback Resolver.defaultResolver)
 
 -- | Entrypoint for the @grace repl@ subcommand
 replWith :: ImportCallback -> IO ()
