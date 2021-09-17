@@ -9,7 +9,7 @@ module Grace.Repl
       repl
     ) where
 
-import Control.Exception.Safe (MonadThrow, displayException)
+import Control.Exception.Safe (MonadCatch, displayException)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.State (MonadState(..), StateT)
 import Data.Foldable (toList)
@@ -59,13 +59,13 @@ prompt SingleLine = return ">>> "
 
 type Status = [(Text, Type Location, Value)]
 
-commands :: (MonadIO m, MonadState Status m, MonadThrow m) => Options m
+commands :: (MonadCatch m, MonadIO m, MonadState Status m) => Options m
 commands =
-    [ ("let", assignment)
-    , ("type", infer)
+    [ ("let", Repline.dontCrash . assignment)
+    , ("type", Repline.dontCrash . infer)
     ]
 
-interpret :: (MonadIO m, MonadState Status m, MonadThrow m) => Cmd m
+interpret :: (MonadIO m, MonadState Status m) => Cmd m
 interpret string = do
     let input = Code "(input)" (pack string)
 
@@ -80,7 +80,7 @@ interpret string = do
             width <- liftIO Pretty.getWidth
             liftIO (Pretty.renderIO True width IO.stdout (Pretty.pretty syntax <> "\n"))
 
-assignment :: (MonadIO m, MonadState Status m, MonadThrow m) => Cmd m
+assignment :: (MonadIO m, MonadState Status m) => Cmd m
 assignment string
     | (var, '=' : expr) <- break (== '=') string
     = do
@@ -100,7 +100,7 @@ assignment string
     | otherwise
     = liftIO (putStrLn "usage: let = {expression}")
 
-infer :: (MonadIO m, MonadState Status m, MonadThrow m) => Cmd m
+infer :: (MonadIO m, MonadState Status m) => Cmd m
 infer expr = do
     let input = Code "(input)" (pack expr)
 
