@@ -36,4 +36,4 @@ jobs:
     - name: Build
       run: cabal build --enable-tests --enable-benchmarks all
     - name: Run tests
-      run: cabal test grace-core:tasty grace-resolver-builtin:tasty
+      run: cabal test grace-core:tasty
