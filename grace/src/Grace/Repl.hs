@@ -7,7 +7,6 @@
 module Grace.Repl
     ( -- * REPL
       repl
-    , replWith
     ) where
 
 import Control.Exception.Safe (MonadThrow, displayException)
@@ -15,7 +14,6 @@ import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.State (MonadState(..), StateT)
 import Data.Foldable (toList)
 import Data.Text (pack, strip, unpack, Text)
-import Grace.Import (ImportCallback)
 import Grace.Interpret (Input(..))
 import Grace.Lexer (reserved)
 import Grace.Location (Location)
@@ -33,30 +31,24 @@ import System.Console.Repline
 import qualified Control.Monad.Except   as Except
 import qualified Control.Monad.State    as State
 import qualified Data.Text.IO           as Text.IO
-import qualified Grace.Import           as Import
 import qualified Grace.Interpret        as Interpret
 import qualified Grace.Normalize        as Normalize
-import qualified Grace.Pretty           as Grace.Pretty
-import qualified Grace.Resolver.Builtin as Resolver
+import qualified Grace.Pretty           as Pretty
 import qualified System.Console.Repline as Repline
 import qualified System.IO              as IO
 
 -- | Entrypoint for the @grace repl@ subcommand
 repl :: IO ()
-repl = replWith (Import.resolverToCallback Resolver.defaultResolver)
-
--- | Entrypoint for the @grace repl@ subcommand
-replWith :: ImportCallback -> IO ()
-replWith importCb = State.evalStateT action []
+repl = State.evalStateT action []
   where
     action =
       Repline.evalReplOpts ReplOpts
         { banner = prompt
-        , command = interpret importCb
-        , options = commands importCb
+        , command = interpret
+        , options = commands
         , prefix = Just ':'
         , multilineCommand = Just "paste"
-        , tabComplete = complete importCb
+        , tabComplete = complete
         , initialiser = return ()
         , finaliser = return Repline.Exit
         }
@@ -67,29 +59,29 @@ prompt SingleLine = return ">>> "
 
 type Status = [(Text, Type Location, Value)]
 
-commands :: (MonadIO m, MonadState Status m, MonadThrow m) => ImportCallback -> Options m
-commands importCb =
-    [ ("let", assignment importCb)
-    , ("type", infer importCb)
+commands :: (MonadIO m, MonadState Status m, MonadThrow m) => Options m
+commands =
+    [ ("let", assignment)
+    , ("type", infer)
     ]
 
-interpret :: (MonadIO m, MonadState Status m, MonadThrow m) => ImportCallback -> Cmd m
-interpret importCb string = do
+interpret :: (MonadIO m, MonadState Status m, MonadThrow m) => Cmd m
+interpret string = do
     let input = Code "(input)" (pack string)
 
     context <- get
-    eitherResult <- Except.runExceptT (Interpret.interpretWith importCb context Nothing input)
+    eitherResult <- Except.runExceptT (Interpret.interpretWith context Nothing input)
 
     case eitherResult of
         Left e -> liftIO (Text.IO.hPutStrLn IO.stderr (pack (displayException e)))
         Right (_inferred, value) -> do
             let syntax = Normalize.quote [] value
 
-            width <- liftIO Grace.Pretty.getWidth
-            liftIO (Grace.Pretty.renderIO True width IO.stdout (Grace.Pretty.pretty syntax <> "\n"))
+            width <- liftIO Pretty.getWidth
+            liftIO (Pretty.renderIO True width IO.stdout (Pretty.pretty syntax <> "\n"))
 
-assignment :: (MonadIO m, MonadState Status m, MonadThrow m) => ImportCallback -> Cmd m
-assignment importCb string
+assignment :: (MonadIO m, MonadState Status m, MonadThrow m) => Cmd m
+assignment string
     | (var, '=' : expr) <- break (== '=') string
     = do
       let input = Code "(input)" (pack expr)
@@ -99,7 +91,7 @@ assignment importCb string
       context <- get
 
       eitherResult <- do
-          Except.runExceptT (Interpret.interpretWith importCb context Nothing input)
+          Except.runExceptT (Interpret.interpretWith context Nothing input)
 
       case eitherResult of
           Left e -> liftIO (Text.IO.hPutStrLn IO.stderr (pack (displayException e)))
@@ -108,30 +100,30 @@ assignment importCb string
     | otherwise
     = liftIO (putStrLn "usage: let = {expression}")
 
-infer :: (MonadIO m, MonadState Status m, MonadThrow m) => ImportCallback -> Cmd m
-infer importCb expr = do
+infer :: (MonadIO m, MonadState Status m, MonadThrow m) => Cmd m
+infer expr = do
     let input = Code "(input)" (pack expr)
 
     context <- get
 
     eitherResult <- do
-        Except.runExceptT (Interpret.interpretWith importCb context Nothing input)
+        Except.runExceptT (Interpret.interpretWith context Nothing input)
 
     case eitherResult of
         Left e -> do
             liftIO (Text.IO.hPutStrLn IO.stderr (pack (displayException e)))
 
         Right (type_, _) -> do
-            width <- liftIO Grace.Pretty.getWidth
+            width <- liftIO Pretty.getWidth
 
-            liftIO (Grace.Pretty.renderIO True width IO.stdout (Grace.Pretty.pretty type_ <> "\n"))
+            liftIO (Pretty.renderIO True width IO.stdout (Pretty.pretty type_ <> "\n"))
 
-complete :: Monad m => ImportCallback -> CompleterStyle m
-complete importCb =
+complete :: Monad m => CompleterStyle m
+complete =
     Custom (Repline.runMatcher [ (":", completeCommands) ] completeIdentifiers)
   where
     completeCommands =
-        Repline.listCompleter (fmap adapt (commands @(StateT Status IO) importCb))
+        Repline.listCompleter (fmap adapt (commands @(StateT Status IO)))
       where
         adapt (c, _) = ":" <> c
 

@@ -13,49 +13,38 @@ module Grace.Interpret
     , interpret
     , interpretWith
     , interpretExprWith
-    , parseInput
 
       -- * Errors related to interpretation
     , InterpretError(..)
     ) where
 
-import Control.Exception.Safe (Exception(..), catchAny)
+import Control.Exception.Safe (Exception(..), tryAny)
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Bifunctor (Bifunctor(..))
 import Data.Generics.Product (the)
 import Data.Text (Text)
+import Data.Traversable (for)
 import Grace.Import (Import, ImportCallback)
 import Grace.Location (Location(..))
+import Grace.Parser (Input(..))
 import Grace.Syntax (Node(..), Syntax(..))
 import Grace.Type (Type)
 import Grace.Value (Value)
 import System.FilePath ((</>))
 
-import qualified Control.Lens         as Lens
-import qualified Control.Monad.Except as Except
-import qualified Data.Text            as Text
-import qualified Data.Text.IO         as Text.IO
-import qualified Grace.Context        as Context
-import qualified Grace.Import         as Import
-import qualified Grace.Infer          as Infer
-import qualified Grace.Normalize      as Normalize
-import qualified Grace.Parser         as Parser
-import qualified Grace.Syntax         as Syntax
-import qualified System.FilePath      as FilePath
-import qualified Text.URI             as URI
-
-{-| Input to the `interpret` function
-
-    You should prefer to use `Path` if possible (for better error messages and
-    correctly handling transitive imports).  The `Code` constructor is intended
-    for cases like interpreting code read from standard input.
--}
-data Input
-    = Path FilePath
-    -- ^ The path to the code
-    | Code String Text
-    -- ^ Source code: @Code name content@
+import qualified Control.Lens          as Lens
+import qualified Control.Monad.Except  as Except
+import qualified Data.Text             as Text
+import qualified Grace.Context         as Context
+import qualified Grace.Import          as Import
+import qualified Grace.Import.Resolver as Resolver
+import qualified Grace.Infer           as Infer
+import qualified Grace.Normalize       as Normalize
+import qualified Grace.Parser          as Parser
+import qualified Grace.Syntax          as Syntax
+import qualified System.FilePath       as FilePath
+import qualified Text.URI              as URI
 
 {-| Interpret Grace source code, return the inferred type and the evaluated
     result
@@ -68,36 +57,36 @@ interpret
     -- ^ Optional expected type for the input
     -> Input
     -> m (Type Location, Value)
-interpret = interpretWith (Import.resolverToCallback mempty) []
+interpret = interpretWith []
 
 -- | Like `interpret`, but accepts a custom list of bindings
 interpretWith
     :: (MonadError InterpretError m, MonadIO m)
-    => ImportCallback
-    -- ^ How to resolve URI imports
-    -> [(Text, Type Location, Value)]
+    => [(Text, Type Location, Value)]
     -- ^ @(name, type, value)@ for each custom binding
     -> Maybe (Type Location)
     -- ^ Optional expected type for the input
     -> Input
     -> m (Type Location, Value)
-interpretWith resolveImport bindings maybeAnnotation input = do
+interpretWith bindings maybeAnnotation input = do
     let directory = case input of
             Path file -> FilePath.takeDirectory file
             Code _ _  -> "."
 
-    expression <- parseInput input
+    eitherExpression <- Except.runExceptT (Parser.parseInput input)
 
-    interpretExprWith resolveImport bindings maybeAnnotation directory expression
+    expression <- case eitherExpression of
+        Left e -> throwError (ParseError e)
+        Right expression -> return expression
+
+    interpretExprWith bindings maybeAnnotation directory expression
 
 {- | Like `interpretWith`, but takes a pre-parsed expression instead of some
      source code
 -}
 interpretExprWith
     :: (MonadError InterpretError m, MonadIO m)
-    => ImportCallback
-    -- ^ How to resolve URI imports
-    -> [(Text, Type Location, Value)]
+    => [(Text, Type Location, Value)]
     -- ^ @(name, type, value)@ for each custom binding
     -> Maybe (Type Location)
     -- ^ Optional expected type for the input
@@ -105,25 +94,31 @@ interpretExprWith
     -- ^ The base directory used when resolving filepath imports of relative paths
     -> Syntax Location Import
     -> m (Type Location, Value)
-interpretExprWith resolveImport bindings maybeAnnotation directory expression = do
-    let resolve :: (MonadError InterpretError m, MonadIO m) => (Maybe (Type Location), Import) -> m (Type Location, Value)
-        resolve (maybeAnnotation', Import.File file) =
-            interpretWith resolveImport bindings maybeAnnotation' (Path path)
-          where
-            path = FilePath.normalise (directory </> file)
-        resolve (maybeAnnotation', Import.URI uri) = do
-            eitherResult <- liftIO do
-                (Right <$> resolveImport uri) `catchAny` (return . Left)
+interpretExprWith bindings maybeAnnotation directory expression = do
+    resolvedExpression <- for (annotate expression)
+        \(maybeAnnotation', input) -> case input of
+            Import.File file -> interpretWith bindings maybeAnnotation' (Path path)
+              where
+                path = FilePath.normalise (directory </> file)
 
-            importExpression <- case eitherResult of
-                Left e -> throwError (ImportError uri (displayException e))
-                Right result -> return result
+            Import.URI uri -> do
+                eitherResult <- liftIO do
+                    -- CUSTOMIZE ME
+                    -- If you want support for other URI types you probably want
+                    -- to replace the default resolver with your own one.
+                    tryAny (Import.resolverToCallback Resolver.defaultResolver uri)
 
-            let relocate location = location { name = Text.unpack (URI.render uri) }
+                importExpression <- case eitherResult of
+                    Left e -> throwError (ImportError uri (displayException e))
+                    Right result -> return result
 
-            interpretExprWith resolveImport bindings maybeAnnotation' directory (first relocate importExpression)
+                let relocate location = location
+                        { name = Text.unpack (URI.render uri)
+                        }
 
-    resolvedExpression <- traverse resolve (annotate expression)
+                let relocatedExpression = first relocate importExpression
+
+                interpretExprWith bindings maybeAnnotation' directory relocatedExpression
 
     let annotatedExpression =
             case maybeAnnotation of
@@ -150,29 +145,6 @@ interpretExprWith resolveImport bindings maybeAnnotation directory expression = 
                     return (variable, value)
 
             return (inferred, Normalize.evaluate evaluationContext resolvedExpression)
-
--- | Like `Parser.parse`, but expects an `Input` and returns a located expression
-parseInput
-    :: (MonadError InterpretError m, MonadIO m)
-    => Input
-    -> m (Syntax Location Import)
-parseInput input = do
-    code <- case input of
-        Path file   -> liftIO (Text.IO.readFile file)
-        Code _ text -> return text
-
-    let name = case input of
-            Path file -> file
-            Code n _  -> n
-
-    case Parser.parse name code of
-        Left message -> do
-            Except.throwError (ParseError message)
-
-        Right expression -> do
-            let locate offset = Location{..}
-
-            return (first locate expression)
 
 {-| We use this utility so that when we resolve an import of the form:
 

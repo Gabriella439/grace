@@ -13,7 +13,6 @@ library
   build-depends:       base
                      , ansi-terminal
                      , grace-core
-                     , grace-resolver-builtin
                      , mtl
                      , optparse-applicative
                      , prettyprinter

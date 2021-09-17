@@ -9,7 +9,7 @@
 {- | This module contains the builtin resolvers for the grace executable
 -}
 
-module Grace.Resolver.Builtin
+module Grace.Import.Resolver
     ( -- * Builtin default resolver
       defaultResolver
 
@@ -35,12 +35,12 @@ import System.FilePath ((</>))
 import Text.URI (Authority)
 
 import qualified Control.Monad.Except    as Except
-import qualified Grace.Interpret         as Interpret
 import qualified Data.List.NonEmpty      as NonEmpty
 import qualified Data.Maybe              as Unsafe (fromJust)
 import qualified Data.Text               as Text
 import qualified Data.Text.Lazy          as Text.Lazy
 import qualified Data.Text.Lazy.Encoding as Text.Lazy.Encoding
+import qualified Grace.Parser            as Parser
 import qualified System.Environment      as Environment
 import qualified System.IO.Error         as Error
 import qualified System.Process.Typed    as Process
@@ -84,9 +84,9 @@ envResolver = Resolver \case
             Nothing -> throw (EnvVarNotFound name)
             Just value -> return value
 
-        let input = Interpret.Code "(environment)" (Text.pack value)
+        let input = Parser.Code "(environment)" (Text.pack value)
 
-        eitherResult <- Except.runExceptT (Interpret.parseInput input)
+        eitherResult <- Except.runExceptT (Parser.parseInput input)
 
         result <- case eitherResult of
             Left e -> throw e
@@ -125,9 +125,9 @@ fileResolver = Resolver \case
             Nothing -> throw FileMissingPath
             Just (_, pieces) -> return pieces
 
-        let input = Interpret.Path (pathPiecesToFilePath pieces)
+        let input = Parser.Path (pathPiecesToFilePath pieces)
 
-        eitherResult <- Except.runExceptT (Interpret.parseInput input)
+        eitherResult <- Except.runExceptT (Parser.parseInput input)
 
         result <- case eitherResult of
             Left e -> throw e
@@ -174,9 +174,9 @@ externalResolver = Resolver \case
             Left e -> throw (ExternalFailedDecodeStdout e)
             Right text -> return (Text.Lazy.toStrict text)
 
-        let input = Interpret.Code "(external)" text
+        let input = Parser.Code "(external)" text
 
-        eitherResult <- Except.runExceptT (Interpret.parseInput input)
+        eitherResult <- Except.runExceptT (Parser.parseInput input)
 
         result <- case eitherResult of
             Left e -> throw e

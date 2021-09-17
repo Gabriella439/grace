@@ -1,4 +1,3 @@
 packages:
     grace/grace.cabal
     grace-core/grace-core.cabal
-    grace-resolver-builtin/grace-resolver-builtin.cabal

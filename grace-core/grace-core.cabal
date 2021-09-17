@@ -29,11 +29,13 @@ library
                      , template-haskell
                      , terminal-size
                      , text
+                     , typed-process
                      , unordered-containers
   exposed-modules:     Grace.Context
                      , Grace.Domain
                      , Grace.Existential
                      , Grace.Import
+                     , Grace.Import.Resolver
                      , Grace.Interpret
                      , Grace.Infer
                      , Grace.Lexer
@@ -62,6 +64,7 @@ test-suite tasty
                      , tasty-hunit
                      , tasty-silver
                      , text
+  other-modules:       Grace.Test.Resolver
   hs-source-dirs:      tasty
   default-language:    Haskell2010
   ghc-options:         -Wall

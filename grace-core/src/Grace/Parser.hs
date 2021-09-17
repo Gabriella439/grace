@@ -1,5 +1,6 @@
 {-# LANGUAGE ApplicativeDo     #-}
 {-# LANGUAGE BlockArguments    #-}
+{-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
@@ -19,6 +20,8 @@
 module Grace.Parser
     ( -- * Parsing
       parse
+    , Input(..)
+    , parseInput
 
       -- * Errors related to parsing
     , ParseError(..)
@@ -27,6 +30,9 @@ module Grace.Parser
 import Control.Applicative (many, optional, (<|>))
 import Control.Applicative.Combinators.NonEmpty (sepBy1)
 import Control.Applicative.Combinators (endBy, sepBy)
+import Control.Monad.Except (MonadError)
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Data.Bifunctor (first)
 import Data.Functor (($>), void)
 import Data.List.NonEmpty (NonEmpty(..), some1)
 import Data.Scientific (Scientific)
@@ -38,9 +44,11 @@ import Grace.Syntax (Binding(..), Syntax(..))
 import Grace.Type (Type(..))
 import Text.Earley (Grammar, Prod, Report(..), rule, (<?>))
 
+import qualified Control.Monad.Except   as Except
 import qualified Data.List.NonEmpty     as NonEmpty
 import qualified Data.Sequence          as Seq
 import qualified Data.Text              as Text
+import qualified Data.Text.IO           as Text.IO
 import qualified Grace.Domain           as Domain
 import qualified Grace.Import           as Import
 import qualified Grace.Lexer            as Lexer
@@ -748,3 +756,38 @@ parse name code = do
 
         (result : _, _) -> do
             return result
+
+{-| Input to the interpreter.
+
+    You should prefer to use `Path` if possible (for better error messages and
+    correctly handling transitive imports).  The `Code` constructor is intended
+    for cases like interpreting code read from standard input.
+-}
+data Input
+    = Path FilePath
+    -- ^ The path to the code
+    | Code String Text
+    -- ^ Source code: @Code name content@
+
+-- | Like `parse`, but expects an `Input` and returns a located expression
+parseInput
+    :: (MonadError ParseError m, MonadIO m)
+    => Input
+    -> m (Syntax Location Import)
+parseInput input = do
+    code <- case input of
+        Path file   -> liftIO (Text.IO.readFile file)
+        Code _ code -> return code
+
+    let name = case input of
+            Path file -> file
+            Code n _  -> n
+
+    case parse name code of
+        Left e -> do
+            Except.throwError e
+
+        Right expression -> do
+            let locate offset = Location{..}
+
+            return (first locate expression)

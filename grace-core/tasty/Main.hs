@@ -9,6 +9,7 @@ import Data.Text (Text)
 import Grace.Interpret (Input(..), InterpretError)
 import Grace.Location (Location(..))
 import Grace.Pretty (Pretty(..))
+import Grace.Test.Resolver
 import Grace.Type (Type(..))
 import System.FilePath ((</>))
 import Test.Tasty (TestTree)
@@ -121,6 +122,8 @@ main = do
     let manualTestTree =
             Tasty.testGroup "Manual tests"
                 [ interpretCode
+                , interpretCodeWithEnvURI
+                , interpretCodeWithFileURI
                 , interpretCodeWithImport
                 ]
 
@@ -140,8 +143,6 @@ interpretCode = Tasty.HUnit.testCase "interpret code" do
             node = Type.Scalar Monotype.Natural
 
     Tasty.HUnit.assertEqual "" expectedValue actualValue
-
-    return ()
 
 interpretCodeWithImport :: TestTree
 interpretCodeWithImport = Tasty.HUnit.testCase "interpret code with import from file" do
