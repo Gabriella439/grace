@@ -1002,11 +1002,10 @@ that take care of all the things related to networking like downloading, caching
 For instance, the motivating example will unfortunately not work out-of-the box
 since the grace executable has no builtin resolver for HTTP (yet).
 
-Grace comes with three builtin resolvers:
+Grace comes with two builtin resolvers:
 
 1. One to resolve `env://` URIs,
 2. one to resolve `file://` URIs.
-3. and one that delegates the resolving to an external program.
 
 Lets have a look at the `env://` resolver first:
 ```bash
@@ -1019,38 +1018,6 @@ $ MY_VAR='"Hello !"' grace interpret - <<< 'env:///MY_VAR'
 The `file://` resolver is similar to the filepath-based imports we already know:
 ```bash
 $ grace interpret - <<< 'file:///path/to/greet.ffg "John"'
-```
-```dhall
-"Hello, John!"
-```
-
-Last but not least we'll have at look at third resolver: The one using external
-programs to resolve URIs. This resolver is somewhat different compared to the
-other two: It is not bound to a particular URI scheme.
-Instead, it tries to find the right executable to process the URI: Suppose our
-`greet.ffg` is on a remote machine reachable at `example.com` and all we got is
-SSH access. Now a resolver capable of receiving that file might look something
-like this:
-
-```bash
-#!/usr/bin/bash
-
-# The URI to resolve is passed as $1
-
-set -e
-
-no_scheme="${1#ssh://}"
-host="${no_scheme%%/*}"
-path="${1#ssh://$host/}"
-
-ssh "$host" cat "$path"
-```
-
-We store that file under `/usr/local/bin/grace-resolver-ssh` (or in another
-directory in `$PATH` - but the name is important). Now the following will work:
-
-```bash
-$ grace interpret - <<< 'ssh://example.com/greet.ffg "John"'
 ```
 ```dhall
 "Hello, John!"

@@ -20,16 +20,12 @@ module Grace.Import.Resolver
       -- ** file:// resolver
     , fileResolver
     , FileResolverError(..)
-
-      -- ** Resolver using external programs
-    , externalResolver
     ) where
 
-import Control.Exception.Safe (Exception(..), handleIO, throw)
+import Control.Exception.Safe (Exception(..), throw)
 import Data.Foldable (foldl')
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text)
-import Data.Text.Encoding.Error (UnicodeException)
 import Grace.Import (Resolver(..))
 import System.FilePath ((</>))
 import Text.URI (Authority)
@@ -38,32 +34,26 @@ import qualified Control.Monad.Except    as Except
 import qualified Data.List.NonEmpty      as NonEmpty
 import qualified Data.Maybe              as Unsafe (fromJust)
 import qualified Data.Text               as Text
-import qualified Data.Text.Lazy          as Text.Lazy
-import qualified Data.Text.Lazy.Encoding as Text.Lazy.Encoding
 import qualified Grace.Parser            as Parser
 import qualified System.Environment      as Environment
-import qualified System.IO.Error         as Error
-import qualified System.Process.Typed    as Process
 import qualified Text.URI                as URI
 
 {- | A set of default resolvers. Includes (order matters):
 
      * `envResolver`
      * `fileResolver`
-     * `externalResolver`
 -}
 defaultResolver :: Resolver
 defaultResolver
     =  envResolver
     <> fileResolver
-    <> externalResolver
 
 {- | A resolver for environment variables.
 
-     This resolver matches URIs with the @env:@ scheme. In order to obtain the
-     name of the environment variable it takes the path component and replaces
-     each \"/\" with \"_\". The value of the environment variable is the
-     source code returned by this resolver.
+     This resolver matches URIs with the @env:@ scheme. It assumes that the
+     first path component is the name of the environment variable, looks it up
+     and expects the value to be an expression. It will then return the parsed
+     expression as a result.
 
      It will fail if the URI has an authority component, a trailing slash or
      more than one path components. I.e. a valid URI looks like @env:///NAME@.
@@ -110,7 +100,8 @@ instance Exception EnvResolverError where
 {- | A resolver for files.
 
      This resolver matches URIs with the @file:@ scheme. The resolver takes the
-     path of the URI, tries to read its content and returns it as a result.
+     path of the URI, tries to read its content and returns the parsed value as
+     its result.
 
      It will fail if the URI has an authority component.
 -}
@@ -147,55 +138,6 @@ data FileResolverError
 instance Exception FileResolverError where
     displayException FileInvalidURI = "Invalid URI"
     displayException FileMissingPath = "Filepath is missing"
-
-{- | A resolver that uses external programs to resolve the URI.
-
-     This resolver passes the URI as an command line argument to an executable
-     named @grace-resolver-\<scheme\>@. If that fails because the executable
-     cannot be looked up (i.e. it does not exist in @PATH@) the URI is
-     considered unmatched by this resolver and @Nothing@ is returned. On
-     success, the standard output of that process is expected to be the desired
-     expression to be returned as a result.
-
-     It will fail if the URI has an authority component.
--}
-externalResolver :: Resolver
-externalResolver = Resolver \case
-    uri@URI.URI{ URI.uriScheme = Just scheme } -> handleDoesNotExist do
-        let cmd = "grace-resolver-" <> Text.unpack (URI.unRText scheme)
-
-        let args = [URI.renderStr uri]
-
-        let pc = Process.proc cmd args
-
-        bytes <- Process.readProcessStdout_ pc
-
-        text <- case Text.Lazy.Encoding.decodeUtf8' bytes of
-            Left e -> throw (ExternalFailedDecodeStdout e)
-            Right text -> return (Text.Lazy.toStrict text)
-
-        let input = Parser.Code "(external)" text
-
-        eitherResult <- Except.runExceptT (Parser.parseInput input)
-
-        result <- case eitherResult of
-            Left e -> throw e
-            Right result -> return result
-
-        return (Just result)
-    _ -> return Nothing
-    where
-        handleDoesNotExist = handleIO \e ->
-            if Error.isDoesNotExistError e
-                then return Nothing
-                else throw e
-
--- | Errors raised by `externalResolver`
-data ExternalResolverError = ExternalFailedDecodeStdout UnicodeException
-    deriving stock Show
-
-instance Exception ExternalResolverError where
-    displayException (ExternalFailedDecodeStdout e) = "Failed to decode stdout: " <> displayException e
 
 -- Internal helper functions
 
