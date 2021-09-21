@@ -222,15 +222,16 @@ grammar = mdo
         --
         -- … but that is not permitted by the extension
 
-        (   do  let f location (nameLocation, name) body = Syntax{..}
+        (   do  let f location locatedNames body0 = foldr cons body0 locatedNames
                       where
-                        node = Syntax.Lambda nameLocation name body
+                        cons (nameLocation, name) body = Syntax{..}
+                          where node = Syntax.Lambda nameLocation name body
 
                 lambdaOffset <- locatedToken Lexer.Lambda
-                locatedName <- locatedLabel
+                locatedNames <- some1 locatedLabel
                 token Lexer.Arrow
                 body <- expression
-                return (f lambdaOffset locatedName body)
+                return (f lambdaOffset locatedNames body)
 
         <|> do  let f bindings body = Syntax{..}
                       where
