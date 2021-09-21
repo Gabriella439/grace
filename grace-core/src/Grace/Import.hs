@@ -35,7 +35,7 @@ instance Pretty Import where
     pretty (URI uri) = pretty uri
 
 -- | Type of the callback function used to resolve URI imports
-type ImportCallback = URI -> IO (Syntax Location Import)
+type ImportCallback = URI -> IO (Syntax Location Import, Maybe FilePath)
 
 {- | A resolver for an URI.
 
@@ -55,7 +55,9 @@ type ImportCallback = URI -> IO (Syntax Location Import)
      * Exceptions thrown in resolvers will be caught and rethrown as an
        `ImportError` by the interpreter.
 -}
-newtype Resolver = Resolver { runResolver :: URI -> IO (Maybe (Syntax Location Import)) }
+newtype Resolver = Resolver
+    { runResolver :: URI -> IO (Maybe (Syntax Location Import, Maybe FilePath))
+    }
 
 instance Semigroup Resolver where
     x <> y = Resolver \uri -> do

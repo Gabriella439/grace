@@ -222,7 +222,7 @@ render t = case t of
     Lexer.Type             -> "Type"
     Lexer.Times            -> "*"
     Lexer.True_            -> "True"
-    Lexer.URI _            -> "an URI"
+    Lexer.URI _            -> "a URI"
 
 grammar :: Grammar r (Parser r (Syntax Offset Import))
 grammar = mdo

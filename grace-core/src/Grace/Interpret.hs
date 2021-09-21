@@ -103,14 +103,12 @@ interpretExprWith bindings maybeAnnotation directory expression = do
 
             Import.URI uri -> do
                 eitherResult <- liftIO do
-                    -- CUSTOMIZE ME
-                    -- If you want support for other URI types you probably want
-                    -- to replace the default resolver with your own one.
                     tryAny (Import.resolverToCallback Resolver.defaultResolver uri)
 
-                importExpression <- case eitherResult of
+                (importExpression, directory') <- case eitherResult of
                     Left e -> throwError (ImportError uri (displayException e))
-                    Right result -> return result
+                    Right (expr, Nothing) -> return (expr, directory)
+                    Right (expr, Just directory') -> return (expr, directory')
 
                 let relocate location = location
                         { name = Text.unpack (URI.render uri)
@@ -118,7 +116,7 @@ interpretExprWith bindings maybeAnnotation directory expression = do
 
                 let relocatedExpression = first relocate importExpression
 
-                interpretExprWith bindings maybeAnnotation' directory relocatedExpression
+                interpretExprWith bindings maybeAnnotation' directory' relocatedExpression
 
     let annotatedExpression =
             case maybeAnnotation of

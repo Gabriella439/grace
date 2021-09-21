@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ViewPatterns #-}
 
 {- | This module contains the builtin resolvers for the grace executable
@@ -32,11 +33,12 @@ import Text.URI (Authority)
 
 import qualified Control.Monad.Except    as Except
 import qualified Data.List.NonEmpty      as NonEmpty
-import qualified Data.Maybe              as Unsafe (fromJust)
 import qualified Data.Text               as Text
 import qualified Grace.Parser            as Parser
 import qualified System.Environment      as Environment
+import qualified System.FilePath         as FilePath
 import qualified Text.URI                as URI
+import qualified Text.URI.QQ             as URI.QQ
 
 {- | A set of default resolvers. Includes (order matters):
 
@@ -74,7 +76,7 @@ envResolver = Resolver \case
             Nothing -> throw (EnvVarNotFound name)
             Just value -> return value
 
-        let input = Parser.Code "(environment)" (Text.pack value)
+        let input = Parser.Code ("env:" <> Text.unpack name) (Text.pack value)
 
         eitherResult <- Except.runExceptT (Parser.parseInput input)
 
@@ -82,7 +84,7 @@ envResolver = Resolver \case
             Left e -> throw e
             Right result -> return result
 
-        return (Just result)
+        return (Just (result, Nothing))
     _ -> return Nothing
 
 -- | Errors raised by `envResolver`
@@ -116,7 +118,9 @@ fileResolver = Resolver \case
             Nothing -> throw FileMissingPath
             Just (_, pieces) -> return pieces
 
-        let input = Parser.Path (pathPiecesToFilePath pieces)
+        let path = pathPiecesToFilePath pieces
+
+        let input = Parser.Path path
 
         eitherResult <- Except.runExceptT (Parser.parseInput input)
 
@@ -124,7 +128,7 @@ fileResolver = Resolver \case
             Left e -> throw e
             Right result -> return result
 
-        return (Just result)
+        return (Just (result, Just (FilePath.takeDirectory path)))
     _ -> return Nothing
     where
         pathPiecesToFilePath = foldl' (</>) "/" . map (Text.unpack . URI.unRText) . NonEmpty.toList
@@ -144,6 +148,6 @@ instance Exception FileResolverError where
 emptyAuthority :: Authority
 emptyAuthority = URI.Authority
     { URI.authUserInfo = Nothing
-    , URI.authHost = Unsafe.fromJust (URI.mkHost "")
+    , URI.authHost = [URI.QQ.host||]
     , URI.authPort = Nothing
     }
