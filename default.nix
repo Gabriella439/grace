@@ -21,11 +21,7 @@ let
     });
   };
 
-  pkgs = import nixpkgs {
-    config = { allowBroken = true; };
-
-    overlays = [ overlay ];
-  };
+  pkgs = import nixpkgs { config = { }; overlays = [ overlay ]; };
 
 in
   { inherit (pkgs.haskellPackages) grace-core grace; }
