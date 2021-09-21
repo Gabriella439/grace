@@ -238,7 +238,7 @@ uri = do
 
     if validScheme && validAuthority
         then lexeme (URI <$> URI.parser)
-        else fail "Invalid Grace URI !"
+        else fail "Invalid Grace URI"
 
 text :: Parser Token
 text = lexeme do
