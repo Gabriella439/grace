@@ -103,7 +103,9 @@ interpretExprWith bindings maybeAnnotation directory expression = do
 
             Import.URI uri -> do
                 eitherResult <- liftIO do
-                    tryAny (Import.resolverToCallback Resolver.defaultResolver uri)
+                    let callback = Import.resolverToCallback Resolver.defaultResolver
+
+                    tryAny (Import.runCallback callback uri)
 
                 (importExpression, directory') <- case eitherResult of
                     Left e -> throwError (ImportError uri (displayException e))

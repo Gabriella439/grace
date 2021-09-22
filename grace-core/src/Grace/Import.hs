@@ -11,7 +11,7 @@
 
 module Grace.Import
     ( Import(..)
-    , ImportCallback
+    , ImportCallback(..)
     , Resolver(..)
     , resolverToCallback
     , ImportError(..)
@@ -35,7 +35,9 @@ instance Pretty Import where
     pretty (URI uri) = pretty uri
 
 -- | Type of the callback function used to resolve URI imports
-type ImportCallback = URI -> IO (Syntax Location Import, Maybe FilePath)
+newtype ImportCallback = ImportCallback
+    { runCallback :: URI -> IO (Syntax Location Import, Maybe FilePath)
+    }
 
 {- | A resolver for an URI.
 
@@ -71,7 +73,7 @@ instance Monoid Resolver where
 
 -- | Convert a resolver to a callback function
 resolverToCallback :: Resolver -> ImportCallback
-resolverToCallback resolver uri = do
+resolverToCallback resolver = ImportCallback \uri -> do
     maybeResult <- runResolver resolver uri
     case maybeResult of
         Nothing -> throw UnsupportedURI
