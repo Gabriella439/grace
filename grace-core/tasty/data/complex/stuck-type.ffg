@@ -1,0 +1,7 @@
+forall (a : Type) .
+  { a: Bool -> Bool -> Bool
+  , b: Bool -> Bool -> Bool
+  , c: Natural -> Natural -> Natural
+  , d: Natural -> Natural -> Natural
+  , e: (a -> a -> Bool) -> a -> Bool
+  }

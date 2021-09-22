@@ -1,0 +1,6 @@
+{ bool: ./bool/package.ffg
+, real: ./real/package.ffg
+, integer: ./integer/package.ffg
+, list: ./list/package.ffg
+, text: ./text/package.ffg
+}

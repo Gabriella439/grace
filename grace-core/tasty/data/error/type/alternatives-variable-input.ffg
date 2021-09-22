@@ -1,0 +1,3 @@
+[ Left 1 : forall (a : Alternatives) . < Left: Natural | a >
+, Right true : forall (b : Alternatives) . < Right: Bool | b >
+]

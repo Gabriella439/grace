@@ -1,0 +1,6 @@
+# Negate a `Integer`
+let negate
+      : Integer -> Integer
+      = Integer/negate
+
+in  negate

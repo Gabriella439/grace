@@ -1,0 +1,6 @@
+{ and: ./and.ffg
+, equal: ./equal.ffg
+, not: ./not.ffg
+, or: ./or.ffg
+, show: ./show.ffg
+}

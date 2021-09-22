@@ -1,0 +1,15 @@
+{ as: Text
+, city: Text
+, country: Text
+, countryCode: Text
+, isp: Text
+, lat: Real
+, lon: Real
+, org: Text
+, query: Text
+, region: Text
+, regionName: Text
+, status: Text
+, timezone: Text
+, zip: Text
+}

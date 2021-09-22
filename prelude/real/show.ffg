@@ -1,0 +1,6 @@
+# Render a `Real` as `Text`
+let show
+      : Real -> Text
+      = Real/show
+
+in  show

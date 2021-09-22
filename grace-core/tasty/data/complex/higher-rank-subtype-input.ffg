@@ -1,0 +1,5 @@
+# The purpose of this test is to fully exercise the <:∀R judgment
+let f : Natural -> Optional (forall (a : Type) . Bool) -> Natural
+      = \n -> \_ -> n
+
+in  f 0 (true : Optional (forall (a : Type) . Bool))

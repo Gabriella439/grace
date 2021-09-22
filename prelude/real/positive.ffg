@@ -1,0 +1,6 @@
+# Returns `true` if a `Real` is positive, and `false` otherwise
+let positive
+      : Real -> Bool
+      = Real/lessThan 0
+
+in  positive

@@ -1,0 +1,11 @@
+# Returns `true` if the first `Real` is greater than the second `Real`, and
+# `false` otherwise
+let not = ../Bool/not.ffg
+
+let lessThanOrEqual = ./lessThanOrEqual.ffg
+
+let greaterThan
+      : Real -> Real -> Bool
+      = \l -> \r -> not (lessThanOrEqual l r)
+
+in  greaterThan

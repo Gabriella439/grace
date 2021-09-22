@@ -14,7 +14,7 @@ most likely be interested in Grace for one of two reasons:
 
 If you're interested in code samples, then you can either jump down to the
 [Quick tour](#quick-tour) section or check out the
-[examples directory](./examples).
+[examples directory](./grace/examples).
 
 ## Features
 
@@ -187,8 +187,8 @@ Grace does not support the following language features:
 
 * Recursion or recursive data types
 
-  This is the feature I'd most like to add, especially if there were some way
-  to implement anonymous recursion, but I couldn't find a simple solution.
+  Grace only supports two built-in recursive types, which are `List` and `JSON`,
+  but does not support user-defined recursion or anonymous recursion.
 
 * String interpolation
 
@@ -284,9 +284,9 @@ These are the issues and pull requests that I'm most likely to reject:
 ## Acknowledgments
 
 Your fork doesn't need to credit me or this project, beyond what the
-[BSD 3-clause license](./LICENSE) requires.  The only thanks I need is for
-people to use Grace instead of creating yet another domain-specific language
-embedded in JSON or YAML.
+[BSD 3-clause license](./grace-core/LICENSE) requires.  The only thanks I need
+is for people to use Grace instead of creating yet another domain-specific
+language embedded in JSON or YAML.
 
 ## Quick tour
 
@@ -396,6 +396,10 @@ Grace supports the following Scalar types:
   need to specify the type of the union, since union types are open and
   inferred.
 
+* JSON, such as `[ 1, [ true, "" ] ]`
+
+  … which is a supertype of all expressions that are also valid JSON.
+
 Note that unions are the only data structure that is not JSON-compatible,
 since JSON does not support unions.
 
@@ -467,6 +471,8 @@ Left 1 : forall (a : Alternatives) . < Left: Natural | a >
   : forall (a : Alternatives) . List < Left: Natural | Right: Bool | a >
 
 Integer/even : Integer -> Bool
+
+[ 1, true ] : JSON  # Any expression that is valid JSON type-checks as `JSON`
 ```
 
 ### Control
@@ -559,7 +565,7 @@ You can also use the built-in functions, including:
   mainly included as reference implementations for how to implement a simple
   function.
 
-* `List/fold : forall (a : Type) . forall (b : Type) . List a -> (a -> b -> b) -> b -> b`
+* `List/fold : forall (a : Type) .  forall (b : Type) .  { cons: a -> b -> b, nil: b } -> List a -> b`
 
   Canonical fold for a `List`, also known as a "right fold" or `foldr` in many
   languages
@@ -819,6 +825,62 @@ $ grace interpret --annotate - <<< '[ Left 1, Right true ]'
 The type is universally quantified over the extra union alternatives, meaning
 that the union is "open" and we can keep adding new alternatives.  We don't
 need to specify the desired type or set of alternatives in advance.
+
+### JSON
+
+You can make all sorts of weird expressions type-check by adding a type
+annotation of `JSON`:
+
+```dhall
+[ true, 1, [ -2, false, "" ], null, { foo: { } } ] : JSON
+```
+
+… but the only way you can consume an expression of type `JSON` is to use
+`JSON/fold`, which has the following type:
+
+```dhall
+JSON/fold
+  : forall (a : Type) .
+      { array: List a -> a
+      , bool: Bool -> a
+      , double: Double -> a
+      , integer: Integer -> a
+      , natural: Natural -> a
+      , "null": a
+      , object: List { key: Text, value: a } -> a
+      , string: Text -> a
+      } ->
+      JSON ->
+        a
+```
+
+This is similar in spirit to a `merge` expression where you need to specify how
+to handle every possible case that the JSON value could possibly be.
+
+For example, the following expression
+
+```dhall
+JSON/fold
+  { "bool": \b -> if b then 1 else 0
+  , "natural": \x -> x
+  , "integer": Integer/abs
+  , "double": \_ -> 1
+  , "string": \_ -> 2
+  , "null": 3
+  , "object": List/length
+  , "array": \vs -> List/fold vs (\x -> \y -> x + y : Natural) 0
+  }
+  [ true, 1, [ -2, false, "" ], null, { foo: { } } ]
+```
+
+… evaluates to `10`.
+
+There is no other way to consume a `JSON` value other than to specify how to
+handle every single case, because once you annotate a value as having type
+`JSON` then the interpreter can no longer guarantee that the value is a `List`,
+record, or a specific scalar value.  This is why you should prefer to use a
+more precise type annotation if possible and only use `JSON` as a type
+annotation as a last resort.
 
 ### Imports
 

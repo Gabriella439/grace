@@ -1,0 +1,2 @@
+# This exercises the failing case for checking an addition
+(true + true) : Bool

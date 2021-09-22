@@ -1,0 +1,12 @@
+{ equal: ./equal.ffg
+, greaterThan: ./greaterThan.ffg
+, greaterThanOrEqual: ./greaterThanOrEqual.ffg
+, lessThan: ./lessThan.ffg
+, lessThanOrEqual: ./lessThanOrEqual.ffg
+, negate: ./negate.ffg
+, negative: ./negative.ffg
+, nonNegative: ./nonNegative.ffg
+, nonPositive: ./nonPositive.ffg
+, positive: ./positive.ffg
+, show: ./show.ffg
+}

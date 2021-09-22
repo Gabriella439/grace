@@ -1,0 +1,6 @@
+# Truncate a list to the first `n` elements
+let take
+      : forall (a : Type) . Natural -> List a -> List a
+      = List/take
+
+in  take

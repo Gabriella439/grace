@@ -1,0 +1,21 @@
+# This verifies that the interpreter correctly simplifies various abstract
+# expressions
+{ example0: \x -> x + 0
+, example1: \x -> 0 + x
+, example2: \x -> x * 1
+, example3: \x -> 1 * x
+, example4: \x -> x * 0
+, example5: \x -> 0 * x
+, example6: \x -> x && true
+, example7: \x -> true && x
+, example8: \x -> x || false
+, example9: \x -> false || x
+, example10: \x -> x && false
+, example11: \x -> false && x
+, example12: \x -> x || true
+, example13: \x -> true || x
+, example14: \x -> x + ""
+, example15: \x -> "" + x
+, example16: \x -> x + []
+, example17: \x -> [] + x
+}

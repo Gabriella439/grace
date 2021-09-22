@@ -1,0 +1,7 @@
+{ abs: ./abs.ffg
+, clamp: ./clamp.ffg
+, even: ./even.ffg
+, negate: ./negate.ffg
+, odd: ./odd.ffg
+, toNatural: ./toNatural.ffg
+}

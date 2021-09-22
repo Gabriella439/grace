@@ -1,0 +1,2 @@
+# The purpose of this test is to exercise support for typed alternatives holes
+[ Left 1 : < ? >, Right true : < ? > ]

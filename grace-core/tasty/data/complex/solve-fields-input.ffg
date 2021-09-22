@@ -1,0 +1,9 @@
+# The purpose of this test is to exercise instantiation of unsolved fields
+# variables
+\r -> \s ->
+
+let _ = [ r.x, 1 ]
+
+let _ = [ s.y, 1 ]
+
+in  { a: [ r, { x: 1, z: 1 } ], b: [ { y: 1, z: 1 }, s ] }

@@ -1,0 +1,10 @@
+Invalid operands
+
+You cannot add values of type:
+
+  [0;4mBool[0m
+
+tasty/data/error/type/invalid-times-annotation-input.ffg:2:2: 
+  │
+2 │ (true * true) : Bool
+  │  ↑

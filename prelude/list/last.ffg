@@ -1,0 +1,8 @@
+# Return the last element of a `List`
+let last
+      : forall (a : Type) .
+        forall (b : Alternatives) .
+          List a -> < Some: a | None: { } | b >
+      = List/last
+
+in  last

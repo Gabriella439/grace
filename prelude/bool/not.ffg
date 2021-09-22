@@ -1,0 +1,6 @@
+# Negate a `Bool`
+let not
+      : Bool -> Bool
+      = \b -> if b then false else true
+
+in  not

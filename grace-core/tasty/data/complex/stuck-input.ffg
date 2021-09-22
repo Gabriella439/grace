@@ -1,0 +1,7 @@
+# This test exercises evaluation of various "stuck" expressions
+{ a: \x -> \y -> x || y
+, b: \x -> \y -> x && y
+, c: \x -> \y -> (x + y) : Natural
+, d: \x -> \y -> (x * y) : Natural
+, e: \f -> \x -> List/equal f [ x ] [ x ]
+}

@@ -1,0 +1,13 @@
+{ a: Optional (exists (a : Type) . a)
+, b: Optional (exists (a : Fields) . { a })
+, c: Optional (exists (a : Alternatives) . < a >)
+, d: Optional (forall (a : Type) . { })
+, e: Optional (forall (a : Fields) . { })
+, f: Optional (forall (a : Alternatives) . { })
+, g: Optional ?
+, h: Optional ?
+, i: Optional ?
+, j: Optional ?
+, k: Optional ?
+, l: Optional ?
+}

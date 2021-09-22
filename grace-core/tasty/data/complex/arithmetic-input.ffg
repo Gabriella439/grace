@@ -1,0 +1,18 @@
+# This test exercises all of the permitted types that you can add and multiply
+{ a: 1 + 1
+, b: -1 + -1
+, c: 1.1 + 1.1
+, d: "A" + "B"
+, e: [ true ] + [ true ]
+, f: 1 * 1
+, g: -1 * -1
+, h: 1.1 * 1.1
+, i: (1 + 1) : Natural
+, j: (-1 + -1) : Integer
+, k: (1.0 + 1.0) : Real
+, l: ("A" + "B") : Text
+, m: ([ true ] + [ true ]) : List Bool
+, n: (1 * 1) : Natural
+, o: (-1 * -1) : Integer
+, p: (1.1 * 1.1) : Real
+}

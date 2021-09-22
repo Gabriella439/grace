@@ -1,0 +1,2 @@
+# This test exercises the error message if you multiply invalid types
+true * true

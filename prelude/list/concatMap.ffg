@@ -1,0 +1,11 @@
+# Transform a `List` by applying a function to each element and concatenating
+# the results
+let concat = ./concat.ffg
+
+let concatMap
+      : forall (a : Type) .
+        forall (b : Type) .
+          (a -> List b) -> List a -> List b
+      = \f -> List/fold { cons: \x -> \ys -> f x + ys, nil: [ ] }
+
+in  concatMap

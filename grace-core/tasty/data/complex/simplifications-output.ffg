@@ -1,0 +1,19 @@
+{ "example0": \x -> x
+, "example1": \x -> x
+, "example2": \x -> x
+, "example3": \x -> x
+, "example4": \x -> 0
+, "example5": \x -> 0
+, "example6": \x -> x
+, "example7": \x -> x
+, "example8": \x -> x
+, "example9": \x -> x
+, "example10": \x -> false
+, "example11": \x -> false
+, "example12": \x -> true
+, "example13": \x -> true
+, "example14": \x -> x
+, "example15": \x -> x
+, "example16": \x -> x
+, "example17": \x -> x
+}

@@ -1,0 +1,2 @@
+# This test exercises the error message if you add invalid types
+true + true
