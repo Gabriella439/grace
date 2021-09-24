@@ -20,6 +20,7 @@ import Control.Exception.Safe (Exception(..), throw)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text)
 import Grace.Location (Location)
+import Grace.Pretty (Pretty(..))
 import Grace.Syntax (Syntax)
 import System.FilePath ((</>))
 
@@ -68,6 +69,11 @@ instance Semigroup Input where
                 , URI.uriQuery = []
                 , URI.uriFragment = Nothing
                 }
+
+instance Pretty Input where
+    pretty (Code _ code) = pretty code
+    pretty (Path path) = pretty path
+    pretty (URI uri) = pretty uri
 
 {- | A resolver for an URI.
 

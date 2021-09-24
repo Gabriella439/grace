@@ -183,7 +183,7 @@ main = do
                     return (Path file)
 
             eitherResult <- do
-                Except.runExceptT (Interpret.interpret Nothing input)
+                Except.runExceptT (Interpret.interpret input)
 
             (inferred, value) <- throws eitherResult
 
@@ -220,7 +220,7 @@ main = do
             let expected = Type{ node = Type.Scalar Monotype.Text, .. }
 
             eitherResult <- do
-                Except.runExceptT (Interpret.interpret (Just expected) input)
+                Except.runExceptT (Interpret.interpretWith [] (Just expected) input)
 
             (_, value) <- throws eitherResult
 
