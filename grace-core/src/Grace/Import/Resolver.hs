@@ -5,6 +5,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ViewPatterns #-}
 
 {- | This module contains the builtin resolvers for the grace executable
@@ -24,21 +25,22 @@ module Grace.Import.Resolver
     ) where
 
 import Control.Exception.Safe (Exception(..), throw)
+import Data.Bifunctor (first)
 import Data.Foldable (foldl')
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text)
-import Grace.Import (Resolver(..))
+import Grace.Import (Input(..), Resolver(..))
+import Grace.Location (Location(..))
 import System.FilePath ((</>))
 import Text.URI (Authority)
 
-import qualified Control.Monad.Except    as Except
-import qualified Data.List.NonEmpty      as NonEmpty
-import qualified Data.Text               as Text
-import qualified Grace.Parser            as Parser
-import qualified System.Environment      as Environment
-import qualified System.FilePath         as FilePath
-import qualified Text.URI                as URI
-import qualified Text.URI.QQ             as URI.QQ
+import qualified Data.List.NonEmpty as NonEmpty
+import qualified Data.Text          as Text
+import qualified Data.Text.IO       as Text.IO
+import qualified Grace.Parser       as Parser
+import qualified System.Environment as Environment
+import qualified Text.URI           as URI
+import qualified Text.URI.QQ        as URI.QQ
 
 {- | A set of default resolvers. Includes (order matters):
 
@@ -49,6 +51,7 @@ defaultResolver :: Resolver
 defaultResolver
     =  envResolver
     <> fileResolver
+    <> codeResolver
 
 {- | A resolver for environment variables.
 
@@ -62,29 +65,29 @@ defaultResolver
 -}
 envResolver :: Resolver
 envResolver = Resolver \case
-    uri@URI.URI{ URI.uriScheme = Just (URI.unRText -> "env") } -> do
+    URI uri@URI.URI{ URI.uriScheme = Just (URI.unRText -> "env") } -> do
         case URI.uriAuthority uri of
             Right auth | auth /= emptyAuthority -> throw EnvInvalidURI
             _ -> return ()
 
-        name <- case URI.uriPath uri of
+        var <- case URI.uriPath uri of
             Nothing -> throw EnvMissingVarName
-            Just (False, name :| []) -> return (URI.unRText name)
+            Just (False, var :| []) -> return (URI.unRText var)
             _ -> throw EnvInvalidURI
 
-        value <- Environment.lookupEnv (Text.unpack name) >>= \case
-            Nothing -> throw (EnvVarNotFound name)
-            Just value -> return value
+        code <- Environment.lookupEnv (Text.unpack var) >>= \case
+            Nothing -> throw (EnvVarNotFound var)
+            Just string -> return (Text.pack string)
 
-        let input = Parser.Code ("env:" <> Text.unpack name) (Text.pack value)
+        let name = "env:" <> Text.unpack var
 
-        eitherResult <- Except.runExceptT (Parser.parseInput input)
-
-        result <- case eitherResult of
+        result <- case Parser.parse name code of
             Left e -> throw e
             Right result -> return result
 
-        return (Just (result, Nothing))
+        let locate offset = Location{..}
+
+        return (Just (first locate result))
     _ -> return Nothing
 
 -- | Errors raised by `envResolver`
@@ -109,7 +112,7 @@ instance Exception EnvResolverError where
 -}
 fileResolver :: Resolver
 fileResolver = Resolver \case
-    uri@URI.URI{ URI.uriScheme = Just (URI.unRText -> "file") } -> do
+    URI uri@URI.URI{ URI.uriScheme = Just (URI.unRText -> "file") } -> do
         case URI.uriAuthority uri of
             Right auth | auth /= emptyAuthority -> throw FileInvalidURI
             _ -> return ()
@@ -118,20 +121,41 @@ fileResolver = Resolver \case
             Nothing -> throw FileMissingPath
             Just (_, pieces) -> return pieces
 
-        let path = pathPiecesToFilePath pieces
+        readPath (pathPiecesToFilePath pieces)
 
-        let input = Parser.Path path
+    Path path -> do
+        readPath path
 
-        eitherResult <- Except.runExceptT (Parser.parseInput input)
+    _ -> do
+        return Nothing
+  where
+    pathPiecesToFilePath =
+        foldl' (</>) "/" . map (Text.unpack . URI.unRText) . NonEmpty.toList
 
-        result <- case eitherResult of
+    readPath path = do
+        code <- Text.IO.readFile path
+
+        result <- case Parser.parse path code of
             Left e -> throw e
             Right result -> return result
 
-        return (Just (result, Just (FilePath.takeDirectory path)))
-    _ -> return Nothing
-    where
-        pathPiecesToFilePath = foldl' (</>) "/" . map (Text.unpack . URI.unRText) . NonEmpty.toList
+        let locate offset = Location{ name = path, ..}
+
+        return (Just (first locate result))
+
+codeResolver :: Resolver
+codeResolver = Resolver \case
+    Code name code -> do
+        result <- case Parser.parse name code of
+            Left e -> throw e
+            Right result -> return result
+
+        let locate offset = Location{..}
+
+        return (Just (first locate result))
+
+    _ -> do
+        return Nothing
 
 -- | Errors raised by `fileResolver`
 data FileResolverError

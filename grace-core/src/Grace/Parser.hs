@@ -20,8 +20,6 @@
 module Grace.Parser
     ( -- * Parsing
       parse
-    , Input(..)
-    , parseInput
 
       -- * Errors related to parsing
     , ParseError(..)
@@ -30,27 +28,21 @@ module Grace.Parser
 import Control.Applicative (many, optional, (<|>))
 import Control.Applicative.Combinators.NonEmpty (sepBy1)
 import Control.Applicative.Combinators (endBy, sepBy)
-import Control.Monad.Except (MonadError)
-import Control.Monad.IO.Class (MonadIO, liftIO)
-import Data.Bifunctor (first)
 import Data.Functor (($>), void)
 import Data.List.NonEmpty (NonEmpty(..), some1)
 import Data.Scientific (Scientific)
 import Data.Text (Text)
-import Grace.Import (Import)
+import Grace.Import (Input(..))
 import Grace.Lexer (LocatedToken(LocatedToken), ParseError(ParsingFailed), Token)
 import Grace.Location (Location(..), Offset(..))
 import Grace.Syntax (Binding(..), Syntax(..))
 import Grace.Type (Type(..))
 import Text.Earley (Grammar, Prod, Report(..), rule, (<?>))
 
-import qualified Control.Monad.Except   as Except
 import qualified Data.List.NonEmpty     as NonEmpty
 import qualified Data.Sequence          as Seq
 import qualified Data.Text              as Text
-import qualified Data.Text.IO           as Text.IO
 import qualified Grace.Domain           as Domain
-import qualified Grace.Import           as Import
 import qualified Grace.Lexer            as Lexer
 import qualified Grace.Monotype         as Monotype
 import qualified Grace.Syntax           as Syntax
@@ -224,7 +216,7 @@ render t = case t of
     Lexer.True_            -> "True"
     Lexer.URI _            -> "a URI"
 
-grammar :: Grammar r (Parser r (Syntax Offset Import))
+grammar :: Grammar r (Parser r (Syntax Offset Input))
 grammar = mdo
     expression <- rule
         -- The reason all of these rules use a `let f … = …` at the beginning
@@ -525,7 +517,7 @@ grammar = mdo
 
         <|> do  let f (location, file) = Syntax{..}
                       where
-                        node = Syntax.Embed (Import.File file)
+                        node = Syntax.Embed (Path file)
 
                 located <- locatedFile
 
@@ -533,7 +525,7 @@ grammar = mdo
 
         <|> do  let f (location, uri) = Syntax{..}
                       where
-                        node = Syntax.Embed (Import.URI uri)
+                        node = Syntax.Embed (URI uri)
 
                 located <- locatedURI
 
@@ -741,7 +733,7 @@ parse
     -- ^ Name of the input (used for error messages)
     -> Text
     -- ^ Source code
-    -> Either ParseError (Syntax Offset Import)
+    -> Either ParseError (Syntax Offset Input)
 parse name code = do
     tokens <- Lexer.lex name code
 
@@ -756,38 +748,3 @@ parse name code = do
 
         (result : _, _) -> do
             return result
-
-{-| Input to the interpreter.
-
-    You should prefer to use `Path` if possible (for better error messages and
-    correctly handling transitive imports).  The `Code` constructor is intended
-    for cases like interpreting code read from standard input.
--}
-data Input
-    = Path FilePath
-    -- ^ The path to the code
-    | Code String Text
-    -- ^ Source code: @Code name content@
-
--- | Like `parse`, but expects an `Input` and returns a located expression
-parseInput
-    :: (MonadError ParseError m, MonadIO m)
-    => Input
-    -> m (Syntax Location Import)
-parseInput input = do
-    code <- case input of
-        Path file   -> liftIO (Text.IO.readFile file)
-        Code _ code -> return code
-
-    let name = case input of
-            Path file -> file
-            Code n _  -> n
-
-    case parse name code of
-        Left e -> do
-            Except.throwError e
-
-        Right expression -> do
-            let locate offset = Location{..}
-
-            return (first locate expression)

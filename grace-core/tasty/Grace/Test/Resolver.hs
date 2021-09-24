@@ -24,7 +24,7 @@ import qualified System.Environment   as Environment
 import qualified Test.Tasty.HUnit     as Tasty.HUnit
 
 interpret :: Input -> IO (Either InterpretError (Type Location, Value.Value))
-interpret input = Except.runExceptT (Interpret.interpret Nothing input)
+interpret input = Except.runExceptT (Interpret.interpret input)
 
 interpretCodeWithEnvURI :: TestTree
 interpretCodeWithEnvURI = Tasty.HUnit.testCase "interpret code with env:// import" do
@@ -37,7 +37,8 @@ interpretCodeWithEnvURI = Tasty.HUnit.testCase "interpret code with env:// impor
     let expectedValue =
             Right (Type{ location, node }, Value.Scalar (Syntax.Bool True))
           where
-            location = Location{ name = uri, code = "true", offset = 0 }
+            -- TODO: Make the location match the grammar
+            location = Location{ name = "env:GRACE_TEST_VAR", code = "true", offset = 0 }
 
             node = Type.Scalar Monotype.Bool
 
@@ -54,7 +55,7 @@ interpretCodeWithFileURI = Tasty.HUnit.testCase "interpret code with file:// imp
     let expectedValue =
             Right (Type{ location, node }, Value.Scalar (Syntax.Bool True))
           where
-            location = Location{ name = uri, code = "true\n", offset = 0 }
+            location = Location{ name = absolute, code = "true\n", offset = 0 }
 
             node = Type.Scalar Monotype.Bool
 

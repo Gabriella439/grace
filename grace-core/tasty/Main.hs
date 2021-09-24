@@ -36,7 +36,7 @@ pretty_ x =
         (pretty x <> Pretty.hardline)
 
 interpret :: Input -> IO (Either InterpretError (Type Location, Value.Value))
-interpret input = Except.runExceptT (Interpret.interpret Nothing input)
+interpret input = Except.runExceptT (Interpret.interpret input)
 
 fileToTestTree :: FilePath -> IO TestTree
 fileToTestTree prefix = do

@@ -2,6 +2,8 @@
 {-# LANGUAGE DataKinds          #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts   #-}
+{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE QuasiQuotes        #-}
 {-# LANGUAGE RecordWildCards    #-}
 {-# LANGUAGE TypeApplications   #-}
 
@@ -9,42 +11,37 @@
 module Grace.Interpret
     ( -- * Interpret
       Input(..)
-    , ImportCallback
     , interpret
     , interpretWith
-    , interpretExprWith
 
       -- * Errors related to interpretation
     , InterpretError(..)
     ) where
 
-import Control.Exception.Safe (Exception(..), tryAny)
+import Control.Exception.Safe (Exception(..), Handler(..), SomeException)
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import Data.Bifunctor (Bifunctor(..))
 import Data.Generics.Product (the)
+import Data.String.Interpolate (__i)
 import Data.Text (Text)
-import Data.Traversable (for)
-import Grace.Import (Import, ImportCallback)
+import Grace.Import (Input(..))
 import Grace.Location (Location(..))
-import Grace.Parser (Input(..))
 import Grace.Syntax (Node(..), Syntax(..))
 import Grace.Type (Type)
 import Grace.Value (Value)
-import System.FilePath ((</>))
 
-import qualified Control.Lens          as Lens
-import qualified Control.Monad.Except  as Except
-import qualified Data.Text             as Text
-import qualified Grace.Context         as Context
-import qualified Grace.Import          as Import
-import qualified Grace.Import.Resolver as Resolver
-import qualified Grace.Infer           as Infer
-import qualified Grace.Normalize       as Normalize
-import qualified Grace.Parser          as Parser
-import qualified Grace.Syntax          as Syntax
-import qualified System.FilePath       as FilePath
-import qualified Text.URI              as URI
+import qualified Control.Exception.Safe as Exception
+import qualified Control.Lens           as Lens
+import qualified Control.Monad.Except   as Except
+import qualified Data.Text              as Text
+import qualified Grace.Context          as Context
+import qualified Grace.Import           as Import
+import qualified Grace.Import.Resolver  as Resolver
+import qualified Grace.Infer            as Infer
+import qualified Grace.Normalize        as Normalize
+import qualified Grace.Parser           as Parser
+import qualified Grace.Syntax           as Syntax
+import qualified Text.URI               as URI
 
 {-| Interpret Grace source code, return the inferred type and the evaluated
     result
@@ -53,11 +50,9 @@ import qualified Text.URI              as URI
 -}
 interpret
     :: (MonadError InterpretError m, MonadIO m)
-    => Maybe (Type Location)
-    -- ^ Optional expected type for the input
-    -> Input
+    => Input
     -> m (Type Location, Value)
-interpret = interpretWith []
+interpret = interpretWith [] Nothing
 
 -- | Like `interpret`, but accepts a custom list of bindings
 interpretWith
@@ -69,56 +64,23 @@ interpretWith
     -> Input
     -> m (Type Location, Value)
 interpretWith bindings maybeAnnotation input = do
-    let directory = case input of
-            Path file -> FilePath.takeDirectory file
-            Code _ _  -> "."
+    eitherPartiallyResolved <- do
+        liftIO
+            (Exception.catches
+                (fmap Right (Import.resolverToCallback Resolver.defaultResolver input))
+                [ Handler (\e -> return (Left (ParseError e)))
+                , Handler (\e -> return (Left (ImportError input (displayException (e :: SomeException)))))
+                ]
+            )
 
-    eitherExpression <- Except.runExceptT (Parser.parseInput input)
+    partiallyResolved <- case eitherPartiallyResolved of
+        Left  interpretError    -> throwError interpretError
+        Right partiallyResolved -> return partiallyResolved
 
-    expression <- case eitherExpression of
-        Left e -> throwError (ParseError e)
-        Right expression -> return expression
+    let process (maybeAnnotation', child) = do
+            interpretWith bindings maybeAnnotation' (input <> child)
 
-    interpretExprWith bindings maybeAnnotation directory expression
-
-{- | Like `interpretWith`, but takes a pre-parsed expression instead of some
-     source code
--}
-interpretExprWith
-    :: (MonadError InterpretError m, MonadIO m)
-    => [(Text, Type Location, Value)]
-    -- ^ @(name, type, value)@ for each custom binding
-    -> Maybe (Type Location)
-    -- ^ Optional expected type for the input
-    -> FilePath
-    -- ^ The base directory used when resolving filepath imports of relative paths
-    -> Syntax Location Import
-    -> m (Type Location, Value)
-interpretExprWith bindings maybeAnnotation directory expression = do
-    resolvedExpression <- for (annotate expression)
-        \(maybeAnnotation', input) -> case input of
-            Import.File file -> interpretWith bindings maybeAnnotation' (Path path)
-              where
-                path = FilePath.normalise (directory </> file)
-
-            Import.URI uri -> do
-                eitherResult <- liftIO do
-                    let callback = Import.resolverToCallback Resolver.defaultResolver
-
-                    tryAny (Import.runCallback callback uri)
-
-                (importExpression, directory') <- case eitherResult of
-                    Left e -> throwError (ImportError uri (displayException e))
-                    Right (expr, Nothing) -> return (expr, directory)
-                    Right (expr, Just directory') -> return (expr, directory')
-
-                let relocate location = location
-                        { name = Text.unpack (URI.render uri)
-                        }
-
-                let relocatedExpression = first relocate importExpression
-
-                interpretExprWith bindings maybeAnnotation' directory' relocatedExpression
+    resolvedExpression <- traverse process (annotate partiallyResolved)
 
     let annotatedExpression =
             case maybeAnnotation of
@@ -183,14 +145,21 @@ annotate = Lens.transform transformSyntax . fmap ((,) Nothing)
 
 -- | Errors related to interpretation of an expression
 data InterpretError
-    = ImportError URI.URI String
+    = ImportError Input String
     | ParseError Parser.ParseError
     | TypeInferenceError Infer.TypeInferenceError
     deriving stock (Eq, Show)
 
 instance Exception InterpretError where
-    displayException (ImportError uri e) =
-        "The import of " <> Text.unpack (URI.render uri) <> " failed with: " <>
-        e
+    displayException (ImportError input e) =
+        Text.unpack [__i|
+        #{renderInput}
+        #{e}
+        |]
+      where
+        renderInput = case input of
+            URI  uri  -> URI.render uri
+            Path path -> Text.pack path
+            Code _ _  -> "(input)"
     displayException (ParseError e) = displayException e
     displayException (TypeInferenceError e) = displayException e
