@@ -10,34 +10,64 @@
 -}
 
 module Grace.Import
-    ( Import(..)
-    , ImportCallback(..)
+    ( Input(..)
     , Resolver(..)
     , resolverToCallback
     , ImportError(..)
     ) where
 
 import Control.Exception.Safe (Exception(..), throw)
+import Data.List.NonEmpty (NonEmpty(..))
+import Data.Text (Text)
 import Grace.Location (Location)
-import Grace.Pretty (Pretty(..))
 import Grace.Syntax (Syntax)
-import Text.URI (URI)
+import System.FilePath ((</>))
 
-{- | A reference to external source code that will be imported by the
-     interpreter.
+import qualified Data.Text       as Text
+import qualified System.FilePath as FilePath
+import qualified Text.URI        as URI
+
+{-| Input to the interpreter.
+
+    You should prefer to use `Path` if possible (for better error messages and
+    correctly handling transitive imports).  The `Code` constructor is intended
+    for cases like interpreting code read from standard input.
 -}
-data Import
-    = File FilePath
-    | URI URI
+data Input
+    = Path FilePath
+    -- ^ The path to the code
+    | Code String Text
+    -- ^ Source code: @Code name content@
+    | URI URI.URI
+    deriving (Eq, Show)
 
-instance Pretty Import where
-    pretty (File file) = pretty file
-    pretty (URI uri) = pretty uri
+instance Semigroup Input where
+    _ <> URI uri = URI uri
 
--- | Type of the callback function used to resolve URI imports
-newtype ImportCallback = ImportCallback
-    { runCallback :: URI -> IO (Syntax Location Import, Maybe FilePath)
-    }
+    _ <> Code name code = Code name code
+
+    Code _ _    <> Path child = Path child
+    Path parent <> Path child = Path (FilePath.takeDirectory parent </> child)
+    URI parent  <> Path child
+        | FilePath.isRelative child
+        , Just uri <- URI.relativeTo childURI parent =
+            URI uri
+        | otherwise =
+            Path child
+      where
+        uriPath = do
+            c : cs <- traverse (URI.mkPathPiece . Text.pack) (FilePath.splitPath child)
+
+            return (FilePath.hasTrailingPathSeparator child, c :| cs)
+
+        childURI =
+            URI.URI
+                { URI.uriScheme = Nothing
+                , URI.uriAuthority = Left False
+                , URI.uriPath = uriPath
+                , URI.uriQuery = []
+                , URI.uriFragment = Nothing
+                }
 
 {- | A resolver for an URI.
 
@@ -58,7 +88,7 @@ newtype ImportCallback = ImportCallback
        `ImportError` by the interpreter.
 -}
 newtype Resolver = Resolver
-    { runResolver :: URI -> IO (Maybe (Syntax Location Import, Maybe FilePath))
+    { runResolver :: Input -> IO (Maybe (Syntax Location Input))
     }
 
 instance Semigroup Resolver where
@@ -72,17 +102,17 @@ instance Monoid Resolver where
     mempty = Resolver (const (return Nothing))
 
 -- | Convert a resolver to a callback function
-resolverToCallback :: Resolver -> ImportCallback
-resolverToCallback resolver = ImportCallback \uri -> do
+resolverToCallback :: Resolver -> Input -> IO (Syntax Location Input)
+resolverToCallback resolver uri = do
     maybeResult <- runResolver resolver uri
     case maybeResult of
-        Nothing -> throw UnsupportedURI
+        Nothing -> throw UnsupportedInput
         Just result -> return result
 
 -- | Errors that might be raised during import resolution.
 data ImportError
-    = UnsupportedURI
+    = UnsupportedInput
     deriving stock Show
 
 instance Exception ImportError where
-    displayException UnsupportedURI = "Resolving this URI is not supported"
+    displayException UnsupportedInput = "Resolving this input is not supported"

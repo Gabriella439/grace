@@ -97,7 +97,7 @@ typeOfInput = helperFunction fst
 
 helperFunction :: Lift r => ((Type (), Syntax () Void) -> r) -> Input -> Q (TExp r)
 helperFunction f input = do
-    eitherResult <- Except.runExceptT (Interpret.interpret Nothing input)
+    eitherResult <- Except.runExceptT (Interpret.interpret input)
 
     (inferred, value) <- case eitherResult of
         Left e -> fail (displayException e)
