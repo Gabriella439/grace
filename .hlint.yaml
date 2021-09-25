@@ -7,3 +7,4 @@
 - ignore: {name: Unused LANGUAGE pragma}
 - ignore: {name: Use const}
 - ignore: {name: Redundant bracket, within: Grace.Parser}
+- ignore: {name: Redundant return, within: Grace.Parser}
