@@ -218,7 +218,7 @@ file = lexeme do
             ||  ('\x7C' == c)
             ||   '\x7E' == c
 
-    let pathComponent = Megaparsec.takeWhileP (Just "path character") isPath
+    let pathComponent = Megaparsec.takeWhile1P (Just "path character") isPath
 
     suffix <- pathComponent `sepBy1` "/"
 
