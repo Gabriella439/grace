@@ -24,7 +24,7 @@ import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Generics.Product (the)
 import Data.String.Interpolate (__i)
 import Data.Text (Text)
-import Grace.Import (Input(..))
+import Grace.Input (Input(..))
 import Grace.Location (Location(..))
 import Grace.Syntax (Node(..), Syntax(..))
 import Grace.Type (Type)
@@ -36,7 +36,6 @@ import qualified Control.Monad.Except   as Except
 import qualified Data.Text              as Text
 import qualified Grace.Context          as Context
 import qualified Grace.Import           as Import
-import qualified Grace.Import.Resolver  as Resolver
 import qualified Grace.Infer            as Infer
 import qualified Grace.Normalize        as Normalize
 import qualified Grace.Parser           as Parser
@@ -67,7 +66,7 @@ interpretWith bindings maybeAnnotation input = do
     eitherPartiallyResolved <- do
         liftIO
             (Exception.catches
-                (fmap Right (Import.resolverToCallback Resolver.defaultResolver input))
+                (fmap Right (Import.resolve input))
                 [ Handler (\e -> return (Left (ParseError e)))
                 , Handler (\e -> return (Left (ImportError input (displayException (e :: SomeException)))))
                 ]

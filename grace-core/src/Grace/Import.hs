@@ -4,121 +4,131 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ViewPatterns #-}
 
-{- | This module contains the functions and types that power to URI-base imports
--}
-
+-- | This module contains the import resolution logic
 module Grace.Import
-    ( Input(..)
-    , Resolver(..)
-    , resolverToCallback
-    , ImportError(..)
+    ( -- * Import resolution
+      resolve
+
+      -- * Exceptions
+    , EnvResolverError(..)
+    , FileResolverError(..)
     ) where
 
 import Control.Exception.Safe (Exception(..), throw)
+import Data.Bifunctor (first)
+import Data.Foldable (foldl')
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text)
-import Grace.Location (Location)
-import Grace.Pretty (Pretty(..))
+import Grace.Input (Input(..))
+import Grace.Location (Location(..))
 import Grace.Syntax (Syntax)
 import System.FilePath ((</>))
+import Text.URI (Authority)
 
-import qualified Data.Text       as Text
-import qualified System.FilePath as FilePath
-import qualified Text.URI        as URI
+import qualified Data.List.NonEmpty as NonEmpty
+import qualified Data.Text          as Text
+import qualified Data.Text.IO       as Text.IO
+import qualified Grace.Parser       as Parser
+import qualified System.Environment as Environment
+import qualified Text.URI           as URI
+import qualified Text.URI.QQ        as URI.QQ
 
-{-| Input to the interpreter.
+-- | Resolve an `Input` by returning the source code that it represents
+resolve :: Input -> IO (Syntax Location Input)
+resolve input = case input of
+    URI uri@URI.URI{ URI.uriScheme = Just (URI.unRText -> "env") } -> do
+        case URI.uriAuthority uri of
+            Right auth | auth /= emptyAuthority -> throw EnvInvalidURI
+            _ -> return ()
 
-    You should prefer to use `Path` if possible (for better error messages and
-    correctly handling transitive imports).  The `Code` constructor is intended
-    for cases like interpreting code read from standard input.
--}
-data Input
-    = Path FilePath
-    -- ^ The path to the code
-    | Code String Text
-    -- ^ Source code: @Code name content@
-    | URI URI.URI
-    deriving (Eq, Show)
+        var <- case URI.uriPath uri of
+            Nothing -> throw EnvMissingVarName
+            Just (False, var :| []) -> return (URI.unRText var)
+            _ -> throw EnvInvalidURI
 
-instance Semigroup Input where
-    _ <> URI uri = URI uri
+        code <- Environment.lookupEnv (Text.unpack var) >>= \case
+            Nothing -> throw (EnvVarNotFound var)
+            Just string -> return (Text.pack string)
 
-    _ <> Code name code = Code name code
+        let name = "env:" <> Text.unpack var
 
-    Code _ _    <> Path child = Path child
-    Path parent <> Path child = Path (FilePath.takeDirectory parent </> child)
-    URI parent  <> Path child
-        | FilePath.isRelative child
-        , Just uri <- URI.relativeTo childURI parent =
-            URI uri
-        | otherwise =
-            Path child
-      where
-        uriPath = do
-            c : cs <- traverse (URI.mkPathPiece . Text.pack) (FilePath.splitPath child)
+        result <- case Parser.parse name code of
+            Left e -> throw e
+            Right result -> return result
 
-            return (FilePath.hasTrailingPathSeparator child, c :| cs)
+        let locate offset = Location{..}
 
-        childURI =
-            URI.URI
-                { URI.uriScheme = Nothing
-                , URI.uriAuthority = Left False
-                , URI.uriPath = uriPath
-                , URI.uriQuery = []
-                , URI.uriFragment = Nothing
-                }
+        return (first locate result)
 
-instance Pretty Input where
-    pretty (Code _ code) = pretty code
-    pretty (Path path) = pretty path
-    pretty (URI uri) = pretty uri
+    URI uri@URI.URI{ URI.uriScheme = Just (URI.unRText -> "file") } -> do
+        case URI.uriAuthority uri of
+            Right auth | auth /= emptyAuthority -> throw FileInvalidURI
+            _ -> return ()
 
-{- | A resolver for a URI.
+        pieces <- case URI.uriPath uri of
+            Nothing -> throw FileMissingPath
+            Just (_, pieces) -> return pieces
 
-     When the interpreter tries to resolve a URI pointing to some source code
-     it will try multiple resolvers sequentially and stops if one returns a
-     @Just code@ value where @code@ is the source code of an expression.
-     It will then try to parse and interpret that expression.
+        let pathPiecesToFilePath =
+                foldl' (</>) "/" . map (Text.unpack . URI.unRText) . NonEmpty.toList
 
-     Here are some good practices for the development of resolvers:
+        readPath (pathPiecesToFilePath pieces)
 
-     * A resolver should handle exactly one URI scheme.
+    URI _ -> do
+       throw FileInvalidURI
 
-     * If a resolver encounters a URI which it cannot process (e.g. a
-       @file://@ URI is passed to a HTTP resolver) it should return @Nothing@
-       as fast as possible.
+    Path path -> do
+        readPath path
 
-     * Exceptions thrown in resolvers will be caught and rethrown as an
-       `ImportError` by the interpreter.
--}
-newtype Resolver = Resolver
-    { runResolver :: Input -> IO (Maybe (Syntax Location Input))
-    }
+    Code name code -> do
+        result <- case Parser.parse name code of
+            Left e -> throw e
+            Right result -> return result
 
-instance Semigroup Resolver where
-    x <> y = Resolver \uri -> do
-        maybeResult <- runResolver x uri
-        case maybeResult of
-            Nothing -> runResolver y uri
-            _ -> return maybeResult
+        let locate offset = Location{..}
 
-instance Monoid Resolver where
-    mempty = Resolver (const (return Nothing))
+        return (first locate result)
+  where
+    readPath path = do
+        code <- Text.IO.readFile path
 
--- | Convert a resolver to a callback function
-resolverToCallback :: Resolver -> Input -> IO (Syntax Location Input)
-resolverToCallback resolver uri = do
-    maybeResult <- runResolver resolver uri
-    case maybeResult of
-        Nothing -> throw UnsupportedInput
-        Just result -> return result
+        result <- case Parser.parse path code of
+            Left e -> throw e
+            Right result -> return result
 
--- | Errors that might be raised during import resolution.
-data ImportError
-    = UnsupportedInput
+        let locate offset = Location{ name = path, ..}
+
+        return (first locate result)
+
+-- | Errors raised by @env:@ imports
+data EnvResolverError
+    = EnvInvalidURI
+    | EnvMissingVarName
+    | EnvVarNotFound Text
     deriving stock Show
 
-instance Exception ImportError where
-    displayException UnsupportedInput = "Resolving this input is not supported"
+instance Exception EnvResolverError where
+    displayException EnvInvalidURI = "Invalid URI"
+    displayException EnvMissingVarName = "Environment variable name is missing"
+    displayException (EnvVarNotFound k) = Text.unpack ("Environment variable not found: " <> k)
+
+-- | Errors raised by @file:@ imports
+data FileResolverError
+    = FileInvalidURI
+    | FileMissingPath
+    deriving stock Show
+
+instance Exception FileResolverError where
+    displayException FileInvalidURI = "Invalid URI"
+    displayException FileMissingPath = "Filepath is missing"
+
+emptyAuthority :: Authority
+emptyAuthority = URI.Authority
+    { URI.authUserInfo = Nothing
+    , URI.authHost = [URI.QQ.host||]
+    , URI.authPort = Nothing
+    }
