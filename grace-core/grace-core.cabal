@@ -29,7 +29,6 @@ library
                      , template-haskell
                      , terminal-size
                      , text
-                     , typed-process
                      , unordered-containers
   exposed-modules:     Grace.Context
                      , Grace.Domain
