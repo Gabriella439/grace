@@ -884,6 +884,11 @@ annotation as a last resort.
 
 ### Imports
 
+Grace has two ways to import expressions from other sources: Filepath-based
+imports and imports using URIs.
+
+#### Imports from files
+
 You can import a Grace subexpression stored within a separate file by
 referencing the file's relative or absolute path.
 
@@ -973,6 +978,50 @@ $ grace interpret - <<< './greet.ffg "John"'
 ```
 
 Any subexpression can be imported in this way.
+
+#### Imports using URIs
+
+Imports with URIs work similar to the ones using a simple filepath.
+
+Suppose you do not have the `greet.ffg` stored locally but instead it resides
+on a web server: `http://example.com/grace/greet.ffg`
+You could either download it and reference it by its filepath like demonstrated
+in the example above or let the Grace interpreter do the job:
+
+```bash
+$ grace interpret - <<< 'http://example.com/grace/greet.ffg "John"'
+```
+```dhall
+"Hello, John!"
+```
+
+Note that if a particular URI can be handled by the Grace interpreter depends
+on its (compile-time) configuration: Internally it relies on a set of _resolvers_
+that take care of all the things related to networking like downloading, caching
+, verifying the integrity of retrieved file on so on.
+For instance, the motivating example will unfortunately not work out-of-the box
+since the grace executable has no builtin resolver for HTTP (yet).
+
+Grace comes with two builtin resolvers:
+
+1. One to resolve `env://` URIs,
+2. one to resolve `file://` URIs.
+
+Lets have a look at the `env://` resolver first:
+```bash
+$ MY_VAR='"Hello !"' grace interpret - <<< 'env:///MY_VAR'
+```
+```dhall
+"Hello !"
+```
+
+The `file://` resolver is similar to the filepath-based imports we already know:
+```bash
+$ grace interpret - <<< 'file:///path/to/greet.ffg "John"'
+```
+```dhall
+"Hello, John!"
+```
 
 ## Name
 

@@ -39,6 +39,7 @@ module Grace.Type
     ) where
 
 import Control.Lens (Plated(..))
+import Data.Bifunctor (second)
 import Data.Generics.Product (the)
 import Data.Generics.Sum (_As)
 import Data.String (IsString(..))
@@ -223,9 +224,9 @@ fromMonotype monotype = Type{ location = (), node }
         Monotype.List τ ->
             List (fromMonotype τ)
         Monotype.Record (Monotype.Fields kτs ρ) ->
-            Record (Fields (map (\(k, τ) -> (k, fromMonotype τ)) kτs) ρ)
+            Record (Fields (map (second fromMonotype) kτs) ρ)
         Monotype.Union (Monotype.Alternatives kτs ρ) ->
-            Union (Alternatives (map (\(k, τ) -> (k, fromMonotype τ)) kτs) ρ)
+            Union (Alternatives (map (second fromMonotype) kτs) ρ)
         Monotype.Scalar scalar ->
             Scalar scalar
 
@@ -321,9 +322,9 @@ substituteType a0 n _A0 Type{ node = old, .. } = Type{ node = new, .. }
         List _A1 ->
             List (substituteType a0 n _A0 _A1)
         Record (Fields kAs ρ) ->
-            Record (Fields (map (\(k, _A1) -> (k, substituteType a0 n _A0 _A1)) kAs) ρ)
+            Record (Fields (map (second (substituteType a0 n _A0)) kAs) ρ)
         Union (Alternatives kAs ρ) ->
-            Union (Alternatives (map (\(k, _A1) -> (k, substituteType a0 n _A0 _A1)) kAs) ρ)
+            Union (Alternatives (map (second (substituteType a0 n _A0)) kAs) ρ)
         Scalar scalar ->
             Scalar scalar
 
@@ -357,13 +358,13 @@ substituteFields ρ0 n r@(Fields kτs ρ1) Type{ node = old, .. } =
             List (substituteFields ρ0 n r _A)
         Record (Fields kAs0 ρ)
             | VariableFields ρ0 == ρ && n == 0 ->
-                Record (Fields (map (\(k, _A) -> (k, substituteFields ρ0 n r _A)) kAs1) ρ1)
+                Record (Fields (map (second (substituteFields ρ0 n r)) kAs1) ρ1)
             | otherwise ->
-                Record (Fields (map (\(k, _A) -> (k, substituteFields ρ0 n r _A)) kAs0) ρ)
+                Record (Fields (map (second (substituteFields ρ0 n r)) kAs0) ρ)
           where
-            kAs1 = kAs0 <> map (\(k, τ) -> (k, fmap (\_ -> location) τ)) kτs
+            kAs1 = kAs0 <> map (second (fmap (const location))) kτs
         Union (Alternatives kAs ρ) ->
-            Union (Alternatives (map (\(k, _A) -> (k, substituteFields ρ0 n r _A)) kAs) ρ)
+            Union (Alternatives (map (second (substituteFields ρ0 n r)) kAs) ρ)
         Scalar scalar ->
             Scalar scalar
 
@@ -396,14 +397,14 @@ substituteAlternatives ρ0 n r@(Alternatives kτs ρ1) Type{ node = old, .. } =
         List _A ->
             List (substituteAlternatives ρ0 n r _A)
         Record (Fields kAs ρ) ->
-            Record (Fields (map (\(k, _A) -> (k, substituteAlternatives ρ0 n r _A)) kAs) ρ)
+            Record (Fields (map (second (substituteAlternatives ρ0 n r)) kAs) ρ)
         Union (Alternatives kAs0 ρ)
             | Monotype.VariableAlternatives ρ0 == ρ && n == 0 ->
-                Union (Alternatives (map (\(k, _A) -> (k, substituteAlternatives ρ0 n r _A)) kAs1) ρ1)
+                Union (Alternatives (map (second (substituteAlternatives ρ0 n r)) kAs1) ρ1)
             | otherwise ->
-                Union (Alternatives (map (\(k, _A) -> (k, substituteAlternatives ρ0 n r _A)) kAs0) ρ)
+                Union (Alternatives (map (second (substituteAlternatives ρ0 n r)) kAs0) ρ)
           where
-            kAs1 = kAs0 <> map (\(k, τ) -> (k, fmap (\_ -> location) τ)) kτs
+            kAs1 = kAs0 <> map (second (fmap (const location))) kτs
         Scalar scalar ->
             Scalar scalar
 

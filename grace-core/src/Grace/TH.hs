@@ -1,3 +1,7 @@
+{- | This module provides Template Haskell functions to embed expression and
+     their times at compile-time.
+-}
+
 module Grace.TH
     ( grace
 
@@ -60,7 +64,7 @@ grace = QuasiQuoter
      Syntax {location = (), node = Scalar (Text "hello")}
 -}
 expressionFromCode :: Text -> Q (TExp (Syntax () Void))
-expressionFromCode = expressionFromInput . Code
+expressionFromCode = expressionFromInput . Code "(input)"
 
 -- | Like `expressionFromCode`, but takes path of a source file as input.
 expressionFromFile :: FilePath -> Q (TExp (Syntax () Void))
@@ -79,7 +83,7 @@ expressionFromInput = helperFunction snd
      Type {location = (), node = Scalar Text}
 -}
 typeOfCode :: Text -> Q (TExp (Type ()))
-typeOfCode = typeOfInput . Code
+typeOfCode = typeOfInput . Code "(input)"
 
 -- | Like `typeOfCode`, but takes path of a source file as input.
 typeOfFile :: FilePath -> Q (TExp (Type ()))
@@ -93,7 +97,7 @@ typeOfInput = helperFunction fst
 
 helperFunction :: Lift r => ((Type (), Syntax () Void) -> r) -> Input -> Q (TExp r)
 helperFunction f input = do
-    eitherResult <- Except.runExceptT (Interpret.interpret Nothing input)
+    eitherResult <- Except.runExceptT (Interpret.interpret input)
 
     (inferred, value) <- case eitherResult of
         Left e -> fail (displayException e)

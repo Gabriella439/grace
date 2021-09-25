@@ -9,9 +9,8 @@ module Grace.Repl
       repl
     ) where
 
-import Control.Monad.Catch (MonadCatch)
-import Control.Exception (displayException)
-import Control.Monad.IO.Class (liftIO, MonadIO)
+import Control.Exception.Safe (MonadCatch, displayException)
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.State (MonadState(..), StateT)
 import Data.Foldable (toList)
 import Data.Text (pack, strip, unpack, Text)
@@ -34,7 +33,7 @@ import qualified Control.Monad.State    as State
 import qualified Data.Text.IO           as Text.IO
 import qualified Grace.Interpret        as Interpret
 import qualified Grace.Normalize        as Normalize
-import qualified Grace.Pretty           as Grace.Pretty
+import qualified Grace.Pretty           as Pretty
 import qualified System.Console.Repline as Repline
 import qualified System.IO              as IO
 
@@ -60,15 +59,15 @@ prompt SingleLine = return ">>> "
 
 type Status = [(Text, Type Location, Value)]
 
-commands :: (MonadState Status m, MonadCatch m, MonadIO m) => Options m
+commands :: (MonadCatch m, MonadIO m, MonadState Status m) => Options m
 commands =
     [ ("let", Repline.dontCrash . assignment)
     , ("type", Repline.dontCrash . infer)
     ]
 
-interpret :: (MonadState Status m, MonadIO m) => Cmd m
+interpret :: (MonadIO m, MonadState Status m) => Cmd m
 interpret string = do
-    let input = Code (pack string)
+    let input = Code "(input)" (pack string)
 
     context <- get
     eitherResult <- Except.runExceptT (Interpret.interpretWith context Nothing input)
@@ -78,14 +77,14 @@ interpret string = do
         Right (_inferred, value) -> do
             let syntax = Normalize.quote [] value
 
-            width <- liftIO Grace.Pretty.getWidth
-            liftIO (Grace.Pretty.renderIO True width IO.stdout (Grace.Pretty.pretty syntax <> "\n"))
+            width <- liftIO Pretty.getWidth
+            liftIO (Pretty.renderIO True width IO.stdout (Pretty.pretty syntax <> "\n"))
 
-assignment :: (MonadState Status m, MonadIO m) => Cmd m
+assignment :: (MonadIO m, MonadState Status m) => Cmd m
 assignment string
     | (var, '=' : expr) <- break (== '=') string
     = do
-      let input = Code (pack expr)
+      let input = Code "(input)" (pack expr)
 
       let variable = strip (pack var)
 
@@ -101,9 +100,9 @@ assignment string
     | otherwise
     = liftIO (putStrLn "usage: let = {expression}")
 
-infer :: (MonadState Status m, MonadIO m) => Cmd m
+infer :: (MonadIO m, MonadState Status m) => Cmd m
 infer expr = do
-    let input = Code (pack expr)
+    let input = Code "(input)" (pack expr)
 
     context <- get
 
@@ -115,14 +114,13 @@ infer expr = do
             liftIO (Text.IO.hPutStrLn IO.stderr (pack (displayException e)))
 
         Right (type_, _) -> do
-            width <- liftIO Grace.Pretty.getWidth
+            width <- liftIO Pretty.getWidth
 
-            liftIO (Grace.Pretty.renderIO True width IO.stdout (Grace.Pretty.pretty type_ <> "\n"))
+            liftIO (Pretty.renderIO True width IO.stdout (Pretty.pretty type_ <> "\n"))
 
 complete :: Monad m => CompleterStyle m
 complete =
-    Combine File
-      (Custom (Repline.runMatcher [ (":", completeCommands) ] completeIdentifiers))
+    Custom (Repline.runMatcher [ (":", completeCommands) ] completeIdentifiers)
   where
     completeCommands =
         Repline.listCompleter (fmap adapt (commands @(StateT Status IO)))

@@ -14,6 +14,7 @@ module Grace
 
 import Control.Applicative (many, (<|>))
 import Control.Exception (Exception(..))
+import Control.Monad (void)
 import Data.Foldable (traverse_)
 import Data.String.Interpolate (__i)
 import Data.Void (Void)
@@ -177,13 +178,12 @@ main = do
         Interpret{..} -> do
             input <- case file of
                 "-" -> do
-                    text <- Text.IO.getContents
-                    return (Code text)
+                    Code "(input)" <$> Text.IO.getContents
                 _ -> do
                     return (Path file)
 
             eitherResult <- do
-                Except.runExceptT (Interpret.interpret Nothing input)
+                Except.runExceptT (Interpret.interpret input)
 
             (inferred, value) <- throws eitherResult
 
@@ -193,7 +193,7 @@ main = do
                     | annotate =
                         Syntax
                             { node =
-                                Annotation syntax (fmap (\_ -> ()) inferred)
+                                Annotation syntax (void inferred)
                             , location = ()
                             }
                     | otherwise =
@@ -206,9 +206,7 @@ main = do
         Text{..} -> do
             input <- case file of
                 "-" -> do
-                    text <- Text.IO.getContents
-
-                    return (Code text)
+                    Code "(input)" <$> Text.IO.getContents
                 _ -> do
                     return (Path file)
 
@@ -222,7 +220,7 @@ main = do
             let expected = Type{ node = Type.Scalar Monotype.Text, .. }
 
             eitherResult <- do
-                Except.runExceptT (Interpret.interpret (Just expected) input)
+                Except.runExceptT (Interpret.interpretWith [] (Just expected) input)
 
             (_, value) <- throws eitherResult
 

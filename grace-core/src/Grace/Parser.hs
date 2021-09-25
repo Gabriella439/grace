@@ -1,5 +1,6 @@
 {-# LANGUAGE ApplicativeDo     #-}
 {-# LANGUAGE BlockArguments    #-}
+{-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
@@ -27,10 +28,11 @@ module Grace.Parser
 import Control.Applicative (many, optional, (<|>))
 import Control.Applicative.Combinators.NonEmpty (sepBy1)
 import Control.Applicative.Combinators (endBy, sepBy)
-import Data.Functor (void)
+import Data.Functor (($>), void)
 import Data.List.NonEmpty (NonEmpty(..), some1)
 import Data.Scientific (Scientific)
 import Data.Text (Text)
+import Grace.Import (Input(..))
 import Grace.Lexer (LocatedToken(LocatedToken), ParseError(ParsingFailed), Token)
 import Grace.Location (Location(..), Offset(..))
 import Grace.Syntax (Binding(..), Syntax(..))
@@ -46,6 +48,7 @@ import qualified Grace.Monotype         as Monotype
 import qualified Grace.Syntax           as Syntax
 import qualified Grace.Type             as Type
 import qualified Text.Earley            as Earley
+import qualified Text.URI               as URI
 
 type Parser r = Prod r Text LocatedToken
 
@@ -72,6 +75,10 @@ matchText  _                    = Nothing
 matchFile :: Token -> Maybe FilePath
 matchFile (Lexer.File f) = Just f
 matchFile  _             = Nothing
+
+matchURI :: Token -> Maybe URI.URI
+matchURI (Lexer.URI t) = Just t
+matchURI  _            = Nothing
 
 terminal :: (Token -> Maybe a) -> Parser r a
 terminal match = Earley.terminal match'
@@ -119,6 +126,9 @@ locatedText = locatedTerminal matchText
 
 locatedFile :: Parser r (Offset, FilePath)
 locatedFile = locatedTerminal matchFile
+
+locatedURI :: Parser r (Offset, URI.URI)
+locatedURI = locatedTerminal matchURI
 
 locatedToken :: Token -> Parser r Offset
 locatedToken expectedToken =
@@ -204,8 +214,9 @@ render t = case t of
     Lexer.Type             -> "Type"
     Lexer.Times            -> "*"
     Lexer.True_            -> "True"
+    Lexer.URI _            -> "a URI"
 
-grammar :: Grammar r (Parser r (Syntax Offset FilePath))
+grammar :: Grammar r (Parser r (Syntax Offset Input))
 grammar = mdo
     expression <- rule
         -- The reason all of these rules use a `let f … = …` at the beginning
@@ -230,6 +241,7 @@ grammar = mdo
                 locatedName <- locatedLabel
                 token Lexer.Arrow
                 body <- expression
+
                 return (f lambdaOffset locatedName body)
 
         <|> do  let f bindings body = Syntax{..}
@@ -386,7 +398,7 @@ grammar = mdo
                       where
                         node = Syntax.Scalar (Syntax.Real (sign n))
 
-                sign <- (token Lexer.Dash *> pure negate) <|> pure id
+                sign <- (token Lexer.Dash $> negate) <|> pure id
 
                 located <- locatedReal
 
@@ -505,9 +517,17 @@ grammar = mdo
 
         <|> do  let f (location, file) = Syntax{..}
                       where
-                        node = Syntax.Embed file
+                        node = Syntax.Embed (Path file)
 
                 located <- locatedFile
+
+                return (f located)
+
+        <|> do  let f (location, uri) = Syntax{..}
+                      where
+                        node = Syntax.Embed (URI uri)
+
+                located <- locatedURI
 
                 return (f located)
 
@@ -713,7 +733,7 @@ parse
     -- ^ Name of the input (used for error messages)
     -> Text
     -- ^ Source code
-    -> Either ParseError (Syntax Offset FilePath)
+    -> Either ParseError (Syntax Offset Input)
 parse name code = do
     tokens <- Lexer.lex name code
 

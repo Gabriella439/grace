@@ -6,9 +6,10 @@ module Main where
 
 import Control.Exception (displayException)
 import Data.Text (Text)
-import Grace.Interpret (Input(..))
+import Grace.Interpret (Input(..), InterpretError)
 import Grace.Location (Location(..))
 import Grace.Pretty (Pretty(..))
+import Grace.Test.Resolver
 import Grace.Type (Type(..))
 import System.FilePath ((</>))
 import Test.Tasty (TestTree)
@@ -34,6 +35,9 @@ pretty_ x =
     Grace.Pretty.renderStrict False Grace.Pretty.defaultColumns
         (pretty x <> Pretty.hardline)
 
+interpret :: Input -> IO (Either InterpretError (Type Location, Value.Value))
+interpret input = Except.runExceptT (Interpret.interpret input)
+
 fileToTestTree :: FilePath -> IO TestTree
 fileToTestTree prefix = do
     let input              = prefix <> "-input.ffg"
@@ -43,7 +47,7 @@ fileToTestTree prefix = do
 
     let name = FilePath.takeBaseName input
 
-    eitherResult <- Except.runExceptT (Interpret.interpret Nothing (Path input))
+    eitherResult <- interpret (Path input)
 
     case eitherResult of
         Left e -> do
@@ -118,6 +122,8 @@ main = do
     let manualTestTree =
             Tasty.testGroup "Manual tests"
                 [ interpretCode
+                , interpretCodeWithEnvURI
+                , interpretCodeWithFileURI
                 , interpretCodeWithImport
                 ]
 
@@ -125,22 +131,9 @@ main = do
 
     Tasty.defaultMain tests
 
-interpretCodeWithImport :: TestTree
-interpretCodeWithImport = Tasty.HUnit.testCase "interpret code with import" do
-    actualValue <- Except.runExceptT (Interpret.interpret Nothing (Interpret.Code "./tasty/data/unit/plus-input.ffg"))
-
-    let expectedValue =
-            Right (Type{ location, node }, Value.Scalar (Syntax.Natural 5))
-          where
-            location = Location{ name = "tasty/data/unit/plus-input.ffg", code = "2 + 3\n", offset = 0 }
-
-            node = Type.Scalar Monotype.Natural
-
-    Tasty.HUnit.assertEqual "" expectedValue actualValue
-
 interpretCode :: TestTree
-interpretCode = Tasty.HUnit.testCase "interpret code with import" do
-    actualValue <- Except.runExceptT (Interpret.interpret Nothing (Interpret.Code "2 + 2"))
+interpretCode = Tasty.HUnit.testCase "interpret code" do
+    actualValue <- interpret (Code "(input)" "2 + 2")
 
     let expectedValue =
             Right (Type{ location, node }, Value.Scalar (Syntax.Natural 4))
@@ -151,4 +144,15 @@ interpretCode = Tasty.HUnit.testCase "interpret code with import" do
 
     Tasty.HUnit.assertEqual "" expectedValue actualValue
 
-    return ()
+interpretCodeWithImport :: TestTree
+interpretCodeWithImport = Tasty.HUnit.testCase "interpret code with import from file" do
+    actualValue <- interpret (Code "(input)" "./tasty/data/unit/plus-input.ffg")
+
+    let expectedValue =
+            Right (Type{ location, node }, Value.Scalar (Syntax.Natural 5))
+          where
+            location = Location{ name = "tasty/data/unit/plus-input.ffg", code = "2 + 3\n", offset = 0 }
+
+            node = Type.Scalar Monotype.Natural
+
+    Tasty.HUnit.assertEqual "" expectedValue actualValue
