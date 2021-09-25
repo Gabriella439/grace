@@ -4,12 +4,10 @@
 
 module Grace.TH
     ( grace
-
       -- * Embedding an expression
     , expressionFromCode
     , expressionFromFile
     , expressionFromInput
-
       -- * Embedding the type of an expression
     , typeOfCode
     , typeOfFile
@@ -27,10 +25,10 @@ import Language.Haskell.TH.Quote (QuasiQuoter(..))
 import Language.Haskell.TH.Syntax (Lift, Q, TExp(..))
 
 import qualified Control.Monad.Except as Except
-import qualified Data.Text            as Text
-import qualified Grace.Interpret      as Interpret
-import qualified Grace.Normalize      as Normalize
-import qualified Language.Haskell.TH  as TH
+import qualified Data.Text as Text
+import qualified Grace.Interpret as Interpret
+import qualified Grace.Normalize as Normalize
+import qualified Language.Haskell.TH as TH
 import qualified Language.Haskell.TH.Syntax as TH
 
 -- $setup

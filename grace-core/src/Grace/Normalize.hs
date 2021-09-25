@@ -23,12 +23,12 @@ import Grace.Value (Closure(..), Value)
 import Prelude hiding (succ)
 
 import qualified Data.HashMap.Strict.InsOrd as HashMap
-import qualified Data.List                  as List
-import qualified Data.Ord                   as Ord
-import qualified Data.Sequence              as Seq
-import qualified Data.Text                  as Text
-import qualified Grace.Value                as Value
-import qualified Grace.Syntax               as Syntax
+import qualified Data.List as List
+import qualified Data.Ord as Ord
+import qualified Data.Sequence as Seq
+import qualified Data.Text as Text
+import qualified Grace.Syntax as Syntax
+import qualified Grace.Value as Value
 
 {- $setup
 

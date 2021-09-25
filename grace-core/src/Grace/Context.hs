@@ -11,7 +11,6 @@ module Grace.Context
     ( -- * Types
       Entry(..)
     , Context
-
       -- * Utilities
     , lookup
     , splitOnUnsolvedType
@@ -34,13 +33,13 @@ import Prelude hiding (lookup)
 import Prettyprinter (Doc)
 import Prettyprinter.Render.Terminal (AnsiStyle)
 
-import qualified Control.Monad              as Monad
+import qualified Control.Monad as Monad
 import qualified Control.Monad.State.Strict as State
-import qualified Grace.Domain               as Domain
-import qualified Grace.Existential          as Existential
-import qualified Grace.Monotype             as Monotype
-import qualified Grace.Type                 as Type
-import qualified Prettyprinter              as Pretty
+import qualified Grace.Domain as Domain
+import qualified Grace.Existential as Existential
+import qualified Grace.Monotype as Monotype
+import qualified Grace.Type as Type
+import qualified Prettyprinter as Pretty
 
 {- $setup
 

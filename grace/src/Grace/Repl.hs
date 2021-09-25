@@ -13,7 +13,7 @@ import Control.Exception.Safe (MonadCatch, displayException)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.State (MonadState(..), StateT)
 import Data.Foldable (toList)
-import Data.Text (pack, strip, unpack, Text)
+import Data.Text (Text, pack, strip, unpack)
 import Grace.Interpret (Input(..))
 import Grace.Lexer (reserved)
 import Grace.Location (Location)
@@ -28,14 +28,14 @@ import System.Console.Repline
     , ReplOpts(..)
     )
 
-import qualified Control.Monad.Except   as Except
-import qualified Control.Monad.State    as State
-import qualified Data.Text.IO           as Text.IO
-import qualified Grace.Interpret        as Interpret
-import qualified Grace.Normalize        as Normalize
-import qualified Grace.Pretty           as Pretty
+import qualified Control.Monad.Except as Except
+import qualified Control.Monad.State as State
+import qualified Data.Text.IO as Text.IO
+import qualified Grace.Interpret as Interpret
+import qualified Grace.Normalize as Normalize
+import qualified Grace.Pretty as Pretty
 import qualified System.Console.Repline as Repline
-import qualified System.IO              as IO
+import qualified System.IO as IO
 
 -- | Entrypoint for the @grace repl@ subcommand
 repl :: IO ()

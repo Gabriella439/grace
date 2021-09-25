@@ -21,7 +21,6 @@ module Grace.Type
     , Node(..)
     , Record(..)
     , Union(..)
-
       -- * Utilities
     , solveType
     , solveFields
@@ -32,8 +31,7 @@ module Grace.Type
     , substituteType
     , substituteFields
     , substituteAlternatives
-
-    -- * Pretty-printing
+      -- * Pretty-printing
     , prettyRecordLabel
     , prettyTextLiteral
     ) where
@@ -47,7 +45,7 @@ import Data.Text (Text)
 import GHC.Generics (Generic)
 import Grace.Domain (Domain)
 import Grace.Existential (Existential)
-import Grace.Pretty (Pretty(..), keyword, punctuation, label, builtin, operator)
+import Grace.Pretty (Pretty(..), builtin, keyword, label, operator, punctuation)
 import Language.Haskell.TH.Syntax (Lift)
 import Prettyprinter (Doc)
 import Prettyprinter.Render.Terminal (AnsiStyle)
@@ -59,12 +57,12 @@ import Grace.Monotype
     , Scalar(..)
     )
 
-import qualified Control.Lens   as Lens
-import qualified Data.Text      as Text
-import qualified Grace.Domain   as Domain
-import qualified Grace.Lexer    as Lexer
+import qualified Control.Lens as Lens
+import qualified Data.Text as Text
+import qualified Grace.Domain as Domain
+import qualified Grace.Lexer as Lexer
 import qualified Grace.Monotype as Monotype
-import qualified Prettyprinter  as Pretty
+import qualified Prettyprinter as Pretty
 
 {- $setup
 

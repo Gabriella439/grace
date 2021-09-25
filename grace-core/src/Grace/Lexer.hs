@@ -25,10 +25,8 @@ module Grace.Lexer
     , LocatedToken(..)
     , lex
     , reserved
-
       -- * Miscellaneous
     , validRecordLabel
-
       -- * Errors related to parsing
     , ParseError(..)
     ) where
@@ -44,22 +42,22 @@ import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Location (Location(..), Offset(..))
 import Prelude hiding (lex)
-import Text.Megaparsec (ParseErrorBundle(..), (<?>), try)
+import Text.Megaparsec (ParseErrorBundle(..), try, (<?>))
 
-import qualified Control.Monad              as Monad
-import qualified Control.Monad.Combinators  as Combinators
-import qualified Data.Char                  as Char
-import qualified Data.HashSet               as HashSet
-import qualified Data.List                  as List
-import qualified Data.Scientific            as Scientific
-import qualified Data.Text                  as Text
-import qualified Data.Text.Read             as Read
-import qualified Grace.Location             as Location
-import qualified Text.Megaparsec            as Megaparsec
-import qualified Text.Megaparsec.Char       as Megaparsec.Char
+import qualified Control.Monad as Monad
+import qualified Control.Monad.Combinators as Combinators
+import qualified Data.Char as Char
+import qualified Data.HashSet as HashSet
+import qualified Data.List as List
+import qualified Data.Scientific as Scientific
+import qualified Data.Text as Text
+import qualified Data.Text.Read as Read
+import qualified Grace.Location as Location
+import qualified Text.Megaparsec as Megaparsec
+import qualified Text.Megaparsec.Char as Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as Lexer
-import qualified Text.Megaparsec.Error      as Error
-import qualified Text.URI                   as URI
+import qualified Text.Megaparsec.Error as Error
+import qualified Text.URI as URI
 
 -- | Short-hand type synonym used by lexing utilities
 type Parser = Megaparsec.Parsec Void Text

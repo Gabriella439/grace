@@ -9,9 +9,9 @@ import Data.Text (Text)
 import Grace.Pretty (Pretty(..))
 import System.FilePath ((</>))
 
-import qualified Data.Text       as Text
+import qualified Data.Text as Text
 import qualified System.FilePath as FilePath
-import qualified Text.URI        as URI
+import qualified Text.URI as URI
 
 {-| Input to the interpreter.
 

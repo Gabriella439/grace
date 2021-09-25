@@ -18,8 +18,8 @@ import Data.String.Interpolate (__i)
 import Data.Text (Text)
 import Text.Megaparsec (PosState(..), SourcePos(..))
 
-import qualified Data.Text              as Text
-import qualified Text.Megaparsec.Pos    as Pos
+import qualified Data.Text as Text
+import qualified Text.Megaparsec.Pos as Pos
 import qualified Text.Megaparsec.Stream as Stream
 
 -- | Offsets are stored in characters (0-indexed)

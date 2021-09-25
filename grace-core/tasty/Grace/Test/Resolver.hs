@@ -13,15 +13,15 @@ import Grace.Type (Type(..))
 import Test.Tasty (TestTree)
 
 import qualified Control.Monad.Except as Except
-import qualified Data.Text            as Text
-import qualified Grace.Interpret      as Interpret
-import qualified Grace.Monotype       as Monotype
-import qualified Grace.Syntax         as Syntax
-import qualified Grace.Type           as Type
-import qualified Grace.Value          as Value
-import qualified System.Directory     as Directory
-import qualified System.Environment   as Environment
-import qualified Test.Tasty.HUnit     as Tasty.HUnit
+import qualified Data.Text as Text
+import qualified Grace.Interpret as Interpret
+import qualified Grace.Monotype as Monotype
+import qualified Grace.Syntax as Syntax
+import qualified Grace.Type as Type
+import qualified Grace.Value as Value
+import qualified System.Directory as Directory
+import qualified System.Environment as Environment
+import qualified Test.Tasty.HUnit as Tasty.HUnit
 
 interpret :: Input -> IO (Either InterpretError (Type Location, Value.Value))
 interpret input = Except.runExceptT (Interpret.interpret input)

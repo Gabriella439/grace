@@ -30,7 +30,6 @@ module Grace.Infer
     ( -- * Type inference
       typeOf
     , typeWith
-
       -- * Errors related to type inference
     , TypeInferenceError(..)
     ) where
@@ -55,19 +54,19 @@ import Grace.Syntax (Syntax(Syntax))
 import Grace.Type (Type(..))
 import Grace.Value (Value)
 
-import qualified Control.Monad       as Monad
+import qualified Control.Monad as Monad
 import qualified Control.Monad.State as State
-import qualified Data.Map            as Map
-import qualified Data.Sequence       as Seq
-import qualified Data.Text           as Text
-import qualified Grace.Context       as Context
-import qualified Grace.Domain        as Domain
-import qualified Grace.Location      as Location
-import qualified Grace.Monotype      as Monotype
+import qualified Data.Map as Map
+import qualified Data.Sequence as Seq
+import qualified Data.Text as Text
+import qualified Grace.Context as Context
+import qualified Grace.Domain as Domain
+import qualified Grace.Location as Location
+import qualified Grace.Monotype as Monotype
 import qualified Grace.Pretty
-import qualified Grace.Syntax        as Syntax
-import qualified Grace.Type          as Type
-import qualified Prettyprinter       as Pretty
+import qualified Grace.Syntax as Syntax
+import qualified Grace.Type as Type
+import qualified Prettyprinter as Pretty
 
 -- | Type-checking state
 data Status = Status

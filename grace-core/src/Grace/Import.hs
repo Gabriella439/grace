@@ -1,18 +1,17 @@
-{-# LANGUAGE BlockArguments #-}
-{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE BlockArguments     #-}
+{-# LANGUAGE DataKinds          #-}
 {-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE FlexibleContexts   #-}
+{-# LANGUAGE LambdaCase         #-}
+{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE QuasiQuotes        #-}
+{-# LANGUAGE RecordWildCards    #-}
+{-# LANGUAGE ViewPatterns       #-}
 
 -- | This module contains the import resolution logic
 module Grace.Import
     ( -- * Import resolution
       resolve
-
       -- * Exceptions
     , EnvResolverError(..)
     , FileResolverError(..)
@@ -30,12 +29,12 @@ import System.FilePath ((</>))
 import Text.URI (Authority)
 
 import qualified Data.List.NonEmpty as NonEmpty
-import qualified Data.Text          as Text
-import qualified Data.Text.IO       as Text.IO
-import qualified Grace.Parser       as Parser
+import qualified Data.Text as Text
+import qualified Data.Text.IO as Text.IO
+import qualified Grace.Parser as Parser
 import qualified System.Environment as Environment
-import qualified Text.URI           as URI
-import qualified Text.URI.QQ        as URI.QQ
+import qualified Text.URI as URI
+import qualified Text.URI.QQ as URI.QQ
 
 -- | Resolve an `Input` by returning the source code that it represents
 resolve :: Input -> IO (Syntax Location Input)

@@ -13,7 +13,6 @@ module Grace.Interpret
       Input(..)
     , interpret
     , interpretWith
-
       -- * Errors related to interpretation
     , InterpretError(..)
     ) where
@@ -31,16 +30,16 @@ import Grace.Type (Type)
 import Grace.Value (Value)
 
 import qualified Control.Exception.Safe as Exception
-import qualified Control.Lens           as Lens
-import qualified Control.Monad.Except   as Except
-import qualified Data.Text              as Text
-import qualified Grace.Context          as Context
-import qualified Grace.Import           as Import
-import qualified Grace.Infer            as Infer
-import qualified Grace.Normalize        as Normalize
-import qualified Grace.Parser           as Parser
-import qualified Grace.Syntax           as Syntax
-import qualified Text.URI               as URI
+import qualified Control.Lens as Lens
+import qualified Control.Monad.Except as Except
+import qualified Data.Text as Text
+import qualified Grace.Context as Context
+import qualified Grace.Import as Import
+import qualified Grace.Infer as Infer
+import qualified Grace.Normalize as Normalize
+import qualified Grace.Parser as Parser
+import qualified Grace.Syntax as Syntax
+import qualified Text.URI as URI
 
 {-| Interpret Grace source code, return the inferred type and the evaluated
     result
