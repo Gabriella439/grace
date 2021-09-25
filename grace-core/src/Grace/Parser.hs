@@ -326,7 +326,7 @@ grammar = mdo
                 node = Syntax.Field l fieldOffset r
 
         record <- primitiveExpression
-        fields <- many (do token Lexer.Dot; l <- locatedRecordLabel; return l)
+        fields <- many (do token Lexer.Dot; locatedRecordLabel)
 
         return (foldl (field record) record fields)
 

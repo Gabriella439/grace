@@ -360,7 +360,7 @@ substituteFields ρ0 n r@(Fields kτs ρ1) Type{ node = old, .. } =
             | otherwise ->
                 Record (Fields (map (second (substituteFields ρ0 n r)) kAs0) ρ)
           where
-            kAs1 = kAs0 <> map (second (fmap (const location))) kτs
+            kAs1 = kAs0 <> map (second (fmap (\_ -> location))) kτs
         Union (Alternatives kAs ρ) ->
             Union (Alternatives (map (second (substituteFields ρ0 n r)) kAs) ρ)
         Scalar scalar ->
@@ -402,7 +402,7 @@ substituteAlternatives ρ0 n r@(Alternatives kτs ρ1) Type{ node = old, .. } =
             | otherwise ->
                 Union (Alternatives (map (second (substituteAlternatives ρ0 n r)) kAs0) ρ)
           where
-            kAs1 = kAs0 <> map (second (fmap (const location))) kτs
+            kAs1 = kAs0 <> map (second (fmap (\_ -> location))) kτs
         Scalar scalar ->
             Scalar scalar
 
