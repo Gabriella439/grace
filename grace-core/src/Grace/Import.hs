@@ -75,9 +75,9 @@ instance Pretty Input where
     pretty (Path path) = pretty path
     pretty (URI uri) = pretty uri
 
-{- | A resolver for an URI.
+{- | A resolver for a URI.
 
-     When the interpreter tries to resolve an URI pointing to some source code
+     When the interpreter tries to resolve a URI pointing to some source code
      it will try multiple resolvers sequentially and stops if one returns a
      @Just code@ value where @code@ is the source code of an expression.
      It will then try to parse and interpret that expression.
@@ -86,7 +86,7 @@ instance Pretty Input where
 
      * A resolver should handle exactly one URI scheme.
 
-     * If a resolver encounters an URI which it cannot process (e.g. a
+     * If a resolver encounters a URI which it cannot process (e.g. a
        @file://@ URI is passed to a HTTP resolver) it should return @Nothing@
        as fast as possible.
 
