@@ -25,6 +25,7 @@ import Grace.Location (Location(..))
 import Grace.Syntax (Node(..), Syntax(..))
 import Grace.Type (Type)
 import Grace.Value (Value)
+import Network.HTTP.Client (Manager)
 
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
@@ -35,6 +36,7 @@ import qualified Grace.Infer as Infer
 import qualified Grace.Normalize as Normalize
 import qualified Grace.Parser as Parser
 import qualified Grace.Syntax as Syntax
+import qualified Network.HTTP.Client.TLS as TLS
 
 {-| Interpret Grace source code, return the inferred type and the evaluated
     result
@@ -45,7 +47,10 @@ interpret
     :: (MonadError InterpretError m, MonadIO m)
     => Input
     -> m (Type Location, Value)
-interpret = interpretWith [] Nothing
+interpret input = do
+    manager <- TLS.newTlsManager
+
+    interpretWith [] Nothing manager input
 
 -- | Like `interpret`, but accepts a custom list of bindings
 interpretWith
@@ -54,13 +59,14 @@ interpretWith
     -- ^ @(name, type, value)@ for each custom binding
     -> Maybe (Type Location)
     -- ^ Optional expected type for the input
+    -> Manager
     -> Input
     -> m (Type Location, Value)
-interpretWith bindings maybeAnnotation input = do
+interpretWith bindings maybeAnnotation manager input = do
     eitherPartiallyResolved <- do
         liftIO
             (Exception.catches
-                (fmap Right (Import.resolve input))
+                (fmap Right (Import.resolve manager input))
                 [ Handler (\e -> return (Left (ParseError e)))
                 , Handler (\e -> return (Left (ImportError e)))
                 ]
@@ -71,7 +77,7 @@ interpretWith bindings maybeAnnotation input = do
         Right partiallyResolved -> return partiallyResolved
 
     let process (maybeAnnotation', child) = do
-            interpretWith bindings maybeAnnotation' (input <> child)
+            interpretWith bindings maybeAnnotation' manager (input <> child)
 
     resolvedExpression <- traverse process (annotate partiallyResolved)
 

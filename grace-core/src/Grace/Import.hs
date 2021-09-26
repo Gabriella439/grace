@@ -22,26 +22,52 @@ import Data.Foldable (foldl')
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.String.Interpolate (__i)
 import Data.Text (Text)
+import Data.Text.Encoding.Error (UnicodeException)
 import Grace.Input (Input(..))
 import Grace.Location (Location(..))
 import Grace.Syntax (Syntax)
+import Network.HTTP.Client (Manager)
 import System.FilePath ((</>))
 import Text.URI (Authority)
+import Text.URI.QQ (host, scheme)
 
 import qualified Control.Exception.Safe as Exception
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Text as Text
+import qualified Data.Text.Lazy as Text.Lazy
+import qualified Data.Text.Lazy.Encoding as Encoding
 import qualified Data.Text.IO as Text.IO
 import qualified Grace.Parser as Parser
+import qualified Network.HTTP.Client as HTTP
 import qualified System.Environment as Environment
 import qualified Text.URI as URI
-import qualified Text.URI.QQ as URI.QQ
 
 -- | Resolve an `Input` by returning the source code that it represents
-resolve :: Input -> IO (Syntax Location Input)
-resolve input = case input of
+resolve :: Manager -> Input -> IO (Syntax Location Input)
+resolve manager input = case input of
     URI uri
-        | URI.uriScheme uri == Just [URI.QQ.scheme|env|]
+        | any (`elem` [ [scheme|http|], [scheme|https|] ]) (URI.uriScheme uri) -> do
+            let name = URI.renderStr uri
+
+            request <- HTTP.parseUrlThrow name
+
+            response <- HTTP.httpLbs request manager
+
+            let lazyBytes = HTTP.responseBody response
+
+            code <- case Encoding.decodeUtf8' lazyBytes of
+                Left exception -> throw (NotUTF8 exception)
+                Right lazyText -> return (Text.Lazy.toStrict lazyText)
+
+            result <- case Parser.parse name code of
+                Left e -> Exception.throw e
+                Right result -> return result
+
+            let locate offset = Location{..}
+
+            return (first locate result)
+
+        | URI.uriScheme uri == Just [scheme|env|]
         , all (== emptyAuthority) (URI.uriAuthority uri) -> do
             var <- case URI.uriPath uri of
                 Nothing -> throw MissingEnvironmentVariableName
@@ -62,7 +88,7 @@ resolve input = case input of
 
             return (first locate result)
 
-        | URI.uriScheme uri == Just [URI.QQ.scheme|file|]
+        | URI.uriScheme uri == Just [scheme|file|]
         , all (== emptyAuthority) (URI.uriAuthority uri) -> do
             pieces <- case URI.uriPath uri of
                 Nothing -> throw MissingFile
@@ -104,7 +130,7 @@ resolve input = case input of
 emptyAuthority :: Authority
 emptyAuthority = URI.Authority
     { URI.authUserInfo = Nothing
-    , URI.authHost = [URI.QQ.host||]
+    , URI.authHost = [host||]
     , URI.authPort = Nothing
     }
 
@@ -114,6 +140,7 @@ data ResolutionError
     | MissingEnvironmentVariableName
     | MissingEnvironmentVariable
     | MissingFile
+    | NotUTF8 UnicodeException
     deriving stock (Eq, Show)
 
 data ImportError = ImportError
@@ -142,3 +169,9 @@ instance Exception ImportError where
                 "Missing environment variable"
             MissingFile ->
                 "Missing file"
+            NotUTF8 exception ->
+                [__i|
+                Not UTF8
+
+                #{Exception.displayException exception}
+                |]

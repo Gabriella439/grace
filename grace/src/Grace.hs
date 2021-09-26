@@ -39,6 +39,7 @@ import qualified Grace.Repl as Repl
 import qualified Grace.Syntax as Syntax
 import qualified Grace.Type as Type
 import qualified Grace.Value as Value
+import qualified Network.HTTP.Client.TLS as TLS
 import qualified Options.Applicative as Options
 import qualified Prettyprinter as Pretty
 import qualified System.Console.ANSI as ANSI
@@ -219,8 +220,10 @@ main = do
 
             let expected = Type{ node = Type.Scalar Monotype.Text, .. }
 
+            manager <- TLS.newTlsManager
+
             eitherResult <- do
-                Except.runExceptT (Interpret.interpretWith [] (Just expected) input)
+                Except.runExceptT (Interpret.interpretWith [] (Just expected) manager input)
 
             (_, value) <- throws eitherResult
 

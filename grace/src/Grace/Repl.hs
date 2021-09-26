@@ -9,22 +9,17 @@ module Grace.Repl
       repl
     ) where
 
-import Control.Exception.Safe (MonadCatch, displayException)
-import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.State (MonadState(..), StateT)
+import Control.Exception.Safe (displayException)
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.State (MonadState(..))
 import Data.Foldable (toList)
-import Data.Text (Text, pack, strip, unpack)
+import Data.Text (pack, strip, unpack)
 import Grace.Interpret (Input(..))
 import Grace.Lexer (reserved)
-import Grace.Location (Location)
-import Grace.Type (Type)
-import Grace.Value (Value)
 
 import System.Console.Repline
-    ( Cmd
-    , CompleterStyle(..)
+    ( CompleterStyle(..)
     , MultiLine(..)
-    , Options
     , ReplOpts(..)
     )
 
@@ -34,97 +29,94 @@ import qualified Data.Text.IO as Text.IO
 import qualified Grace.Interpret as Interpret
 import qualified Grace.Normalize as Normalize
 import qualified Grace.Pretty as Pretty
+import qualified Network.HTTP.Client.TLS as TLS
 import qualified System.Console.Repline as Repline
 import qualified System.IO as IO
 
 -- | Entrypoint for the @grace repl@ subcommand
 repl :: IO ()
-repl = State.evalStateT action []
-  where
-    action =
-      Repline.evalReplOpts ReplOpts
-        { banner = prompt
-        , command = interpret
-        , options = commands
-        , prefix = Just ':'
-        , multilineCommand = Just "paste"
-        , tabComplete = complete
-        , initialiser = return ()
-        , finaliser = return Repline.Exit
-        }
+repl = do
+    manager <- TLS.newTlsManager
 
-prompt :: Monad m => MultiLine -> m String
-prompt MultiLine  = return "... "
-prompt SingleLine = return ">>> "
+    let prompt MultiLine  = return "... "
+        prompt SingleLine = return ">>> "
 
-type Status = [(Text, Type Location, Value)]
+    let interpret string = do
+            let input = Code "(input)" (pack string)
 
-commands :: (MonadCatch m, MonadIO m, MonadState Status m) => Options m
-commands =
-    [ ("let", Repline.dontCrash . assignment)
-    , ("type", Repline.dontCrash . infer)
-    ]
+            context <- get
+            eitherResult <- Except.runExceptT (Interpret.interpretWith context Nothing manager input)
 
-interpret :: (MonadIO m, MonadState Status m) => Cmd m
-interpret string = do
-    let input = Code "(input)" (pack string)
+            case eitherResult of
+                Left e -> liftIO (Text.IO.hPutStrLn IO.stderr (pack (displayException e)))
+                Right (_inferred, value) -> do
+                    let syntax = Normalize.quote [] value
 
-    context <- get
-    eitherResult <- Except.runExceptT (Interpret.interpretWith context Nothing input)
+                    width <- liftIO Pretty.getWidth
 
-    case eitherResult of
-        Left e -> liftIO (Text.IO.hPutStrLn IO.stderr (pack (displayException e)))
-        Right (_inferred, value) -> do
-            let syntax = Normalize.quote [] value
+                    liftIO (Pretty.renderIO True width IO.stdout (Pretty.pretty syntax <> "\n"))
 
-            width <- liftIO Pretty.getWidth
-            liftIO (Pretty.renderIO True width IO.stdout (Pretty.pretty syntax <> "\n"))
+    let assignment string
+            | (var, '=' : expr) <- break (== '=') string
+            = do
+              let input = Code "(input)" (pack expr)
 
-assignment :: (MonadIO m, MonadState Status m) => Cmd m
-assignment string
-    | (var, '=' : expr) <- break (== '=') string
-    = do
-      let input = Code "(input)" (pack expr)
+              let variable = strip (pack var)
 
-      let variable = strip (pack var)
+              context <- get
 
-      context <- get
+              eitherResult <- do
+                  Except.runExceptT (Interpret.interpretWith context Nothing manager input)
 
-      eitherResult <- do
-          Except.runExceptT (Interpret.interpretWith context Nothing input)
+              case eitherResult of
+                  Left e -> liftIO (Text.IO.hPutStrLn IO.stderr (pack (displayException e)))
+                  Right (type_, value) -> State.modify ((variable, type_, value) :)
 
-      case eitherResult of
-          Left e -> liftIO (Text.IO.hPutStrLn IO.stderr (pack (displayException e)))
-          Right (type_, value) -> State.modify ((variable, type_, value) :)
+            | otherwise
+            = liftIO (putStrLn "usage: let = {expression}")
 
-    | otherwise
-    = liftIO (putStrLn "usage: let = {expression}")
+    let infer expr = do
+            let input = Code "(input)" (pack expr)
 
-infer :: (MonadIO m, MonadState Status m) => Cmd m
-infer expr = do
-    let input = Code "(input)" (pack expr)
+            context <- get
 
-    context <- get
+            eitherResult <- do
+                Except.runExceptT (Interpret.interpretWith context Nothing manager input)
 
-    eitherResult <- do
-        Except.runExceptT (Interpret.interpretWith context Nothing input)
+            case eitherResult of
+                Left e -> do
+                    liftIO (Text.IO.hPutStrLn IO.stderr (pack (displayException e)))
 
-    case eitherResult of
-        Left e -> do
-            liftIO (Text.IO.hPutStrLn IO.stderr (pack (displayException e)))
+                Right (type_, _) -> do
+                    width <- liftIO Pretty.getWidth
 
-        Right (type_, _) -> do
-            width <- liftIO Pretty.getWidth
+                    liftIO (Pretty.renderIO True width IO.stdout (Pretty.pretty type_ <> "\n"))
 
-            liftIO (Pretty.renderIO True width IO.stdout (Pretty.pretty type_ <> "\n"))
+    let commands =
+            [ ("let", Repline.dontCrash . assignment)
+            , ("type", Repline.dontCrash . infer)
+            ]
 
-complete :: Monad m => CompleterStyle m
-complete =
-    Custom (Repline.runMatcher [ (":", completeCommands) ] completeIdentifiers)
-  where
-    completeCommands =
-        Repline.listCompleter (fmap adapt (commands @(StateT Status IO)))
-      where
-        adapt (c, _) = ":" <> c
+    let complete =
+            Custom (Repline.runMatcher [ (":", completeCommands) ] completeIdentifiers)
+          where
+            completeCommands =
+                Repline.listCompleter (fmap adapt commands)
+              where
+                adapt (c, _) = ":" <> c
 
-    completeIdentifiers = Repline.listCompleter (fmap unpack (toList reserved))
+            completeIdentifiers = Repline.listCompleter (fmap unpack (toList reserved))
+
+    let action =
+            Repline.evalReplOpts ReplOpts
+                { banner = prompt
+                , command = interpret
+                , options = commands
+                , prefix = Just ':'
+                , multilineCommand = Just "paste"
+                , tabComplete = complete
+                , initialiser = return ()
+                , finaliser = return Repline.Exit
+                }
+
+    State.evalStateT action []

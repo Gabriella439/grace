@@ -227,9 +227,14 @@ uri :: Parser Token
 uri = (lexeme . try) do
     u <- URI.parser
 
-    let validScheme s = s `elem` [ [scheme|env|], [scheme|file|] ]
+    let schemes =
+            [ [scheme|https|]
+            , [scheme|http|]
+            , [scheme|env|]
+            , [scheme|file|]
+            ]
 
-    if any validScheme (URI.uriScheme u)
+    if any (`elem` schemes) (URI.uriScheme u)
         then return (URI u)
         else fail "Unsupported Grace URI"
 
