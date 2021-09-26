@@ -1,8 +1,6 @@
-{-# LANGUAGE BlockArguments     #-}
 {-# LANGUAGE DataKinds          #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts   #-}
-{-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE QuasiQuotes        #-}
 {-# LANGUAGE RecordWildCards    #-}
 {-# LANGUAGE TypeApplications   #-}
@@ -17,11 +15,10 @@ module Grace.Interpret
     , InterpretError(..)
     ) where
 
-import Control.Exception.Safe (Exception(..), Handler(..), SomeException)
+import Control.Exception.Safe (Exception(..), Handler(..))
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Generics.Product (the)
-import Data.String.Interpolate (__i)
 import Data.Text (Text)
 import Grace.Input (Input(..))
 import Grace.Location (Location(..))
@@ -32,14 +29,12 @@ import Grace.Value (Value)
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
 import qualified Control.Monad.Except as Except
-import qualified Data.Text as Text
 import qualified Grace.Context as Context
 import qualified Grace.Import as Import
 import qualified Grace.Infer as Infer
 import qualified Grace.Normalize as Normalize
 import qualified Grace.Parser as Parser
 import qualified Grace.Syntax as Syntax
-import qualified Text.URI as URI
 
 {-| Interpret Grace source code, return the inferred type and the evaluated
     result
@@ -67,7 +62,7 @@ interpretWith bindings maybeAnnotation input = do
             (Exception.catches
                 (fmap Right (Import.resolve input))
                 [ Handler (\e -> return (Left (ParseError e)))
-                , Handler (\e -> return (Left (ImportError input (displayException (e :: SomeException)))))
+                , Handler (\e -> return (Left (ImportError e)))
                 ]
             )
 
@@ -143,21 +138,12 @@ annotate = Lens.transform transformSyntax . fmap ((,) Nothing)
 
 -- | Errors related to interpretation of an expression
 data InterpretError
-    = ImportError Input String
+    = ImportError Import.ImportError
     | ParseError Parser.ParseError
     | TypeInferenceError Infer.TypeInferenceError
     deriving stock (Eq, Show)
 
 instance Exception InterpretError where
-    displayException (ImportError input e) =
-        Text.unpack [__i|
-        #{renderInput}
-        #{e}
-        |]
-      where
-        renderInput = case input of
-            URI  uri  -> URI.render uri
-            Path path -> Text.pack path
-            Code _ _  -> "(input)"
+    displayException (ImportError e) = displayException e
     displayException (ParseError e) = displayException e
     displayException (TypeInferenceError e) = displayException e
