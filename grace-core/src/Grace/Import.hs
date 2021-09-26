@@ -13,14 +13,15 @@ module Grace.Import
     ( -- * Import resolution
       resolve
       -- * Exceptions
-    , EnvResolverError(..)
-    , FileResolverError(..)
+    , ResolutionError(..)
+    , ImportError(..)
     ) where
 
-import Control.Exception.Safe (Exception(..), throw)
+import Control.Exception.Safe (Exception(..))
 import Data.Bifunctor (first)
 import Data.Foldable (foldl')
 import Data.List.NonEmpty (NonEmpty(..))
+import Data.String.Interpolate (__i)
 import Data.Text (Text)
 import Grace.Input (Input(..))
 import Grace.Location (Location(..))
@@ -28,6 +29,7 @@ import Grace.Syntax (Syntax)
 import System.FilePath ((</>))
 import Text.URI (Authority)
 
+import qualified Control.Exception.Safe as Exception
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text.IO
@@ -41,22 +43,22 @@ resolve :: Input -> IO (Syntax Location Input)
 resolve input = case input of
     URI uri@URI.URI{ URI.uriScheme = Just (URI.unRText -> "env") } -> do
         case URI.uriAuthority uri of
-            Right auth | auth /= emptyAuthority -> throw EnvInvalidURI
+            Right auth | auth /= emptyAuthority -> throw InvalidURI
             _ -> return ()
 
         var <- case URI.uriPath uri of
-            Nothing -> throw EnvMissingVarName
+            Nothing -> throw MissingEnvironmentVariableName
             Just (False, var :| []) -> return (URI.unRText var)
-            _ -> throw EnvInvalidURI
+            _ -> throw InvalidURI
 
         code <- Environment.lookupEnv (Text.unpack var) >>= \case
-            Nothing -> throw (EnvVarNotFound var)
+            Nothing -> throw MissingEnvironmentVariable
             Just string -> return (Text.pack string)
 
         let name = "env:" <> Text.unpack var
 
         result <- case Parser.parse name code of
-            Left e -> throw e
+            Left e -> Exception.throw e
             Right result -> return result
 
         let locate offset = Location{..}
@@ -65,11 +67,13 @@ resolve input = case input of
 
     URI uri@URI.URI{ URI.uriScheme = Just (URI.unRText -> "file") } -> do
         case URI.uriAuthority uri of
-            Right auth | auth /= emptyAuthority -> throw FileInvalidURI
-            _ -> return ()
+            Right auth | auth /= emptyAuthority ->
+                throw InvalidURI
+            _ ->
+                return ()
 
         pieces <- case URI.uriPath uri of
-            Nothing -> throw FileMissingPath
+            Nothing -> throw MissingFile
             Just (_, pieces) -> return pieces
 
         let pathPiecesToFilePath =
@@ -78,14 +82,14 @@ resolve input = case input of
         readPath (pathPiecesToFilePath pieces)
 
     URI _ -> do
-       throw FileInvalidURI
+       throw InvalidURI
 
     Path path -> do
         readPath path
 
     Code name code -> do
         result <- case Parser.parse name code of
-            Left e -> throw e
+            Left e -> Exception.throw e
             Right result -> return result
 
         let locate offset = Location{..}
@@ -96,34 +100,14 @@ resolve input = case input of
         code <- Text.IO.readFile path
 
         result <- case Parser.parse path code of
-            Left e -> throw e
+            Left e -> Exception.throw e
             Right result -> return result
 
         let locate offset = Location{ name = path, ..}
 
         return (first locate result)
 
--- | Errors raised by @env:@ imports
-data EnvResolverError
-    = EnvInvalidURI
-    | EnvMissingVarName
-    | EnvVarNotFound Text
-    deriving stock Show
-
-instance Exception EnvResolverError where
-    displayException EnvInvalidURI = "Invalid URI"
-    displayException EnvMissingVarName = "Environment variable name is missing"
-    displayException (EnvVarNotFound k) = Text.unpack ("Environment variable not found: " <> k)
-
--- | Errors raised by @file:@ imports
-data FileResolverError
-    = FileInvalidURI
-    | FileMissingPath
-    deriving stock Show
-
-instance Exception FileResolverError where
-    displayException FileInvalidURI = "Invalid URI"
-    displayException FileMissingPath = "Filepath is missing"
+    throw e = Exception.throw (ImportError input e)
 
 emptyAuthority :: Authority
 emptyAuthority = URI.Authority
@@ -131,3 +115,38 @@ emptyAuthority = URI.Authority
     , URI.authHost = [URI.QQ.host||]
     , URI.authPort = Nothing
     }
+
+-- | The base error for `ImportError` (without the @input@ information)
+data ResolutionError
+    = InvalidURI
+    | MissingEnvironmentVariableName
+    | MissingEnvironmentVariable
+    | MissingFile
+    deriving stock (Eq, Show)
+
+data ImportError = ImportError
+    { input :: Input
+    , resolutionError :: ResolutionError
+    } deriving stock (Eq, Show)
+
+instance Exception ImportError where
+    displayException ImportError{..} =
+        Text.unpack [__i|
+        #{renderedInput}: #{renderedError}
+        |]
+      where
+        renderedInput = case input of
+            URI  uri  -> URI.render uri
+            Path path -> Text.pack path
+            Code _ _  -> "(input)"
+
+        renderedError :: Text
+        renderedError = case resolutionError of
+            InvalidURI ->
+                "Invalid URI"
+            MissingEnvironmentVariableName ->
+                "Missing environment variable name"
+            MissingEnvironmentVariable ->
+                "Missing environment variable"
+            MissingFile ->
+                "Missing file"
