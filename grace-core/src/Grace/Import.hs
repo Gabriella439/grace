@@ -26,19 +26,26 @@ import Data.Text.Encoding.Error (UnicodeException)
 import Grace.Input (Input(..))
 import Grace.Location (Location(..))
 import Grace.Syntax (Syntax)
-import Network.HTTP.Client (Manager)
 import System.FilePath ((</>))
 import Text.URI (Authority)
 import Text.URI.QQ (host, scheme)
+
+import Network.HTTP.Client
+    ( HttpException(..)
+    , HttpExceptionContent(..)
+    , Manager
+    )
 
 import qualified Control.Exception.Safe as Exception
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as Text.Lazy
-import qualified Data.Text.Lazy.Encoding as Encoding
+import qualified Data.Text.Encoding as Encoding
+import qualified Data.Text.Lazy.Encoding as Lazy.Encoding
 import qualified Data.Text.IO as Text.IO
 import qualified Grace.Parser as Parser
 import qualified Network.HTTP.Client as HTTP
+import qualified Network.HTTP.Types as HTTP.Types
 import qualified System.Environment as Environment
 import qualified Text.URI as URI
 
@@ -51,11 +58,13 @@ resolve manager input = case input of
 
             request <- HTTP.parseUrlThrow name
 
-            response <- HTTP.httpLbs request manager
+            let handler e = throw (HTTPError e)
+
+            response <- Exception.handle handler (HTTP.httpLbs request manager)
 
             let lazyBytes = HTTP.responseBody response
 
-            code <- case Encoding.decodeUtf8' lazyBytes of
+            code <- case Lazy.Encoding.decodeUtf8' lazyBytes of
                 Left exception -> throw (NotUTF8 exception)
                 Right lazyText -> return (Text.Lazy.toStrict lazyText)
 
@@ -67,37 +76,47 @@ resolve manager input = case input of
 
             return (first locate result)
 
-        | URI.uriScheme uri == Just [scheme|env|]
-        , all (== emptyAuthority) (URI.uriAuthority uri) -> do
-            var <- case URI.uriPath uri of
-                Nothing -> throw MissingEnvironmentVariableName
-                Just (False, var :| []) -> return (URI.unRText var)
-                _ -> throw InvalidURI
+        | URI.uriScheme uri == Just [scheme|env|] -> do
+            case URI.uriAuthority uri of
+                Left False -> do
+                    var <- case URI.uriPath uri of
+                        Nothing -> throw MissingPath
+                        Just (False, var :| []) -> return (URI.unRText var)
+                        _ -> throw UnsupportedPathSeparators
 
-            code <- Environment.lookupEnv (Text.unpack var) >>= \case
-                Nothing -> throw MissingEnvironmentVariable
-                Just string -> return (Text.pack string)
+                    maybeCode <- Environment.lookupEnv (Text.unpack var)
 
-            let name = "env:" <> Text.unpack var
+                    code <- case maybeCode of
+                        Nothing -> throw MissingEnvironmentVariable
+                        Just string -> return (Text.pack string)
 
-            result <- case Parser.parse name code of
-                Left e -> Exception.throw e
-                Right result -> return result
+                    let name = "env:" <> Text.unpack var
 
-            let locate offset = Location{..}
+                    result <- case Parser.parse name code of
+                        Left e -> Exception.throw e
+                        Right result -> return result
 
-            return (first locate result)
+                    let locate offset = Location{..}
 
-        | URI.uriScheme uri == Just [scheme|file|]
-        , all (== emptyAuthority) (URI.uriAuthority uri) -> do
-            pieces <- case URI.uriPath uri of
-                Nothing -> throw MissingFile
-                Just (_, pieces) -> return pieces
+                    return (first locate result)
+                Left True -> do
+                    throw UnsupportedPathSeparators
+                Right _ -> do
+                    throw UnsupportedAuthority
 
-            let pathPiecesToFilePath =
-                    foldl' (</>) "/" . map (Text.unpack . URI.unRText) . NonEmpty.toList
+        | URI.uriScheme uri == Just [scheme|file|] -> do
+            if all (== emptyAuthority) (URI.uriAuthority uri)
+                then do
+                    pieces <- case URI.uriPath uri of
+                        Nothing -> throw MissingPath
+                        Just (_, pieces) -> return pieces
 
-            readPath (pathPiecesToFilePath pieces)
+                    let pathPiecesToFilePath =
+                            foldl' (</>) "/" . map (Text.unpack . URI.unRText) . NonEmpty.toList
+
+                    readPath (pathPiecesToFilePath pieces)
+                else do
+                    throw UnsupportedAuthority
 
         | otherwise -> do
             throw InvalidURI
@@ -136,17 +155,19 @@ emptyAuthority = URI.Authority
 
 -- | The base error for `ImportError` (without the @input@ information)
 data ResolutionError
-    = InvalidURI
-    | MissingEnvironmentVariableName
+    = HTTPError HttpException
+    | InvalidURI
     | MissingEnvironmentVariable
-    | MissingFile
+    | MissingPath
+    | UnsupportedPathSeparators
     | NotUTF8 UnicodeException
-    deriving stock (Eq, Show)
+    | UnsupportedAuthority
+    deriving stock (Show)
 
 data ImportError = ImportError
     { input :: Input
     , resolutionError :: ResolutionError
-    } deriving stock (Eq, Show)
+    } deriving stock (Show)
 
 instance Exception ImportError where
     displayException ImportError{..} =
@@ -161,17 +182,91 @@ instance Exception ImportError where
 
         renderedError :: Text
         renderedError = case resolutionError of
+            HTTPError (InvalidUrlException _ _) ->
+                "Invalid URL"
+
+            HTTPError httpException@(HttpExceptionRequest _ e) -> case e of
+                ConnectionFailure _ ->
+                    "Remote host not found"
+                InvalidDestinationHost _ ->
+                    "Invalid remote host name"
+                ResponseTimeout ->
+                    "The remote host took too long to respond"
+                ConnectionTimeout ->
+                    "Connection establishment took too long"
+                StatusCodeException response body -> prefix <> suffix
+                  where
+                    statusCode =
+                        HTTP.Types.statusCode (HTTP.responseStatus response)
+
+                    prefix =
+                        case statusCode of
+                            401 -> "Access unauthorized"
+                            403 -> "Access forbidden"
+                            404 -> "Remote file not found"
+                            500 -> "Server-side failure"
+                            502 -> "Upstream failure"
+                            503 -> "Server temporarily unavailable"
+                            504 -> "Upstream timeout"
+                            _   -> "HTTP request failure"
+
+                    suffix =
+                            "\n\n"
+                        <>  [__i|
+                            HTTP status code: #{statusCode}#{responseBody}
+                            |]
+
+                    responseBody :: Text
+                    responseBody =
+                        case Encoding.decodeUtf8' body of
+                            Left _ ->
+                                    "\n\n"
+                                <>  [__i|
+                                    Response body (non-UTF8 bytes):
+
+                                    #{body}
+                                    |]
+                            Right "" ->
+                                ""
+                            Right bodyText ->
+                                    "\n\n"
+                                <>  [__i|
+                                    Response body:
+
+                                    #{prefixedText}
+                                    |]
+                              where
+                                prefixedLines =
+                                        zipWith combine prefixes
+                                            (Text.lines bodyText)
+                                    <>  [ "…│ …" ]
+                                  where
+                                    prefixes = [(1 :: Int)..7]
+
+                                    combine n line =
+                                        Text.pack (show n) <> "│ " <> line
+
+                                prefixedText = Text.unlines prefixedLines
+                _ ->
+                   [__i|
+                   HTTP request failure
+
+                   #{displayException httpException}
+                   |]
+
             InvalidURI ->
                 "Invalid URI"
-            MissingEnvironmentVariableName ->
-                "Missing environment variable name"
             MissingEnvironmentVariable ->
                 "Missing environment variable"
-            MissingFile ->
-                "Missing file"
+            MissingPath ->
+                "Missing path"
+            UnsupportedPathSeparators ->
+                "Unsupported path separators"
             NotUTF8 exception ->
                 [__i|
                 Not UTF8
 
                 #{Exception.displayException exception}
                 |]
+            UnsupportedAuthority ->
+                "Unsupported authority"

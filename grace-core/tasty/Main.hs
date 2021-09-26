@@ -5,6 +5,7 @@
 module Main
     where
 
+import Control.Exception.Safe (Exception)
 import Data.Text (Text)
 import Grace.Interpret (Input(..), InterpretError)
 import Grace.Location (Location(..))
@@ -38,6 +39,14 @@ pretty_ x =
 
 interpret :: Input -> IO (Either InterpretError (Type Location, Value.Value))
 interpret input = Except.runExceptT (Interpret.interpret input)
+
+throws :: Exception e => IO (Either e a) -> IO a
+throws io = do
+    result <- io
+
+    case result of
+        Left  e -> Exception.throw e
+        Right a -> return a
 
 fileToTestTree :: FilePath -> IO TestTree
 fileToTestTree prefix = do
@@ -134,10 +143,10 @@ main = do
 
 interpretCode :: TestTree
 interpretCode = Tasty.HUnit.testCase "interpret code" do
-    actualValue <- interpret (Code "(input)" "2 + 2")
+    actualValue <- throws (interpret (Code "(input)" "2 + 2"))
 
     let expectedValue =
-            Right (Type{ location, node }, Value.Scalar (Syntax.Natural 4))
+            (Type{ location, node }, Value.Scalar (Syntax.Natural 4))
           where
             location = Location{ name = "(input)", code = "2 + 2", offset = 0 }
 
@@ -147,10 +156,10 @@ interpretCode = Tasty.HUnit.testCase "interpret code" do
 
 interpretCodeWithImport :: TestTree
 interpretCodeWithImport = Tasty.HUnit.testCase "interpret code with import from file" do
-    actualValue <- interpret (Code "(input)" "./tasty/data/unit/plus-input.ffg")
+    actualValue <- throws (interpret (Code "(input)" "./tasty/data/unit/plus-input.ffg"))
 
     let expectedValue =
-            Right (Type{ location, node }, Value.Scalar (Syntax.Natural 5))
+            (Type{ location, node }, Value.Scalar (Syntax.Natural 5))
           where
             location = Location{ name = "tasty/data/unit/plus-input.ffg", code = "2 + 3\n", offset = 0 }
 
@@ -175,10 +184,10 @@ interpretCodeWithEnvURI = Tasty.HUnit.testCase "interpret code with env: import"
         close (Just v ) = Environment.setEnv key v
 
     actualValue <- Exception.bracket open close \_ -> do
-        interpret (Code "(input)" (Text.pack name))
+        throws (interpret (Code "(input)" (Text.pack name)))
 
     let expectedValue =
-            Right (Type{ location, node }, Value.Scalar (Syntax.Bool True))
+            (Type{ location, node }, Value.Scalar (Syntax.Bool True))
           where
             location = Location{ name, code = "true", offset = 0 }
 
@@ -192,10 +201,10 @@ interpretCodeWithFileURI = Tasty.HUnit.testCase "interpret code with file:// imp
 
     let uri = "file://" <> absolute
 
-    actualValue <- interpret (Code "(input)" (Text.pack uri))
+    actualValue <- throws (interpret (Code "(input)" (Text.pack uri)))
 
     let expectedValue =
-            Right (Type{ location, node }, Value.Scalar (Syntax.Bool True))
+            (Type{ location, node }, Value.Scalar (Syntax.Bool True))
           where
             location = Location{ name = absolute, code = "true\n", offset = 0 }
 

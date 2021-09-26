@@ -147,7 +147,7 @@ data InterpretError
     = ImportError Import.ImportError
     | ParseError Parser.ParseError
     | TypeInferenceError Infer.TypeInferenceError
-    deriving stock (Eq, Show)
+    deriving stock (Show)
 
 instance Exception InterpretError where
     displayException (ImportError e) = displayException e
