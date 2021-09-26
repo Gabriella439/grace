@@ -107,7 +107,14 @@ repl = do
               where
                 adapt (c, _) = ":" <> c
 
-            completeIdentifiers = Repline.listCompleter (fmap unpack (toList reserved))
+            completeIdentifiers args = do
+                context <- get
+
+                let completions =
+                            toList reserved
+                        <>  fmap (\(name, _, _) -> name) context
+
+                Repline.listCompleter (fmap unpack completions) args
 
     let banner MultiLine  = return "... "
         banner SingleLine = return ">>> "
