@@ -10,7 +10,6 @@ import Data.Text (Text)
 import Grace.Interpret (Input(..), InterpretError)
 import Grace.Location (Location(..))
 import Grace.Pretty (Pretty(..))
-import Grace.Test.Resolver
 import Grace.Type (Type(..))
 import System.FilePath ((</>))
 import Test.Tasty (TestTree)
@@ -26,6 +25,7 @@ import qualified Grace.Type as Type
 import qualified Grace.Value as Value
 import qualified Prettyprinter as Pretty
 import qualified System.Directory as Directory
+import qualified System.Environment as Environment
 import qualified System.FilePath as FilePath
 import qualified Test.Tasty as Tasty
 import qualified Test.Tasty.HUnit as Tasty.HUnit
@@ -155,5 +155,39 @@ interpretCodeWithImport = Tasty.HUnit.testCase "interpret code with import from 
             location = Location{ name = "tasty/data/unit/plus-input.ffg", code = "2 + 3\n", offset = 0 }
 
             node = Type.Scalar Monotype.Natural
+
+    Tasty.HUnit.assertEqual "" expectedValue actualValue
+
+interpretCodeWithEnvURI :: TestTree
+interpretCodeWithEnvURI = Tasty.HUnit.testCase "interpret code with env: import" do
+    let uri = "env:GRACE_TEST_VAR"
+
+    Environment.setEnv "GRACE_TEST_VAR" "true"
+    actualValue <- interpret (Code "(input)" (Text.pack uri))
+    Environment.unsetEnv "GRACE_TEST_VAR"
+
+    let expectedValue =
+            Right (Type{ location, node }, Value.Scalar (Syntax.Bool True))
+          where
+            location = Location{ name = "env:GRACE_TEST_VAR", code = "true", offset = 0 }
+
+            node = Type.Scalar Monotype.Bool
+
+    Tasty.HUnit.assertEqual "" expectedValue actualValue
+
+interpretCodeWithFileURI :: TestTree
+interpretCodeWithFileURI = Tasty.HUnit.testCase "interpret code with file:// import" do
+    absolute <- Directory.makeAbsolute "./tasty/data/true.ffg"
+
+    let uri = "file://" <> absolute
+
+    actualValue <- interpret (Code "(input)" (Text.pack uri))
+
+    let expectedValue =
+            Right (Type{ location, node }, Value.Scalar (Syntax.Bool True))
+          where
+            location = Location{ name = absolute, code = "true\n", offset = 0 }
+
+            node = Type.Scalar Monotype.Bool
 
     Tasty.HUnit.assertEqual "" expectedValue actualValue

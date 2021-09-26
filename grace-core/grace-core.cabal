@@ -63,7 +63,6 @@ test-suite tasty
                      , tasty-hunit
                      , tasty-silver
                      , text
-  other-modules:       Grace.Test.Resolver
   hs-source-dirs:      tasty
   default-language:    Haskell2010
   ghc-options:         -Wall
