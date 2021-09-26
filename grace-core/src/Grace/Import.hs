@@ -6,7 +6,6 @@
 {-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE QuasiQuotes        #-}
 {-# LANGUAGE RecordWildCards    #-}
-{-# LANGUAGE ViewPatterns       #-}
 
 -- | This module contains the import resolution logic
 module Grace.Import
@@ -41,48 +40,41 @@ import qualified Text.URI.QQ as URI.QQ
 -- | Resolve an `Input` by returning the source code that it represents
 resolve :: Input -> IO (Syntax Location Input)
 resolve input = case input of
-    URI uri@URI.URI{ URI.uriScheme = Just (URI.unRText -> "env") } -> do
-        case URI.uriAuthority uri of
-            Right auth | auth /= emptyAuthority -> throw InvalidURI
-            _ -> return ()
+    URI uri
+        | URI.uriScheme uri == Just [URI.QQ.scheme|env|]
+        , all (== emptyAuthority) (URI.uriAuthority uri) -> do
+            var <- case URI.uriPath uri of
+                Nothing -> throw MissingEnvironmentVariableName
+                Just (False, var :| []) -> return (URI.unRText var)
+                _ -> throw InvalidURI
 
-        var <- case URI.uriPath uri of
-            Nothing -> throw MissingEnvironmentVariableName
-            Just (False, var :| []) -> return (URI.unRText var)
-            _ -> throw InvalidURI
+            code <- Environment.lookupEnv (Text.unpack var) >>= \case
+                Nothing -> throw MissingEnvironmentVariable
+                Just string -> return (Text.pack string)
 
-        code <- Environment.lookupEnv (Text.unpack var) >>= \case
-            Nothing -> throw MissingEnvironmentVariable
-            Just string -> return (Text.pack string)
+            let name = "env:" <> Text.unpack var
 
-        let name = "env:" <> Text.unpack var
+            result <- case Parser.parse name code of
+                Left e -> Exception.throw e
+                Right result -> return result
 
-        result <- case Parser.parse name code of
-            Left e -> Exception.throw e
-            Right result -> return result
+            let locate offset = Location{..}
 
-        let locate offset = Location{..}
+            return (first locate result)
 
-        return (first locate result)
+        | URI.uriScheme uri == Just [URI.QQ.scheme|file|]
+        , all (== emptyAuthority) (URI.uriAuthority uri) -> do
+            pieces <- case URI.uriPath uri of
+                Nothing -> throw MissingFile
+                Just (_, pieces) -> return pieces
 
-    URI uri@URI.URI{ URI.uriScheme = Just (URI.unRText -> "file") } -> do
-        case URI.uriAuthority uri of
-            Right auth | auth /= emptyAuthority ->
-                throw InvalidURI
-            _ ->
-                return ()
+            let pathPiecesToFilePath =
+                    foldl' (</>) "/" . map (Text.unpack . URI.unRText) . NonEmpty.toList
 
-        pieces <- case URI.uriPath uri of
-            Nothing -> throw MissingFile
-            Just (_, pieces) -> return pieces
+            readPath (pathPiecesToFilePath pieces)
 
-        let pathPiecesToFilePath =
-                foldl' (</>) "/" . map (Text.unpack . URI.unRText) . NonEmpty.toList
-
-        readPath (pathPiecesToFilePath pieces)
-
-    URI _ -> do
-       throw InvalidURI
+        | otherwise -> do
+            throw InvalidURI
 
     Path path -> do
         readPath path
