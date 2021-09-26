@@ -43,6 +43,7 @@ import Data.Void (Void)
 import Grace.Location (Location(..), Offset(..))
 import Prelude hiding (lex)
 import Text.Megaparsec (ParseErrorBundle(..), try, (<?>))
+import Text.URI.QQ (scheme)
 
 import qualified Control.Monad as Monad
 import qualified Control.Monad.Combinators as Combinators
@@ -223,20 +224,14 @@ file = lexeme do
     return (File (concatMap Text.unpack (prefix : List.intersperse "/" suffix)))
 
 uri :: Parser Token
-uri = do
-    x <- Megaparsec.lookAhead URI.parser
+uri = (lexeme . try) do
+    u <- URI.parser
 
-    let validScheme = case URI.uriScheme x of
-            Nothing -> False
-            _ -> True
+    let validScheme s = s `elem` [ [scheme|env|], [scheme|file|] ]
 
-    let validAuthority = case URI.uriAuthority x of
-            Left False -> False
-            _ -> True
-
-    if validScheme && validAuthority
-        then lexeme (URI <$> URI.parser)
-        else fail "Invalid Grace URI"
+    if any validScheme (URI.uriScheme u)
+        then return (URI u)
+        else fail "Unsupported Grace URI"
 
 text :: Parser Token
 text = lexeme do
