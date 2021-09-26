@@ -1,3 +1,4 @@
+{-# LANGUAGE BlockArguments    #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
@@ -9,11 +10,12 @@ module Grace.Repl
       repl
     ) where
 
+import Control.Applicative (empty)
 import Control.Exception.Safe (displayException)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.State (MonadState(..))
 import Data.Foldable (toList)
-import Data.Text (pack, strip, unpack)
+import Data.List.NonEmpty (NonEmpty(..))
 import Grace.Interpret (Input(..))
 import Grace.Lexer (reserved)
 
@@ -23,13 +25,17 @@ import System.Console.Repline
     , ReplOpts(..)
     )
 
+import qualified Control.Monad as Monad
 import qualified Control.Monad.Except as Except
 import qualified Control.Monad.State as State
+import qualified Data.Text as Text
 import qualified Data.Text.IO as Text.IO
 import qualified Grace.Interpret as Interpret
 import qualified Grace.Normalize as Normalize
 import qualified Grace.Pretty as Pretty
+import qualified Grace.Type as Type
 import qualified Network.HTTP.Client.TLS as TLS
+import qualified System.Console.Haskeline.Completion as Completion
 import qualified System.Console.Repline as Repline
 import qualified System.IO as IO
 
@@ -44,10 +50,10 @@ repl = do
             Except.runExceptT (Interpret.interpretWith context Nothing manager input)
 
     let err e =
-            liftIO (Text.IO.hPutStrLn IO.stderr (pack (displayException e)))
+            liftIO (Text.IO.hPutStrLn IO.stderr (Text.pack (displayException e)))
 
     let command string = do
-            let input = Code "(input)" (pack string)
+            let input = Code "(input)" (Text.pack string)
 
             eitherResult <- interpret input
 
@@ -64,9 +70,9 @@ repl = do
 
     let assignment string
             | (var, '=' : expr) <- break (== '=') string = do
-                let input = Code "(input)" (pack expr)
+                let input = Code "(input)" (Text.pack expr)
 
-                let variable = strip (pack var)
+                let variable = Text.strip (Text.pack var)
 
                 eitherResult <- interpret input
 
@@ -81,7 +87,7 @@ repl = do
                 liftIO (putStrLn "usage: let = {expression}")
 
     let infer expr = do
-            let input = Code "(input)" (pack expr)
+            let input = Code "(input)" (Text.pack expr)
 
             eitherResult <- interpret input
 
@@ -100,21 +106,73 @@ repl = do
             ]
 
     let tabComplete =
-            Custom (Repline.runMatcher [ (":", completeCommands) ] completeIdentifiers)
+            Custom (Repline.runMatcher [ (":", completeCommands) ] complete)
           where
             completeCommands =
                 Repline.listCompleter (fmap adapt options)
               where
                 adapt (c, _) = ":" <> c
 
+            complete =
+                foldr Repline.fallbackCompletion Completion.noCompletion
+                    [ completeReserved
+                    , completeIdentifiers
+                    , completeFields
+                    ]
+
+            completeReserved =
+                Repline.listCompleter (fmap Text.unpack (toList reserved))
+
             completeIdentifiers args = do
                 context <- get
 
                 let completions =
-                            toList reserved
-                        <>  fmap (\(name, _, _) -> name) context
+                        fmap (\(name, _, _) -> name) context
 
-                Repline.listCompleter (fmap unpack completions) args
+                Repline.listCompleter (fmap Text.unpack completions) args
+
+            completeFields =
+                Repline.wordCompleter \prefix -> do
+                    let toNonEmpty (x : xs) =  x :| xs
+                        toNonEmpty      []  = "" :| []
+
+                    let loop (c0 :| c1 : cs) context = do
+                            let newContext = do
+                                    (name, type_) <- context
+
+                                    Monad.guard (c0 == name)
+
+                                    case Type.node type_ of
+                                        Type.Record (Type.Fields keyTypes _) -> do
+                                            keyTypes
+                                        _ -> do
+                                            empty
+
+                            results <- loop (c1 :| cs) newContext
+
+                            let prepend result = c0 <> "." <> result
+
+                            return (fmap prepend results)
+                        loop (c0 :| []) context = return do
+                            (name, _) <- context
+
+                            Monad.guard (Text.isPrefixOf c0 name)
+
+                            return name
+
+                    let startingComponents =
+                            toNonEmpty (Text.splitOn "." (Text.pack prefix))
+
+                    context <- get
+
+                    let startingContext = do
+                            (name, type_, _) <- context
+
+                            return (name, type_)
+
+                    results <- loop startingComponents startingContext
+
+                    return (fmap Text.unpack results)
 
     let banner MultiLine  = return "... "
         banner SingleLine = return ">>> "

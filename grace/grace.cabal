@@ -13,6 +13,7 @@ library
   build-depends:       base
                      , ansi-terminal
                      , grace-core
+                     , haskeline
                      , http-client-tls
                      , mtl
                      , optparse-applicative
