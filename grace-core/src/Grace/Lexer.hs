@@ -32,7 +32,7 @@ module Grace.Lexer
     ) where
 
 import Control.Applicative (empty, (<|>))
-import Control.Exception (Exception(..))
+import Control.Exception.Safe (Exception(..))
 import Control.Monad.Combinators (many, manyTill, sepBy1)
 import Data.HashSet (HashSet)
 import Data.List.NonEmpty (NonEmpty(..))

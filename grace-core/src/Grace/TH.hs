@@ -14,7 +14,6 @@ module Grace.TH
     , typeOfInput
     ) where
 
-import Control.Exception (displayException)
 import Data.Functor (void)
 import Data.Text (Text)
 import Data.Void (Void)
@@ -24,6 +23,7 @@ import Grace.Type (Type)
 import Language.Haskell.TH.Quote (QuasiQuoter(..))
 import Language.Haskell.TH.Syntax (Lift, Q, TExp(..))
 
+import qualified Control.Exception.Safe as Exception
 import qualified Control.Monad.Except as Except
 import qualified Data.Text as Text
 import qualified Grace.Interpret as Interpret
@@ -93,12 +93,13 @@ typeOfInput = helperFunction fst
 
 -- Internal functions
 
-helperFunction :: Lift r => ((Type (), Syntax () Void) -> r) -> Input -> Q (TExp r)
+helperFunction
+    :: Lift r => ((Type (), Syntax () Void) -> r) -> Input -> Q (TExp r)
 helperFunction f input = do
     eitherResult <- Except.runExceptT (Interpret.interpret input)
 
     (inferred, value) <- case eitherResult of
-        Left e -> fail (displayException e)
+        Left e -> fail (Exception.displayException e)
         Right result -> return result
 
     let type_ = void inferred

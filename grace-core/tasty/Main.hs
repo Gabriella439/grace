@@ -5,7 +5,6 @@
 module Main
     where
 
-import Control.Exception (displayException)
 import Data.Text (Text)
 import Grace.Interpret (Input(..), InterpretError)
 import Grace.Location (Location(..))
@@ -15,6 +14,7 @@ import System.FilePath ((</>))
 import Test.Tasty (TestTree)
 
 import qualified Control.Monad.Except as Except
+import qualified Control.Exception.Safe as Exception
 import qualified Data.Text as Text
 import qualified Grace.Interpret as Interpret
 import qualified Grace.Monotype as Monotype
@@ -57,7 +57,7 @@ fileToTestTree prefix = do
                     [ Silver.goldenVsAction
                         (name <> " - error")
                         expectedStderrFile
-                        (return (Text.pack (displayException e)))
+                        (return (Text.pack (Exception.displayException e)))
                         id
                     ]
                 )
@@ -160,16 +160,27 @@ interpretCodeWithImport = Tasty.HUnit.testCase "interpret code with import from 
 
 interpretCodeWithEnvURI :: TestTree
 interpretCodeWithEnvURI = Tasty.HUnit.testCase "interpret code with env: import" do
-    let uri = "env:GRACE_TEST_VAR"
+    let key = "GRACE_TEST_VAR"
 
-    Environment.setEnv "GRACE_TEST_VAR" "true"
-    actualValue <- interpret (Code "(input)" (Text.pack uri))
-    Environment.unsetEnv "GRACE_TEST_VAR"
+    let name = "env:" <> key
+
+    let open = do
+            m <- Environment.lookupEnv key
+
+            Environment.setEnv key "true"
+
+            return m
+
+    let close  Nothing  = Environment.unsetEnv key
+        close (Just v ) = Environment.setEnv key v
+
+    actualValue <- Exception.bracket open close \_ -> do
+        interpret (Code "(input)" (Text.pack name))
 
     let expectedValue =
             Right (Type{ location, node }, Value.Scalar (Syntax.Bool True))
           where
-            location = Location{ name = "env:GRACE_TEST_VAR", code = "true", offset = 0 }
+            location = Location{ name, code = "true", offset = 0 }
 
             node = Type.Scalar Monotype.Bool
 

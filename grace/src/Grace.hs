@@ -13,7 +13,7 @@ module Grace
     ) where
 
 import Control.Applicative (many, (<|>))
-import Control.Exception (Exception(..))
+import Control.Exception.Safe (Exception(..))
 import Control.Monad (void)
 import Data.Foldable (traverse_)
 import Data.String.Interpolate (__i)

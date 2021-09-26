@@ -59,6 +59,7 @@ test-suite tasty
                      , grace-core
                      , mtl
                      , prettyprinter
+                     , safe-exceptions
                      , tasty
                      , tasty-hunit
                      , tasty-silver
