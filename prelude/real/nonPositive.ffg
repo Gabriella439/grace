@@ -1,5 +1,5 @@
 # Returns `true` if a `Real` is non-positive, and `false` otherwise
-let not = ../Bool/not.ffg
+let not = ../bool/not.ffg
 
 let positive = ./positive.ffg
 
