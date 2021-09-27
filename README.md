@@ -32,7 +32,7 @@ Grace implements the following features so that you don't have to:
   Grace uses the same syntax as JSON for records, lists, and scalar values,
   which means that many JSON expression are already valid Grace expressions:
 
-  ```dhall
+  ```json
   # This is valid Grace source code
   {
     "clients": [
@@ -78,16 +78,8 @@ Grace implements the following features so that you don't have to:
 
 * [Dhall](https://dhall-lang.org/)-style filepath imports
 
-  You can import subexpressions by referencing their relative or absolute paths.
-  You can also import JSON in the way same way since Grace is a superset of
-  JSON.
-
-  For example, you can import JSON with a type annotation so that you don't
-  need to amend the original JSON:
-
-  ```dhall
-  ./input.json : List ?
-  ```
+  You can import subexpressions by referencing their path or URL.  You can also
+  import JSON in the way same way since Grace is a superset of JSON.
 
 * Fast evaluation
 
