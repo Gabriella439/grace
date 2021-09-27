@@ -7,24 +7,19 @@
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE TypeApplications  #-}
 
-{-| This module implements the bidirectional type-checking algorithm from:
+{-| This module is based on the bidirectional type-checking algorithm from:
 
     Dunfield, Joshua, and Neelakantan R. Krishnaswami. \"Complete and easy bidirectional typechecking for higher-rank polymorphism.\" ACM SIGPLAN Notices 48.9 (2013): 429-442.
 
-    The source code of this module strives to use the same variable-naming
-    conventions as the original paper.  The source code also includes comments
-    highlighting which subexpressions in the code correspond to which judgments
-    from the paper.
+    The main differences from the original algorithm are:
 
-    The main difference from the original algorithm that this module uses
-    `Control.Monad.State.Strict.StateT` to thread around `Context`s and
-    manipulate them instead of explicit `Context` passing as in the original
-    paper.
+    * This uses `Control.Monad.State.Strict.StateT` to thread around
+      `Context`s and manipulate them instead of explicit `Context` passing as
+      in the original paper
 
-    Also, the code will not add comments for code that corresponds 1-to-1 with
-    the original paper.  Instead, the comments will mostly explain new
-    type-checking logic that wasn't already covered by the paper.  The comments
-    are intended to be read top-to-bottom.
+    * This algorithm adds support for existential quantification
+
+    * This algorithm adds support for row polymorphic and polymorphic variants
 -}
 module Grace.Infer
     ( -- * Type inference
@@ -71,7 +66,8 @@ import qualified Prettyprinter as Pretty
 -- | Type-checking state
 data Status = Status
     { count :: !Int
-      -- ^ Used to generate fresh unsolved variables (e.g. α̂, β̂)
+      -- ^ Used to generate fresh unsolved variables (e.g. α̂, β̂ from the
+      --   original paper)
     , context :: Context Location
       -- ^ The type-checking context (e.g. Γ, Δ, Θ)
     }
@@ -80,6 +76,7 @@ orDie :: MonadError e m => Maybe a -> e -> m a
 Just x  `orDie` _ = return x
 Nothing `orDie` e = throwError e
 
+-- | Generate a fresh existential variable (of any type)
 fresh :: MonadState Status m => m (Existential a)
 fresh = do
     Status{ count = n, .. } <- State.get
@@ -88,9 +85,8 @@ fresh = do
 
     return (fromIntegral n)
 
--- The main place where we depart from the paper is that we don't explicitly
--- thread the `Context` around.  Instead, we mutate the ambient state using
--- the following utility functions
+-- Unlike the original paper, we don't explicitly thread the `Context` around.
+-- Instead, we modify the ambient state using the following utility functions:
 
 -- | Push a new `Context` `Entry` onto the stack
 push :: MonadState Status m => Entry Location -> m ()
@@ -104,10 +100,46 @@ get = State.gets context
 set :: MonadState Status m => Context Location -> m ()
 set context = State.modify (\s -> s{ context })
 
--- | Discard all `Context` entries up to and including the specified `Entry`
-discardUpTo :: MonadState Status m => Entry Location -> m ()
-discardUpTo entry =
+{-| This is used to temporarily add a `Context` entry that is discarded at the
+    end of the entry's scope, along with any downstream entries that were
+    created within that same scope
+-}
+scoped :: MonadState Status m => Entry Location -> m r -> m r
+scoped entry k = do
+    push entry
+
+    r <- k
+
     State.modify (\s -> s{ context = Context.discardUpTo entry (context s) })
+
+    return r
+
+scopedUnsolvedType :: MonadState Status m => s -> (Type.Type s -> m a) -> m a
+scopedUnsolvedType location k = do
+    a <- fresh
+
+    scoped (Context.MarkerType a) do
+        push (Context.UnsolvedType a)
+
+        k Type{ location, node = Type.UnsolvedType a }
+
+scopedUnsolvedFields :: MonadState Status m => (Type.Record s -> m a) -> m a
+scopedUnsolvedFields k = do
+    a <- fresh
+
+    scoped (Context.MarkerFields a) do
+        push (Context.UnsolvedFields a)
+
+        k (Type.Fields [] (Monotype.UnsolvedFields a))
+
+scopedUnsolvedAlternatives :: MonadState Status m => (Type.Union s -> m a) -> m a
+scopedUnsolvedAlternatives k = do
+    a <- fresh
+
+    scoped (Context.MarkerAlternatives a) do
+        push (Context.UnsolvedAlternatives a)
+
+        k (Type.Alternatives [] (Monotype.UnsolvedAlternatives a))
 
 {-| This corresponds to the judgment:
 
@@ -115,7 +147,9 @@ discardUpTo entry =
 
     … which checks that under context Γ, the type A is well-formed
 -}
-wellFormedType :: MonadError TypeInferenceError m => Context Location -> Type Location -> m ()
+wellFormedType
+    :: MonadError TypeInferenceError m
+    => Context Location -> Type Location -> m ()
 wellFormedType _Γ Type{..} =
     case node of
         -- UvarWF
@@ -219,28 +253,12 @@ subtype _A0 _B0 = do
 
     case (Type.node _A0, Type.node _B0) of
         (Type.TypeHole, _) -> do
-            a <- fresh
-
-            push (Context.MarkerType a)
-            push (Context.UnsolvedType a)
-
-            let _A1 = _A0{ node = Type.UnsolvedType a }
-
-            subtype _A1 _B0
-
-            discardUpTo (Context.MarkerType a)
+            scopedUnsolvedType (Type.location _A0) \_A1 -> do
+                subtype _A1 _B0
 
         (_, Type.TypeHole) -> do
-            b <- fresh
-
-            push (Context.MarkerType b)
-            push (Context.UnsolvedType b)
-
-            let _B1 = _B0{ node = Type.UnsolvedType b }
-
-            subtype _A0 _B1
-
-            discardUpTo (Context.MarkerType b)
+            scopedUnsolvedType (Type.location _B0) \_B1 -> do
+                subtype _A0 _B1
 
         -- <:Var
         (Type.VariableType a0, Type.VariableType a1)
@@ -262,7 +280,8 @@ subtype _A0 _B0 = do
             -- union types so that Fields variables and Alternatives variables
             -- cannot refer to the record or union that they belong to,
             -- respectively.
-            | not (a `Type.typeFreeIn` _B0) && elem (Context.UnsolvedType a) _Γ -> do
+            |   not (a `Type.typeFreeIn` _B0)
+            &&  elem (Context.UnsolvedType a) _Γ -> do
                 instantiateTypeL a _B0
 
         -- InstantiateR
@@ -314,95 +333,39 @@ subtype _A0 _B0 = do
 
         -- <:∃R
         (_, Type.Exists nameLocation a0 Domain.Type _B) -> do
-            a1 <- fresh
-
-            push (Context.MarkerType a1)
-            push (Context.UnsolvedType a1)
-
-            let a1' =
-                    Type{ location = nameLocation, node = Type.UnsolvedType a1 }
-
-            subtype _A0 (Type.substituteType a0 0 a1' _B)
-
-            discardUpTo (Context.MarkerType a1)
+            scopedUnsolvedType nameLocation \a1 ->
+                subtype _A0 (Type.substituteType a0 0 a1 _B)
 
         (_, Type.Exists _ a0 Domain.Fields _B) -> do
-            a1 <- fresh
-
-            push (Context.MarkerFields   a1)
-            push (Context.UnsolvedFields a1)
-
-            let a1' = Type.Fields [] (Monotype.UnsolvedFields a1)
-
-            subtype _A0 (Type.substituteFields a0 0 a1' _B)
-
-            discardUpTo (Context.MarkerFields a1)
+            scopedUnsolvedFields \a1 -> do
+                subtype _A0 (Type.substituteFields a0 0 a1  _B)
 
         (_, Type.Exists _ a0 Domain.Alternatives _B) -> do
-            a1 <- fresh
-
-            push (Context.MarkerAlternatives a1)
-            push (Context.UnsolvedAlternatives a1)
-
-            let a1' = Type.Alternatives [] (Monotype.UnsolvedAlternatives a1)
-
-            subtype _A0 (Type.substituteAlternatives a0 0 a1' _B)
-
-            discardUpTo (Context.MarkerAlternatives a1)
+            scopedUnsolvedAlternatives \a1 -> do
+                subtype _A0 (Type.substituteAlternatives a0 0 a1  _B)
 
         -- <:∀L
         (Type.Forall nameLocation a0 Domain.Type _A, _) -> do
-            a1 <- fresh
-
-            push (Context.MarkerType a1)
-            push (Context.UnsolvedType a1)
-
-            let a1' =
-                    Type{ location = nameLocation, node = Type.UnsolvedType a1 }
-
-            subtype (Type.substituteType a0 0 a1' _A) _B0
-
-            discardUpTo (Context.MarkerType a1)
+            scopedUnsolvedType nameLocation \a1 -> do
+                subtype (Type.substituteType a0 0 a1 _A) _B0
 
         (Type.Forall _ a0 Domain.Fields _A, _) -> do
-            a1 <- fresh
-
-            push (Context.MarkerFields   a1)
-            push (Context.UnsolvedFields a1)
-
-            let a1' = Type.Fields [] (Monotype.UnsolvedFields a1)
-
-            subtype (Type.substituteFields a0 0 a1' _A) _B0
-
-            discardUpTo (Context.MarkerFields a1)
+            scopedUnsolvedFields \a1 -> do
+                subtype (Type.substituteFields a0 0 a1 _A) _B0
 
         (Type.Forall _ a0 Domain.Alternatives _A, _) -> do
-            a1 <- fresh
-
-            push (Context.MarkerAlternatives a1)
-            push (Context.UnsolvedAlternatives a1)
-
-            let a1' = Type.Alternatives [] (Monotype.UnsolvedAlternatives a1)
-
-            subtype (Type.substituteAlternatives a0 0 a1' _A) _B0
-
-            discardUpTo (Context.MarkerAlternatives a1)
+            scopedUnsolvedAlternatives \a1 -> do
+                subtype (Type.substituteAlternatives a0 0 a1 _A) _B0
 
         -- <:∃L
         (Type.Exists _ a domain _A, _) -> do
-            push (Context.Variable domain a)
-
-            subtype _A _B0
-
-            discardUpTo (Context.Variable domain a)
+            scoped (Context.Variable domain a) do
+                subtype _A _B0
 
         -- <:∀R
         (_, Type.Forall _ a domain _B) -> do
-            push (Context.Variable domain a)
-
-            subtype _A0 _B
-
-            discardUpTo (Context.Variable domain a)
+            scoped (Context.Variable domain a) do
+                subtype _A0 _B
 
         (Type.Scalar s0, Type.Scalar s1)
             | s0 == s1 -> do
@@ -437,24 +400,12 @@ subtype _A0 _B0 = do
         -- paper, so we'll go into more detail here to explain the general
         -- type-checking principles of the paper.
         (Type.Record (Type.Fields kAs Monotype.HoleFields), _) -> do
-            p <- fresh
-
-            push (Context.MarkerFields p)
-            push (Context.UnsolvedFields p)
-
-            subtype Type{ location = Type.location _A0, node = Type.Record (Type.Fields kAs (Monotype.UnsolvedFields p)) } _B0
-
-            discardUpTo (Context.MarkerFields p)
+            scopedUnsolvedFields \(Type.Fields [] p) -> do
+                subtype Type{ location = Type.location _A0, node = Type.Record (Type.Fields kAs p) } _B0
 
         (_, Type.Record (Type.Fields kBs Monotype.HoleFields)) -> do
-            p <- fresh
-
-            push (Context.MarkerFields p)
-            push (Context.UnsolvedFields p)
-
-            subtype _A0 Type{ location = Type.location _B0, node = Type.Record (Type.Fields kBs (Monotype.UnsolvedFields p)) }
-
-            discardUpTo (Context.MarkerFields p)
+            scopedUnsolvedFields \(Type.Fields [] p) -> do
+                subtype _A0 Type{ location = Type.location _B0, node = Type.Record (Type.Fields kBs p) }
 
         (_A@(Type.Record (Type.Fields kAs0 fields0)), _B@(Type.Record (Type.Fields kBs0 fields1))) -> do
             let mapA = Map.fromList kAs0
@@ -481,9 +432,7 @@ subtype _A0 _B0 = do
             -- variable to the right type.
             --
             -- For example, `{ x: Bool }` can never be a subtype of
-            -- `{ y: Text }`, but `{ x: Bool, a }` can be a subtype of
-            -- `{ y: Text, b }` if we solve `a` to be `{ y: Text }` and solve
-            -- `b` to be `{ x : Bool }`.
+            -- `{ y: Text }`
             if | not okayA && not okayB -> do
                 throwError (RecordTypeMismatch _A0 _B0 extraA extraB)
 
@@ -653,24 +602,12 @@ subtype _A0 _B0 = do
         -- exact same as the logic for checking if a record is a subtype of
         -- another record.
         (Type.Union (Type.Alternatives kAs Monotype.HoleAlternatives), _) -> do
-            p <- fresh
-
-            push (Context.MarkerAlternatives p)
-            push (Context.UnsolvedAlternatives p)
-
-            subtype Type{ location = Type.location _A0, node = Type.Union (Type.Alternatives kAs (Monotype.UnsolvedAlternatives p)) } _B0
-
-            discardUpTo (Context.MarkerAlternatives p)
+            scopedUnsolvedAlternatives \(Type.Alternatives [] p) -> do
+                subtype Type{ location = Type.location _A0, node = Type.Union (Type.Alternatives kAs p) } _B0
 
         (_, Type.Union (Type.Alternatives kBs Monotype.HoleAlternatives)) -> do
-            p <- fresh
-
-            push (Context.MarkerAlternatives p)
-            push (Context.UnsolvedAlternatives p)
-
-            subtype _A0 Type{ location = Type.location _B0, node = Type.Union (Type.Alternatives kBs (Monotype.UnsolvedAlternatives p)) }
-
-            discardUpTo (Context.MarkerAlternatives p)
+            scopedUnsolvedAlternatives \(Type.Alternatives [] p) -> do
+                subtype _A0 Type{ location = Type.location _B0, node = Type.Union (Type.Alternatives kBs p) }
 
         (_A@(Type.Union (Type.Alternatives kAs0 alternatives0)), _B@(Type.Union (Type.Alternatives kBs0 alternatives1))) -> do
             let mapA = Map.fromList kAs0
@@ -856,14 +793,8 @@ instantiateTypeL a _A0 = do
 
     case Type.node _A0 of
         Type.TypeHole -> do
-            b <- fresh
-
-            push (Context.MarkerType b)
-            push (Context.UnsolvedType b)
-
-            instantiateTypeL a Type{ location = Type.location _A0, node = Type.UnsolvedType b }
-
-            discardUpTo (Context.MarkerType b)
+            scopedUnsolvedType (Type.location _A0) \b -> do
+                instantiateTypeL a b
 
         -- InstLReach
         Type.UnsolvedType b
@@ -881,35 +812,14 @@ instantiateTypeL a _A0 = do
 
         -- InstLExt
         Type.Exists nameLocation b0 Domain.Type _B -> do
-            b1 <- fresh
-
-            push (Context.MarkerType b1)
-            push (Context.UnsolvedType b1)
-
-            let b1' = Type{ location = nameLocation, node = Type.UnsolvedType b1 }
-            instantiateTypeR (Type.substituteType b0 0 b1' _B) a
-
-            discardUpTo (Context.MarkerType b1)
+            scopedUnsolvedType nameLocation \b1 -> do
+                instantiateTypeR (Type.substituteType b0 0 b1 _B) a
         Type.Exists _ b0 Domain.Fields _B -> do
-            b1 <- fresh
-
-            push (Context.MarkerFields b1)
-            push (Context.UnsolvedFields b1)
-
-            let b1' = Type.Fields [] (Monotype.UnsolvedFields b1)
-            instantiateTypeR (Type.substituteFields b0 0 b1' _B) a
-
-            discardUpTo (Context.MarkerFields b1)
+            scopedUnsolvedFields \b1 -> do
+                instantiateTypeR (Type.substituteFields b0 0 b1 _B) a
         Type.Exists _ b0 Domain.Alternatives _B -> do
-            b1 <- fresh
-
-            push (Context.MarkerAlternatives b1)
-            push (Context.UnsolvedAlternatives b1)
-
-            let b1' = Type.Alternatives [] (Monotype.UnsolvedAlternatives b1)
-            instantiateTypeR (Type.substituteAlternatives b0 0 b1' _B) a
-
-            discardUpTo (Context.MarkerAlternatives b1)
+            scopedUnsolvedAlternatives \b1 -> do
+                instantiateTypeR (Type.substituteAlternatives b0 0 b1 _B) a
 
         -- InstLArr
         Type.Function _A1 _A2 -> do
@@ -929,11 +839,8 @@ instantiateTypeL a _A0 = do
 
         -- InstLAllR
         Type.Forall _ b domain _B -> do
-            push (Context.Variable domain b)
-
-            instantiateTypeL a _B
-
-            discardUpTo (Context.Variable domain b)
+            scoped (Context.Variable domain b) do
+                instantiateTypeL a _B
 
         -- This case is the first example of a general pattern we have to
         -- follow when solving unsolved variables.
@@ -1044,14 +951,8 @@ instantiateTypeR _A0 a = do
 
     case Type.node _A0 of
         Type.TypeHole -> do
-            b <- fresh
-
-            push (Context.MarkerType b)
-            push (Context.UnsolvedType b)
-
-            instantiateTypeL a Type{ location = Type.location _A0, node = Type.UnsolvedType b }
-
-            discardUpTo (Context.MarkerType b)
+            scopedUnsolvedType (Type.location _A0) \b -> do
+                instantiateTypeL a b
 
         -- InstRReach
         Type.UnsolvedType b
@@ -1085,43 +986,19 @@ instantiateTypeR _A0 a = do
 
         -- InstRExtL
         Type.Exists _ b domain _B -> do
-            push (Context.Variable domain b)
-
-            instantiateTypeL a _B
-
-            discardUpTo (Context.Variable domain b)
+            scoped (Context.Variable domain b) do
+                instantiateTypeL a _B
 
         -- InstRAllL
         Type.Forall nameLocation b0 Domain.Type _B -> do
-            b1 <- fresh
-
-            push (Context.MarkerType b1)
-            push (Context.UnsolvedType b1)
-
-            let b1' = Type{ location = nameLocation, node = Type.UnsolvedType b1 }
-            instantiateTypeR (Type.substituteType b0 0 b1' _B) a
-
-            discardUpTo (Context.MarkerType b1)
+            scopedUnsolvedType nameLocation \b1 -> do
+                instantiateTypeR (Type.substituteType b0 0 b1 _B) a
         Type.Forall _ b0 Domain.Fields _B -> do
-            b1 <- fresh
-
-            push (Context.MarkerFields b1)
-            push (Context.UnsolvedFields b1)
-
-            let b1' = Type.Fields [] (Monotype.UnsolvedFields b1)
-            instantiateTypeR (Type.substituteFields b0 0 b1' _B) a
-
-            discardUpTo (Context.MarkerFields b1)
+            scopedUnsolvedFields \b1 -> do
+                instantiateTypeR (Type.substituteFields b0 0 b1 _B) a
         Type.Forall _ b0 Domain.Alternatives _B -> do
-            b1 <- fresh
-
-            push (Context.MarkerAlternatives b1)
-            push (Context.UnsolvedAlternatives b1)
-
-            let b1' = Type.Alternatives [] (Monotype.UnsolvedAlternatives b1)
-            instantiateTypeR (Type.substituteAlternatives b0 0 b1' _B) a
-
-            discardUpTo (Context.MarkerAlternatives b1)
+            scopedUnsolvedAlternatives \b1 -> do
+                instantiateTypeR (Type.substituteAlternatives b0 0 b1 _B) a
 
         Type.Optional _A -> do
             let _ΓL = _Γ
@@ -1444,11 +1321,9 @@ infer e0 = do
 
             push (Context.UnsolvedType a)
             push (Context.UnsolvedType b)
-            push (Context.Annotation x _A)
 
-            check e _B
-
-            discardUpTo (Context.Annotation x _A)
+            scoped (Context.Annotation x _A) do
+                check e _B
 
             return _Type{ node = Type.Function _A _B }
 
@@ -2027,66 +1902,30 @@ check
 -- type annotations to fix any type errors that they might encounter, which is
 -- a desirable property!
 
-check e _A@Type{ node = Type.TypeHole } = do
-    a <- fresh
-
-    push (Context.MarkerType a)
-    push (Context.UnsolvedType a)
-
-    check e _A{ node = Type.UnsolvedType a }
-
-    discardUpTo (Context.MarkerType a)
+check e _A0@Type{ node = Type.TypeHole } = do
+    scopedUnsolvedType (Type.location _A0) \_A1 -> do
+        check e _A1
 
 -- →I
 check Syntax{ node = Syntax.Lambda _ x e } Type{ node = Type.Function _A _B } = do
-    push (Context.Annotation x _A)
-
-    check e _B
-
-    discardUpTo (Context.Annotation x _A)
+    scoped (Context.Annotation x _A) do
+        check e _B
 
 -- ∃I
 check e Type{ node = Type.Exists nameLocation a0 Domain.Type _A } = do
-    a1 <- fresh
-
-    push (Context.MarkerType a1)
-    push (Context.UnsolvedType a1)
-
-    let a1' = Type{ location = nameLocation, node = Type.UnsolvedType a1 }
-
-    check e (Type.substituteType a0 0 a1' _A)
-
-    discardUpTo (Context.MarkerType a1)
+    scopedUnsolvedType nameLocation \a1 -> do
+        check e (Type.substituteType a0 0 a1 _A)
 check e Type{ node = Type.Exists _ a0 Domain.Fields _A } = do
-    a1 <- fresh
-
-    push (Context.MarkerFields a1)
-    push (Context.UnsolvedFields a1)
-
-    let a1' = Type.Fields [] (Monotype.UnsolvedFields a1)
-
-    check e (Type.substituteFields a0 0 a1' _A)
-
-    discardUpTo (Context.MarkerFields a1)
+    scopedUnsolvedFields \a1 -> do
+        check e (Type.substituteFields a0 0 a1 _A)
 check e Type{ node = Type.Exists _ a0 Domain.Alternatives _A } = do
-    a1 <- fresh
-
-    push (Context.MarkerAlternatives a1)
-    push (Context.UnsolvedAlternatives a1)
-
-    let a1' = Type.Alternatives [] (Monotype.UnsolvedAlternatives a1)
-
-    check e (Type.substituteAlternatives a0 0 a1' _A)
-
-    discardUpTo (Context.MarkerAlternatives a1)
+    scopedUnsolvedAlternatives \a1 -> do
+        check e (Type.substituteAlternatives a0 0 a1 _A)
 
 -- ∀I
 check e Type{ node = Type.Forall _ a domain _A } = do
-    push (Context.Variable domain a)
-
-    check e _A
-
-    discardUpTo (Context.Variable domain a)
+    scoped (Context.Variable domain a) do
+        check e _A
 
 check Syntax{ node = Syntax.Operator l _ Syntax.Times r } _B@Type{ node = Type.Scalar scalar }
     | scalar `elem` ([ Monotype.Natural, Monotype.Integer, Monotype.Real ] :: [Monotype.Scalar])= do
@@ -2219,13 +2058,8 @@ inferApplication _A0@Type{ node = Type.Forall _ a0 Domain.Alternatives _A } e = 
 
 -- ∃App
 inferApplication _A0@Type{ node = Type.Exists _ a domain _A } e = do
-    push (Context.Variable domain a)
-
-    _B <- inferApplication _A e
-
-    discardUpTo (Context.Variable domain a)
-
-    return _B
+    scoped (Context.Variable domain a) do
+        inferApplication _A e
 
 -- αApp
 inferApplication Type{ node = Type.UnsolvedType a, .. } e = do
