@@ -26,6 +26,7 @@ import Grace.Syntax (Node(..), Syntax(..))
 import Grace.Type (Type)
 import Grace.Value (Value)
 import Network.HTTP.Client (Manager)
+import Text.URI.QQ (scheme)
 
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
@@ -37,6 +38,7 @@ import qualified Grace.Normalize as Normalize
 import qualified Grace.Parser as Parser
 import qualified Grace.Syntax as Syntax
 import qualified Network.HTTP.Client.TLS as TLS
+import qualified Text.URI as URI
 
 {-| Interpret Grace source code, return the inferred type and the evaluated
     result
@@ -77,6 +79,8 @@ interpretWith bindings maybeAnnotation manager input = do
         Right partiallyResolved -> return partiallyResolved
 
     let process (maybeAnnotation', child) = do
+            referentiallySane input child
+
             interpretWith bindings maybeAnnotation' manager (input <> child)
 
     resolvedExpression <- traverse process (annotate partiallyResolved)
@@ -106,6 +110,22 @@ interpretWith bindings maybeAnnotation manager input = do
                     return (variable, value)
 
             return (inferred, Normalize.evaluate evaluationContext resolvedExpression)
+
+remote :: Input -> Bool
+remote (URI uri) =
+    any (`elem` [ [scheme|https|], [scheme|http|] ]) (URI.uriScheme uri)
+remote _ =
+    False
+
+referentiallySane :: MonadError InterpretError m => Input -> Input -> m ()
+referentiallySane parent child
+    | remote parent && not (remote child) = do
+        Except.throwError
+            (ImportError
+                (Import.ImportError parent (Import.ReferentiallyInsane child))
+            )
+    | otherwise = do
+        return ()
 
 {-| We use this utility so that when we resolve an import of the form:
 

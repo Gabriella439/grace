@@ -1,4 +1,6 @@
-https://example.com/a: Remote file not found
+Import resolution failed: https://example.com/a
+
+Remote file not found
 
 HTTP status code: 404
 

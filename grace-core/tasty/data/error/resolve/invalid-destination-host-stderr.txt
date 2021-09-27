@@ -1,1 +1,3 @@
-http://:80: Invalid remote host name
+Import resolution failed: http://:80
+
+Invalid remote host name

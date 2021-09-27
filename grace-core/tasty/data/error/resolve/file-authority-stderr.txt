@@ -1,1 +1,3 @@
-file://a/b: Unsupported authority
+Import resolution failed: file://a/b
+
+Unsupported authority

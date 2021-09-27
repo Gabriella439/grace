@@ -44,6 +44,7 @@ import qualified Data.Text.Encoding as Encoding
 import qualified Data.Text.Lazy.Encoding as Lazy.Encoding
 import qualified Data.Text.IO as Text.IO
 import qualified Grace.Parser as Parser
+import qualified Grace.Pretty as Pretty
 import qualified Network.HTTP.Client as HTTP
 import qualified Network.HTTP.Types as HTTP.Types
 import qualified System.Environment as Environment
@@ -161,6 +162,7 @@ data ResolutionError
     | MissingPath
     | UnsupportedPathSeparators
     | NotUTF8 UnicodeException
+    | ReferentiallyInsane Input
     | UnsupportedAuthority
     deriving stock (Show)
 
@@ -173,7 +175,9 @@ data ImportError = ImportError
 instance Exception ImportError where
     displayException ImportError{..} =
         Text.unpack [__i|
-        #{renderedInput}: #{renderedError}
+        Import resolution failed: #{renderedInput}
+
+        #{renderedError}
         |]
       where
         renderedInput = case input of
@@ -261,13 +265,19 @@ instance Exception ImportError where
                 "Missing environment variable"
             MissingPath ->
                 "Missing path"
-            UnsupportedPathSeparators ->
-                "Unsupported path separators"
             NotUTF8 exception ->
                 [__i|
                 Not UTF8
 
                 #{Exception.displayException exception}
                 |]
+            ReferentiallyInsane child ->
+                [__i|
+                Local imports are rejected within remote imports
+
+                Rejected local import: #{Pretty.pretty child}
+                |]
+            UnsupportedPathSeparators ->
+                "Unsupported path separators"
             UnsupportedAuthority ->
                 "Unsupported authority"
