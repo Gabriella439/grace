@@ -14,8 +14,8 @@ import Grace.Type (Type(..))
 import System.FilePath ((</>))
 import Test.Tasty (TestTree)
 
-import qualified Control.Monad.Except as Except
 import qualified Control.Exception.Safe as Exception
+import qualified Control.Monad.Except as Except
 import qualified Data.Text as Text
 import qualified Grace.Interpret as Interpret
 import qualified Grace.Monotype as Monotype

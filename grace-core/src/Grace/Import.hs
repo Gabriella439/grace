@@ -39,10 +39,10 @@ import Network.HTTP.Client
 import qualified Control.Exception.Safe as Exception
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Text as Text
-import qualified Data.Text.Lazy as Text.Lazy
 import qualified Data.Text.Encoding as Encoding
-import qualified Data.Text.Lazy.Encoding as Lazy.Encoding
 import qualified Data.Text.IO as Text.IO
+import qualified Data.Text.Lazy as Text.Lazy
+import qualified Data.Text.Lazy.Encoding as Lazy.Encoding
 import qualified Grace.Parser as Parser
 import qualified Grace.Pretty as Pretty
 import qualified Network.HTTP.Client as HTTP

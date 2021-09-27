@@ -18,12 +18,7 @@ import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
 import Grace.Interpret (Input(..))
 import Grace.Lexer (reserved)
-
-import System.Console.Repline
-    ( CompleterStyle(..)
-    , MultiLine(..)
-    , ReplOpts(..)
-    )
+import System.Console.Repline (CompleterStyle(..), MultiLine(..), ReplOpts(..))
 
 import qualified Control.Monad as Monad
 import qualified Control.Monad.Except as Except
