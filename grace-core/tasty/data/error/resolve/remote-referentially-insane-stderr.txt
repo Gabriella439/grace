@@ -1,0 +1,5 @@
+Import resolution failed: https://gist.githubusercontent.com/Gabriel439/7dce61ec95e1c38ecf14448eef7dd827/raw/fbb01f2afb0eaa98ea0e1bd1d4bb1e8fe482b081/test.ffg
+
+Local imports are rejected within remote imports
+
+Rejected local import: env:FOO

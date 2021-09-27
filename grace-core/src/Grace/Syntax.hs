@@ -39,17 +39,17 @@ import Prettyprinter.Render.Terminal (AnsiStyle)
 
 import Grace.Pretty
     ( Pretty(..)
-    , keyword
-    , punctuation
-    , label
-    , scalar
     , builtin
+    , keyword
+    , label
     , operator
+    , punctuation
+    , scalar
     )
 
-import qualified Data.Text     as Text
-import qualified Grace.Pretty  as Pretty
-import qualified Grace.Type    as Type
+import qualified Data.Text as Text
+import qualified Grace.Pretty as Pretty
+import qualified Grace.Type as Type
 import qualified Prettyprinter as Pretty
 
 {- $setup

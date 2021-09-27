@@ -1,6 +1,6 @@
 # Returns `true` if the first `Real` is greater than the second `Real`, and
 # `false` otherwise
-let not = ../Bool/not.ffg
+let not = ../bool/not.ffg
 
 let lessThanOrEqual = ./lessThanOrEqual.ffg
 

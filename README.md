@@ -14,7 +14,7 @@ most likely be interested in Grace for one of two reasons:
 
 If you're interested in code samples, then you can either jump down to the
 [Quick tour](#quick-tour) section or check out the
-[examples directory](./grace/examples).
+[examples directory](./examples).
 
 ## Features
 
@@ -32,7 +32,7 @@ Grace implements the following features so that you don't have to:
   Grace uses the same syntax as JSON for records, lists, and scalar values,
   which means that many JSON expression are already valid Grace expressions:
 
-  ```dhall
+  ```json
   # This is valid Grace source code
   {
     "clients": [
@@ -78,16 +78,8 @@ Grace implements the following features so that you don't have to:
 
 * [Dhall](https://dhall-lang.org/)-style filepath imports
 
-  You can import subexpressions by referencing their relative or absolute paths.
-  You can also import JSON in the way same way since Grace is a superset of
-  JSON.
-
-  For example, you can import JSON with a type annotation so that you don't
-  need to amend the original JSON:
-
-  ```dhall
-  ./input.json : List ?
-  ```
+  You can import subexpressions by referencing their path or URL.  You can also
+  import JSON in the way same way since Grace is a superset of JSON.
 
 * Fast evaluation
 
@@ -364,9 +356,9 @@ Grace supports the following Scalar types:
 
   `Natural` numbers are a subtype of `Integer`s
 
-* `Double`s, such as `3.14159265`, `6.0221409e+23`, …
+* `Real`s, such as `3.14159265`, `6.0221409e+23`, …
 
-  `Integer`s are a subtype of `Double`s
+  `Integer`s are a subtype of `Real`s
 
 * `Text`, such as `""`, `"Hello!"`, `"ABC"`, …
 
@@ -455,7 +447,7 @@ true : Bool
 
 1 : Integer  # `Natural` numbers also type-check as `Integer`s
 
-1 : Double   # All numbers type-check as `Double`s
+1 : Real     # All numbers type-check as `Real`s
 
 1 : Optional Natural  # Everything type-checks as `Optional`, too
 
@@ -518,9 +510,9 @@ record of handlers (one per alternative):
 
 ```dhall
 let render
-      : < Left: Double | Right: Bool > -> Text
+      : < Left: Real | Right: Bool > -> Text
       = merge
-          { Left: Double/show
+          { Left: Real/show
           , Right: \b -> if b then "true" else "false"
           }
 
@@ -554,33 +546,91 @@ in  twice 2
 
 You can also use the built-in functions, including:
 
-* `Double/show : Double -> Text`
+```dhall
+# Compare two `Reals` for equality
+Real/equal : Real -> Real -> Bool
 
-  Render any number as `Text` (including `Natural` numbers and `Integer`s,
-  since they are subtypes of `Double`)
+# Check if one `Real` is less than another `Real`
+Real/lessThan : Real -> Real -> Bool
 
-* `Integer/even : Integer -> Bool` and `Integer/odd : Integer -> Bool`
+# Negate a `Real` number
+Real/negate : Real -> Real
 
-  Returns whether a number is `even` or odd respectively.  These are
-  mainly included as reference implementations for how to implement a simple
-  function.
+# Render a `Real` number as `Text`
+Real/show : Real -> Text
 
-* `List/fold : forall (a : Type) .  forall (b : Type) .  { cons: a -> b -> b, nil: b } -> List a -> b`
+# Drop the first N elements from a `List`
+List/drop : forall (a : Type) . Natural -> List a -> List a
 
-  Canonical fold for a `List`, also known as a "right fold" or `foldr` in many
-  languages
+# Compare two lists for equality, given an element-wise equality test
+List/equal : forall (a : Type) . (a -> a -> Bool) -> List a -> List a -> Bool
 
-* `List/length : forall (a : Type) . List a -> Natural`
+# Fold a list
+List/fold
+  : forall (a : Type) .
+    forall (b : Type) .
+      { cons: a -> b -> b, nil: b } -> List a -> b
 
-  Returns the length of a `List`
+# Get the first element of a list
+List/head
+  : forall (a : Type) .
+    forall (b : Alternatives) .
+      List a -> < Some: a | None: { } | b >
 
-* `List/map : forall (a : Type) . forall (b : Type) . (a -> b) -> List a -> List b`
+# Annotate each element of a list with its index
+List/indexed : forall (a : Type) . List a -> List { index: Natural, value: a }
 
-  Transform each element of a list using a function
+# Get the last element of a list
+List/last
+  : forall (a : Type) .
+    forall (b : Alternatives) .
+      List a -> < Some: a | None: { } | b >
 
-* `Natural/fold : forall (a : Type) . Natural -> (a -> a) -> a -> a`
+# Compute the length of a list
+List/length : forall (a : Type) . List a -> Natural
 
-  Canonical fold for a `Natural` number
+# Transform each element of a list
+List/map : forall (a : Type) . forall (b : Type) . (a -> b) -> List a -> List b
+
+# Reverse a list
+List/reverse : forall (a : Type) . List a -> List a
+
+# Take the first N elements of a list
+List/take : forall (a : Type) . Natural -> List a -> List a
+
+# Returns `true` if the `Integer` is even
+Integer/even : Integer -> Bool
+
+# Negate an `Integer`
+Integer/negate : Integer -> Integer
+
+# Returns `true` if the `Integer` is false
+Integer/odd : Integer -> Bool
+
+# Compute the absolute value of an `Integer`
+Integer/abs : Integer -> Natural
+
+# Fold a JSON value
+JSON/fold
+  : forall (a : Type) .
+      { array: List a -> a
+      , bool: Bool -> a
+      , real: Real -> a
+      , integer: Integer -> a
+      , natural: Natural -> a
+      , "null": a
+      , object: List { key: Text, value: a } -> a
+      , string: Text -> a
+      } ->
+      JSON ->
+        a
+
+# Fold a `Natural` number
+Natural/fold : forall (a : Type) . Natural -> (a -> a) -> a -> a
+
+# Compare two `Text` values for equality
+Text/equal : Text -> Text -> Bool
+```
 
 For an up-to-date list of builtin functions and their types, run
 the `grace builtins` subcommand.
@@ -843,7 +893,7 @@ JSON/fold
   : forall (a : Type) .
       { array: List a -> a
       , bool: Bool -> a
-      , double: Double -> a
+      , real: Real -> a
       , integer: Integer -> a
       , natural: Natural -> a
       , "null": a
@@ -864,7 +914,7 @@ JSON/fold
   { "bool": \b -> if b then 1 else 0
   , "natural": \x -> x
   , "integer": Integer/abs
-  , "double": \_ -> 1
+  , "real": \_ -> 1
   , "string": \_ -> 2
   , "null": 3
   , "object": List/length
@@ -883,6 +933,11 @@ more precise type annotation if possible and only use `JSON` as a type
 annotation as a last resort.
 
 ### Imports
+
+Grace has two ways to import expressions from other sources: Filepath-based
+imports and imports using URIs.
+
+#### Imports from files
 
 You can import a Grace subexpression stored within a separate file by
 referencing the file's relative or absolute path.
@@ -973,6 +1028,81 @@ $ grace interpret - <<< './greet.ffg "John"'
 ```
 
 Any subexpression can be imported in this way.
+
+#### Imports using URIs
+
+Imports with URIs work similar to the ones using a simple filepath.
+
+Suppose you do not have the `greet.ffg` stored locally but instead it resides
+on a web server: `http://example.com/grace/greet.ffg`
+You could either download it and reference it by its filepath like demonstrated
+in the example above or let the Grace interpreter do the job:
+
+```bash
+$ grace interpret - <<< 'http://example.com/grace/greet.ffg "John"'
+```
+```dhall
+"Hello, John!"
+```
+
+Grace supports the following URI schemes:
+
+* HTTP: `https://…` or `http://…`
+
+  ```bash
+  $ grace interpret - <<< 'https://raw.githubusercontent.com/Gabriel439/grace/5b3c0e11ee4776a42c26c1986bef8a17dd329e2e/prelude/bool/not.ffg true'
+  false
+  ```
+
+* Files: `file:…`
+
+  ```bash
+  $ grace interpret - <<< 'file:///path/to/greet.ffg "John"'
+  ```
+  ```dhall
+  "Hello, John!"
+  ```
+
+* Environment variables: `env:…`
+
+  ```bash
+  $ MY_VAR='"Hello !"' grace interpret - <<< 'env:///MY_VAR'
+  ```
+  ```dhall
+  "Hello !"
+  ```
+
+## Prelude
+
+You can import a small standard library of utilities from the following URL:
+
+* [https://raw.githubusercontent.com/Gabriel439/grace/main/prelude/package.ffg](https://raw.githubusercontent.com/Gabriel439/grace/main/prelude/package.ffg)
+
+These utilities provide higher-level functionality that wraps the underlying
+builtins.
+
+Here is an example of how to use the Prelude:
+
+```dhall
+let prelude =
+      https://raw.githubusercontent.com/Gabriel439/grace/main/prelude/package.ffg
+
+in  prelude.bool.not true
+```
+
+The Prelude is organized as a large and nested record that you can import.
+Each sub-package of the Prelude is a top-level field, and the utilities are
+nested fields within each sub-package.
+
+You can also directly import the utility you need, which is faster since it
+only requires a single HTTP request:
+
+```dhall
+let not =
+      https://raw.githubusercontent.com/Gabriel439/grace/main/prelude/bool/not.ffg
+
+in  not true
+```
 
 ## Name
 

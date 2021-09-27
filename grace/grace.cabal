@@ -12,13 +12,15 @@ library
   hs-source-dirs:      src
   build-depends:       base
                      , ansi-terminal
-                     , exceptions
                      , grace-core
+                     , haskeline
+                     , http-client-tls
                      , mtl
                      , optparse-applicative
                      , prettyprinter
                      , prettyprinter-ansi-terminal
                      , repline
+                     , safe-exceptions
                      , string-interpolate
                      , text
   exposed-modules:     Grace

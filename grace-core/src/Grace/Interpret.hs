@@ -1,8 +1,9 @@
-{-# LANGUAGE DataKinds        #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE NamedFieldPuns   #-}
-{-# LANGUAGE RecordWildCards  #-}
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE DataKinds          #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleContexts   #-}
+{-# LANGUAGE QuasiQuotes        #-}
+{-# LANGUAGE RecordWildCards    #-}
+{-# LANGUAGE TypeApplications   #-}
 
 -- | This module implements the main interpretation function
 module Grace.Interpret
@@ -10,44 +11,34 @@ module Grace.Interpret
       Input(..)
     , interpret
     , interpretWith
-
       -- * Errors related to interpretation
     , InterpretError(..)
     ) where
 
-import Control.Exception (Exception(..))
+import Control.Exception.Safe (Exception(..), Handler(..))
 import Control.Monad.Except (MonadError(..))
-import Control.Monad.IO.Class (MonadIO(..))
-import Data.Bifunctor (Bifunctor(..))
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Generics.Product (the)
 import Data.Text (Text)
+import Grace.Input (Input(..))
 import Grace.Location (Location(..))
 import Grace.Syntax (Node(..), Syntax(..))
 import Grace.Type (Type)
 import Grace.Value (Value)
-import System.FilePath ((</>))
+import Network.HTTP.Client (Manager)
+import Text.URI.QQ (scheme)
 
-import qualified Control.Lens         as Lens
+import qualified Control.Exception.Safe as Exception
+import qualified Control.Lens as Lens
 import qualified Control.Monad.Except as Except
-import qualified Data.Text.IO         as Text.IO
-import qualified Grace.Context        as Context
-import qualified Grace.Infer          as Infer
-import qualified Grace.Normalize      as Normalize
-import qualified Grace.Parser         as Parser
-import qualified Grace.Syntax         as Syntax
-import qualified System.FilePath      as FilePath
-
-{-| Input to the `interpret` function
-
-    You should prefer to use `Path` if possible (for better error messages and
-    correctly handling transitive imports).  The `Code` constructor is intended
-    for cases like interpreting code read from standard input.
--}
-data Input
-    = Path FilePath
-    -- ^ The path to the code
-    | Code Text
-    -- ^ Source code
+import qualified Grace.Context as Context
+import qualified Grace.Import as Import
+import qualified Grace.Infer as Infer
+import qualified Grace.Normalize as Normalize
+import qualified Grace.Parser as Parser
+import qualified Grace.Syntax as Syntax
+import qualified Network.HTTP.Client.TLS as TLS
+import qualified Text.URI as URI
 
 {-| Interpret Grace source code, return the inferred type and the evaluated
     result
@@ -56,11 +47,12 @@ data Input
 -}
 interpret
     :: (MonadError InterpretError m, MonadIO m)
-    => Maybe (Type Location)
-    -- ^ Optional expected type for the input
-    -> Input
+    => Input
     -> m (Type Location, Value)
-interpret = interpretWith []
+interpret input = do
+    manager <- TLS.newTlsManager
+
+    interpretWith [] Nothing manager input
 
 -- | Like `interpret`, but accepts a custom list of bindings
 interpretWith
@@ -69,34 +61,29 @@ interpretWith
     -- ^ @(name, type, value)@ for each custom binding
     -> Maybe (Type Location)
     -- ^ Optional expected type for the input
+    -> Manager
     -> Input
     -> m (Type Location, Value)
-interpretWith bindings maybeAnnotation input = do
-    code <- case input of
-        Path file -> liftIO (Text.IO.readFile file)
-        Code text -> return text
+interpretWith bindings maybeAnnotation manager input = do
+    eitherPartiallyResolved <- do
+        liftIO
+            (Exception.catches
+                (fmap Right (Import.resolve manager input))
+                [ Handler (\e -> return (Left (ParseError e)))
+                , Handler (\e -> return (Left (ImportError e)))
+                ]
+            )
 
-    let name = case input of
-            Path file -> file
-            Code _    -> "(input)"
+    partiallyResolved <- case eitherPartiallyResolved of
+        Left  interpretError    -> throwError interpretError
+        Right partiallyResolved -> return partiallyResolved
 
-    expression <- case Parser.parse name code of
-        Left message -> do
-            Except.throwError (ParseError message)
+    let process (maybeAnnotation', child) = do
+            referentiallySane input (input <> child)
 
-        Right expression -> do
-            let locate offset = Location{..}
+            interpretWith bindings maybeAnnotation' manager (input <> child)
 
-            return (first locate expression)
-
-    let resolve (maybeAnnotation', file) =
-            interpretWith bindings maybeAnnotation' (Path path)
-          where
-            path = case input of
-                Path parent -> FilePath.takeDirectory parent </> file
-                Code _      -> file
-
-    resolvedExpression <- traverse resolve (annotate expression)
+    resolvedExpression <- traverse process (annotate partiallyResolved)
 
     let annotatedExpression =
             case maybeAnnotation of
@@ -123,6 +110,22 @@ interpretWith bindings maybeAnnotation input = do
                     return (variable, value)
 
             return (inferred, Normalize.evaluate evaluationContext resolvedExpression)
+
+remote :: Input -> Bool
+remote (URI uri) =
+    any (`elem` [ [scheme|https|], [scheme|http|] ]) (URI.uriScheme uri)
+remote _ =
+    False
+
+referentiallySane :: MonadError InterpretError m => Input -> Input -> m ()
+referentiallySane parent child
+    | remote parent && not (remote child) = do
+        Except.throwError
+            (ImportError
+                (Import.ImportError parent (Import.ReferentiallyInsane child))
+            )
+    | otherwise = do
+        return ()
 
 {-| We use this utility so that when we resolve an import of the form:
 
@@ -161,10 +164,12 @@ annotate = Lens.transform transformSyntax . fmap ((,) Nothing)
 
 -- | Errors related to interpretation of an expression
 data InterpretError
-    = TypeInferenceError Infer.TypeInferenceError
+    = ImportError Import.ImportError
     | ParseError Parser.ParseError
-    deriving (Eq, Show)
+    | TypeInferenceError Infer.TypeInferenceError
+    deriving stock (Show)
 
 instance Exception InterpretError where
-    displayException (TypeInferenceError e) = displayException e
+    displayException (ImportError e) = displayException e
     displayException (ParseError e) = displayException e
+    displayException (TypeInferenceError e) = displayException e

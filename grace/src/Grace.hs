@@ -13,7 +13,8 @@ module Grace
     ) where
 
 import Control.Applicative (many, (<|>))
-import Control.Exception (Exception(..))
+import Control.Exception.Safe (Exception(..))
+import Control.Monad (void)
 import Data.Foldable (traverse_)
 import Data.String.Interpolate (__i)
 import Data.Void (Void)
@@ -25,24 +26,25 @@ import Options.Applicative (Parser, ParserInfo)
 import Prettyprinter (Doc)
 import Prettyprinter.Render.Terminal (AnsiStyle)
 
-import qualified Control.Monad.Except         as Except
-import qualified Data.Text                    as Text
-import qualified Data.Text.IO                 as Text.IO
-import qualified Prettyprinter                as Pretty
-import qualified Grace.Infer                  as Infer
-import qualified Grace.Interpret              as Interpret
-import qualified Grace.Monotype               as Monotype
-import qualified Grace.Normalize              as Normalize
-import qualified Grace.Parser                 as Parser
+import qualified Control.Monad.Except as Except
+import qualified Data.Text as Text
+import qualified Data.Text.IO as Text.IO
+import qualified Grace.Infer as Infer
+import qualified Grace.Interpret as Interpret
+import qualified Grace.Monotype as Monotype
+import qualified Grace.Normalize as Normalize
+import qualified Grace.Parser as Parser
 import qualified Grace.Pretty
-import qualified Grace.Syntax                 as Syntax
-import qualified Grace.Type                   as Type
-import qualified Grace.Value                  as Value
-import qualified Grace.Repl                   as Repl
-import qualified Options.Applicative          as Options
-import qualified System.Console.ANSI          as ANSI
-import qualified System.Exit                  as Exit
-import qualified System.IO                    as IO
+import qualified Grace.Repl as Repl
+import qualified Grace.Syntax as Syntax
+import qualified Grace.Type as Type
+import qualified Grace.Value as Value
+import qualified Network.HTTP.Client.TLS as TLS
+import qualified Options.Applicative as Options
+import qualified Prettyprinter as Pretty
+import qualified System.Console.ANSI as ANSI
+import qualified System.Exit as Exit
+import qualified System.IO as IO
 
 data Highlight
     = Color
@@ -177,13 +179,12 @@ main = do
         Interpret{..} -> do
             input <- case file of
                 "-" -> do
-                    text <- Text.IO.getContents
-                    return (Code text)
+                    Code "(input)" <$> Text.IO.getContents
                 _ -> do
                     return (Path file)
 
             eitherResult <- do
-                Except.runExceptT (Interpret.interpret Nothing input)
+                Except.runExceptT (Interpret.interpret input)
 
             (inferred, value) <- throws eitherResult
 
@@ -193,7 +194,7 @@ main = do
                     | annotate =
                         Syntax
                             { node =
-                                Annotation syntax (fmap (\_ -> ()) inferred)
+                                Annotation syntax (void inferred)
                             , location = ()
                             }
                     | otherwise =
@@ -206,9 +207,7 @@ main = do
         Text{..} -> do
             input <- case file of
                 "-" -> do
-                    text <- Text.IO.getContents
-
-                    return (Code text)
+                    Code "(input)" <$> Text.IO.getContents
                 _ -> do
                     return (Path file)
 
@@ -221,8 +220,10 @@ main = do
 
             let expected = Type{ node = Type.Scalar Monotype.Text, .. }
 
+            manager <- TLS.newTlsManager
+
             eitherResult <- do
-                Except.runExceptT (Interpret.interpret (Just expected) input)
+                Except.runExceptT (Interpret.interpretWith [] (Just expected) manager input)
 
             (_, value) <- throws eitherResult
 

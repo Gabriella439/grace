@@ -1,6 +1,7 @@
+{-# LANGUAGE BlockArguments    #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeApplications  #-}
+{-# LANGUAGE RecordWildCards   #-}
 
 -- | This module contains the implementation of the @grace repl@ subcommand
 
@@ -9,124 +10,176 @@ module Grace.Repl
       repl
     ) where
 
-import Control.Monad.Catch (MonadCatch)
-import Control.Exception (displayException)
-import Control.Monad.IO.Class (liftIO, MonadIO)
-import Control.Monad.State (MonadState(..), StateT)
+import Control.Applicative (empty)
+import Control.Exception.Safe (displayException)
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.State (MonadState(..))
 import Data.Foldable (toList)
-import Data.Text (pack, strip, unpack, Text)
+import Data.List.NonEmpty (NonEmpty(..))
 import Grace.Interpret (Input(..))
 import Grace.Lexer (reserved)
-import Grace.Location (Location)
-import Grace.Type (Type)
-import Grace.Value (Value)
+import System.Console.Repline (CompleterStyle(..), MultiLine(..), ReplOpts(..))
 
-import System.Console.Repline
-    ( Cmd
-    , CompleterStyle(..)
-    , MultiLine(..)
-    , Options
-    , ReplOpts(..)
-    )
-
-import qualified Control.Monad.Except   as Except
-import qualified Control.Monad.State    as State
-import qualified Data.Text.IO           as Text.IO
-import qualified Grace.Interpret        as Interpret
-import qualified Grace.Normalize        as Normalize
-import qualified Grace.Pretty           as Grace.Pretty
+import qualified Control.Monad as Monad
+import qualified Control.Monad.Except as Except
+import qualified Control.Monad.State as State
+import qualified Data.Text as Text
+import qualified Data.Text.IO as Text.IO
+import qualified Grace.Interpret as Interpret
+import qualified Grace.Normalize as Normalize
+import qualified Grace.Pretty as Pretty
+import qualified Grace.Type as Type
+import qualified Network.HTTP.Client.TLS as TLS
+import qualified System.Console.Haskeline.Completion as Completion
 import qualified System.Console.Repline as Repline
-import qualified System.IO              as IO
+import qualified System.IO as IO
 
 -- | Entrypoint for the @grace repl@ subcommand
 repl :: IO ()
-repl = State.evalStateT action []
-  where
-    action =
-      Repline.evalReplOpts ReplOpts
-        { banner = prompt
-        , command = interpret
-        , options = commands
-        , prefix = Just ':'
-        , multilineCommand = Just "paste"
-        , tabComplete = complete
-        , initialiser = return ()
-        , finaliser = return Repline.Exit
-        }
+repl = do
+    manager <- TLS.newTlsManager
 
-prompt :: Monad m => MultiLine -> m String
-prompt MultiLine  = return "... "
-prompt SingleLine = return ">>> "
+    let interpret input = do
+            context <- get
 
-type Status = [(Text, Type Location, Value)]
+            Except.runExceptT (Interpret.interpretWith context Nothing manager input)
 
-commands :: (MonadState Status m, MonadCatch m, MonadIO m) => Options m
-commands =
-    [ ("let", Repline.dontCrash . assignment)
-    , ("type", Repline.dontCrash . infer)
-    ]
+    let err e =
+            liftIO (Text.IO.hPutStrLn IO.stderr (Text.pack (displayException e)))
 
-interpret :: (MonadState Status m, MonadIO m) => Cmd m
-interpret string = do
-    let input = Code (pack string)
+    let command string = do
+            let input = Code "(input)" (Text.pack string)
 
-    context <- get
-    eitherResult <- Except.runExceptT (Interpret.interpretWith context Nothing input)
+            eitherResult <- interpret input
 
-    case eitherResult of
-        Left e -> liftIO (Text.IO.hPutStrLn IO.stderr (pack (displayException e)))
-        Right (_inferred, value) -> do
-            let syntax = Normalize.quote [] value
+            case eitherResult of
+                Left e -> do
+                    err e
 
-            width <- liftIO Grace.Pretty.getWidth
-            liftIO (Grace.Pretty.renderIO True width IO.stdout (Grace.Pretty.pretty syntax <> "\n"))
+                Right (_inferred, value) -> do
+                    let syntax = Normalize.quote [] value
 
-assignment :: (MonadState Status m, MonadIO m) => Cmd m
-assignment string
-    | (var, '=' : expr) <- break (== '=') string
-    = do
-      let input = Code (pack expr)
+                    width <- liftIO Pretty.getWidth
 
-      let variable = strip (pack var)
+                    liftIO (Pretty.renderIO True width IO.stdout (Pretty.pretty syntax <> "\n"))
 
-      context <- get
+    let assignment string
+            | (var, '=' : expr) <- break (== '=') string = do
+                let input = Code "(input)" (Text.pack expr)
 
-      eitherResult <- do
-          Except.runExceptT (Interpret.interpretWith context Nothing input)
+                let variable = Text.strip (Text.pack var)
 
-      case eitherResult of
-          Left e -> liftIO (Text.IO.hPutStrLn IO.stderr (pack (displayException e)))
-          Right (type_, value) -> State.modify ((variable, type_, value) :)
+                eitherResult <- interpret input
 
-    | otherwise
-    = liftIO (putStrLn "usage: let = {expression}")
+                case eitherResult of
+                    Left e -> do
+                        err e
 
-infer :: (MonadState Status m, MonadIO m) => Cmd m
-infer expr = do
-    let input = Code (pack expr)
+                    Right (type_, value) -> do
+                        State.modify ((variable, type_, value) :)
 
-    context <- get
+            | otherwise = do
+                liftIO (putStrLn "usage: let = {expression}")
 
-    eitherResult <- do
-        Except.runExceptT (Interpret.interpretWith context Nothing input)
+    let infer expr = do
+            let input = Code "(input)" (Text.pack expr)
 
-    case eitherResult of
-        Left e -> do
-            liftIO (Text.IO.hPutStrLn IO.stderr (pack (displayException e)))
+            eitherResult <- interpret input
 
-        Right (type_, _) -> do
-            width <- liftIO Grace.Pretty.getWidth
+            case eitherResult of
+                Left e -> do
+                    err e
 
-            liftIO (Grace.Pretty.renderIO True width IO.stdout (Grace.Pretty.pretty type_ <> "\n"))
+                Right (type_, _) -> do
+                    width <- liftIO Pretty.getWidth
 
-complete :: Monad m => CompleterStyle m
-complete =
-    Combine File
-      (Custom (Repline.runMatcher [ (":", completeCommands) ] completeIdentifiers))
-  where
-    completeCommands =
-        Repline.listCompleter (fmap adapt (commands @(StateT Status IO)))
-      where
-        adapt (c, _) = ":" <> c
+                    liftIO (Pretty.renderIO True width IO.stdout (Pretty.pretty type_ <> "\n"))
 
-    completeIdentifiers = Repline.listCompleter (fmap unpack (toList reserved))
+    let options =
+            [ ("let", Repline.dontCrash . assignment)
+            , ("type", Repline.dontCrash . infer)
+            ]
+
+    let tabComplete =
+            Custom (Repline.runMatcher [ (":", completeCommands) ] complete)
+          where
+            completeCommands =
+                Repline.listCompleter (fmap adapt options)
+              where
+                adapt (c, _) = ":" <> c
+
+            complete =
+                foldr Repline.fallbackCompletion Completion.noCompletion
+                    [ completeReserved
+                    , completeIdentifiers
+                    , completeFields
+                    ]
+
+            completeReserved =
+                Repline.listCompleter (fmap Text.unpack (toList reserved))
+
+            completeIdentifiers args = do
+                context <- get
+
+                let completions =
+                        fmap (\(name, _, _) -> name) context
+
+                Repline.listCompleter (fmap Text.unpack completions) args
+
+            completeFields =
+                Repline.wordCompleter \prefix -> do
+                    let toNonEmpty (x : xs) =  x :| xs
+                        toNonEmpty      []  = "" :| []
+
+                    let loop (c0 :| c1 : cs) context = do
+                            let newContext = do
+                                    (name, type_) <- context
+
+                                    Monad.guard (c0 == name)
+
+                                    case Type.node type_ of
+                                        Type.Record (Type.Fields keyTypes _) -> do
+                                            keyTypes
+                                        _ -> do
+                                            empty
+
+                            results <- loop (c1 :| cs) newContext
+
+                            let prepend result = c0 <> "." <> result
+
+                            return (fmap prepend results)
+                        loop (c0 :| []) context = return do
+                            (name, _) <- context
+
+                            Monad.guard (Text.isPrefixOf c0 name)
+
+                            return name
+
+                    let startingComponents =
+                            toNonEmpty (Text.splitOn "." (Text.pack prefix))
+
+                    context <- get
+
+                    let startingContext = do
+                            (name, type_, _) <- context
+
+                            return (name, type_)
+
+                    results <- loop startingComponents startingContext
+
+                    return (fmap Text.unpack results)
+
+    let banner MultiLine  = return "... "
+        banner SingleLine = return ">>> "
+
+    let prefix = Just ':'
+
+    let multilineCommand = Just "paste"
+
+    let initialiser = return ()
+
+    let finaliser = return Repline.Exit
+
+    let action = Repline.evalReplOpts ReplOpts{..}
+
+    State.evalStateT action []

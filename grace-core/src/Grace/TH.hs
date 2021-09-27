@@ -1,18 +1,19 @@
+{- | This module provides Template Haskell functions to embed expression and
+     their times at compile-time.
+-}
+
 module Grace.TH
     ( grace
-
       -- * Embedding an expression
     , expressionFromCode
     , expressionFromFile
     , expressionFromInput
-
       -- * Embedding the type of an expression
     , typeOfCode
     , typeOfFile
     , typeOfInput
     ) where
 
-import Control.Exception (displayException)
 import Data.Functor (void)
 import Data.Text (Text)
 import Data.Void (Void)
@@ -22,11 +23,12 @@ import Grace.Type (Type)
 import Language.Haskell.TH.Quote (QuasiQuoter(..))
 import Language.Haskell.TH.Syntax (Lift, Q, TExp(..))
 
+import qualified Control.Exception.Safe as Exception
 import qualified Control.Monad.Except as Except
-import qualified Data.Text            as Text
-import qualified Grace.Interpret      as Interpret
-import qualified Grace.Normalize      as Normalize
-import qualified Language.Haskell.TH  as TH
+import qualified Data.Text as Text
+import qualified Grace.Interpret as Interpret
+import qualified Grace.Normalize as Normalize
+import qualified Language.Haskell.TH as TH
 import qualified Language.Haskell.TH.Syntax as TH
 
 -- $setup
@@ -60,7 +62,7 @@ grace = QuasiQuoter
      Syntax {location = (), node = Scalar (Text "hello")}
 -}
 expressionFromCode :: Text -> Q (TExp (Syntax () Void))
-expressionFromCode = expressionFromInput . Code
+expressionFromCode = expressionFromInput . Code "(input)"
 
 -- | Like `expressionFromCode`, but takes path of a source file as input.
 expressionFromFile :: FilePath -> Q (TExp (Syntax () Void))
@@ -79,7 +81,7 @@ expressionFromInput = helperFunction snd
      Type {location = (), node = Scalar Text}
 -}
 typeOfCode :: Text -> Q (TExp (Type ()))
-typeOfCode = typeOfInput . Code
+typeOfCode = typeOfInput . Code "(input)"
 
 -- | Like `typeOfCode`, but takes path of a source file as input.
 typeOfFile :: FilePath -> Q (TExp (Type ()))
@@ -91,12 +93,13 @@ typeOfInput = helperFunction fst
 
 -- Internal functions
 
-helperFunction :: Lift r => ((Type (), Syntax () Void) -> r) -> Input -> Q (TExp r)
+helperFunction
+    :: Lift r => ((Type (), Syntax () Void) -> r) -> Input -> Q (TExp r)
 helperFunction f input = do
-    eitherResult <- Except.runExceptT (Interpret.interpret Nothing input)
+    eitherResult <- Except.runExceptT (Interpret.interpret input)
 
     (inferred, value) <- case eitherResult of
-        Left e -> fail (displayException e)
+        Left e -> fail (Exception.displayException e)
         Right result -> return result
 
     let type_ = void inferred

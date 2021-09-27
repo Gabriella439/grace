@@ -25,16 +25,14 @@ module Grace.Lexer
     , LocatedToken(..)
     , lex
     , reserved
-
       -- * Miscellaneous
     , validRecordLabel
-
       -- * Errors related to parsing
     , ParseError(..)
     ) where
 
 import Control.Applicative (empty, (<|>))
-import Control.Exception (Exception(..))
+import Control.Exception.Safe (Exception(..))
 import Control.Monad.Combinators (many, manyTill, sepBy1)
 import Data.HashSet (HashSet)
 import Data.List.NonEmpty (NonEmpty(..))
@@ -44,21 +42,23 @@ import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Location (Location(..), Offset(..))
 import Prelude hiding (lex)
-import Text.Megaparsec (ParseErrorBundle(..), (<?>), try)
+import Text.Megaparsec (ParseErrorBundle(..), try, (<?>))
+import Text.URI.QQ (scheme)
 
-import qualified Control.Monad              as Monad
-import qualified Control.Monad.Combinators  as Combinators
-import qualified Data.Char                  as Char
-import qualified Data.HashSet               as HashSet
-import qualified Data.List                  as List
-import qualified Data.Scientific            as Scientific
-import qualified Data.Text                  as Text
-import qualified Data.Text.Read             as Read
-import qualified Grace.Location             as Location
-import qualified Text.Megaparsec            as Megaparsec
-import qualified Text.Megaparsec.Char       as Megaparsec.Char
+import qualified Control.Monad as Monad
+import qualified Control.Monad.Combinators as Combinators
+import qualified Data.Char as Char
+import qualified Data.HashSet as HashSet
+import qualified Data.List as List
+import qualified Data.Scientific as Scientific
+import qualified Data.Text as Text
+import qualified Data.Text.Read as Read
+import qualified Grace.Location as Location
+import qualified Text.Megaparsec as Megaparsec
+import qualified Text.Megaparsec.Char as Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as Lexer
-import qualified Text.Megaparsec.Error      as Error
+import qualified Text.Megaparsec.Error as Error
+import qualified Text.URI as URI
 
 -- | Short-hand type synonym used by lexing utilities
 type Parser = Megaparsec.Parsec Void Text
@@ -78,6 +78,7 @@ parseToken =
         [ -- `file` has to come before the lexer for `.` so that a file
           -- prefix of `.` or `..` is not lexed as a field access
           file
+        , uri
         , label
 
         , Combinators.choice
@@ -166,7 +167,7 @@ parseToken =
 
 parseLocatedToken :: Parser LocatedToken
 parseLocatedToken = do
-    start <- fmap Offset (Megaparsec.getOffset)
+    start <- fmap Offset Megaparsec.getOffset
     token <- parseToken
     return LocatedToken{..}
 
@@ -216,11 +217,26 @@ file = lexeme do
             ||  ('\x7C' == c)
             ||   '\x7E' == c
 
-    let pathComponent = Megaparsec.takeWhileP (Just "path character") isPath
+    let pathComponent = Megaparsec.takeWhile1P (Just "path character") isPath
 
     suffix <- pathComponent `sepBy1` "/"
 
-    return (File (concat (map Text.unpack (prefix : List.intersperse "/" suffix))))
+    return (File (concatMap Text.unpack (prefix : List.intersperse "/" suffix)))
+
+uri :: Parser Token
+uri = (lexeme . try) do
+    u <- URI.parser
+
+    let schemes =
+            [ [scheme|https|]
+            , [scheme|http|]
+            , [scheme|env|]
+            , [scheme|file|]
+            ]
+
+    if any (`elem` schemes) (URI.uriScheme u)
+        then return (URI u)
+        else fail "Unsupported Grace URI"
 
 text :: Parser Token
 text = lexeme do
@@ -420,6 +436,7 @@ data Token
     | Times
     | True_
     | Type
+    | URI URI.URI
     deriving stock (Eq, Show)
 
 {-| A token with offset information attached, used for reporting line and

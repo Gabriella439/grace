@@ -15,13 +15,18 @@ library
                      , Earley
                      , filepath
                      , generic-lens
+                     , http-client
+                     , http-client-tls
+                     , http-types
                      , insert-ordered-containers
                      , lens
                      , megaparsec
+                     , modern-uri
                      , mtl
                      , parser-combinators
                      , prettyprinter
                      , prettyprinter-ansi-terminal
+                     , safe-exceptions
                      , scientific
                      , string-interpolate
                      , template-haskell
@@ -31,6 +36,8 @@ library
   exposed-modules:     Grace.Context
                      , Grace.Domain
                      , Grace.Existential
+                     , Grace.Input
+                     , Grace.Import
                      , Grace.Interpret
                      , Grace.Infer
                      , Grace.Lexer
@@ -55,6 +62,7 @@ test-suite tasty
                      , grace-core
                      , mtl
                      , prettyprinter
+                     , safe-exceptions
                      , tasty
                      , tasty-hunit
                      , tasty-silver

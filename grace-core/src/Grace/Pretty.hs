@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards   #-}
 
 -- | Pretty-printing logic
 module Grace.Pretty
@@ -10,7 +10,6 @@ module Grace.Pretty
     , defaultColumns
     , getWidth
     , Pretty(..)
-
       -- * Highlighting
     , keyword
     , punctuation
@@ -29,10 +28,11 @@ import Prettyprinter.Render.Terminal (AnsiStyle)
 import System.Console.Terminal.Size (Window(..))
 import System.IO (Handle)
 
-import qualified Prettyprinter                 as Pretty
+import qualified Prettyprinter as Pretty
 import qualified Prettyprinter.Render.Terminal as Pretty.Terminal
-import qualified Prettyprinter.Render.Text     as Pretty.Text
+import qualified Prettyprinter.Render.Text as Pretty.Text
 import qualified System.Console.Terminal.Size as Size
+import qualified Text.URI as URI
 
 {-| Convenient wrapper around
     "Prettyprinter.Render.Terminal".`Pretty.Terminal.renderStrict`
@@ -127,6 +127,9 @@ instance Pretty Void where
 
 instance Pretty String where
     pretty = Pretty.pretty
+
+instance Pretty URI.URI where
+    pretty = Pretty.pretty . URI.render
 
 instance Pretty (Doc AnsiStyle) where
     pretty = id

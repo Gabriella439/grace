@@ -56,9 +56,9 @@ consist of:
 Then, edit the [`Normalize`][normalize] module to change the `apply` function to
 add a case for handling the newly-added builtin.
 
-**CAREFULLY NOTE:** If the built-in accepts a type `T` as input (e.g. `Double`)
+**CAREFULLY NOTE:** If the built-in accepts a type `T` as input (e.g. `Real`)
 then it also must accept all types that are subtypes of `T`, too (e.g.
-`Integer` and `Natural`, which are subtypes of `Double`).  For example, the
+`Integer` and `Natural`, which are subtypes of `Real`).  For example, the
 `Integer/even` function has type `Integer -> Bool`, so the `apply` function
 has to handle the case where the input to the `Integer/even` function is either
 an `Integer` *or* a `Natural` (since `Natural` is a subtype of `Integer`).

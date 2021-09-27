@@ -1,0 +1,6 @@
+{ and: List Bool -> Bool
+, equal: Bool -> Bool -> Bool
+, not: Bool -> Bool
+, or: List Bool -> Bool
+, show: Bool -> Text
+}

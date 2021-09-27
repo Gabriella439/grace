@@ -12,7 +12,6 @@
 module Grace.Existential
     ( -- * Types
       Existential
-
       -- * Utilities
     , toVariable
     ) where

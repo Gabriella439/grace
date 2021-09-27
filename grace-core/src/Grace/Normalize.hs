@@ -2,7 +2,6 @@
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedLists   #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternSynonyms   #-}
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE ViewPatterns      #-}
 
@@ -24,12 +23,12 @@ import Grace.Value (Closure(..), Value)
 import Prelude hiding (succ)
 
 import qualified Data.HashMap.Strict.InsOrd as HashMap
-import qualified Data.List                  as List
-import qualified Data.Ord                   as Ord
-import qualified Data.Sequence              as Seq
-import qualified Data.Text                  as Text
-import qualified Grace.Value                as Value
-import qualified Grace.Syntax               as Syntax
+import qualified Data.List as List
+import qualified Data.Ord as Ord
+import qualified Data.Sequence as Seq
+import qualified Data.Text as Text
+import qualified Grace.Syntax as Syntax
+import qualified Grace.Value as Value
 
 {- $setup
 
@@ -375,11 +374,11 @@ apply
             (List.sortBy (Ord.comparing fst) . HashMap.toList ->
                 [ ("array"  , arrayHandler )
                 , ("bool"   , boolHandler  )
-                , ("double" , doubleHandler)
                 , ("integer", integerHandler)
                 , ("natural", naturalHandler)
                 , ("null"   , nullHandler   )
                 , ("object" , objectHandler )
+                , ("real"   , realHandler  )
                 , ("string" , stringHandler )
                 ]
             )
@@ -394,7 +393,7 @@ apply
     loop (Value.Scalar (Integer n)) =
         apply integerHandler (Value.Scalar (Integer n))
     loop (Value.Scalar (Real n)) =
-        apply doubleHandler (Value.Scalar (Real n))
+        apply realHandler (Value.Scalar (Real n))
     loop (Value.Scalar (Text t)) =
         apply stringHandler (Value.Scalar (Text t))
     loop (Value.Scalar Null) =
