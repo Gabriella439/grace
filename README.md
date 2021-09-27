@@ -1061,32 +1061,63 @@ $ grace interpret - <<< 'http://example.com/grace/greet.ffg "John"'
 "Hello, John!"
 ```
 
-Note that if a particular URI can be handled by the Grace interpreter depends
-on its (compile-time) configuration: Internally it relies on a set of _resolvers_
-that take care of all the things related to networking like downloading, caching
-, verifying the integrity of retrieved file on so on.
-For instance, the motivating example will unfortunately not work out-of-the box
-since the grace executable has no builtin resolver for HTTP (yet).
+Grace supports the following URI schemes:
 
-Grace comes with two builtin resolvers:
+* HTTP: `https://…` or `http://…`
 
-1. One to resolve `env://` URIs,
-2. one to resolve `file://` URIs.
+  ```bash
+  $ grace interpret - <<< 'https://raw.githubusercontent.com/Gabriel439/grace/5b3c0e11ee4776a42c26c1986bef8a17dd329e2e/prelude/bool/not.ffg true'
+  false
+  ```
 
-Lets have a look at the `env://` resolver first:
-```bash
-$ MY_VAR='"Hello !"' grace interpret - <<< 'env:///MY_VAR'
-```
+* Files: `file:…`
+
+  ```bash
+  $ grace interpret - <<< 'file:///path/to/greet.ffg "John"'
+  ```
+  ```dhall
+  "Hello, John!"
+  ```
+
+* Environment variables: `env:…`
+
+  ```bash
+  $ MY_VAR='"Hello !"' grace interpret - <<< 'env:///MY_VAR'
+  ```
+  ```dhall
+  "Hello !"
+  ```
+
+## Prelude
+
+You can import a small standard library of utilities from the following URL:
+
+* [https://raw.githubusercontent.com/Gabriel439/grace/main/prelude/package.ffg](https://raw.githubusercontent.com/Gabriel439/grace/main/prelude/package.ffg)
+
+These utilities provide higher-level functionality that wraps the underlying
+builtins.
+
+Here is an example of how to use the Prelude:
+
 ```dhall
-"Hello !"
+let prelude =
+      https://raw.githubusercontent.com/Gabriel439/grace/main/prelude/package.ffg
+
+in  prelude.bool.not true
 ```
 
-The `file://` resolver is similar to the filepath-based imports we already know:
-```bash
-$ grace interpret - <<< 'file:///path/to/greet.ffg "John"'
-```
+The Prelude is organized as a large and nested record that you can import.
+Each sub-package of the Prelude is a top-level field, and the utilities are
+nested fields within each sub-package.
+
+You can also directly import the utility you need, which is faster since it
+only requires a single HTTP request:
+
 ```dhall
-"Hello, John!"
+let not =
+      https://raw.githubusercontent.com/Gabriel439/grace/main/prelude/bool/not.ffg
+
+in  not true
 ```
 
 ## Name
