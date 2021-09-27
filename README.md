@@ -14,7 +14,7 @@ most likely be interested in Grace for one of two reasons:
 
 If you're interested in code samples, then you can either jump down to the
 [Quick tour](#quick-tour) section or check out the
-[examples directory](./grace/examples).
+[examples directory](./examples).
 
 ## Features
 
