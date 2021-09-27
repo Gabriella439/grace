@@ -164,6 +164,7 @@ data ResolutionError
     | UnsupportedAuthority
     deriving stock (Show)
 
+-- | Errors related to import resolution
 data ImportError = ImportError
     { input :: Input
     , resolutionError :: ResolutionError
