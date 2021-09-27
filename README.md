@@ -552,53 +552,73 @@ let twice = \x -> [ x, x ]
 in  twice 2
 ```
 
+You can also use the built-in functions, including:
+
 ```dhall
-# Compare two 
+# Compare two `Reals` for equality
 Real/equal : Real -> Real -> Bool
 
+# Check if one `Real` is less than another `Real`
 Real/lessThan : Real -> Real -> Bool
 
+# Negate a `Real` number
 Real/negate : Real -> Real
 
+# Render a `Real` number as `Text`
 Real/show : Real -> Text
 
+# Drop the first N elements from a `List`
 List/drop : forall (a : Type) . Natural -> List a -> List a
 
+# Compare two lists for equality, given an element-wise equality test
 List/equal : forall (a : Type) . (a -> a -> Bool) -> List a -> List a -> Bool
 
+# Fold a list
 List/fold
   : forall (a : Type) .
     forall (b : Type) .
       { cons: a -> b -> b, nil: b } -> List a -> b
 
+# Get the first element of a list
 List/head
   : forall (a : Type) .
     forall (b : Alternatives) .
       List a -> < Some: a | None: { } | b >
 
+# Annotate each element of a list with its index
 List/indexed : forall (a : Type) . List a -> List { index: Natural, value: a }
 
+# Get the last element of a list
 List/last
   : forall (a : Type) .
     forall (b : Alternatives) .
       List a -> < Some: a | None: { } | b >
 
+# Compute the length of a list
 List/length : forall (a : Type) . List a -> Natural
 
+# Transform each element of a list
 List/map : forall (a : Type) . forall (b : Type) . (a -> b) -> List a -> List b
 
+# Reverse a list
 List/reverse : forall (a : Type) . List a -> List a
 
+# Take the first N elements of a list
 List/take : forall (a : Type) . Natural -> List a -> List a
 
+# Returns `true` if the `Integer` is even
 Integer/even : Integer -> Bool
 
+# Negate an `Integer`
 Integer/negate : Integer -> Integer
 
+# Returns `true` if the `Integer` is false
 Integer/odd : Integer -> Bool
 
+# Compute the absolute value of an `Integer`
 Integer/abs : Integer -> Natural
 
+# Fold a JSON value
 JSON/fold
   : forall (a : Type) .
       { array: List a -> a
@@ -613,40 +633,12 @@ JSON/fold
       JSON ->
         a
 
+# Fold a `Natural` number
 Natural/fold : forall (a : Type) . Natural -> (a -> a) -> a -> a
 
+# Compare two `Text` values for equality
 Text/equal : Text -> Text -> Bool
 ```
-
-You can also use the built-in functions, including:
-
-* `Real/show : Real -> Text`
-
-  Render any number as `Text` (including `Natural` numbers and `Integer`s,
-  since they are subtypes of `Real`)
-
-* `Integer/even : Integer -> Bool` and `Integer/odd : Integer -> Bool`
-
-  Returns whether a number is `even` or odd respectively.  These are
-  mainly included as reference implementations for how to implement a simple
-  function.
-
-* `List/fold : forall (a : Type) .  forall (b : Type) .  { cons: a -> b -> b, nil: b } -> List a -> b`
-
-  Canonical fold for a `List`, also known as a "right fold" or `foldr` in many
-  languages
-
-* `List/length : forall (a : Type) . List a -> Natural`
-
-  Returns the length of a `List`
-
-* `List/map : forall (a : Type) . forall (b : Type) . (a -> b) -> List a -> List b`
-
-  Transform each element of a list using a function
-
-* `Natural/fold : forall (a : Type) . Natural -> (a -> a) -> a -> a`
-
-  Canonical fold for a `Natural` number
 
 For an up-to-date list of builtin functions and their types, run
 the `grace builtins` subcommand.
