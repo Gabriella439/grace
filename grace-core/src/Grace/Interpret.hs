@@ -79,7 +79,7 @@ interpretWith bindings maybeAnnotation manager input = do
         Right partiallyResolved -> return partiallyResolved
 
     let process (maybeAnnotation', child) = do
-            referentiallySane input child
+            referentiallySane input (input <> child)
 
             interpretWith bindings maybeAnnotation' manager (input <> child)
 

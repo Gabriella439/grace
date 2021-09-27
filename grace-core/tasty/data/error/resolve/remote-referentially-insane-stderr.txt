@@ -2,4 +2,4 @@ Import resolution failed: https://gist.githubusercontent.com/Gabriel439/7dce61ec
 
 Local imports are rejected within remote imports
 
-Rejected import: env:FOO
+Rejected local import: env:FOO
