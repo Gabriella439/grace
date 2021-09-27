@@ -364,9 +364,9 @@ Grace supports the following Scalar types:
 
   `Natural` numbers are a subtype of `Integer`s
 
-* `Double`s, such as `3.14159265`, `6.0221409e+23`, …
+* `Real`s, such as `3.14159265`, `6.0221409e+23`, …
 
-  `Integer`s are a subtype of `Double`s
+  `Integer`s are a subtype of `Real`s
 
 * `Text`, such as `""`, `"Hello!"`, `"ABC"`, …
 
@@ -455,7 +455,7 @@ true : Bool
 
 1 : Integer  # `Natural` numbers also type-check as `Integer`s
 
-1 : Double   # All numbers type-check as `Double`s
+1 : Real     # All numbers type-check as `Real`s
 
 1 : Optional Natural  # Everything type-checks as `Optional`, too
 
@@ -518,9 +518,9 @@ record of handlers (one per alternative):
 
 ```dhall
 let render
-      : < Left: Double | Right: Bool > -> Text
+      : < Left: Real | Right: Bool > -> Text
       = merge
-          { Left: Double/show
+          { Left: Real/show
           , Right: \b -> if b then "true" else "false"
           }
 
@@ -552,12 +552,78 @@ let twice = \x -> [ x, x ]
 in  twice 2
 ```
 
+```dhall
+# Compare two 
+Real/equal : Real -> Real -> Bool
+
+Real/lessThan : Real -> Real -> Bool
+
+Real/negate : Real -> Real
+
+Real/show : Real -> Text
+
+List/drop : forall (a : Type) . Natural -> List a -> List a
+
+List/equal : forall (a : Type) . (a -> a -> Bool) -> List a -> List a -> Bool
+
+List/fold
+  : forall (a : Type) .
+    forall (b : Type) .
+      { cons: a -> b -> b, nil: b } -> List a -> b
+
+List/head
+  : forall (a : Type) .
+    forall (b : Alternatives) .
+      List a -> < Some: a | None: { } | b >
+
+List/indexed : forall (a : Type) . List a -> List { index: Natural, value: a }
+
+List/last
+  : forall (a : Type) .
+    forall (b : Alternatives) .
+      List a -> < Some: a | None: { } | b >
+
+List/length : forall (a : Type) . List a -> Natural
+
+List/map : forall (a : Type) . forall (b : Type) . (a -> b) -> List a -> List b
+
+List/reverse : forall (a : Type) . List a -> List a
+
+List/take : forall (a : Type) . Natural -> List a -> List a
+
+Integer/even : Integer -> Bool
+
+Integer/negate : Integer -> Integer
+
+Integer/odd : Integer -> Bool
+
+Integer/abs : Integer -> Natural
+
+JSON/fold
+  : forall (a : Type) .
+      { array: List a -> a
+      , bool: Bool -> a
+      , real: Real -> a
+      , integer: Integer -> a
+      , natural: Natural -> a
+      , "null": a
+      , object: List { key: Text, value: a } -> a
+      , string: Text -> a
+      } ->
+      JSON ->
+        a
+
+Natural/fold : forall (a : Type) . Natural -> (a -> a) -> a -> a
+
+Text/equal : Text -> Text -> Bool
+```
+
 You can also use the built-in functions, including:
 
-* `Double/show : Double -> Text`
+* `Real/show : Real -> Text`
 
   Render any number as `Text` (including `Natural` numbers and `Integer`s,
-  since they are subtypes of `Double`)
+  since they are subtypes of `Real`)
 
 * `Integer/even : Integer -> Bool` and `Integer/odd : Integer -> Bool`
 
@@ -843,7 +909,7 @@ JSON/fold
   : forall (a : Type) .
       { array: List a -> a
       , bool: Bool -> a
-      , double: Double -> a
+      , real: Real -> a
       , integer: Integer -> a
       , natural: Natural -> a
       , "null": a
@@ -864,7 +930,7 @@ JSON/fold
   { "bool": \b -> if b then 1 else 0
   , "natural": \x -> x
   , "integer": Integer/abs
-  , "double": \_ -> 1
+  , "real": \_ -> 1
   , "string": \_ -> 2
   , "null": 3
   , "object": List/length

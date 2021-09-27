@@ -1807,7 +1807,7 @@ infer e0 = do
                                         (Type.Fields
                                             [ ( "array", _Type{ node = Type.List _Type{ node = "a" } } ~> _Type{ node = "a" })
                                             , ("bool", _Type{ node = Type.Scalar Monotype.Bool } ~> _Type{ node = "a" })
-                                            , ("double", _Type{ node = Type.Scalar Monotype.Real } ~> _Type{ node = "a" })
+                                            , ("real", _Type{ node = Type.Scalar Monotype.Real } ~> _Type{ node = "a" })
                                             , ("integer", _Type{ node = Type.Scalar Monotype.Integer } ~> _Type{ node = "a" })
                                             , ("natural", _Type{ node = Type.Scalar Monotype.Natural } ~> _Type{ node = "a" })
                                             , ("null", _Type{ node = "a" })

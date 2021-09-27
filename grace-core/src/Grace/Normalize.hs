@@ -374,11 +374,11 @@ apply
             (List.sortBy (Ord.comparing fst) . HashMap.toList ->
                 [ ("array"  , arrayHandler )
                 , ("bool"   , boolHandler  )
-                , ("double" , doubleHandler)
                 , ("integer", integerHandler)
                 , ("natural", naturalHandler)
                 , ("null"   , nullHandler   )
                 , ("object" , objectHandler )
+                , ("real"   , realHandler  )
                 , ("string" , stringHandler )
                 ]
             )
@@ -393,7 +393,7 @@ apply
     loop (Value.Scalar (Integer n)) =
         apply integerHandler (Value.Scalar (Integer n))
     loop (Value.Scalar (Real n)) =
-        apply doubleHandler (Value.Scalar (Real n))
+        apply realHandler (Value.Scalar (Real n))
     loop (Value.Scalar (Text t)) =
         apply stringHandler (Value.Scalar (Text t))
     loop (Value.Scalar Null) =
