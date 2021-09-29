@@ -90,7 +90,7 @@ Grace implements the following features so that you don't have to:
 
   … and this doesn't compromise the soundness of the type system.
 
-* [Dhall](https://dhall-lang.org/)-style filepath imports
+* [Dhall](https://dhall-lang.org/)-style imports
 
   You can import subexpressions by referencing their path or URL.  You can also
   import JSON in the way same way since Grace is a superset of JSON.
