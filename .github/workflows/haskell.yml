@@ -36,4 +36,4 @@ jobs:
     - name: Build
       run: cabal build --enable-tests --enable-benchmarks
     - name: Run tests
-      run: cabal test
+      run: cabal test tasty
