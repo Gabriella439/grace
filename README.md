@@ -16,6 +16,20 @@ If you're interested in code samples, then you can either jump down to the
 [Quick tour](#quick-tour) section or check out the
 [examples directory](./examples).
 
+## Build
+
+You can build the `grace` executable using `cabal`:
+
+```bash
+$ cabal build exe:grace
+```
+
+You can also build this project using Nix:
+
+```bash
+$ nix build
+```
+
 ## Features
 
 Grace implements the following features so that you don't have to:
