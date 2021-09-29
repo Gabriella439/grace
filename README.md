@@ -1071,7 +1071,7 @@ Grace supports the following URI schemes:
 * Files: `file:…`
 
   ```bash
-  $ grace interpret - <<< 'file:///path/to/greet.ffg "John"'
+  $ grace interpret - <<< 'file:/path/to/greet.ffg "John"'
   ```
   ```dhall
   "Hello, John!"
