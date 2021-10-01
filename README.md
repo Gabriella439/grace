@@ -16,6 +16,20 @@ If you're interested in code samples, then you can either jump down to the
 [Quick tour](#quick-tour) section or check out the
 [examples directory](./examples).
 
+## Build
+
+You can build the `grace` executable using `cabal`:
+
+```bash
+$ cabal build exe:grace
+```
+
+You can also build this project using Nix:
+
+```bash
+$ nix build
+```
+
 ## Features
 
 Grace implements the following features so that you don't have to:
@@ -76,7 +90,7 @@ Grace implements the following features so that you don't have to:
 
   … and this doesn't compromise the soundness of the type system.
 
-* [Dhall](https://dhall-lang.org/)-style filepath imports
+* [Dhall](https://dhall-lang.org/)-style imports
 
   You can import subexpressions by referencing their path or URL.  You can also
   import JSON in the way same way since Grace is a superset of JSON.
@@ -1057,7 +1071,7 @@ Grace supports the following URI schemes:
 * Files: `file:…`
 
   ```bash
-  $ grace interpret - <<< 'file:///path/to/greet.ffg "John"'
+  $ grace interpret - <<< 'file:/path/to/greet.ffg "John"'
   ```
   ```dhall
   "Hello, John!"

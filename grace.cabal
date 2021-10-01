@@ -1,20 +1,20 @@
 cabal-version:       >=1.10
-name:                grace-core
+name:                grace
 version:             1.0.0
 license-file:        LICENSE
-author:              Gabriel Gonzalez
+author:              Gabriella Gonzalez
 maintainer:          Gabriel439@gmail.com
 build-type:          Simple
-
-tested-with:         GHC ==8.8.4 || ==8.10.7 || ==9.0.1 || ==9.2.0.20210821
 
 library
   hs-source-dirs:      src
   build-depends:       base
-                     , containers
                      , Earley
+                     , ansi-terminal
+                     , containers
                      , filepath
                      , generic-lens
+                     , haskeline
                      , http-client
                      , http-client-tls
                      , http-types
@@ -23,9 +23,11 @@ library
                      , megaparsec
                      , modern-uri
                      , mtl
+                     , optparse-applicative
                      , parser-combinators
                      , prettyprinter
                      , prettyprinter-ansi-terminal
+                     , repline
                      , safe-exceptions
                      , scientific
                      , string-interpolate
@@ -33,7 +35,9 @@ library
                      , terminal-size
                      , text
                      , unordered-containers
-  exposed-modules:     Grace.Context
+
+  exposed-modules:     Grace
+                     , Grace.Context
                      , Grace.Domain
                      , Grace.Existential
                      , Grace.Input
@@ -44,14 +48,23 @@ library
                      , Grace.Location
                      , Grace.Monotype
                      , Grace.Normalize
+                     , Grace.Repl
                      , Grace.Parser
                      , Grace.Pretty
                      , Grace.Syntax
                      , Grace.TH
                      , Grace.Type
                      , Grace.Value
+
   default-language:    Haskell2010
   ghc-options:         -Wall
+
+executable grace
+  main-is:             Main.hs
+  build-depends:       base
+                     , grace
+  hs-source-dirs:      grace
+  default-language:    Haskell2010
 
 test-suite tasty
   type:                exitcode-stdio-1.0
@@ -59,7 +72,7 @@ test-suite tasty
   build-depends:       base
                      , directory
                      , filepath
-                     , grace-core
+                     , grace
                      , mtl
                      , prettyprinter
                      , safe-exceptions
