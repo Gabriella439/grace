@@ -428,18 +428,17 @@ prettyExpression expression@Lambda{} =
     -- (which is typically a multi-line result)
     Pretty.group (Pretty.flatAlt long short)
   where
-    short = prettyShort expression
+    short = punctuation "\\" <> prettyShort expression
 
     long = Pretty.align (prettyLong expression)
 
     prettyShort (Lambda _ name body) =
-            punctuation "\\"
-        <>  label (pretty name)
+            label (pretty name)
         <>  " "
-        <>  punctuation "-> "
         <>  liftSyntax prettyShort body
     prettyShort body =
-        prettyExpression body
+            punctuation "-> "
+        <>  prettyExpression body
 
     prettyLong (Lambda _ name body) =
             punctuation "\\"
