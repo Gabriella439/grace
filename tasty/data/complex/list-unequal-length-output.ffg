@@ -1,1 +1,1 @@
-\f -> \x -> false
+\f x -> false
