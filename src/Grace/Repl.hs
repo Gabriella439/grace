@@ -1,6 +1,7 @@
 {-# LANGUAGE BlockArguments    #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes       #-}
 {-# LANGUAGE RecordWildCards   #-}
 
 -- | This module contains the implementation of the @grace repl@ subcommand
@@ -16,6 +17,7 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad.State (MonadState(..))
 import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
+import Data.String.Interpolate (__i)
 import Grace.Interpret (Input(..))
 import Grace.Lexer (reserved)
 import System.Console.Repline (CompleterStyle(..), MultiLine(..), ReplOpts(..))
@@ -63,6 +65,19 @@ repl = do
 
                     liftIO (Pretty.renderIO True width IO.stdout (Pretty.pretty syntax <> "\n"))
 
+    let help _string = do
+            liftIO (putStrLn [__i|
+                Type any expression to normalize it or use one of the following commands:
+                :help
+                    Print help text and describe options
+                :paste
+                    Start a multi-line input. Submit with <Ctrl-D>
+                :type EXPRESSION
+                    Infer the type of an expression
+                :let IDENTIFIER = EXPRESSION
+                    Assign an expression to a variable
+            |])
+
     let assignment string
             | (var, '=' : expr) <- break (== '=') string = do
                 let input = Code "(input)" (Text.pack expr)
@@ -96,7 +111,8 @@ repl = do
                     liftIO (Pretty.renderIO True width IO.stdout (Pretty.pretty type_ <> "\n"))
 
     let options =
-            [ ("let", Repline.dontCrash . assignment)
+            [ ("help", Repline.dontCrash . help)
+            , ("let", Repline.dontCrash . assignment)
             , ("paste", Repline.dontCrash . \_ -> return ())
             , ("type", Repline.dontCrash . infer)
             ]
