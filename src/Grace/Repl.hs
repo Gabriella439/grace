@@ -12,7 +12,7 @@ module Grace.Repl
     ) where
 
 import Control.Applicative (empty)
-import Control.Exception.Safe (displayException)
+import Control.Exception.Safe (displayException, throwIO)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.State (MonadState(..))
 import Data.Foldable (toList)
@@ -20,6 +20,7 @@ import Data.List.NonEmpty (NonEmpty(..))
 import Data.String.Interpolate (__i)
 import Grace.Interpret (Input(..))
 import Grace.Lexer (reserved)
+import System.Console.Haskeline (Interrupt(..))
 import System.Console.Repline (CompleterStyle(..), MultiLine(..), ReplOpts(..))
 
 import qualified Control.Monad as Monad
@@ -76,6 +77,8 @@ repl = do
                     Infer the type of an expression
                 :let IDENTIFIER = EXPRESSION
                     Assign an expression to a variable
+                :quit
+                    Exit the REPL
             |])
 
     let assignment string
@@ -110,10 +113,14 @@ repl = do
 
                     liftIO (Pretty.renderIO True width IO.stdout (Pretty.pretty type_ <> "\n"))
 
+    let quit _ =
+            liftIO (throwIO Interrupt)
+
     let options =
             [ ("help", Repline.dontCrash . help)
             , ("let", Repline.dontCrash . assignment)
             , ("paste", Repline.dontCrash . \_ -> return ())
+            , ("quit", quit)
             , ("type", Repline.dontCrash . infer)
             ]
 
