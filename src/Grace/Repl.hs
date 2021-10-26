@@ -97,6 +97,7 @@ repl = do
 
     let options =
             [ ("let", Repline.dontCrash . assignment)
+            , ("paste", Repline.dontCrash . \_ -> return ())
             , ("type", Repline.dontCrash . infer)
             ]
 
