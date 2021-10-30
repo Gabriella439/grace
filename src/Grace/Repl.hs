@@ -119,6 +119,8 @@ repl = do
     let options =
             [ ("help", Repline.dontCrash . help)
             , ("let", Repline.dontCrash . assignment)
+            -- `paste` is included here for auto-completion purposes only.
+            -- `repline`'s `multilineCommand` logic overrides this `mempty`.
             , ("paste", Repline.dontCrash . mempty)
             , ("quit", quit)
             , ("type", Repline.dontCrash . infer)
