@@ -119,7 +119,7 @@ repl = do
     let options =
             [ ("help", Repline.dontCrash . help)
             , ("let", Repline.dontCrash . assignment)
-            , ("paste", Repline.dontCrash . \_ -> return ())
+            , ("paste", Repline.dontCrash . mempty)
             , ("quit", quit)
             , ("type", Repline.dontCrash . infer)
             ]
