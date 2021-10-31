@@ -120,7 +120,7 @@ repl = do
             [ ("help", Repline.dontCrash . help)
             , ("let", Repline.dontCrash . assignment)
             -- `paste` is included here for auto-completion purposes only.
-            -- `repline`'s `multilineCommand` logic overrides this `mempty`.
+            -- `repline`'s `multilineCommand` logic overrides this no-op.
             , ("paste", Repline.dontCrash . \_ -> return ())
             , ("quit", quit)
             , ("type", Repline.dontCrash . infer)
