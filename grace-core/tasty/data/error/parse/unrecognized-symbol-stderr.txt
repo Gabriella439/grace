@@ -1,4 +1,0 @@
-tasty/data/error/parse/unrecognized-symbol-input.ffg:1:6: Invalid input - Lexing failed
-  │
-1 │ True & False
-  │      ↑

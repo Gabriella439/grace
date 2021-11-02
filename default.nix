@@ -11,9 +11,7 @@ let
           oldOverrides = old.overrides or (_: _: {});
 
           sourceOverrides = pkgsNew.haskell.lib.packageSourceOverrides {
-            grace = ./grace;
-
-            grace-core = ./grace-core;
+            grace = ./.;
           };
 
         in
@@ -24,4 +22,4 @@ let
   pkgs = import nixpkgs { config = { }; overlays = [ overlay ]; };
 
 in
-  { inherit (pkgs.haskellPackages) grace-core grace; }
+  { inherit (pkgs.haskellPackages) grace; }

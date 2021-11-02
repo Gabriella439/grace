@@ -1,0 +1,3 @@
+Import resolution failed: env://foo/bar
+
+Unsupported authority

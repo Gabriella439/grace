@@ -1,0 +1,21 @@
+# This is taken from the mustache tutorial:
+#
+# https://mustache.github.io/mustache.5.html
+let template = \args ->
+        "Hello " + args.name + "\n"
+      + "You have just won " + Real/show args.value + " dollars!\n"
+      + ( if args.in_ca
+          then    "Well, "
+                + Real/show args.taxed_value
+                + " dollars, after taxes.\n"
+          else ""
+        )
+
+let arguments =
+      { name: "Chris"
+      , value: 10000
+      , taxed_value: 6000
+      , in_ca: true
+      }
+
+in  template arguments

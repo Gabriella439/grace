@@ -1,0 +1,10 @@
+- ignore: {name: Use fmap}
+- ignore: {name: Use <$>}
+- ignore: {name: Avoid lambda using `infix`}
+- ignore: {name: Use infix}
+- ignore: {name: Use tuple-section}
+- ignore: {name: Avoid lambda}
+- ignore: {name: Unused LANGUAGE pragma}
+- ignore: {name: Use const}
+- ignore: {name: Redundant bracket, within: Grace.Parser}
+- ignore: {name: Redundant return, within: Grace.Parser}
