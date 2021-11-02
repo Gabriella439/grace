@@ -24,7 +24,7 @@ module Grace.Parser
     , ParseError(..)
     ) where
 
-import Control.Applicative (many, optional, (<|>))
+import Control.Applicative (many, optional, some, (<|>))
 import Control.Applicative.Combinators (endBy, sepBy)
 import Control.Applicative.Combinators.NonEmpty (sepBy1)
 import Data.Functor (void, ($>))
@@ -587,26 +587,31 @@ grammar = mdo
               where
                 node = forallOrExists typeVariableOffset typeVariable domain_ type_
 
-        locatedTypeVariables <- many
-            (   do  locatedForall <- locatedToken Lexer.Forall
-                    token Lexer.OpenParenthesis
-                    locatedTypeVariable <- locatedLabel
-                    token Lexer.Colon
-                    domain_ <- domain
-                    token Lexer.CloseParenthesis
+        fss <- many
+            (   do  location <- locatedToken Lexer.Forall
+                    fs <- some do
+                        token Lexer.OpenParenthesis
+                        locatedTypeVariable <- locatedLabel
+                        token Lexer.Colon
+                        domain_ <- domain
+                        token Lexer.CloseParenthesis
+                        return \location_ -> forall (Type.Forall, location_, locatedTypeVariable, domain_)
                     token Lexer.Dot
-                    return (Type.Forall, locatedForall, locatedTypeVariable, domain_)
-            <|> do  locatedExists <- locatedToken Lexer.Exists
-                    token Lexer.OpenParenthesis
-                    locatedTypeVariable <- locatedLabel
-                    token Lexer.Colon
-                    domain_ <- domain
-                    token Lexer.CloseParenthesis
+                    return (map ($ location) fs)
+            <|> do  location <- locatedToken Lexer.Exists
+                    fs <- some do
+                        token Lexer.OpenParenthesis
+                        locatedTypeVariable <- locatedLabel
+                        token Lexer.Colon
+                        domain_ <- domain
+                        token Lexer.CloseParenthesis
+
+                        return \location_ -> forall (Type.Exists, location_, locatedTypeVariable, domain_)
                     token Lexer.Dot
-                    return (Type.Exists, locatedExists, locatedTypeVariable, domain_)
+                    return (map ($ location) fs)
             )
         t <- functionType
-        return (foldr forall t locatedTypeVariables)
+        return (foldr ($) t (concat fss))
 
     functionType <- rule do
         let function _A@Type{ location } _B = Type{..}
