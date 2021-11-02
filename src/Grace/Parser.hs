@@ -595,7 +595,7 @@ grammar = mdo
                         token Lexer.Colon
                         domain_ <- domain
                         token Lexer.CloseParenthesis
-                        return \location_ -> (forall (Type.Forall, location_, locatedTypeVariable, domain_))
+                        return \location_ -> forall (Type.Forall, location_, locatedTypeVariable, domain_)
                     token Lexer.Dot
                     return (map ($ location) fs)
             <|> do  location <- locatedToken Lexer.Exists
@@ -606,7 +606,7 @@ grammar = mdo
                         domain_ <- domain
                         token Lexer.CloseParenthesis
 
-                        return \location_ -> (forall (Type.Exists, location_, locatedTypeVariable, domain_))
+                        return \location_ -> forall (Type.Exists, location_, locatedTypeVariable, domain_)
                     token Lexer.Dot
                     return (map ($ location) fs)
             )
