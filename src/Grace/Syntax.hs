@@ -401,11 +401,6 @@ data Builtin
     deriving (Bounded, Enum, Eq, Generic, Lift, Show)
 
 instance Pretty Builtin where
-    pretty ListAny        = builtin "List/any"
-    pretty ListEqual      = builtin "List/equal"
-    pretty ListFold       = builtin "List/fold"
-    pretty ListLength     = builtin "List/length"
-    pretty ListMap        = builtin "List/map"
     pretty RealEqual      = builtin "Real/equal"
     pretty RealLessThan   = builtin "Real/lessThan"
     pretty RealNegate     = builtin "Real/negate"
@@ -415,6 +410,7 @@ instance Pretty Builtin where
     pretty IntegerNegate  = builtin "Integer/negate"
     pretty IntegerOdd     = builtin "Integer/odd"
     pretty JSONFold       = builtin "JSON/fold"
+    pretty ListAny        = builtin "List/any"
     pretty ListDrop       = builtin "List/drop"
     pretty ListEqual      = builtin "List/equal"
     pretty ListFold       = builtin "List/fold"
