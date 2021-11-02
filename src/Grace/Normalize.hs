@@ -261,7 +261,7 @@ apply
 apply
     (Value.Application (Value.Builtin Syntax.ListAny) f)
     (Value.List elements)
-        | Just bools <- traverse toBool (map (apply f) elements) = Value.Scalar (Syntax.Bool (or bools))
+        | Just bools <- traverse toBool (fmap (apply f) elements) = Value.Scalar (Syntax.Bool (or bools))
       where toBool :: Value -> Maybe Bool
             toBool value =
               case value of
