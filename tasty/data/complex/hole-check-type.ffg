@@ -1,1 +1,1 @@
-forall (a : Type) . forall (b : Type) . a -> List b
+forall (a : Type) (b : Type) . a -> List b
