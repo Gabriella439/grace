@@ -24,6 +24,7 @@ module Grace.Context
     ) where
 
 import Data.Text (Text)
+import Data.Void (Void)
 import Grace.Domain (Domain)
 import Grace.Existential (Existential)
 import Grace.Monotype (Monotype)
@@ -45,6 +46,7 @@ import qualified Prettyprinter as Pretty
 
    >>> :set -XOverloadedStrings
    >>> :set -XTypeApplications
+   >>> import Grace.Type (Hole, Record, Union)
 -}
 
 -- | An element of the `Context` list
@@ -54,7 +56,7 @@ data Entry s
     --
     -- >>> pretty @(Entry ()) (Variable Domain.Type "a")
     -- a: Type
-    | Annotation Text (Type s)
+    | Annotation Text (Type s Void)
     -- ^ A bound variable whose type is known
     --
     -- >>> pretty @(Entry ()) (Annotation "x" "a")
@@ -251,13 +253,13 @@ prettyAlternativeType (k, τ) =
 {-| Substitute a `Type` using the solved entries of a `Context`
 
     >>> original = Type{ location = (), node = Type.UnsolvedType 0 }
-    >>> pretty original
+    >>> pretty @(Type () Hole) original
     a?
 
-    >>> pretty (solveType [ UnsolvedType 1, SolvedType 0 (Monotype.Scalar Monotype.Bool) ] original)
+    >>> pretty @(Type () Hole) (solveType [ UnsolvedType 1, SolvedType 0 (Monotype.Scalar Monotype.Bool) ] original)
     Bool
 -}
-solveType :: Context s -> Type s -> Type s
+solveType :: Context s -> Type s h -> Type s h
 solveType context type_ = foldl snoc type_ context
   where
     snoc t (SolvedType         a τ) = Type.solveType         a τ t
@@ -268,17 +270,17 @@ solveType context type_ = foldl snoc type_ context
 {-| Substitute a t`Type.Record` using the solved entries of a `Context`
 
     >>> original = Type.Fields [("x", Type{ location = (), node = Type.Scalar Monotype.Bool })] (Monotype.UnsolvedFields 0)
-    >>> pretty original
+    >>> pretty @(Record () Hole) original
     { x: Bool, a? }
 
     >>> entry = SolvedFields 0 (Monotype.Fields [] Monotype.EmptyFields)
     >>> pretty entry
     a = •
 
-    >>> pretty (solveRecord [ entry ] original)
+    >>> pretty @(Record () Hole) (solveRecord [ entry ] original)
     { x: Bool }
 -}
-solveRecord :: Context s -> Type.Record s -> Type.Record s
+solveRecord :: Context s -> Type.Record s h -> Type.Record s h
 solveRecord context record = record'
   where
     -- TODO: Come up with total solution
@@ -292,17 +294,17 @@ solveRecord context record = record'
     `Context`
 
     >>> original = Type.Alternatives [("A", Type{ location = (), node = Type.Scalar Monotype.Bool })] (Monotype.UnsolvedAlternatives 0)
-    >>> pretty original
+    >>> pretty @(Union () Hole) original
     < A: Bool | a? >
 
     >>> entry = SolvedAlternatives 0 (Monotype.Alternatives [] Monotype.EmptyAlternatives)
     >>> pretty entry
     a = •
 
-    >>> pretty (solveUnion [ entry ] original)
+    >>> pretty @(Union () Hole) (solveUnion [ entry ] original)
     < A: Bool >
 -}
-solveUnion :: Context s -> Type.Union s -> Type.Union s
+solveUnion :: Context s -> Type.Union s h -> Type.Union s h
 solveUnion context union = union'
   where
     -- TODO: Come up with total solution
@@ -320,13 +322,13 @@ solveUnion context union = union'
     * Adding universal quantifiers for all unsolved entries in the `Context`
 
     >>> original = Type{ location = (), node = Type.Function Type{ location = (), node = Type.UnsolvedType 1 } Type{ location = (), node = Type.UnsolvedType 0 } }
-    >>> pretty original
+    >>> pretty @(Type () Hole) original
     b? -> a?
 
-    >>> pretty (complete [ UnsolvedType 1, SolvedType 0 (Monotype.Scalar Monotype.Bool) ] original)
+    >>> pretty @(Type () Hole) (complete [ UnsolvedType 1, SolvedType 0 (Monotype.Scalar Monotype.Bool) ] original)
     forall (a : Type) . a -> Bool
 -}
-complete :: Context s -> Type s -> Type s
+complete :: Context s -> Type s h -> Type s h
 complete context type_ = do
     State.evalState (Monad.foldM snoc type_ context) 0
   where
@@ -463,7 +465,7 @@ lookup
     -> Int
     -- ^ Variable index (See the documentation of `Value.Variable`)
     -> Context s
-    -> Maybe (Type s)
+    -> Maybe (Type s Void)
 lookup _ _ [] =
     Nothing
 lookup x0 n (Annotation x1 _A : _Γ) =
