@@ -61,22 +61,22 @@ import qualified Prettyprinter as Pretty
 -}
 
 -- | The surface syntax for the language
-data Syntax s a = Syntax { location :: s, node :: Node s a }
+data Syntax h s a = Syntax { location :: s, node :: Node h s a }
     deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
 
-instance Bifunctor Syntax where
+instance Bifunctor (Syntax h) where
     first f Syntax{ location, node } =
         Syntax{ location = f location, node = first f node }
 
     second = fmap
 
-instance IsString (Syntax () a) where
+instance IsString (Syntax h () a) where
     fromString string = Syntax { location = (), node = fromString string }
 
-instance Pretty a => Pretty (Syntax s a) where
+instance (Pretty h, Pretty a) => Pretty (Syntax h s a) where
     pretty = liftSyntax prettyExpression
 
-instance Plated (Syntax s a) where
+instance Plated (Syntax h s a) where
     plate onSyntax Syntax{ node = oldNode, .. } = do
         newNode <- case oldNode of
             Variable name index -> do
@@ -135,30 +135,30 @@ instance Plated (Syntax s a) where
         return Syntax{ node = newNode, .. }
 
 liftSyntax
-    :: Pretty a => (Node s a -> Doc AnsiStyle) -> Syntax s a -> Doc AnsiStyle
+    :: Pretty a => (Node h s a -> Doc AnsiStyle) -> Syntax h s a -> Doc AnsiStyle
 liftSyntax pretty_ Syntax{ node } = pretty_ node
 
 -- | The constructors for `Syntax`
-data Node s a
+data Node h s a
     = Variable Text Int
     -- ^
     --   >>> pretty @(Node () Void) (Variable "x" 0)
     --   x
     --   >>> pretty @(Node () Void) (Variable "x" 1)
     --   x@1
-    | Lambda s Text (Syntax s a)
+    | Lambda s Text (Syntax h s a)
     -- ^
     --   >>> pretty @(Node () Void) (Lambda () "x" "x")
     --   \x -> x
-    | Application (Syntax s a) (Syntax s a)
+    | Application (Syntax h s a) (Syntax h s a)
     -- ^
     --   >>> pretty @(Node () Void) (Application "f" "x")
     --   f x
-    | Annotation (Syntax s a) (Type s)
+    | Annotation (Syntax h s a) (Type s h)
     -- ^
     --   >>> pretty @(Node () Void) (Annotation "x" "A")
     --   x : A
-    | Let (NonEmpty (Binding s a)) (Syntax s a)
+    | Let (NonEmpty (Binding h s a)) (Syntax h s a)
     -- ^
     --   >>> pretty @(Node () Void) (Let (Binding () "x" Nothing "y" :| []) "z")
     --   let x = y in z
@@ -166,15 +166,15 @@ data Node s a
     --   let x : X = y in z
     --   >>> pretty @(Node () Void) (Let (Binding () "a" Nothing "b" :| [ Binding () "c" Nothing "d" ]) "e")
     --   let a = b let c = d in e
-    | List (Seq (Syntax s a))
+    | List (Seq (Syntax h s a))
     -- ^
     --   >>> pretty @(Node () Void) (List [ "x", "y", "z" ])
     --   [ x, y, z ]
-    | Record [(Text, Syntax s a)]
+    | Record [(Text, Syntax h s a)]
     -- ^
     --   >>> pretty @(Node () Void) (Record [ ("x", "a"), ("y", "b") ])
     --   { "x": a, "y": b }
-    | Field (Syntax s a) s Text
+    | Field (Syntax h s a) s Text
     -- ^
     --   >>> pretty @(Node () Void) (Field "x" () "a")
     --   x.a
@@ -182,16 +182,16 @@ data Node s a
     -- ^
     --   >>> pretty @(Node () Void) (Alternative "Nil")
     --   Nil
-    | Merge (Syntax s a)
+    | Merge (Syntax h s a)
     -- ^
     --   >>> pretty @(Node () Void) (Merge "x")
     --   merge x
-    | If (Syntax s a) (Syntax s a) (Syntax s a)
+    | If (Syntax h s a) (Syntax h s a) (Syntax h s a)
     -- ^
     --   >>> pretty @(Node () Void) (If "x" "y" "z")
     --   if x then y else z
     | Scalar Scalar
-    | Operator (Syntax s a) s Operator (Syntax s a)
+    | Operator (Syntax h s a) s Operator (Syntax h s a)
     -- ^
     --   >>> pretty @(Node () Void) (Operator "x" () And "y")
     --   x && y
@@ -201,7 +201,7 @@ data Node s a
     | Embed a
     deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
 
-instance Bifunctor Node where
+instance Bifunctor (Node h) where
     first _ (Variable name index) =
         Variable name index
     first f (Lambda location name body) =
@@ -209,7 +209,7 @@ instance Bifunctor Node where
     first f (Application function argument) =
         Application (first f function) (first f argument)
     first f (Annotation annotated annotation) =
-        Annotation (first f annotated) (fmap f annotation)
+        Annotation (first f annotated) (first f annotation)
     first f (Let bindings body) =
         Let (fmap (first f) bindings) (first f body)
     first f (List elements) =
@@ -237,10 +237,10 @@ instance Bifunctor Node where
 
     second = fmap
 
-instance IsString (Node s a) where
+instance IsString (Node h s a) where
     fromString string = Variable (fromString string) 0
 
-instance Pretty a => Pretty (Node s a) where
+instance (Pretty h, Pretty a) => Pretty (Node h s a) where
     pretty = prettyExpression
 
 -- | A scalar value
@@ -420,7 +420,7 @@ instance Pretty Builtin where
     pretty TextEqual      = builtin "Text/equal"
 
 -- | Pretty-print an expression
-prettyExpression :: Pretty a => Node s a -> Doc AnsiStyle
+prettyExpression :: (Pretty h, Pretty a) => Node h s a -> Doc AnsiStyle
 prettyExpression expression@Lambda{} =
     -- Anywhere you see `Pretty.group (Pretty.flatAlt long short)` that means
     -- that the pretty-printer will first attempt to display `short` if that
@@ -520,8 +520,8 @@ prettyExpression other =
 prettyOperator
     :: Pretty a
     => Operator
-    -> (Node s a -> Doc AnsiStyle)
-    -> (Node s a -> Doc AnsiStyle)
+    -> (Node h s a -> Doc AnsiStyle)
+    -> (Node h s a -> Doc AnsiStyle)
 prettyOperator operator0 prettyNext expression@(Operator _ _ operator1 _)
     | operator0 == operator1 = Pretty.group (Pretty.flatAlt long short)
   where
@@ -562,19 +562,20 @@ prettyOperator operator0 prettyNext expression@(Operator _ _ operator1 _)
 prettyOperator _ prettyNext other =
     prettyNext other
 
-prettyTimesExpression :: Pretty a => Node s a -> Doc AnsiStyle
+prettyTimesExpression :: (Pretty h, Pretty a) => Node h s a -> Doc AnsiStyle
 prettyTimesExpression = prettyOperator Times prettyPlusExpression
 
-prettyPlusExpression :: Pretty a => Node s a -> Doc AnsiStyle
+prettyPlusExpression :: (Pretty h, Pretty a) => Node h s a -> Doc AnsiStyle
 prettyPlusExpression = prettyOperator Plus prettyOrExpression
 
-prettyOrExpression :: Pretty a => Node s a -> Doc AnsiStyle
+prettyOrExpression :: (Pretty h, Pretty a) => Node h s a -> Doc AnsiStyle
 prettyOrExpression = prettyOperator Or prettyAndExpression
 
-prettyAndExpression :: Pretty a => Node s a -> Doc AnsiStyle
+prettyAndExpression :: (Pretty h, Pretty a) => Node h s a -> Doc AnsiStyle
 prettyAndExpression = prettyOperator And prettyApplicationExpression
 
-prettyApplicationExpression :: Pretty a => Node s a -> Doc AnsiStyle
+prettyApplicationExpression
+    :: (Pretty h, Pretty a) => Node h s a -> Doc AnsiStyle
 prettyApplicationExpression expression
     | isApplication expression = Pretty.group (Pretty.flatAlt long short)
     | otherwise                = prettyFieldExpression expression
@@ -609,7 +610,7 @@ prettyApplicationExpression expression
     prettyLong other =
         prettyFieldExpression other
 
-prettyFieldExpression :: Pretty a => Node s a -> Doc AnsiStyle
+prettyFieldExpression :: (Pretty h, Pretty a) => Node h s a -> Doc AnsiStyle
 prettyFieldExpression expression@Field{}  =
     Pretty.group (Pretty.flatAlt long short)
   where
@@ -635,7 +636,7 @@ prettyFieldExpression expression@Field{}  =
 prettyFieldExpression other =
     prettyPrimitiveExpression other
 
-prettyPrimitiveExpression :: Pretty a => Node s a -> Doc AnsiStyle
+prettyPrimitiveExpression :: (Pretty h, Pretty a) => Node h s a -> Doc AnsiStyle
 prettyPrimitiveExpression (Variable name index)
     | index == 0 = label (pretty name)
     | otherwise  = label (pretty name) <> "@" <> scalar (pretty index)
@@ -724,24 +725,24 @@ prettyPrimitiveExpression other = Pretty.group (Pretty.flatAlt long short)
     >>> pretty @(Binding () Void) (Binding () "x" (Just "X") "y")
     let x : X = y
 -}
-data Binding s a = Binding
+data Binding h s a = Binding
     { nameLocation :: s
     , name :: Text
-    , annotation :: Maybe (Type s)
-    , assignment :: Syntax s a
+    , annotation :: Maybe (Type s h)
+    , assignment :: Syntax h s a
     } deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
 
-instance Bifunctor Binding where
+instance Bifunctor (Binding h) where
     first f Binding{ nameLocation, annotation, assignment, .. } =
         Binding
             { nameLocation = f nameLocation
-            , annotation = fmap (fmap f) annotation
+            , annotation = fmap (first f) annotation
             , assignment = first f assignment
             , ..
             }
     second = fmap
 
-instance Pretty a => Pretty (Binding s a) where
+instance (Pretty h, Pretty a) => Pretty (Binding h s a) where
     pretty Binding{ annotation = Nothing, .. } =
         Pretty.group (Pretty.flatAlt long short)
       where

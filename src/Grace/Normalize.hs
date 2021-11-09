@@ -18,7 +18,7 @@ import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Location (Location)
 import Grace.Syntax (Builtin(..), Scalar(..), Syntax)
-import Grace.Type (Type)
+import Grace.Type (Hole, Type)
 import Grace.Value (Closure(..), Value)
 import Prelude hiding (succ)
 
@@ -95,7 +95,7 @@ asReal  _          = Nothing
 evaluate
     :: [(Text, Value)]
     -- ^ Evaluation environment (starting at @[]@ for a top-level expression)
-    -> Syntax Location (Type Location, Value)
+    -> Syntax Hole Location (Type Location Void, Value)
     -- ^ Surface syntax
     -> Value
     -- ^ Result, free of reducible sub-expressions
@@ -438,7 +438,7 @@ quote
     -- ^ Variable names currently in scope (starting at @[]@ for a top-level
     --   expression)
     -> Value
-    -> Syntax () Void
+    -> Syntax Void () Void
 quote names value = Syntax.Syntax{..}
   where
     location = ()

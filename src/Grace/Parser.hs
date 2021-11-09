@@ -35,7 +35,7 @@ import Grace.Input (Input(..))
 import Grace.Lexer (LocatedToken(LocatedToken), ParseError(..), Token)
 import Grace.Location (Location(..), Offset(..))
 import Grace.Syntax (Binding(..), Syntax(..))
-import Grace.Type (Type(..))
+import Grace.Type (Hole(..), Type(..))
 import Text.Earley (Grammar, Prod, Report(..), rule, (<?>))
 
 import qualified Data.List.NonEmpty as NonEmpty
@@ -215,7 +215,7 @@ render t = case t of
     Lexer.True_            -> "True"
     Lexer.URI _            -> "a URI"
 
-grammar :: Grammar r (Parser r (Syntax Offset Input))
+grammar :: Grammar r (Parser r (Syntax Hole Offset Input))
 grammar = mdo
     expression <- rule
         (   do  location <- locatedToken Lexer.Lambda
@@ -592,7 +592,7 @@ grammar = mdo
 
     primitiveType <- rule
         (   do  location <- locatedToken Lexer.Question
-                return Type{ node = Type.TypeHole, .. }
+                return Type{ node = Type.TypeHole Type.Hole, .. }
         <|> do  location <- locatedToken Lexer.Bool
                 return Type{ node = Type.Scalar Monotype.Bool, .. }
         <|> do  location <- locatedToken Lexer.Real
@@ -686,7 +686,7 @@ parse
     -- ^ Name of the input (used for error messages)
     -> Text
     -- ^ Source code
-    -> Either ParseError (Syntax Offset Input)
+    -> Either ParseError (Syntax Hole Offset Input)
 parse name code = do
     tokens <- Lexer.lex name code
 

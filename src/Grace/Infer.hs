@@ -39,14 +39,14 @@ import Control.Monad.State.Strict (MonadState)
 import Data.Foldable (traverse_)
 import Data.Sequence (ViewL(..))
 import Data.String.Interpolate (__i)
-import Data.Void (Void)
+import Data.Void (Void, absurd)
 import Grace.Context (Context, Entry)
 import Grace.Existential (Existential)
 import Grace.Location (Location(..))
 import Grace.Monotype (Monotype)
 import Grace.Pretty (Pretty(..))
 import Grace.Syntax (Syntax(Syntax))
-import Grace.Type (Type(..))
+import Grace.Type (Hole, Type(..))
 import Grace.Value (Value)
 
 import qualified Control.Monad as Monad
@@ -114,7 +114,8 @@ scoped entry k = do
 
     return r
 
-scopedUnsolvedType :: MonadState Status m => s -> (Type.Type s -> m a) -> m a
+scopedUnsolvedType
+    :: MonadState Status m => s -> (Type.Type s h -> m a) -> m a
 scopedUnsolvedType location k = do
     a <- fresh
 
@@ -123,7 +124,9 @@ scopedUnsolvedType location k = do
 
         k Type{ location, node = Type.UnsolvedType a }
 
-scopedUnsolvedFields :: MonadState Status m => (Type.Record s -> m a) -> m a
+scopedUnsolvedFields
+    :: MonadState Status m
+    => (Type.Record s h -> m a) -> m a
 scopedUnsolvedFields k = do
     a <- fresh
 
@@ -132,7 +135,8 @@ scopedUnsolvedFields k = do
 
         k (Type.Fields [] (Monotype.UnsolvedFields a))
 
-scopedUnsolvedAlternatives :: MonadState Status m => (Type.Union s -> m a) -> m a
+scopedUnsolvedAlternatives
+    :: MonadState Status m => (Type.Union s h -> m a) -> m a
 scopedUnsolvedAlternatives k = do
     a <- fresh
 
@@ -149,7 +153,7 @@ scopedUnsolvedAlternatives k = do
 -}
 wellFormedType
     :: MonadError TypeInferenceError m
-    => Context Location -> Type Location -> m ()
+    => Context Location -> Type Location Void -> m ()
 wellFormedType _Γ Type{..} =
     case node of
         -- UvarWF
@@ -182,8 +186,8 @@ wellFormedType _Γ Type{..} =
             predicate (Context.SolvedType   a1 _) = a0 == a1
             predicate  _                          = False
 
-        Type.TypeHole -> do
-            return ()
+        Type.TypeHole void -> do
+            absurd void
 
         Type.Optional _A -> do
             wellFormedType _Γ _A
@@ -247,18 +251,16 @@ wellFormedType _Γ Type{..} =
 -}
 subtype
     :: (MonadState Status m, MonadError TypeInferenceError m)
-    => Type Location -> Type Location -> m ()
+    => Type Location Void -> Type Location Void -> m ()
 subtype _A0 _B0 = do
     _Γ <- get
 
     case (Type.node _A0, Type.node _B0) of
-        (Type.TypeHole, _) -> do
-            scopedUnsolvedType (Type.location _A0) \_A1 -> do
-                subtype _A1 _B0
+        (Type.TypeHole void, _) -> do
+            absurd void
 
-        (_, Type.TypeHole) -> do
-            scopedUnsolvedType (Type.location _B0) \_B1 -> do
-                subtype _A0 _B1
+        (_, Type.TypeHole void) -> do
+            absurd void
 
         -- <:Var
         (Type.VariableType a0, Type.VariableType a1)
@@ -780,7 +782,7 @@ subtype _A0 _B0 = do
 -}
 instantiateTypeL
     :: (MonadState Status m, MonadError TypeInferenceError m)
-    => Existential Monotype -> Type Location -> m ()
+    => Existential Monotype -> Type Location Void -> m ()
 instantiateTypeL a _A0 = do
     _Γ0 <- get
 
@@ -792,9 +794,8 @@ instantiateTypeL a _A0 = do
             set (_Γ' <> (Context.SolvedType a τ : _Γ))
 
     case Type.node _A0 of
-        Type.TypeHole -> do
-            scopedUnsolvedType (Type.location _A0) \b -> do
-                instantiateTypeL a b
+        Type.TypeHole void -> do
+            absurd void
 
         -- InstLReach
         Type.UnsolvedType b
@@ -938,7 +939,7 @@ instantiateTypeL a _A0 = do
 -}
 instantiateTypeR
     :: (MonadState Status m, MonadError TypeInferenceError m)
-    => Type Location -> Existential Monotype -> m ()
+    => Type Location Void -> Existential Monotype -> m ()
 instantiateTypeR _A0 a = do
     _Γ0 <- get
 
@@ -950,9 +951,8 @@ instantiateTypeR _A0 a = do
             set (_Γ' <> (Context.SolvedType a τ : _Γ))
 
     case Type.node _A0 of
-        Type.TypeHole -> do
-            scopedUnsolvedType (Type.location _A0) \b -> do
-                instantiateTypeL a b
+        Type.TypeHole void -> do
+            absurd void
 
         -- InstRReach
         Type.UnsolvedType b
@@ -1089,7 +1089,10 @@ equateFields p0 p1 = do
 
 instantiateFieldsL
     :: (MonadState Status m, MonadError TypeInferenceError m)
-    => Existential Monotype.Record -> Location -> Type.Record Location -> m ()
+    => Existential Monotype.Record
+    -> Location
+    -> Type.Record Location Void
+    -> m ()
 instantiateFieldsL p0 location r@(Type.Fields kAs rest) = do
     when (p0 `Type.fieldsFreeIn` Type{ node = Type.Record r, .. }) do
         throwError (NotFieldsSubtype location p0 r)
@@ -1131,7 +1134,10 @@ instantiateFieldsL p0 location r@(Type.Fields kAs rest) = do
 
 instantiateFieldsR
     :: (MonadState Status m, MonadError TypeInferenceError m)
-    => Location -> Type.Record Location -> Existential Monotype.Record -> m ()
+    => Location
+    -> Type.Record Location Void
+    -> Existential Monotype.Record
+    -> m ()
 instantiateFieldsR location r@(Type.Fields kAs rest) p0 = do
     when (p0 `Type.fieldsFreeIn` Type{ node = Type.Record r, .. }) do
         throwError (NotFieldsSubtype location p0 r)
@@ -1200,7 +1206,10 @@ equateAlternatives p0 p1 = do
 
 instantiateAlternativesL
     :: (MonadState Status m, MonadError TypeInferenceError m)
-    => Existential Monotype.Union -> Location -> Type.Union Location -> m ()
+    => Existential Monotype.Union
+    -> Location
+    -> Type.Union Location Void
+    -> m ()
 instantiateAlternativesL p0 location u@(Type.Alternatives kAs rest) = do
     when (p0 `Type.alternativesFreeIn` Type{ node = Type.Union u, .. }) do
         throwError (NotAlternativesSubtype location p0 u)
@@ -1242,7 +1251,10 @@ instantiateAlternativesL p0 location u@(Type.Alternatives kAs rest) = do
 
 instantiateAlternativesR
     :: (MonadState Status m, MonadError TypeInferenceError m)
-    => Location -> Type.Union Location -> Existential Monotype.Union -> m ()
+    => Location
+    -> Type.Union Location Void
+    -> Existential Monotype.Union
+    -> m ()
 instantiateAlternativesR location u@(Type.Alternatives kAs rest) p0 = do
     when (p0 `Type.alternativesFreeIn` Type{ node = Type.Union u, .. }) do
         throwError (NotAlternativesSubtype location p0 u)
@@ -1291,10 +1303,10 @@ instantiateAlternativesR location u@(Type.Alternatives kAs rest) p0 = do
 -}
 infer
     :: (MonadState Status m, MonadError TypeInferenceError m)
-    => Syntax Location (Type Location, Value)
-    -> m (Type Location)
+    => Syntax Void Location (Type Location Void, Value)
+    -> m (Type Location Void)
 infer e0 = do
-    let _Type :: Type Location
+    let _Type :: Type Location Void
         _Type = Type
             { location = Syntax.location e0
             , node = error "_Type: Uninitialized node field"
@@ -1870,7 +1882,9 @@ infer e0 = do
 -}
 check
     :: (MonadState Status m, MonadError TypeInferenceError m)
-    => Syntax Location (Type Location, Value) -> Type Location -> m ()
+    => Syntax Void Location (Type Location Void, Value)
+    -> Type Location Void
+    -> m ()
 -- The check function is the most important function to understand for the
 -- bidirectional type-checking algorithm.
 --
@@ -1902,9 +1916,8 @@ check
 -- type annotations to fix any type errors that they might encounter, which is
 -- a desirable property!
 
-check e _A0@Type{ node = Type.TypeHole } = do
-    scopedUnsolvedType (Type.location _A0) \_A1 -> do
-        check e _A1
+check _ _A0@Type{ node = Type.TypeHole void } = do
+    absurd void
 
 -- →I
 check Syntax{ node = Syntax.Lambda _ x e } Type{ node = Type.Function _A _B } = do
@@ -2027,9 +2040,9 @@ check e _B = do
 -}
 inferApplication
     :: (MonadState Status m, MonadError TypeInferenceError m)
-    => Type Location
-    -> Syntax Location (Type Location, Value)
-    -> m (Type Location)
+    => Type Location Void
+    -> Syntax Void Location (Type Location Void, Value)
+    -> m (Type Location Void)
 -- ∀App
 inferApplication _A0@Type{ node = Type.Forall nameLocation a0 Domain.Type _A } e = do
     a1 <- fresh
@@ -2084,21 +2097,132 @@ inferApplication Type{ node = Type.VariableType a, ..} _ = do
 inferApplication _A@Type{..} _ = do
     throwError (NotFunctionType location _A)
 
+-- TODO
+instantiateHoles
+    :: MonadState Status m => Syntax Hole s a -> m (Syntax Void s a)
+instantiateHoles = instantiateSyntax
+  where
+    instantiateSyntax Syntax{ node = oldNode, .. } = do
+        newNode <- instantiateNode oldNode
+        pure Syntax{ node = newNode, .. }
+      where
+        instantiateNode (Syntax.Variable a b) = do
+            pure (Syntax.Variable a b)
+        instantiateNode (Syntax.Lambda a b c) = do
+            c' <- instantiateSyntax c
+            pure (Syntax.Lambda a b c')
+        instantiateNode (Syntax.Application a b) = do
+            a' <- instantiateSyntax a
+            b' <- instantiateSyntax b
+            return (Syntax.Application a' b')
+        instantiateNode (Syntax.Annotation a b) = do
+            a' <- instantiateSyntax a
+            b' <- instantiateType b
+            return (Syntax.Annotation a' b')
+        instantiateNode (Syntax.Let a b) = do
+            a' <- traverse instantiateBinding a
+            b' <- instantiateSyntax b
+            pure (Syntax.Let a' b')
+        instantiateNode (Syntax.List as) = do
+            as' <- traverse instantiateSyntax as
+            pure (Syntax.List as')
+        instantiateNode (Syntax.Record as) = do
+            as' <- traverse (traverse instantiateSyntax) as
+            pure (Syntax.Record as')
+        instantiateNode (Syntax.Field a b c) = do
+            a' <- instantiateSyntax a
+            pure (Syntax.Field a' b c)
+        instantiateNode (Syntax.Alternative a) = do
+            pure (Syntax.Alternative a)
+        instantiateNode (Syntax.Merge a) = do
+            a' <- instantiateSyntax a
+            pure (Syntax.Merge a')
+        instantiateNode (Syntax.If a b c) = do
+            a' <- instantiateSyntax a
+            b' <- instantiateSyntax b
+            c' <- instantiateSyntax c
+            pure (Syntax.If a' b' c')
+        instantiateNode (Syntax.Scalar a) = do
+            pure (Syntax.Scalar a)
+        instantiateNode (Syntax.Operator a b c d) = do
+            a' <- instantiateSyntax a
+            d' <- instantiateSyntax d
+            pure (Syntax.Operator a' b c d')
+        instantiateNode (Syntax.Builtin a) = do
+            pure (Syntax.Builtin a)
+        instantiateNode (Syntax.Embed a) = do
+            pure (Syntax.Embed a)
+
+    instantiateBinding (Syntax.Binding a b c d) = do
+        c' <- traverse instantiateType c
+        d' <- instantiateSyntax d
+        pure (Syntax.Binding a b c' d')
+
+    instantiateType Type{ node = oldNode, ..} = do
+        newNode <- instantiateNode oldNode
+        pure Type{ node = newNode, .. }
+      where
+        instantiateNode (Type.TypeHole Type.Hole) = do
+            a <- fresh
+            push (Context.UnsolvedType a)
+            pure (Type.UnsolvedType a)
+        instantiateNode (Type.VariableType a) = do
+            pure (Type.VariableType a)
+        instantiateNode (Type.UnsolvedType a) = do
+            pure (Type.UnsolvedType a)
+        instantiateNode (Type.Exists a b c d) = do
+            d' <- instantiateType d
+            pure (Type.Exists a b c d')
+        instantiateNode (Type.Forall a b c d) = do
+            d' <- instantiateType d
+            pure (Type.Forall a b c d')
+        instantiateNode (Type.Function a b) = do
+            a' <- instantiateType a
+            b' <- instantiateType b
+            pure (Type.Function a' b')
+        instantiateNode (Type.Optional a) = do
+            a' <- instantiateType a
+            pure (Type.Optional a')
+        instantiateNode (Type.List a) = do
+            a' <- instantiateType a
+            pure (Type.List a')
+        instantiateNode (Type.Record a) = do
+            a' <- instantiateRecord a
+            pure (Type.Record a')
+        instantiateNode (Type.Union a) = do
+            a' <- instantiateUnion a
+            pure (Type.Union a')
+        instantiateNode (Type.Scalar a) = do
+            pure (Type.Scalar a)
+
+        instantiateRecord (Type.Fields as b) = do
+            as' <- traverse (traverse instantiateType) as
+            pure (Type.Fields as' b)
+
+        instantiateUnion (Type.Alternatives as b) = do
+            as' <- traverse (traverse instantiateType) as
+            pure (Type.Alternatives as' b)
+
 -- | Infer the `Type` of the given `Syntax` tree
 typeOf
-    :: Syntax Location (Type Location, Value)
-    -> Either TypeInferenceError (Type Location)
+    :: Syntax Hole Location (Type Location Void, Value)
+    -> Either TypeInferenceError (Type Location Void)
 typeOf = typeWith []
 
 -- | Like `typeOf`, but accepts a custom type-checking `Context`
 typeWith
     :: Context Location
-    -> Syntax Location (Type Location, Value)
-    -> Either TypeInferenceError (Type Location)
+    -> Syntax Hole Location (Type Location Void, Value)
+    -> Either TypeInferenceError (Type Location Void)
 typeWith context syntax = do
     let initialStatus = Status{ count = 0, context }
 
-    (_A, Status{ context = _Δ }) <- State.runStateT (infer syntax) initialStatus
+    let action = do
+            holeFreeSyntax <- instantiateHoles syntax
+
+            infer holeFreeSyntax
+
+    (_A, Status{ context = _Δ }) <- State.runStateT action initialStatus
 
     return (Context.complete _Δ _A)
 
@@ -2106,13 +2230,13 @@ typeWith context syntax = do
 data TypeInferenceError
     = IllFormedAlternatives Location (Existential Monotype.Union) (Context Location)
     | IllFormedFields Location (Existential Monotype.Record) (Context Location)
-    | IllFormedType Location (Type.Node Location) (Context Location)
+    | IllFormedType Location (Type.Node Location Void) (Context Location)
     --
-    | InvalidOperands Location (Type Location)
+    | InvalidOperands Location (Type Location Void)
     --
-    | MergeConcreteRecord Location (Type Location)
-    | MergeInvalidHandler Location (Type Location)
-    | MergeRecord Location (Type Location)
+    | MergeConcreteRecord Location (Type Location Void)
+    | MergeInvalidHandler Location (Type Location Void)
+    | MergeRecord Location (Type Location Void)
     --
     | MissingAllAlternatives (Existential Monotype.Union) (Context Location)
     | MissingAllFields (Existential Monotype.Record) (Context Location)
@@ -2120,22 +2244,22 @@ data TypeInferenceError
     | MissingOneOfFields [Location] (Existential Monotype.Record) (Existential Monotype.Record) (Context Location)
     | MissingVariable (Existential Monotype) (Context Location)
     --
-    | NotFunctionType Location (Type Location)
+    | NotFunctionType Location (Type Location Void)
     | NotNecessarilyFunctionType Location Text
     --
-    | NotAlternativesSubtype Location (Existential Monotype.Union) (Type.Union Location)
-    | NotFieldsSubtype Location (Existential Monotype.Record) (Type.Record Location)
-    | NotRecordSubtype Location (Type.Node Location) Location (Type.Node Location)
-    | NotUnionSubtype Location (Type.Node Location) Location (Type.Node Location)
-    | NotSubtype Location (Type.Node Location) Location (Type.Node Location)
+    | NotAlternativesSubtype Location (Existential Monotype.Union) (Type.Union Location Void)
+    | NotFieldsSubtype Location (Existential Monotype.Record) (Type.Record Location Void)
+    | NotRecordSubtype Location (Type.Node Location Void) Location (Type.Node Location Void)
+    | NotUnionSubtype Location (Type.Node Location Void) Location (Type.Node Location Void)
+    | NotSubtype Location (Type.Node Location Void) Location (Type.Node Location Void)
     --
     | UnboundAlternatives Location Text
     | UnboundFields Location Text
     | UnboundTypeVariable Location Text
     | UnboundVariable Location Text Int
     --
-    | RecordTypeMismatch (Type Location) (Type Location) (Map.Map Text (Type Location)) (Map.Map Text (Type Location))
-    | UnionTypeMismatch (Type Location) (Type Location) (Map.Map Text (Type Location)) (Map.Map Text (Type Location))
+    | RecordTypeMismatch (Type Location Void) (Type Location Void) (Map.Map Text (Type Location Void)) (Map.Map Text (Type Location Void))
+    | UnionTypeMismatch (Type Location Void) (Type Location Void) (Map.Map Text (Type Location Void)) (Map.Map Text (Type Location Void))
     deriving (Eq, Show)
 
 instance Exception TypeInferenceError where
@@ -2429,7 +2553,7 @@ instance Exception TypeInferenceError where
         #{Location.renderError "" location }
         |]
         where
-            var = prettyToText @(Syntax.Node () Void) (Syntax.Variable x n)
+            var = prettyToText @(Syntax.Node Void () Void) (Syntax.Variable x n)
 
     displayException (RecordTypeMismatch _A0 _B0 extraA extraB) | extraB == mempty = [__i|
         Record type mismatch

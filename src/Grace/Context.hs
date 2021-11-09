@@ -24,6 +24,7 @@ module Grace.Context
     ) where
 
 import Data.Text (Text)
+import Data.Void (Void)
 import Grace.Domain (Domain)
 import Grace.Existential (Existential)
 import Grace.Monotype (Monotype)
@@ -54,7 +55,7 @@ data Entry s
     --
     -- >>> pretty @(Entry ()) (Variable Domain.Type "a")
     -- a: Type
-    | Annotation Text (Type s)
+    | Annotation Text (Type s Void)
     -- ^ A bound variable whose type is known
     --
     -- >>> pretty @(Entry ()) (Annotation "x" "a")
@@ -257,7 +258,7 @@ prettyAlternativeType (k, τ) =
     >>> pretty (solveType [ UnsolvedType 1, SolvedType 0 (Monotype.Scalar Monotype.Bool) ] original)
     Bool
 -}
-solveType :: Context s -> Type s -> Type s
+solveType :: Context s -> Type s h -> Type s h
 solveType context type_ = foldl snoc type_ context
   where
     snoc t (SolvedType         a τ) = Type.solveType         a τ t
@@ -278,7 +279,7 @@ solveType context type_ = foldl snoc type_ context
     >>> pretty (solveRecord [ entry ] original)
     { x: Bool }
 -}
-solveRecord :: Context s -> Type.Record s -> Type.Record s
+solveRecord :: Context s -> Type.Record s h -> Type.Record s h
 solveRecord context record = record'
   where
     -- TODO: Come up with total solution
@@ -302,7 +303,7 @@ solveRecord context record = record'
     >>> pretty (solveUnion [ entry ] original)
     < A: Bool >
 -}
-solveUnion :: Context s -> Type.Union s -> Type.Union s
+solveUnion :: Context s -> Type.Union s h -> Type.Union s h
 solveUnion context union = union'
   where
     -- TODO: Come up with total solution
@@ -326,7 +327,7 @@ solveUnion context union = union'
     >>> pretty (complete [ UnsolvedType 1, SolvedType 0 (Monotype.Scalar Monotype.Bool) ] original)
     forall (a : Type) . a -> Bool
 -}
-complete :: Context s -> Type s -> Type s
+complete :: Context s -> Type s h -> Type s h
 complete context type_ = do
     State.evalState (Monad.foldM snoc type_ context) 0
   where
@@ -463,7 +464,7 @@ lookup
     -> Int
     -- ^ Variable index (See the documentation of `Value.Variable`)
     -> Context s
-    -> Maybe (Type s)
+    -> Maybe (Type s Void)
 lookup _ _ [] =
     Nothing
 lookup x0 n (Annotation x1 _A : _Γ) =
