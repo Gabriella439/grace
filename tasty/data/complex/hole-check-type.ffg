@@ -1,1 +1,1 @@
-forall (a : Type) . forall (b : Type) . a -> List b
+Natural -> List Natural

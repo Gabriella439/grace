@@ -20,10 +20,11 @@ import Control.Monad.Except (MonadError(..))
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Generics.Product (the)
 import Data.Text (Text)
+import Data.Void (Void)
 import Grace.Input (Input(..))
 import Grace.Location (Location(..))
 import Grace.Syntax (Node(..), Syntax(..))
-import Grace.Type (Type)
+import Grace.Type (Hole, Type)
 import Grace.Value (Value)
 import Network.HTTP.Client (Manager)
 import Text.URI.QQ (scheme)
@@ -48,7 +49,7 @@ import qualified Text.URI as URI
 interpret
     :: (MonadError InterpretError m, MonadIO m)
     => Input
-    -> m (Type Location, Value)
+    -> m (Type Location Void, Value)
 interpret input = do
     manager <- TLS.newTlsManager
 
@@ -57,13 +58,13 @@ interpret input = do
 -- | Like `interpret`, but accepts a custom list of bindings
 interpretWith
     :: (MonadError InterpretError m, MonadIO m)
-    => [(Text, Type Location, Value)]
+    => [(Text, Type Location Void, Value)]
     -- ^ @(name, type, value)@ for each custom binding
-    -> Maybe (Type Location)
+    -> Maybe (Type Location Hole)
     -- ^ Optional expected type for the input
     -> Manager
     -> Input
-    -> m (Type Location, Value)
+    -> m (Type Location Void, Value)
 interpretWith bindings maybeAnnotation manager input = do
     eitherPartiallyResolved <- do
         liftIO
@@ -152,7 +153,7 @@ referentiallySane parent child
     annotation directly to @./example.json@ because then it would no longer be
     valid JSON.
 -}
-annotate :: Syntax s a -> Syntax s (Maybe (Type s), a)
+annotate :: Syntax h s a -> Syntax h s (Maybe (Type s h), a)
 annotate = Lens.transform transformSyntax . fmap ((,) Nothing)
   where
     transformSyntax = Lens.over (the @"node") transformNode

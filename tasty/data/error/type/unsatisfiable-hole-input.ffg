@@ -1,0 +1,10 @@
+# This test illustrates how a typed hole is not exactly the same thing as
+# existential quantification.  In the following example the hole has to be
+# instantiated to a specific type and no such type can satisfy both elements
+# of the list.
+#
+# In fact, even if the type annotation were `List (exists (a : Type) . a)`
+# the example would still fail due to the use of impredicative polymorphism,
+# so this example doubles as an illustration of how holes cannot be used to
+# backdoor support for impredicative polymorphism.
+\f x -> [ f, f x ] : List ?
