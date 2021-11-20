@@ -13,9 +13,10 @@ import Data.HashMap.Strict.InsOrd (InsOrdHashMap)
 import Data.Sequence (Seq)
 import Data.String (IsString(..))
 import Data.Text (Text)
+import Data.Void (Void)
 import Grace.Location (Location)
 import Grace.Syntax (Builtin, Operator, Scalar, Syntax)
-import Grace.Type (Type)
+import Grace.Type (Hole, Type)
 
 {-| A `Closure` captures the current evaluation environment in order to defer
     evaluation until the value of some bound variable is known
@@ -29,7 +30,7 @@ import Grace.Type (Type)
     tree, except using a first-order representation.
 -}
 data Closure =
-    Closure Text [(Text, Value)] (Syntax Location (Type Location, Value))
+    Closure Text [(Text, Value)] (Syntax Hole Location (Type Location Void, Value))
     deriving stock (Eq, Show)
 
 {-| This type represents a fully evaluated expression with no reducible

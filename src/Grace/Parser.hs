@@ -35,7 +35,7 @@ import Grace.Input (Input(..))
 import Grace.Lexer (LocatedToken(LocatedToken), ParseError(..), Token)
 import Grace.Location (Location(..), Offset(..))
 import Grace.Syntax (Binding(..), Syntax(..))
-import Grace.Type (Type(..))
+import Grace.Type (Hole(..), Type(..))
 import Text.Earley (Grammar, Prod, Report(..), rule, (<?>))
 
 import qualified Data.List.NonEmpty as NonEmpty
@@ -215,67 +215,47 @@ render t = case t of
     Lexer.True_            -> "True"
     Lexer.URI _            -> "a URI"
 
-grammar :: Grammar r (Parser r (Syntax Offset Input))
+grammar :: Grammar r (Parser r (Syntax Hole Offset Input))
 grammar = mdo
     expression <- rule
-        -- The reason all of these rules use a `let f … = …` at the beginning
-        -- is due to a limitation of the `ApplicativeDo` extension.  For
-        -- example, I'd prefer to just write something like:
-        --
-        --
-        --      location <- locatedToken Lexer.Lambda
-        --      (nameLocation, name) <- locatedLabel
-        --      token Lexer.Arrow
-        --      body <- expression
-        --      let node = Syntax.Lambda nameLocation name body
-        --      return Syntax{..}
-        --
-        -- … but that is not permitted by the extension
-
-        (   do  let f location locatedNames body0 = foldr cons body0 locatedNames
-                      where
-                        cons (nameLocation, name) body = Syntax{..}
-                          where node = Syntax.Lambda nameLocation name body
-
-                lambdaOffset <- locatedToken Lexer.Lambda
+        (   do  location <- locatedToken Lexer.Lambda
                 locatedNames <- some1 locatedLabel
                 token Lexer.Arrow
-                body <- expression
-                return (f lambdaOffset locatedNames body)
+                body0 <- expression
 
-        <|> do  let f bindings body = Syntax{..}
-                      where
-                        location = nameLocation (NonEmpty.head bindings)
-                        node = Syntax.Let bindings body
+                return do
+                    let cons (nameLocation, name) body = Syntax{..}
+                          where
+                            node = Syntax.Lambda nameLocation name body
+                    foldr cons body0 locatedNames
 
-                bindings <- some1 binding
+        <|> do  bindings <- some1 binding
                 token Lexer.In
                 body <- expression
 
-                return (f bindings body)
+                return do
+                    let location = nameLocation (NonEmpty.head bindings)
+                    let node = Syntax.Let bindings body
+                    Syntax{..}
 
-        <|> do  let f location predicate ifTrue ifFalse = Syntax{..}
-                      where
-                        node = Syntax.If predicate ifTrue ifFalse
-
-                ifOffset <- locatedToken Lexer.If
+        <|> do  location <- locatedToken Lexer.If
                 predicate <- expression
                 token Lexer.Then
                 ifTrue <- expression
                 token Lexer.Else
                 ifFalse <- expression
 
-                return (f ifOffset predicate ifTrue ifFalse)
+                return do
+                    let node = Syntax.If predicate ifTrue ifFalse
+                    Syntax{..}
 
-        <|> do  let f annotated@Syntax{ location } annotation = Syntax{..}
-                      where
-                        node = Syntax.Annotation annotated annotation
-
-                annotated <- operatorExpression
+        <|> do  ~annotated@Syntax{ location } <- operatorExpression
                 token Lexer.Colon
                 annotation <- quantifiedType
 
-                return (f annotated annotation)
+                return do
+                    let node = Syntax.Annotation annotated annotation
+                    Syntax{..}
 
         <|> do  operatorExpression
         )
@@ -311,13 +291,12 @@ grammar = mdo
     applicationExpression <- rule
         (   do  es <- some1 fieldExpression
                 return (foldl application (NonEmpty.head es) (NonEmpty.tail es))
-        <|> do  let f location (e :| es)  = foldl application nil es
-                      where
-                          nil = Syntax{ node = Syntax.Merge e, .. }
+        <|> do  location <- locatedToken Lexer.Merge
+                ~(e :| es) <- some1 fieldExpression
 
-                locatedMerge <- locatedToken Lexer.Merge
-                es <- some1 fieldExpression
-                return (f locatedMerge es)
+                return do
+                    let nil = Syntax{ node = Syntax.Merge e, .. }
+                    foldl application nil es
         )
 
     fieldExpression <- rule do
@@ -331,55 +310,45 @@ grammar = mdo
         return (foldl (field record) record fields)
 
     primitiveExpression <- rule
-        (   do  let f (location, name) = Syntax{..}
-                      where
-                        node = Syntax.Variable name 0
+        (   do  ~(location, name) <- locatedLabel
 
-                locatedName <- locatedLabel
+                return do
+                    let node = Syntax.Variable name 0
+                    Syntax{..}
 
-                return (f locatedName)
-
-        <|> do  let f (location, name) index = Syntax{..}
-                      where
-                        node = Syntax.Variable name index
-
-                locatedName <- locatedLabel
+        <|> do  ~(location, name) <- locatedLabel
                 token Lexer.At
                 index <- int
 
-                return (f locatedName index)
+                return do
+                    let node = Syntax.Variable name index
+                    Syntax{..}
 
-        <|> do  let f (location, alt) = Syntax{..}
-                      where
-                        node = Syntax.Alternative alt
+        <|> do  ~(location, alt) <- locatedAlternative
 
-                located <- locatedAlternative
+                return do
+                    let node = Syntax.Alternative alt
+                    Syntax{..}
 
-                return (f located)
-
-        <|> do  let f location elements = Syntax{..}
-                      where
-                        node = Syntax.List (Seq.fromList elements)
-
-                locatedOpenBracket <- locatedToken Lexer.OpenBracket
+        <|> do  location <- locatedToken Lexer.OpenBracket
                 optional (token Lexer.Comma)
                 elements <- expression `sepBy` token Lexer.Comma
                 optional (token Lexer.Comma)
                 token Lexer.CloseBracket
 
-                return (f locatedOpenBracket elements)
+                return do
+                    let node = Syntax.List (Seq.fromList elements)
+                    Syntax{..}
 
-        <|> do  let f location fieldValues = Syntax{..}
-                      where
-                        node = Syntax.Record fieldValues
-
-                locatedOpenBrace <- locatedToken Lexer.OpenBrace
+        <|> do  location <- locatedToken Lexer.OpenBrace
                 optional (token Lexer.Comma)
                 fieldValues <- fieldValue `sepBy` token Lexer.Comma
                 optional (token Lexer.Comma)
                 token Lexer.CloseBrace
 
-                return (f locatedOpenBrace fieldValues)
+                return do
+                    let node = Syntax.Record fieldValues
+                    Syntax{..}
 
         <|> do  location <- locatedToken Lexer.True_
 
@@ -393,34 +362,28 @@ grammar = mdo
 
                 return Syntax{ node = Syntax.Scalar Syntax.Null, .. }
 
-        <|> do  let f sign (location, n) = Syntax{..}
-                      where
-                        node = Syntax.Scalar (Syntax.Real (sign n))
+        <|> do  sign <- (token Lexer.Dash $> negate) <|> pure id
 
-                sign <- (token Lexer.Dash $> negate) <|> pure id
+                ~(location, n) <- locatedReal
 
-                located <- locatedReal
+                return do
+                    let node = Syntax.Scalar (Syntax.Real (sign n))
+                    Syntax{..}
 
-                return (f sign located)
+        <|> do  token Lexer.Dash
 
-        <|> do  let f (location, n) = Syntax{..}
-                      where
-                        node =
+                ~(location, n) <- locatedInt
+
+                return do
+                    let node =
                             Syntax.Scalar (Syntax.Integer (fromIntegral (negate n)))
+                    Syntax{..}
 
-                token Lexer.Dash
+        <|> do  ~(location, n) <- locatedInt
 
-                located <- locatedInt
-
-                return (f located)
-
-        <|> do  let f (location, n) = Syntax{..}
-                      where
-                        node = Syntax.Scalar (Syntax.Natural (fromIntegral n))
-
-                located <- locatedInt
-
-                return (f located)
+                return do
+                    let node = Syntax.Scalar (Syntax.Natural (fromIntegral n))
+                    Syntax{..}
 
         <|> do  location <- locatedToken Lexer.RealEqual
 
@@ -506,29 +469,23 @@ grammar = mdo
 
                 return Syntax{ node = Syntax.Builtin Syntax.TextEqual, .. }
 
-        <|> do  let f (location, t) = Syntax{..}
-                      where
-                        node = Syntax.Scalar (Syntax.Text t)
+        <|> do  ~(location, t) <- locatedText
 
-                located <- locatedText
+                return do
+                    let node = Syntax.Scalar (Syntax.Text t)
+                    Syntax{..}
 
-                return (f located)
+        <|> do  ~(location, file) <- locatedFile
 
-        <|> do  let f (location, file) = Syntax{..}
-                      where
-                        node = Syntax.Embed (Path file)
+                return do
+                    let node = Syntax.Embed (Path file)
+                    Syntax{..}
 
-                located <- locatedFile
+        <|> do  ~(location, uri) <- locatedURI
 
-                return (f located)
-
-        <|> do  let f (location, uri) = Syntax{..}
-                      where
-                        node = Syntax.Embed (URI uri)
-
-                located <- locatedURI
-
-                return (f located)
+                return do
+                    let node = Syntax.Embed (URI uri)
+                    Syntax{..}
 
         <|> do  token Lexer.OpenParenthesis
                 e <- expression
@@ -537,29 +494,23 @@ grammar = mdo
         )
 
     binding <- rule
-        (   do  let f location name assignment = Syntax.Binding{..}
-                      where
-                        nameLocation = location
-                        annotation = Nothing
-
-                locatedLet <- locatedToken Lexer.Let
+        (   do  nameLocation <- locatedToken Lexer.Let
                 name <- label
                 token Lexer.Equals
                 assignment <- expression
 
-                return (f locatedLet name assignment)
+                return do
+                    let annotation = Nothing
+                    Syntax.Binding{..}
 
-        <|> do  let f location name annotation assignment = Syntax.Binding{..}
-                      where
-                        nameLocation = location
-
-                locatedLet <- locatedToken Lexer.Let
+        <|> do  nameLocation <- locatedToken Lexer.Let
                 name <- label
                 token Lexer.Colon
                 annotation <- fmap Just quantifiedType
                 token Lexer.Equals
                 assignment <- expression
-                return (f locatedLet name annotation assignment)
+
+                return Syntax.Binding{..}
         )
 
     recordLabel <- rule (label <|> alternative <|> text)
@@ -622,28 +573,26 @@ grammar = mdo
         return (foldr function (NonEmpty.last ts) (NonEmpty.init ts))
 
     applicationType <- rule
-        (   do  let f location t = Type{..}
-                      where
-                        node = Type.List t
-
-                locatedList <- locatedToken Lexer.List
+        (   do  location <- locatedToken Lexer.List
                 t <- primitiveType
-                return (f locatedList t)
 
-        <|> do  let f location t = Type{..}
-                      where
-                        node = Type.Optional t
+                return do
+                    let node = Type.List t
+                    Type{..}
 
-                locatedOptional <- locatedToken Lexer.Optional
+        <|> do  location <- locatedToken Lexer.Optional
                 t <- primitiveType
-                return (f locatedOptional t)
+
+                return do
+                    let node = Type.Optional t
+                    Type{..}
 
         <|> do  primitiveType
         )
 
     primitiveType <- rule
         (   do  location <- locatedToken Lexer.Question
-                return Type{ node = Type.TypeHole, .. }
+                return Type{ node = Type.TypeHole Type.Hole, .. }
         <|> do  location <- locatedToken Lexer.Bool
                 return Type{ node = Type.Scalar Monotype.Bool, .. }
         <|> do  location <- locatedToken Lexer.Real
@@ -737,7 +686,7 @@ parse
     -- ^ Name of the input (used for error messages)
     -> Text
     -- ^ Source code
-    -> Either ParseError (Syntax Offset Input)
+    -> Either ParseError (Syntax Hole Offset Input)
 parse name code = do
     tokens <- Lexer.lex name code
 
