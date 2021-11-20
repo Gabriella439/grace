@@ -43,7 +43,7 @@ import Data.Generics.Product (the)
 import Data.Generics.Sum (_As)
 import Data.String (IsString(..))
 import Data.Text (Text)
-import Data.Void (Void)
+import Data.Void (Void, absurd)
 import GHC.Generics (Generic)
 import Grace.Domain (Domain)
 import Grace.Existential (Existential)
@@ -212,7 +212,7 @@ instance Pretty h => Pretty (Node s h) where
     pretty = prettyQuantifiedType
 
 -- | A potentially polymorphic record type
-data Record s h = Fields [(Text, Type s h)] RemainingFields
+data Record s h = Fields [(Text, Type s h)] (RemainingFields h)
     deriving stock (Eq, Functor, Generic, Lift, Show)
 
 instance Bifunctor Record where
@@ -224,7 +224,7 @@ instance Pretty h => Pretty (Record s h) where
     pretty = prettyRecordType
 
 -- | A potentially polymorphic union type
-data Union s h = Alternatives [(Text, Type s h)] RemainingAlternatives
+data Union s h = Alternatives [(Text, Type s h)] (RemainingAlternatives h)
     deriving stock (Eq, Functor, Generic, Lift, Show)
 
 instance Bifunctor Union where
@@ -235,6 +235,9 @@ instance Bifunctor Union where
 instance Pretty h => Pretty (Union s h) where
     pretty = prettyUnionType
 
+{-| User-visible placeholder for an unsolved type\/fields\/alternatives
+    variable
+-}
 data Hole = Hole
     deriving (Eq, Lift, Show)
 
@@ -260,9 +263,9 @@ fromMonotype monotype = Type{ location = (), node }
         Monotype.List τ ->
             List (fromMonotype τ)
         Monotype.Record (Monotype.Fields kτs ρ) ->
-            Record (Fields (map (second fromMonotype) kτs) ρ)
+            Record (Fields (map (second fromMonotype) kτs) (fmap absurd ρ))
         Monotype.Union (Monotype.Alternatives kτs ρ) ->
-            Union (Alternatives (map (second fromMonotype) kτs) ρ)
+            Union (Alternatives (map (second fromMonotype) kτs) (fmap absurd ρ))
         Monotype.Scalar scalar ->
             Scalar scalar
 
@@ -295,7 +298,7 @@ solveFields unsolved (Monotype.Fields fieldMonotypes fields) =
     transformType type_ = Lens.over (the @"node") transformNode type_
       where
         transformNode (Record (Fields fieldTypes (UnsolvedFields unsolved')))
-            | unsolved == unsolved' = Record (Fields fieldTypes' fields)
+            | unsolved == unsolved' = Record (Fields fieldTypes' (fmap absurd fields))
           where
             fieldTypes' =
                 fieldTypes <> map transformPair fieldMonotypes
@@ -318,7 +321,7 @@ solveAlternatives unsolved (Monotype.Alternatives alternativeMonotypes alternati
       where
         transformNode (Union (Alternatives alternativeTypes (UnsolvedAlternatives unsolved')))
             | unsolved == unsolved' =
-                Union (Alternatives alternativeTypes' alternatives)
+                Union (Alternatives alternativeTypes' (fmap absurd alternatives))
           where
             alternativeTypes' =
                 alternativeTypes <> map transformPair alternativeMonotypes
@@ -367,7 +370,7 @@ substituteType a0 n _A0 Type{ node = old, .. } = Type{ node = new, .. }
 {-| Replace all occurrences of a variable within one `Type` with another `Type`,
     given the variable's label and index
 -}
-substituteFields :: Text -> Int -> Record s h -> Type s h -> Type s h
+substituteFields :: Eq h => Text -> Int -> Record s h -> Type s h -> Type s h
 substituteFields ρ0 n r@(Fields kτs ρ1) Type{ node = old, .. } =
     Type{ node = new, .. }
   where
@@ -407,7 +410,8 @@ substituteFields ρ0 n r@(Fields kτs ρ1) Type{ node = old, .. } =
 {-| Replace all occurrences of a variable within one `Type` with another `Type`,
     given the variable's label and index
 -}
-substituteAlternatives :: Text -> Int -> Union s h -> Type s h -> Type s h
+substituteAlternatives
+    :: Eq h => Text -> Int -> Union s h -> Type s h -> Type s h
 substituteAlternatives ρ0 n r@(Alternatives kτs ρ1) Type{ node = old, .. } =
     Type{ node = new, .. }
   where
@@ -660,10 +664,10 @@ prettyRecordType (Fields [] (UnsolvedFields ρ)) =
     <>  label (pretty ρ <> "?")
     <>  " "
     <>  punctuation "}"
-prettyRecordType (Fields [] HoleFields) =
+prettyRecordType (Fields [] (HoleFields h)) =
         punctuation "{"
     <>  " "
-    <>  keyword "?"
+    <>  pretty h
     <>  " "
     <>  punctuation "}"
 prettyRecordType (Fields [] (VariableFields ρ)) =
@@ -686,10 +690,10 @@ prettyRecordType (Fields (keyType : keyTypes) fields) =
                     <>  label (pretty ρ <> "?")
                     <>  " "
                     <>  punctuation "}"
-                HoleFields ->
+                HoleFields h ->
                         punctuation ","
                     <>  " "
-                    <>  keyword "?"
+                    <>  pretty h
                     <>  " "
                     <>  punctuation "}"
                 VariableFields ρ ->
@@ -714,10 +718,10 @@ prettyRecordType (Fields (keyType : keyTypes) fields) =
                         <>  label (pretty ρ <> "?")
                         <>  Pretty.hardline
                         <>  punctuation "}"
-                    HoleFields ->
+                    HoleFields h ->
                             punctuation ","
                         <>  " "
-                        <>  keyword "?"
+                        <>  pretty h
                         <>  Pretty.hardline
                         <>  punctuation "}"
                     VariableFields ρ ->
@@ -752,10 +756,10 @@ prettyUnionType (Alternatives [] (UnsolvedAlternatives ρ)) =
     <>  label (pretty ρ <> "?")
     <>  " "
     <>  punctuation ">"
-prettyUnionType (Alternatives [] HoleAlternatives) =
+prettyUnionType (Alternatives [] (HoleAlternatives h)) =
         punctuation "<"
     <>  " "
-    <>  keyword "?"
+    <>  pretty h
     <>  " "
     <>  punctuation ">"
 prettyUnionType (Alternatives [] (VariableAlternatives ρ)) =
@@ -779,11 +783,11 @@ prettyUnionType (Alternatives (keyType : keyTypes) alternatives) =
                     <>  label (pretty ρ <> "?")
                     <>  " "
                     <>  punctuation ">"
-                HoleAlternatives ->
+                HoleAlternatives h ->
                         " "
                     <>  punctuation "|"
                     <>  " "
-                    <>  keyword "?"
+                    <>  pretty h
                     <>  " "
                     <>  punctuation ">"
                 VariableAlternatives ρ ->
@@ -809,10 +813,10 @@ prettyUnionType (Alternatives (keyType : keyTypes) alternatives) =
                         <>  label (pretty ρ <> "?")
                         <>  Pretty.hardline
                         <>  punctuation ">"
-                    HoleAlternatives ->
+                    HoleAlternatives h ->
                             punctuation "|"
                         <>  " "
-                        <>  keyword "?"
+                        <>  pretty h
                         <>  Pretty.hardline
                         <>  punctuation ">"
                     VariableAlternatives ρ ->
