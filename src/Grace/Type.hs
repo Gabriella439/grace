@@ -484,6 +484,10 @@ alternativesFreeIn unsolved =
         . Lens.only unsolved
         )
 
+data PreviousQuantifier =
+  NoQuantifier | ForallQuantifier | ExistsQuantifier
+  deriving Eq
+
 prettyQuantifiedType :: Pretty h => Node s h -> Doc AnsiStyle
 prettyQuantifiedType type_
     | isQuantified type_ = Pretty.group (Pretty.flatAlt long short)
@@ -493,13 +497,12 @@ prettyQuantifiedType type_
     isQuantified Exists{} = True
     isQuantified _        = False
 
-    short = prettyShort type_
+    short = prettyShort NoQuantifier type_
 
     long = Pretty.align (prettyLong type_)
 
-    prettyShort (Forall _ a domain _A) =
-            keyword "forall"
-        <>  " "
+    prettyShort quantifier (Forall _ a domain _A) =
+            prefix
         <>  punctuation "("
         <>  label (pretty a)
         <>  " "
@@ -508,12 +511,16 @@ prettyQuantifiedType type_
         <>  pretty domain
         <>  punctuation ")"
         <>  " "
-        <>  punctuation "."
-        <>  " "
-        <>  liftType prettyShort _A
-    prettyShort (Exists _ a domain _A) =
-            keyword "exists"
-        <>  " "
+        <>  liftType (prettyShort ForallQuantifier) _A
+        where
+          prefix =
+            case quantifier of
+              NoQuantifier -> keyword "forall" <> " "
+              ExistsQuantifier -> punctuation "." <> " " <> keyword "forall" <> " "
+              ForallQuantifier -> ""
+
+    prettyShort quantifier (Exists _ a domain _A) =
+            prefix
         <>  punctuation "("
         <>  label (pretty a)
         <>  " "
@@ -522,11 +529,16 @@ prettyQuantifiedType type_
         <>  pretty domain
         <>  punctuation ")"
         <>  " "
-        <>  punctuation "."
-        <>  " "
-        <>  liftType prettyShort _A
-    prettyShort _A =
-        prettyFunctionType _A
+        <>  liftType (prettyShort ExistsQuantifier) _A
+        where
+          prefix =
+            case quantifier of
+              NoQuantifier -> keyword "exists" <> " "
+              ExistsQuantifier -> ""
+              ForallQuantifier -> punctuation "." <> " " <> keyword "exists" <> " "
+
+    prettyShort _quantifier _A =
+        punctuation "." <> " " <> prettyFunctionType _A
 
     prettyLong (Forall _ a domain _A) =
             keyword "forall"

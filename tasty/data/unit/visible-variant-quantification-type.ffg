@@ -1,1 +1,1 @@
-forall (a : Type) . forall (p : Alternatives) . a -> < X: a | p >
+forall (a : Type) (p : Alternatives) . a -> < X: a | p >
