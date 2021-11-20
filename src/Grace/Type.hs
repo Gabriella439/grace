@@ -656,22 +656,15 @@ prettyPrimitiveType other =
             )
 
 prettyRecordType :: Pretty h => Record s h -> Doc AnsiStyle
-prettyRecordType (Fields [] EmptyFields) =
-    punctuation "{" <> " " <> punctuation "}"
-prettyRecordType (Fields [] (UnsolvedFields ρ)) =
+prettyRecordType (Fields [] fields) =
         punctuation "{"
-    <>  " "
-    <>  label (pretty ρ <> "?")
-    <>  " "
+    <>  (case fields of
+            EmptyFields      -> " "
+            UnsolvedFields ρ -> " " <> label (pretty ρ <> "?") <> " "
+            HoleFields h     -> " " <> pretty h <> " "
+            VariableFields ρ -> " " <> label (pretty ρ) <> " "
+        )
     <>  punctuation "}"
-prettyRecordType (Fields [] (HoleFields h)) =
-        punctuation "{"
-    <>  " "
-    <>  pretty h
-    <>  " "
-    <>  punctuation "}"
-prettyRecordType (Fields [] (VariableFields ρ)) =
-    punctuation "{" <> " " <> label (pretty ρ) <> " " <> punctuation "}"
 prettyRecordType (Fields (keyType : keyTypes) fields) =
     Pretty.group (Pretty.flatAlt long short)
   where
@@ -680,28 +673,18 @@ prettyRecordType (Fields (keyType : keyTypes) fields) =
         <>  " "
         <>  prettyShortFieldType keyType
         <>  foldMap (\ft -> punctuation "," <> " " <> prettyShortFieldType ft) keyTypes
-        <>  case fields of
+        <>  (case fields of
                 EmptyFields ->
-                        " "
-                    <>  punctuation "}"
+                    mempty
                 UnsolvedFields ρ ->
-                        punctuation ","
-                    <>  " "
-                    <>  label (pretty ρ <> "?")
-                    <>  " "
-                    <>  punctuation "}"
+                    punctuation "," <> " " <> label (pretty ρ <> "?")
                 HoleFields h ->
-                        punctuation ","
-                    <>  " "
-                    <>  pretty h
-                    <>  " "
-                    <>  punctuation "}"
+                    punctuation "," <> " " <> pretty h
                 VariableFields ρ ->
-                        punctuation ","
-                    <>  " "
-                    <>  label (pretty ρ)
-                    <>  " "
-                    <>  punctuation "}"
+                    punctuation "," <> " " <> label (pretty ρ)
+            )
+        <>  " "
+        <>  punctuation "}"
 
     long =
         Pretty.align
@@ -748,22 +731,15 @@ prettyRecordType (Fields (keyType : keyTypes) fields) =
         <>  Pretty.hardline
 
 prettyUnionType :: Pretty h => Union s h -> Doc AnsiStyle
-prettyUnionType (Alternatives [] EmptyAlternatives) =
-    punctuation "<" <> " " <> punctuation ">"
-prettyUnionType (Alternatives [] (UnsolvedAlternatives ρ)) =
+prettyUnionType (Alternatives [] alternatives) =
         punctuation "<"
-    <>  " "
-    <>  label (pretty ρ <> "?")
-    <>  " "
-    <>  punctuation ">"
-prettyUnionType (Alternatives [] (HoleAlternatives h)) =
-        punctuation "<"
-    <>  " "
-    <>  pretty h
-    <>  " "
-    <>  punctuation ">"
-prettyUnionType (Alternatives [] (VariableAlternatives ρ)) =
-    punctuation "<" <> " " <> label (pretty ρ) <> " " <> punctuation ">"
+    <>  (case alternatives of
+            EmptyAlternatives -> " "
+            UnsolvedAlternatives ρ -> " " <> label (pretty ρ <> "?") <> " "
+            HoleAlternatives h -> " " <> pretty h <> " "
+            VariableAlternatives ρ -> " " <> label (pretty ρ) <> " "
+        )
+    <> punctuation ">"
 prettyUnionType (Alternatives (keyType : keyTypes) alternatives) =
     Pretty.group (Pretty.flatAlt long short)
   where
@@ -772,31 +748,27 @@ prettyUnionType (Alternatives (keyType : keyTypes) alternatives) =
         <>  " "
         <>  prettyShortAlternativeType keyType
         <>  foldMap (\kt -> " " <> punctuation "|" <> " " <> prettyShortAlternativeType kt) keyTypes
-        <>  case alternatives of
+        <>  (case alternatives of
                 EmptyAlternatives ->
-                        " "
-                    <>  punctuation ">"
+                    mempty
                 UnsolvedAlternatives ρ ->
                         " "
                     <>  punctuation "|"
                     <>  " "
                     <>  label (pretty ρ <> "?")
-                    <>  " "
-                    <>  punctuation ">"
                 HoleAlternatives h ->
                         " "
                     <>  punctuation "|"
                     <>  " "
                     <>  pretty h
-                    <>  " "
-                    <>  punctuation ">"
                 VariableAlternatives ρ ->
                         " "
                     <>  punctuation "|"
                     <>  " "
                     <>  label (pretty ρ)
-                    <>  " "
-                    <>  punctuation ">"
+            )
+        <>  " "
+        <>  punctuation ">"
 
     long  =
         Pretty.align
