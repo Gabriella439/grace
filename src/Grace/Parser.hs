@@ -625,7 +625,7 @@ grammar = mdo
                     (   do  text_ <- recordLabel
                             pure (\fs -> Type.Fields fs (Monotype.VariableFields text_))
                     <|> do  token Lexer.Question
-                            pure (\fs -> Type.Fields fs Monotype.HoleFields)
+                            pure (\fs -> Type.Fields fs (Monotype.HoleFields Type.Hole))
                     <|> do  pure (\fs -> Type.Fields fs Monotype.EmptyFields)
                     <|> do  f <- fieldType
                             pure (\fs -> Type.Fields (fs <> [ f ]) Monotype.EmptyFields)
@@ -650,7 +650,7 @@ grammar = mdo
                     (   do  text_ <- label
                             return (\as -> Type.Alternatives as (Monotype.VariableAlternatives text_))
                     <|> do  token Lexer.Question
-                            pure (\as -> Type.Alternatives as Monotype.HoleAlternatives)
+                            pure (\as -> Type.Alternatives as (Monotype.HoleAlternatives Type.Hole))
                     <|> do  pure (\as -> Type.Alternatives as Monotype.EmptyAlternatives)
                     <|> do  a <- alternativeType
                             return (\as -> Type.Alternatives (as <> [ a ]) Monotype.EmptyAlternatives)

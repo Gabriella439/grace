@@ -1,1 +1,4 @@
-{ menu: { header: Text, items: List (Optional { id: Text, ? }) } }
+{ menu: { header: Text
+        , items: List (exists (a : Fields) . Optional { id: Text, a })
+        }
+}

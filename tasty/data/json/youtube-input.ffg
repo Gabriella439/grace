@@ -8,7 +8,7 @@
   , items : List
     { kind : Text
     , etag : Text
-    , id : { kind : Text, ? }
+    , id : exists (a : Fields) . { kind : Text, a }
     }
   }
 

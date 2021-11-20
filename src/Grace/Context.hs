@@ -170,12 +170,12 @@ prettyEntry (SolvedFields p0 (Monotype.Fields [] (Monotype.UnsolvedFields p1))) 
     <>  " "
     <>  pretty p1
     <>  "?"
-prettyEntry (SolvedFields p0 (Monotype.Fields [] Monotype.HoleFields)) =
+prettyEntry (SolvedFields p0 (Monotype.Fields [] (Monotype.HoleFields h))) =
         pretty p0
     <>  " "
     <>  punctuation "="
     <>  " "
-    <>  "?"
+    <>  pretty h
 prettyEntry (SolvedFields p0 (Monotype.Fields [] (Monotype.VariableFields p1))) =
         pretty p0
     <>  " "
@@ -195,16 +195,16 @@ prettyEntry (SolvedFields p (Monotype.Fields ((k0, τ0) : kτs) fields)) =
                 ""
             Monotype.UnsolvedFields p1 ->
                 punctuation "," <> " " <> pretty p1 <> "?"
-            Monotype.HoleFields ->
-                punctuation "," <> " " <> "?"
+            Monotype.HoleFields h ->
+                punctuation "," <> " " <> pretty h
             Monotype.VariableFields p1 ->
                 punctuation "," <> " " <> pretty p1
 prettyEntry (SolvedAlternatives p (Monotype.Alternatives [] Monotype.EmptyAlternatives)) =
     pretty p <> " " <> punctuation "=" <> " " <> punctuation "•"
 prettyEntry (SolvedAlternatives p0 (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives p1))) =
     pretty p0 <> " " <> punctuation "=" <> " " <> pretty p1 <> "?"
-prettyEntry (SolvedAlternatives p0 (Monotype.Alternatives [] Monotype.HoleAlternatives)) =
-    pretty p0 <> " " <> punctuation "=" <> " " <> "?"
+prettyEntry (SolvedAlternatives p0 (Monotype.Alternatives [] (Monotype.HoleAlternatives h))) =
+    pretty p0 <> " " <> punctuation "=" <> " " <> pretty h
 prettyEntry (SolvedAlternatives p0 (Monotype.Alternatives [] (Monotype.VariableAlternatives p1))) =
     pretty p0 <> " " <> punctuation "=" <> " " <>  label (pretty p1)
 prettyEntry (SolvedAlternatives p0 (Monotype.Alternatives ((k0, τ0) : kτs) fields)) =
@@ -219,8 +219,8 @@ prettyEntry (SolvedAlternatives p0 (Monotype.Alternatives ((k0, τ0) : kτs) fie
                 ""
             Monotype.UnsolvedAlternatives p1 ->
                 " " <> punctuation "|" <> " " <> pretty p1 <> "?"
-            Monotype.HoleAlternatives ->
-                " " <> punctuation "|" <> " " <> "?"
+            Monotype.HoleAlternatives h ->
+                " " <> punctuation "|" <> " " <> pretty h
             Monotype.VariableAlternatives p1 ->
                 " " <> punctuation "|" <> " " <> label (pretty p1)
 prettyEntry (Annotation x a) = Pretty.group (Pretty.flatAlt long short)

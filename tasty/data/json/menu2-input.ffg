@@ -1,6 +1,6 @@
 ./menu2.json :
   { menu:
     { header: Text
-    , items: List (Optional { id: Text, ? })
+    , items: List (exists (a : Fields) . Optional { id: Text, a })
     }
   }

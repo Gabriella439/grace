@@ -4,9 +4,11 @@
 # trailing comma)
 ./colors.json :
   { colors: List
-    { color: Text
-    , category: Text
-    , code: { rgba: List Natural, hex: Text }
-    , ?
-    }
+    (exists (a : Fields) .
+      { color: Text
+      , category: Text
+      , code: { rgba: List Natural, hex: Text }
+      , a
+      }
+    )
   }

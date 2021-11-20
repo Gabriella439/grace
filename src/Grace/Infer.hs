@@ -208,8 +208,8 @@ wellFormedType _Γ Type{..} =
             predicate (Context.SolvedFields   a1 _) = a0 == a1
             predicate  _                            = False
 
-        Type.Record (Type.Fields kAs Monotype.HoleFields) -> do
-            traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
+        Type.Record (Type.Fields _ (Monotype.HoleFields void)) -> do
+            absurd void
 
         Type.Record (Type.Fields kAs (Monotype.VariableFields a))
             | Context.Variable Domain.Fields a `elem` _Γ -> do
@@ -230,8 +230,8 @@ wellFormedType _Γ Type{..} =
             predicate (Context.SolvedAlternatives   a1 _) = a0 == a1
             predicate  _                                  = False
 
-        Type.Union (Type.Alternatives kAs Monotype.HoleAlternatives) -> do
-            traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
+        Type.Union (Type.Alternatives _ (Monotype.HoleAlternatives void)) -> do
+            absurd void
 
         Type.Union (Type.Alternatives kAs (Monotype.VariableAlternatives a))
             | Context.Variable Domain.Alternatives a `elem` _Γ -> do
@@ -401,13 +401,11 @@ subtype _A0 _B0 = do
         -- implement a non-trivial type that wasn't already covered by the
         -- paper, so we'll go into more detail here to explain the general
         -- type-checking principles of the paper.
-        (Type.Record (Type.Fields kAs Monotype.HoleFields), _) -> do
-            scopedUnsolvedFields \(Type.Fields [] p) -> do
-                subtype Type{ location = Type.location _A0, node = Type.Record (Type.Fields kAs p) } _B0
+        (Type.Record (Type.Fields _ (Monotype.HoleFields void)), _) -> do
+            absurd void
 
-        (_, Type.Record (Type.Fields kBs Monotype.HoleFields)) -> do
-            scopedUnsolvedFields \(Type.Fields [] p) -> do
-                subtype _A0 Type{ location = Type.location _B0, node = Type.Record (Type.Fields kBs p) }
+        (_, Type.Record (Type.Fields _ (Monotype.HoleFields void))) -> do
+            absurd void
 
         (_A@(Type.Record (Type.Fields kAs0 fields0)), _B@(Type.Record (Type.Fields kBs0 fields1))) -> do
             let mapA = Map.fromList kAs0
@@ -418,10 +416,10 @@ subtype _A0 _B0 = do
 
             let both = Map.intersectionWith (,) mapA mapB
 
-            let flexible  Monotype.EmptyFields       = False
-                flexible (Monotype.VariableFields _) = False
-                flexible (Monotype.UnsolvedFields _) = True
-                flexible  Monotype.HoleFields        = True
+            let flexible  Monotype.EmptyFields          = False
+                flexible (Monotype.VariableFields _   ) = False
+                flexible (Monotype.UnsolvedFields _   ) = True
+                flexible (Monotype.HoleFields     void) = absurd void
 
             let okayA = Map.null extraA
                     || (flexible fields1 && fields0 /= fields1)
@@ -603,13 +601,11 @@ subtype _A0 _B0 = do
         -- Checking if one union is a subtype of another union is basically the
         -- exact same as the logic for checking if a record is a subtype of
         -- another record.
-        (Type.Union (Type.Alternatives kAs Monotype.HoleAlternatives), _) -> do
-            scopedUnsolvedAlternatives \(Type.Alternatives [] p) -> do
-                subtype Type{ location = Type.location _A0, node = Type.Union (Type.Alternatives kAs p) } _B0
+        (Type.Union (Type.Alternatives _ (Monotype.HoleAlternatives void)), _) -> do
+            absurd void
 
-        (_, Type.Union (Type.Alternatives kBs Monotype.HoleAlternatives)) -> do
-            scopedUnsolvedAlternatives \(Type.Alternatives [] p) -> do
-                subtype _A0 Type{ location = Type.location _B0, node = Type.Union (Type.Alternatives kBs p) }
+        (_, Type.Union (Type.Alternatives _ (Monotype.HoleAlternatives void))) -> do
+            absurd void
 
         (_A@(Type.Union (Type.Alternatives kAs0 alternatives0)), _B@(Type.Union (Type.Alternatives kBs0 alternatives1))) -> do
             let mapA = Map.fromList kAs0
@@ -620,10 +616,10 @@ subtype _A0 _B0 = do
 
             let both = Map.intersectionWith (,) mapA mapB
 
-            let flexible  Monotype.EmptyAlternatives       = False
-                flexible (Monotype.VariableAlternatives _) = False
-                flexible (Monotype.UnsolvedAlternatives _) = True
-                flexible  Monotype.HoleAlternatives        = True
+            let flexible  Monotype.EmptyAlternatives          = False
+                flexible (Monotype.VariableAlternatives _   ) = False
+                flexible (Monotype.UnsolvedAlternatives _   ) = True
+                flexible (Monotype.HoleAlternatives     void) = absurd void
 
             let okayA = Map.null extraA
                     ||  (flexible alternatives1 && alternatives0 /= alternatives1)
@@ -2196,11 +2192,35 @@ instantiateHoles = instantiateSyntax
 
         instantiateRecord (Type.Fields as b) = do
             as' <- traverse (traverse instantiateType) as
-            pure (Type.Fields as' b)
+            b'  <- instantiateRemainingFields b
+            pure (Type.Fields as' b')
+
+        instantiateRemainingFields Monotype.EmptyFields = do
+            pure Monotype.EmptyFields
+        instantiateRemainingFields (Monotype.UnsolvedFields a) = do
+            pure (Monotype.UnsolvedFields a)
+        instantiateRemainingFields (Monotype.VariableFields a) = do
+            pure (Monotype.VariableFields a)
+        instantiateRemainingFields (Monotype.HoleFields Type.Hole) = do
+            a <- fresh
+            push (Context.UnsolvedFields a)
+            pure (Monotype.UnsolvedFields a)
 
         instantiateUnion (Type.Alternatives as b) = do
             as' <- traverse (traverse instantiateType) as
-            pure (Type.Alternatives as' b)
+            b'  <- instantiateRemainingAlternatives b
+            pure (Type.Alternatives as' b')
+
+        instantiateRemainingAlternatives Monotype.EmptyAlternatives = do
+            pure Monotype.EmptyAlternatives
+        instantiateRemainingAlternatives (Monotype.UnsolvedAlternatives a) = do
+            pure (Monotype.UnsolvedAlternatives a)
+        instantiateRemainingAlternatives (Monotype.VariableAlternatives a) = do
+            pure (Monotype.VariableAlternatives a)
+        instantiateRemainingAlternatives (Monotype.HoleAlternatives Type.Hole) = do
+            a <- fresh
+            push (Context.UnsolvedAlternatives a)
+            pure (Monotype.UnsolvedAlternatives a)
 
 -- | Infer the `Type` of the given `Syntax` tree
 typeOf
