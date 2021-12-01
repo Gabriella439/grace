@@ -32,10 +32,7 @@ import Text.URI (Authority)
 import Text.URI.QQ (host, scheme)
 
 import Network.HTTP.Client
-    ( HttpException(..)
-    , HttpExceptionContent(..)
-    , Manager
-    )
+    (HttpException(..), HttpExceptionContent(..), Manager)
 
 import qualified Control.Exception.Safe as Exception
 import qualified Data.List.NonEmpty as NonEmpty

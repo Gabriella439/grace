@@ -38,14 +38,7 @@ import Prettyprinter (Doc)
 import Prettyprinter.Render.Terminal (AnsiStyle)
 
 import Grace.Pretty
-    ( Pretty(..)
-    , builtin
-    , keyword
-    , label
-    , operator
-    , punctuation
-    , scalar
-    )
+    (Pretty(..), builtin, keyword, label, operator, punctuation, scalar)
 
 import qualified Data.Text as Text
 import qualified Grace.Pretty as Pretty

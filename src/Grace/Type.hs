@@ -53,11 +53,7 @@ import Prettyprinter (Doc)
 import Prettyprinter.Render.Terminal (AnsiStyle)
 
 import Grace.Monotype
-    ( Monotype
-    , RemainingAlternatives(..)
-    , RemainingFields(..)
-    , Scalar(..)
-    )
+    (Monotype, RemainingAlternatives(..), RemainingFields(..), Scalar(..))
 
 import qualified Control.Lens as Lens
 import qualified Data.Text as Text

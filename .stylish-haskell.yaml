@@ -6,7 +6,7 @@ steps:
   - imports:
       align: group
       pad_module_names: false
-      long_list_align: multiline
+      long_list_align: new_line_multiline
       separate_lists: false
   - language_pragmas:
       align: true
