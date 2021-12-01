@@ -29,8 +29,6 @@ module Grace.Infer
     , TypeInferenceError(..)
     ) where
 
-import Data.Text (Text)
-
 import Control.Applicative ((<|>))
 import Control.Exception.Safe (Exception(..))
 import Control.Monad (when)
@@ -39,6 +37,7 @@ import Control.Monad.State.Strict (MonadState)
 import Data.Foldable (traverse_)
 import Data.Sequence (ViewL(..))
 import Data.String.Interpolate (__i)
+import Data.Text (Text)
 import Data.Void (Void, absurd)
 import Grace.Context (Context, Entry)
 import Grace.Existential (Existential)

@@ -2,8 +2,7 @@
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Main
-    where
+module Main where
 
 import Control.Exception.Safe (Exception)
 import Data.Text (Text)
