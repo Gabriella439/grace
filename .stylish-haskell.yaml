@@ -10,7 +10,6 @@ steps:
       separate_lists: false
   - language_pragmas:
       align: true
-      remove_redundant: false
 
       # Language prefix to be used for pragma declaration, this allows you to
       # use other options non case-sensitive like "language" or "Language".
