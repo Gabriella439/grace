@@ -40,7 +40,9 @@ let
     };
   };
 
-  pkgs = import nixpkgs { config = { allowBroken = true; }; overlays = [ overlay ]; };
+  config.allowBroken = true;
+
+  pkgs = import nixpkgs { inherit config; overlays = [ overlay ]; };
 
 in
   { inherit (pkgs.haskell.packages."${compiler}") grace; }
