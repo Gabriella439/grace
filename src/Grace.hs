@@ -29,6 +29,7 @@ import Prettyprinter.Render.Terminal (AnsiStyle)
 import qualified Control.Monad.Except as Except
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text.IO
+import qualified Grace.HTTP as HTTP
 import qualified Grace.Infer as Infer
 import qualified Grace.Interpret as Interpret
 import qualified Grace.Monotype as Monotype
@@ -39,7 +40,7 @@ import qualified Grace.Repl as Repl
 import qualified Grace.Syntax as Syntax
 import qualified Grace.Type as Type
 import qualified Grace.Value as Value
-import qualified Network.HTTP.Client.TLS as TLS
+import qualified Grace.Width as Width
 import qualified Options.Applicative as Options
 import qualified Prettyprinter as Pretty
 import qualified System.Console.ANSI as ANSI
@@ -159,7 +160,7 @@ detectColor Auto  = do ANSI.hSupportsANSI IO.stdout
 getRender :: Highlight -> IO (Doc AnsiStyle -> IO ())
 getRender highlight = do
     color <- detectColor highlight
-    width <- Grace.Pretty.getWidth
+    width <- Width.getWidth
 
     return (Grace.Pretty.renderIO color width IO.stdout)
 
@@ -220,7 +221,7 @@ main = do
 
             let expected = Type{ node = Type.Scalar Monotype.Text, .. }
 
-            manager <- TLS.newTlsManager
+            manager <- HTTP.newManager
 
             eitherResult <- do
                 Except.runExceptT (Interpret.interpretWith [] (Just expected) manager input)
@@ -257,7 +258,7 @@ main = do
                             IO.withFile file IO.WriteMode \handle -> do
                                 Grace.Pretty.renderIO
                                     False
-                                    Grace.Pretty.defaultColumns
+                                    Width.defaultWidth
                                     handle
                                     (Grace.Pretty.pretty syntax <> Pretty.hardline)
 
@@ -274,7 +275,7 @@ main = do
                                         , code =
                                             Grace.Pretty.renderStrict
                                                 False
-                                                Grace.Pretty.defaultColumns
+                                                Width.defaultWidth
                                                 (Grace.Pretty.pretty builtin)
                                         , offset = 0
                                         }

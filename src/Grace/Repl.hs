@@ -28,11 +28,12 @@ import qualified Control.Monad.Except as Except
 import qualified Control.Monad.State as State
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text.IO
+import qualified Grace.HTTP as HTTP
 import qualified Grace.Interpret as Interpret
 import qualified Grace.Normalize as Normalize
 import qualified Grace.Pretty as Pretty
 import qualified Grace.Type as Type
-import qualified Network.HTTP.Client.TLS as TLS
+import qualified Grace.Width as Width
 import qualified System.Console.Haskeline.Completion as Completion
 import qualified System.Console.Repline as Repline
 import qualified System.IO as IO
@@ -40,7 +41,7 @@ import qualified System.IO as IO
 -- | Entrypoint for the @grace repl@ subcommand
 repl :: IO ()
 repl = do
-    manager <- TLS.newTlsManager
+    manager <- HTTP.newManager
 
     let interpret input = do
             context <- get
@@ -62,7 +63,7 @@ repl = do
                 Right (_inferred, value) -> do
                     let syntax = Normalize.quote [] value
 
-                    width <- liftIO Pretty.getWidth
+                    width <- liftIO Width.getWidth
 
                     liftIO (Pretty.renderIO True width IO.stdout (Pretty.pretty syntax <> "\n"))
 
@@ -109,7 +110,7 @@ repl = do
                     err e
 
                 Right (type_, _) -> do
-                    width <- liftIO Pretty.getWidth
+                    width <- liftIO Width.getWidth
 
                     liftIO (Pretty.renderIO True width IO.stdout (Pretty.pretty type_ <> "\n"))
 

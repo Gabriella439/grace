@@ -7,8 +7,6 @@ module Grace.Pretty
       renderStrict
     , renderIO
     , toText
-    , defaultColumns
-    , getWidth
     , Pretty(..)
       -- * Highlighting
     , keyword
@@ -25,13 +23,11 @@ import Data.Void (Void)
 import Numeric.Natural (Natural)
 import Prettyprinter (Doc, LayoutOptions(..), PageWidth(..))
 import Prettyprinter.Render.Terminal (AnsiStyle)
-import System.Console.Terminal.Size (Window(..))
 import System.IO (Handle)
 
 import qualified Prettyprinter as Pretty
 import qualified Prettyprinter.Render.Terminal as Pretty.Terminal
 import qualified Prettyprinter.Render.Text as Pretty.Text
-import qualified System.Console.Terminal.Size as Size
 import qualified Text.URI as URI
 
 {-| Convenient wrapper around
@@ -74,22 +70,6 @@ renderIO highlight columns handle =
         if highlight
         then Pretty.Terminal.renderIO
         else Pretty.Text.renderIO
-
--- | Get the width of the terminal (in columns)
-getWidth :: IO Int
-getWidth = do
-    maybeWindow <- Size.size
-
-    let renderWidth =
-            case maybeWindow of
-                Nothing         -> defaultColumns
-                Just Window{..} -> width
-
-    return renderWidth
-
--- | The default column size to use
-defaultColumns :: Int
-defaultColumns = 80
 
 -- | Simple conversion of a document to `Text`
 toText :: Pretty a => a -> Text

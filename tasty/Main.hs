@@ -24,6 +24,7 @@ import qualified Grace.Pretty
 import qualified Grace.Syntax as Syntax
 import qualified Grace.Type as Type
 import qualified Grace.Value as Value
+import qualified Grace.Width as Width
 import qualified Prettyprinter as Pretty
 import qualified System.Directory as Directory
 import qualified System.Environment as Environment
@@ -34,7 +35,7 @@ import qualified Test.Tasty.Silver as Silver
 
 pretty_ :: Pretty a => a -> Text
 pretty_ x =
-    Grace.Pretty.renderStrict False Grace.Pretty.defaultColumns
+    Grace.Pretty.renderStrict False Width.defaultWidth
         (pretty x <> Pretty.hardline)
 
 interpret

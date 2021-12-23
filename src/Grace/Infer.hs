@@ -60,6 +60,7 @@ import qualified Grace.Monotype as Monotype
 import qualified Grace.Pretty
 import qualified Grace.Syntax as Syntax
 import qualified Grace.Type as Type
+import qualified Grace.Width as Width
 import qualified Prettyprinter as Pretty
 
 -- | Type-checking state
@@ -2712,4 +2713,4 @@ listToText elements = Text.intercalate "\n" (map prettyEntry elements)
     prettyEntry entry = prettyToText ("• " <> Pretty.align (pretty entry))
 
 prettyToText :: Pretty a => a -> Text
-prettyToText = Grace.Pretty.renderStrict True Grace.Pretty.defaultColumns
+prettyToText = Grace.Pretty.renderStrict True Width.defaultWidth

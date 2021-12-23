@@ -21,24 +21,24 @@ import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Generics.Product (the)
 import Data.Text (Text)
 import Data.Void (Void)
+import Grace.HTTP (Manager)
 import Grace.Input (Input(..))
 import Grace.Location (Location(..))
 import Grace.Syntax (Node(..), Syntax(..))
 import Grace.Type (Hole, Type)
 import Grace.Value (Value)
-import Network.HTTP.Client (Manager)
 import Text.URI.QQ (scheme)
 
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
 import qualified Control.Monad.Except as Except
 import qualified Grace.Context as Context
+import qualified Grace.HTTP as HTTP
 import qualified Grace.Import as Import
 import qualified Grace.Infer as Infer
 import qualified Grace.Normalize as Normalize
 import qualified Grace.Parser as Parser
 import qualified Grace.Syntax as Syntax
-import qualified Network.HTTP.Client.TLS as TLS
 import qualified Text.URI as URI
 
 {-| Interpret Grace source code, return the inferred type and the evaluated
@@ -51,7 +51,7 @@ interpret
     => Input
     -> m (Type Location Void, Value)
 interpret input = do
-    manager <- TLS.newTlsManager
+    manager <- liftIO HTTP.newManager
 
     interpretWith [] Nothing manager input
 
