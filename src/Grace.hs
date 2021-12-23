@@ -36,7 +36,7 @@ import qualified Grace.Monotype as Monotype
 import qualified Grace.Normalize as Normalize
 import qualified Grace.Parser as Parser
 import qualified Grace.Pretty
-import qualified Grace.Repl as Repl
+import qualified Grace.REPL as REPL
 import qualified Grace.Syntax as Syntax
 import qualified Grace.Type as Type
 import qualified Grace.Value as Value
@@ -61,7 +61,7 @@ data Options
     | Text { file :: FilePath }
     | Format { highlight :: Highlight, files :: [FilePath] }
     | Builtins { highlight :: Highlight }
-    | Repl {}
+    | REPL {}
 
 parserInfo :: ParserInfo Options
 parserInfo =
@@ -112,7 +112,7 @@ parser = do
             return Builtins{..}
 
     let repl = do
-            pure Repl{}
+            pure REPL{}
 
     Options.hsubparser
         (   Options.command "interpret"
@@ -302,5 +302,5 @@ main = do
 
                     traverse_ (\b -> Text.IO.putStrLn "" >> displayBuiltin b) bs
 
-        Repl{} -> do
-            Repl.repl
+        REPL{} -> do
+            REPL.repl

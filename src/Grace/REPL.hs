@@ -6,7 +6,7 @@
 
 -- | This module contains the implementation of the @grace repl@ subcommand
 
-module Grace.Repl
+module Grace.REPL
     ( -- * REPL
       repl
     ) where

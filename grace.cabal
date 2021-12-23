@@ -68,7 +68,7 @@ library
                      , repline
                      , terminal-size
     exposed-modules:   Grace
-                     , Grace.Repl
+                     , Grace.REPL
 
 executable grace
   main-is:             Main.hs
