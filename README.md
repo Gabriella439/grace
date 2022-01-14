@@ -37,7 +37,7 @@ Grace implements the following features so that you don't have to:
 * Efficient and maintainable parsing
 
   Grace uses a lexer in conjunction with an Earley parser in order to improve
-  the efficiency and predictability of parsing performance.  In particular, any
+  the efficiency and predictability of parsing performance.  In particular,
   the parser will run in linear time for any grammar accepted by an LR parser.
 
 * JSON-compatible syntax
