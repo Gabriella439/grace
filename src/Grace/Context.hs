@@ -24,7 +24,6 @@ module Grace.Context
     ) where
 
 import Data.Text (Text)
-import Data.Void (Void)
 import Grace.Domain (Domain)
 import Grace.Existential (Existential)
 import Grace.Monotype (Monotype)
@@ -46,7 +45,7 @@ import qualified Prettyprinter as Pretty
 
    >>> :set -XOverloadedStrings
    >>> :set -XTypeApplications
-   >>> import Grace.Type (Hole, Record, Union)
+   >>> import Grace.Type (Record, Union)
 -}
 
 -- | An element of the `Context` list
@@ -56,7 +55,7 @@ data Entry s
     --
     -- >>> pretty @(Entry ()) (Variable Domain.Type "a")
     -- a: Type
-    | Annotation Text (Type s Void)
+    | Annotation Text (Type s)
     -- ^ A bound variable whose type is known
     --
     -- >>> pretty @(Entry ()) (Annotation "x" "a")
@@ -170,12 +169,6 @@ prettyEntry (SolvedFields p0 (Monotype.Fields [] (Monotype.UnsolvedFields p1))) 
     <>  " "
     <>  pretty p1
     <>  "?"
-prettyEntry (SolvedFields p0 (Monotype.Fields [] (Monotype.HoleFields h))) =
-        pretty p0
-    <>  " "
-    <>  punctuation "="
-    <>  " "
-    <>  pretty h
 prettyEntry (SolvedFields p0 (Monotype.Fields [] (Monotype.VariableFields p1))) =
         pretty p0
     <>  " "
@@ -195,16 +188,12 @@ prettyEntry (SolvedFields p (Monotype.Fields ((k0, τ0) : kτs) fields)) =
                 ""
             Monotype.UnsolvedFields p1 ->
                 punctuation "," <> " " <> pretty p1 <> "?"
-            Monotype.HoleFields h ->
-                punctuation "," <> " " <> pretty h
             Monotype.VariableFields p1 ->
                 punctuation "," <> " " <> pretty p1
 prettyEntry (SolvedAlternatives p (Monotype.Alternatives [] Monotype.EmptyAlternatives)) =
     pretty p <> " " <> punctuation "=" <> " " <> punctuation "•"
 prettyEntry (SolvedAlternatives p0 (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives p1))) =
     pretty p0 <> " " <> punctuation "=" <> " " <> pretty p1 <> "?"
-prettyEntry (SolvedAlternatives p0 (Monotype.Alternatives [] (Monotype.HoleAlternatives h))) =
-    pretty p0 <> " " <> punctuation "=" <> " " <> pretty h
 prettyEntry (SolvedAlternatives p0 (Monotype.Alternatives [] (Monotype.VariableAlternatives p1))) =
     pretty p0 <> " " <> punctuation "=" <> " " <>  label (pretty p1)
 prettyEntry (SolvedAlternatives p0 (Monotype.Alternatives ((k0, τ0) : kτs) fields)) =
@@ -219,8 +208,6 @@ prettyEntry (SolvedAlternatives p0 (Monotype.Alternatives ((k0, τ0) : kτs) fie
                 ""
             Monotype.UnsolvedAlternatives p1 ->
                 " " <> punctuation "|" <> " " <> pretty p1 <> "?"
-            Monotype.HoleAlternatives h ->
-                " " <> punctuation "|" <> " " <> pretty h
             Monotype.VariableAlternatives p1 ->
                 " " <> punctuation "|" <> " " <> label (pretty p1)
 prettyEntry (Annotation x a) = Pretty.group (Pretty.flatAlt long short)
@@ -253,13 +240,13 @@ prettyAlternativeType (k, τ) =
 {-| Substitute a `Type` using the solved entries of a `Context`
 
     >>> original = Type{ location = (), node = Type.UnsolvedType 0 }
-    >>> pretty @(Type () Hole) original
+    >>> pretty @(Type ()) original
     a?
 
-    >>> pretty @(Type () Hole) (solveType [ UnsolvedType 1, SolvedType 0 (Monotype.Scalar Monotype.Bool) ] original)
+    >>> pretty @(Type ()) (solveType [ UnsolvedType 1, SolvedType 0 (Monotype.Scalar Monotype.Bool) ] original)
     Bool
 -}
-solveType :: Context s -> Type s h -> Type s h
+solveType :: Context s -> Type s -> Type s
 solveType context type_ = foldl snoc type_ context
   where
     snoc t (SolvedType         a τ) = Type.solveType         a τ t
@@ -270,17 +257,17 @@ solveType context type_ = foldl snoc type_ context
 {-| Substitute a t`Type.Record` using the solved entries of a `Context`
 
     >>> original = Type.Fields [("x", Type{ location = (), node = Type.Scalar Monotype.Bool })] (Monotype.UnsolvedFields 0)
-    >>> pretty @(Record () Hole) original
+    >>> pretty @(Record ()) original
     { x: Bool, a? }
 
     >>> entry = SolvedFields 0 (Monotype.Fields [] Monotype.EmptyFields)
     >>> pretty entry
     a = •
 
-    >>> pretty @(Record () Hole) (solveRecord [ entry ] original)
+    >>> pretty @(Record ()) (solveRecord [ entry ] original)
     { x: Bool }
 -}
-solveRecord :: Context s -> Type.Record s h -> Type.Record s h
+solveRecord :: Context s -> Type.Record s -> Type.Record s
 solveRecord context record = record'
   where
     -- TODO: Come up with total solution
@@ -294,17 +281,17 @@ solveRecord context record = record'
     `Context`
 
     >>> original = Type.Alternatives [("A", Type{ location = (), node = Type.Scalar Monotype.Bool })] (Monotype.UnsolvedAlternatives 0)
-    >>> pretty @(Union () Hole) original
+    >>> pretty @(Union ()) original
     < A: Bool | a? >
 
     >>> entry = SolvedAlternatives 0 (Monotype.Alternatives [] Monotype.EmptyAlternatives)
     >>> pretty entry
     a = •
 
-    >>> pretty @(Union () Hole) (solveUnion [ entry ] original)
+    >>> pretty @(Union ()) (solveUnion [ entry ] original)
     < A: Bool >
 -}
-solveUnion :: Context s -> Type.Union s h -> Type.Union s h
+solveUnion :: Context s -> Type.Union s -> Type.Union s
 solveUnion context union = union'
   where
     -- TODO: Come up with total solution
@@ -322,13 +309,13 @@ solveUnion context union = union'
     * Adding universal quantifiers for all unsolved entries in the `Context`
 
     >>> original = Type{ location = (), node = Type.Function Type{ location = (), node = Type.UnsolvedType 1 } Type{ location = (), node = Type.UnsolvedType 0 } }
-    >>> pretty @(Type () Hole) original
+    >>> pretty @(Type ()) original
     b? -> a?
 
-    >>> pretty @(Type () Hole) (complete [ UnsolvedType 1, SolvedType 0 (Monotype.Scalar Monotype.Bool) ] original)
+    >>> pretty @(Type ()) (complete [ UnsolvedType 1, SolvedType 0 (Monotype.Scalar Monotype.Bool) ] original)
     forall (a : Type) . a -> Bool
 -}
-complete :: Context s -> Type s h -> Type s h
+complete :: Context s -> Type s -> Type s
 complete context type_ = do
     State.evalState (Monad.foldM snoc type_ context) 0
   where
@@ -465,7 +452,7 @@ lookup
     -> Int
     -- ^ Variable index (See the documentation of `Value.Variable`)
     -> Context s
-    -> Maybe (Type s Void)
+    -> Maybe (Type s)
 lookup _ _ [] =
     Nothing
 lookup x0 n (Annotation x1 _A : _Γ) =

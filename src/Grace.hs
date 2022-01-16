@@ -14,9 +14,9 @@ module Grace
 
 import Control.Applicative (many, (<|>))
 import Control.Exception.Safe (Exception(..))
-import Data.Bifunctor (first)
 import Data.Foldable (traverse_)
 import Data.String.Interpolate (__i)
+import Data.Functor (void)
 import Data.Void (Void)
 import Grace.Interpret (Input(..))
 import Grace.Location (Location(..))
@@ -195,7 +195,7 @@ main = do
                     | annotate =
                         Syntax
                             { node =
-                                Annotation syntax (first (\_ -> ()) inferred)
+                                Annotation syntax (void inferred)
                             , location = ()
                             }
                     | otherwise =
@@ -284,7 +284,7 @@ main = do
 
                     type_ <- throws (Infer.typeOf expression)
 
-                    let annotated :: Node Void Location Void
+                    let annotated :: Node Location Void
                         annotated = Annotation expression type_
 
                     render <- getRender highlight

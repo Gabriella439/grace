@@ -21,7 +21,6 @@ module Grace.Type
     , Node(..)
     , Record(..)
     , Union(..)
-    , Hole(..)
       -- * Utilities
     , solveType
     , solveFields
@@ -43,7 +42,6 @@ import Data.Generics.Product (the)
 import Data.Generics.Sum (_As)
 import Data.String (IsString(..))
 import Data.Text (Text)
-import Data.Void (Void, absurd)
 import GHC.Generics (Generic)
 import Grace.Domain (Domain)
 import Grace.Existential (Existential)
@@ -69,29 +67,22 @@ import qualified Prettyprinter as Pretty
 -}
 
 -- | A potentially polymorphic type
-data Type s h = Type { location :: s, node :: Node s h}
+data Type s = Type { location :: s, node :: Node s}
     deriving stock (Eq, Functor, Generic, Lift, Show)
 
-instance Bifunctor Type where
-    first f Type{..} = Type{ location = f location, node = first f node, .. }
-
-    second = fmap
-
-instance IsString (Type () a) where
+instance IsString (Type ()) where
     fromString string = Type{ location = (), node = fromString string }
 
-instance Pretty h => Pretty (Type s h) where
+instance Pretty (Type s) where
     pretty = liftType prettyQuantifiedType
 
-instance Plated (Type s h) where
+instance Plated (Type s) where
     plate onType Type{ node = oldNode, .. } = do
         newNode <- case oldNode of
             VariableType a -> do
                 pure (VariableType a)
             UnsolvedType a -> do
                 pure (UnsolvedType a)
-            TypeHole a -> do
-                pure (TypeHole a)
             Exists s h domain oldA -> do
                 newA <- onType oldA
                 return (Exists s h domain newA)
@@ -124,127 +115,88 @@ instance Plated (Type s h) where
                 pure (Scalar scalar)
         return Type{ node = newNode, .. }
 
-liftType :: (Node s h -> Doc b) -> Type s h -> Doc b
+liftType :: (Node s -> Doc b) -> Type s -> Doc b
 liftType pretty_ Type{ node } = pretty_ node
 
 -- | The constructors for `Type`
-data Node s h
+data Node s
     = VariableType Text
     -- ^ Type variable
     --
-    -- >>> pretty @(Node () Hole) (VariableType "a")
+    -- >>> pretty @(Node ()) (VariableType "a")
     -- a
     | UnsolvedType (Existential Monotype)
     -- ^ A placeholder variable whose type has not yet been inferred
     --
-    -- >>> pretty @(Node () Hole) (UnsolvedType 0)
+    -- >>> pretty @(Node ()) (UnsolvedType 0)
     -- a?
-    | TypeHole h
-    -- ^ A type hole inserted by the user
-    --
-    -- >>> pretty @(Node () Hole) (TypeHole Hole)
-    -- ?
-    | Exists s Text Domain (Type s h)
+    | Exists s Text Domain (Type s)
     -- ^ Existentially quantified type
     --
-    -- >>> pretty @(Node () Hole) (Exists () "a" Domain.Type "a")
+    -- >>> pretty @(Node ()) (Exists () "a" Domain.Type "a")
     -- exists (a : Type) . a
-    | Forall s Text Domain (Type s h)
+    | Forall s Text Domain (Type s)
     -- ^ Universally quantified type
     --
-    -- >>> pretty @(Node () Hole) (Forall () "a" Domain.Type "a")
+    -- >>> pretty @(Node ()) (Forall () "a" Domain.Type "a")
     -- forall (a : Type) . a
-    | Function (Type s h) (Type s h)
+    | Function (Type s) (Type s)
     -- ^ Function type
     --
-    -- >>> pretty @(Node () Hole) (Function "a" "b")
+    -- >>> pretty @(Node ()) (Function "a" "b")
     -- a -> b
-    | Optional (Type s h)
+    | Optional (Type s)
     -- ^ Optional type
     --
-    -- >>> pretty @(Node () Hole) (Optional "a")
+    -- >>> pretty @(Node ()) (Optional "a")
     -- Optional a
-    | List (Type s h)
+    | List (Type s)
     -- ^ List type
     --
-    -- >>> pretty @(Node () Hole) (List "a")
+    -- >>> pretty @(Node ()) (List "a")
     -- List a
-    | Record (Record s h)
+    | Record (Record s)
     -- ^ Record type
     --
-    -- >>> pretty @(Node () Hole) (Record (Fields [("x", "X"), ("y", "Y")] Monotype.EmptyFields))
+    -- >>> pretty @(Node ()) (Record (Fields [("x", "X"), ("y", "Y")] Monotype.EmptyFields))
     -- { x: X, y: Y }
-    -- >>> pretty @(Node () Hole) (Record (Fields [("x", "X"), ("y", "Y")] (Monotype.UnsolvedFields 0)))
+    -- >>> pretty @(Node ()) (Record (Fields [("x", "X"), ("y", "Y")] (Monotype.UnsolvedFields 0)))
     -- { x: X, y: Y, a? }
-    | Union (Union s h)
+    | Union (Union s)
     -- ^ Union type
     --
-    -- >>> pretty @(Node () Hole) (Union (Alternatives [("x", "X"), ("y", "Y")] Monotype.EmptyAlternatives))
+    -- >>> pretty @(Node ()) (Union (Alternatives [("x", "X"), ("y", "Y")] Monotype.EmptyAlternatives))
     -- < x: X | y: Y >
-    -- >>> pretty @(Node () Hole) (Union (Alternatives [("x", "X"), ("y", "Y")] (Monotype.UnsolvedAlternatives 0)))
+    -- >>> pretty @(Node ()) (Union (Alternatives [("x", "X"), ("y", "Y")] (Monotype.UnsolvedAlternatives 0)))
     -- < x: X | y: Y | a? >
     | Scalar Scalar
     deriving stock (Eq, Functor, Generic, Lift, Show)
 
-instance Bifunctor Node where
-    first _ (VariableType a) = VariableType a
-    first _ (UnsolvedType a) = UnsolvedType a
-    first _ (TypeHole a    ) = TypeHole a
-    first f (Exists a b c d) = Exists (f a) b c (first f d)
-    first f (Forall a b c d) = Forall (f a) b c (first f d)
-    first f (Function a b  ) = Function (first f a) (first f b)
-    first f (Optional a    ) = Optional (first f a)
-    first f (List a        ) = List (first f a)
-    first f (Record a      ) = Record (first f a)
-    first f (Union a      ) = Union (first f a)
-    first _ (Scalar a     ) = Scalar a
-
-    second = fmap
-
-instance IsString (Node s h) where
+instance IsString (Node s) where
     fromString string = VariableType (fromString string)
 
-instance Pretty h => Pretty (Node s h) where
+instance Pretty (Node s) where
     pretty = prettyQuantifiedType
 
 -- | A potentially polymorphic record type
-data Record s h = Fields [(Text, Type s h)] (RemainingFields h)
+data Record s = Fields [(Text, Type s)] RemainingFields
     deriving stock (Eq, Functor, Generic, Lift, Show)
 
-instance Bifunctor Record where
-    first f (Fields as b) = Fields (map (second (first f)) as) b
-
-    second = fmap
-
-instance Pretty h => Pretty (Record s h) where
+instance Pretty (Record s) where
     pretty = prettyRecordType
 
 -- | A potentially polymorphic union type
-data Union s h = Alternatives [(Text, Type s h)] (RemainingAlternatives h)
+data Union s = Alternatives [(Text, Type s)] RemainingAlternatives
     deriving stock (Eq, Functor, Generic, Lift, Show)
 
-instance Bifunctor Union where
-    first f (Alternatives as b) = Alternatives (map (second (first f)) as) b
-
-    second = fmap
-
-instance Pretty h => Pretty (Union s h) where
+instance Pretty (Union s) where
     pretty = prettyUnionType
-
-{-| User-visible placeholder for an unsolved type\/fields\/alternatives
-    variable
--}
-data Hole = Hole
-    deriving (Eq, Lift, Show)
-
-instance Pretty Hole where
-    pretty Hole = keyword "?"
 
 {-| This function should not be exported or generally used because it does not
     handle the `location` field correctly.  It is only really safe to use within
     one of the @solve*@ functions
 -}
-fromMonotype :: Monotype -> Type () a
+fromMonotype :: Monotype -> Type ()
 fromMonotype monotype = Type{ location = (), node }
   where
     node = case monotype of
@@ -259,26 +211,26 @@ fromMonotype monotype = Type{ location = (), node }
         Monotype.List τ ->
             List (fromMonotype τ)
         Monotype.Record (Monotype.Fields kτs ρ) ->
-            Record (Fields (map (second fromMonotype) kτs) (fmap absurd ρ))
+            Record (Fields (map (second fromMonotype) kτs) ρ)
         Monotype.Union (Monotype.Alternatives kτs ρ) ->
-            Union (Alternatives (map (second fromMonotype) kτs) (fmap absurd ρ))
+            Union (Alternatives (map (second fromMonotype) kτs) ρ)
         Monotype.Scalar scalar ->
             Scalar scalar
 
 instance Pretty Monotype where
-    pretty = pretty . fromMonotype @Void
+    pretty = pretty . fromMonotype
 
 {-| Substitute a `Type` by replacing all occurrences of the given unsolved
     variable with a `Monotype`
 -}
-solveType :: Existential Monotype -> Monotype -> Type s h -> Type s h
+solveType :: Existential Monotype -> Monotype -> Type s -> Type s
 solveType unsolved monotype = Lens.transform transformType
   where
     transformType type_ = Lens.over (the @"node") transformNode type_
       where
         transformNode (UnsolvedType unsolved')
             | unsolved == unsolved' =
-                node (first (\_ -> location type_) (fromMonotype monotype))
+                node (fmap (\_ -> location type_) (fromMonotype monotype))
 
         transformNode node =
             node
@@ -287,20 +239,20 @@ solveType unsolved monotype = Lens.transform transformType
     fields variable with a t`Monotype.Record`
 -}
 solveFields
-    :: Existential Monotype.Record -> Monotype.Record -> Type s h -> Type s h
+    :: Existential Monotype.Record -> Monotype.Record -> Type s -> Type s
 solveFields unsolved (Monotype.Fields fieldMonotypes fields) =
     Lens.transform transformType
   where
     transformType type_ = Lens.over (the @"node") transformNode type_
       where
         transformNode (Record (Fields fieldTypes (UnsolvedFields unsolved')))
-            | unsolved == unsolved' = Record (Fields fieldTypes' (fmap absurd fields))
+            | unsolved == unsolved' = Record (Fields fieldTypes' fields)
           where
             fieldTypes' =
                 fieldTypes <> map transformPair fieldMonotypes
 
             transformPair (field, monotype) =
-                (field, first (\_ -> location type_) (fromMonotype monotype))
+                (field, fmap (\_ -> location type_) (fromMonotype monotype))
 
         transformNode node =
             node
@@ -309,7 +261,7 @@ solveFields unsolved (Monotype.Fields fieldMonotypes fields) =
     alternatives variable with a t`Monotype.Union`
 -}
 solveAlternatives
-    :: Existential Monotype.Union -> Monotype.Union -> Type s h -> Type s h
+    :: Existential Monotype.Union -> Monotype.Union -> Type s -> Type s
 solveAlternatives unsolved (Monotype.Alternatives alternativeMonotypes alternatives) =
     Lens.transform transformType
   where
@@ -317,13 +269,13 @@ solveAlternatives unsolved (Monotype.Alternatives alternativeMonotypes alternati
       where
         transformNode (Union (Alternatives alternativeTypes (UnsolvedAlternatives unsolved')))
             | unsolved == unsolved' =
-                Union (Alternatives alternativeTypes' (fmap absurd alternatives))
+                Union (Alternatives alternativeTypes' alternatives)
           where
             alternativeTypes' =
                 alternativeTypes <> map transformPair alternativeMonotypes
 
             transformPair (alternative, monotype) =
-                (alternative, first (\_ -> location type_) (fromMonotype monotype))
+                (alternative, fmap (\_ -> location type_) (fromMonotype monotype))
 
         transformNode node =
             node
@@ -331,7 +283,7 @@ solveAlternatives unsolved (Monotype.Alternatives alternativeMonotypes alternati
 {-| Replace all occurrences of a variable within one `Type` with another `Type`,
     given the variable's label and index
 -}
-substituteType :: Text -> Int -> Type s h -> Type s h -> Type s h
+substituteType :: Text -> Int -> Type s -> Type s -> Type s
 substituteType a0 n _A0 Type{ node = old, .. } = Type{ node = new, .. }
   where
     new = case old of
@@ -340,8 +292,6 @@ substituteType a0 n _A0 Type{ node = old, .. } = Type{ node = new, .. }
             | otherwise          -> VariableType a1
         UnsolvedType a ->
             UnsolvedType a
-        TypeHole h ->
-            TypeHole h
         Exists s a1 domain _A1 ->
             if a0 == a1 && domain == Domain.Type
             then Exists s a1 domain (substituteType a0 (n + 1) _A0 _A1)
@@ -366,7 +316,7 @@ substituteType a0 n _A0 Type{ node = old, .. } = Type{ node = new, .. }
 {-| Replace all occurrences of a variable within one `Type` with another `Type`,
     given the variable's label and index
 -}
-substituteFields :: Eq h => Text -> Int -> Record s h -> Type s h -> Type s h
+substituteFields :: Text -> Int -> Record s -> Type s -> Type s
 substituteFields ρ0 n r@(Fields kτs ρ1) Type{ node = old, .. } =
     Type{ node = new, .. }
   where
@@ -375,8 +325,6 @@ substituteFields ρ0 n r@(Fields kτs ρ1) Type{ node = old, .. } =
             VariableType a
         UnsolvedType a ->
             UnsolvedType a
-        TypeHole h ->
-            TypeHole h
         Exists s a1 domain _A ->
             if ρ0 == a1 && domain == Domain.Fields
             then Exists s a1 domain (substituteFields ρ0 (n + 1) r _A)
@@ -397,7 +345,7 @@ substituteFields ρ0 n r@(Fields kτs ρ1) Type{ node = old, .. } =
             | otherwise ->
                 Record (Fields (map (second (substituteFields ρ0 n r)) kAs0) ρ)
           where
-            kAs1 = kAs0 <> map (second (first (\_ -> location))) kτs
+            kAs1 = kAs0 <> map (second (fmap (\_ -> location))) kτs
         Union (Alternatives kAs ρ) ->
             Union (Alternatives (map (second (substituteFields ρ0 n r)) kAs) ρ)
         Scalar scalar ->
@@ -406,8 +354,7 @@ substituteFields ρ0 n r@(Fields kτs ρ1) Type{ node = old, .. } =
 {-| Replace all occurrences of a variable within one `Type` with another `Type`,
     given the variable's label and index
 -}
-substituteAlternatives
-    :: Eq h => Text -> Int -> Union s h -> Type s h -> Type s h
+substituteAlternatives :: Text -> Int -> Union s -> Type s -> Type s
 substituteAlternatives ρ0 n r@(Alternatives kτs ρ1) Type{ node = old, .. } =
     Type{ node = new, .. }
   where
@@ -416,8 +363,6 @@ substituteAlternatives ρ0 n r@(Alternatives kτs ρ1) Type{ node = old, .. } =
             VariableType a
         UnsolvedType a ->
             UnsolvedType a
-        TypeHole h ->
-            TypeHole h
         Exists s a1 domain _A ->
             if ρ0 == a1 && domain == Domain.Alternatives
             then Exists s a1 domain (substituteAlternatives ρ0 (n + 1) r _A)
@@ -440,14 +385,14 @@ substituteAlternatives ρ0 n r@(Alternatives kτs ρ1) Type{ node = old, .. } =
             | otherwise ->
                 Union (Alternatives (map (second (substituteAlternatives ρ0 n r)) kAs0) ρ)
           where
-            kAs1 = kAs0 <> map (second (first (\_ -> location))) kτs
+            kAs1 = kAs0 <> map (second (fmap (\_ -> location))) kτs
         Scalar scalar ->
             Scalar scalar
 
 {-| Count how many times the given `Existential` `Type` variable appears within
     a `Type`
 -}
-typeFreeIn :: Existential Monotype -> Type s h -> Bool
+typeFreeIn :: Existential Monotype -> Type s -> Bool
 typeFreeIn unsolved =
     Lens.has
         ( Lens.cosmos
@@ -459,7 +404,7 @@ typeFreeIn unsolved =
 {-| Count how many times the given `Existential` t`Monotype.Record` variable
     appears within a `Type`
 -}
-fieldsFreeIn :: Existential Monotype.Record -> Type s h -> Bool
+fieldsFreeIn :: Existential Monotype.Record -> Type s -> Bool
 fieldsFreeIn unsolved =
     Lens.has
         ( Lens.cosmos
@@ -473,7 +418,7 @@ fieldsFreeIn unsolved =
 {-| Count how many times the given `Existential` t`Monotype.Union` variable
     appears within a `Type`
 -}
-alternativesFreeIn :: Existential Monotype.Union -> Type s h -> Bool
+alternativesFreeIn :: Existential Monotype.Union -> Type s -> Bool
 alternativesFreeIn unsolved =
     Lens.has
         ( Lens.cosmos
@@ -488,7 +433,7 @@ data PreviousQuantifier =
   NoQuantifier | ForallQuantifier | ExistsQuantifier
   deriving Eq
 
-prettyQuantifiedType :: Pretty h => Node s h -> Doc AnsiStyle
+prettyQuantifiedType :: Node s -> Doc AnsiStyle
 prettyQuantifiedType type_
     | isQuantified type_ = Pretty.group (Pretty.flatAlt long short)
     | otherwise          = prettyFunctionType type_
@@ -571,7 +516,7 @@ prettyQuantifiedType type_
     prettyLong _A =
         "  " <> prettyFunctionType _A
 
-prettyFunctionType :: Pretty h => Node s h -> Doc AnsiStyle
+prettyFunctionType :: Node s -> Doc AnsiStyle
 prettyFunctionType  type_@Function{} = Pretty.group (Pretty.flatAlt long short)
   where
     long = Pretty.align (prettyLong type_)
@@ -598,7 +543,7 @@ prettyFunctionType  type_@Function{} = Pretty.group (Pretty.flatAlt long short)
 prettyFunctionType other =
     prettyApplicationType other
 
-prettyApplicationType :: Pretty h => Node s h -> Doc AnsiStyle
+prettyApplicationType :: Node s -> Doc AnsiStyle
 prettyApplicationType (Optional _A) = Pretty.group (Pretty.flatAlt long short)
   where
     short = builtin "Optional" <> " " <> liftType prettyPrimitiveType _A
@@ -624,13 +569,11 @@ prettyApplicationType (List _A) = Pretty.group (Pretty.flatAlt long short)
 prettyApplicationType other =
     prettyPrimitiveType other
 
-prettyPrimitiveType :: Pretty h => Node s h -> Doc AnsiStyle
+prettyPrimitiveType :: Node s -> Doc AnsiStyle
 prettyPrimitiveType (VariableType a) =
     label (pretty a)
 prettyPrimitiveType (UnsolvedType a) =
     label (pretty a <> "?")
-prettyPrimitiveType (TypeHole h) =
-    pretty h
 prettyPrimitiveType (Record r) =
     prettyRecordType r
 prettyPrimitiveType (Union u) =
@@ -651,13 +594,12 @@ prettyPrimitiveType other =
             <>  punctuation ")"
             )
 
-prettyRecordType :: Pretty h => Record s h -> Doc AnsiStyle
+prettyRecordType :: Record s -> Doc AnsiStyle
 prettyRecordType (Fields [] fields) =
         punctuation "{"
     <>  (case fields of
             EmptyFields      -> " "
             UnsolvedFields ρ -> " " <> label (pretty ρ <> "?") <> " "
-            HoleFields h     -> " " <> pretty h <> " "
             VariableFields ρ -> " " <> label (pretty ρ) <> " "
         )
     <>  punctuation "}"
@@ -674,8 +616,6 @@ prettyRecordType (Fields (keyType : keyTypes) fields) =
                     mempty
                 UnsolvedFields ρ ->
                     punctuation "," <> " " <> label (pretty ρ <> "?")
-                HoleFields h ->
-                    punctuation "," <> " " <> pretty h
                 VariableFields ρ ->
                     punctuation "," <> " " <> label (pretty ρ)
             )
@@ -697,12 +637,6 @@ prettyRecordType (Fields (keyType : keyTypes) fields) =
                         <>  label (pretty ρ <> "?")
                         <>  Pretty.hardline
                         <>  punctuation "}"
-                    HoleFields h ->
-                            punctuation ","
-                        <>  " "
-                        <>  pretty h
-                        <>  Pretty.hardline
-                        <>  punctuation "}"
                     VariableFields ρ ->
                             punctuation ","
                         <>  " "
@@ -711,14 +645,14 @@ prettyRecordType (Fields (keyType : keyTypes) fields) =
                         <>  punctuation "}"
             )
 
-    prettyShortFieldType :: Pretty h => (Text, Type s h) -> Doc AnsiStyle
+    prettyShortFieldType :: (Text, Type s) -> Doc AnsiStyle
     prettyShortFieldType (key, type_) =
             prettyRecordLabel False key
         <>  operator ":"
         <>  " "
         <>  liftType prettyQuantifiedType type_
 
-    prettyLongFieldType :: Pretty h => (Text, Type s h) -> Doc AnsiStyle
+    prettyLongFieldType :: (Text, Type s) -> Doc AnsiStyle
     prettyLongFieldType (key, type_) =
             prettyRecordLabel False key
         <>  operator ":"
@@ -726,13 +660,12 @@ prettyRecordType (Fields (keyType : keyTypes) fields) =
         <>  liftType prettyQuantifiedType type_
         <>  Pretty.hardline
 
-prettyUnionType :: Pretty h => Union s h -> Doc AnsiStyle
+prettyUnionType :: Union s -> Doc AnsiStyle
 prettyUnionType (Alternatives [] alternatives) =
         punctuation "<"
     <>  (case alternatives of
-            EmptyAlternatives -> " "
+            EmptyAlternatives      -> " "
             UnsolvedAlternatives ρ -> " " <> label (pretty ρ <> "?") <> " "
-            HoleAlternatives h -> " " <> pretty h <> " "
             VariableAlternatives ρ -> " " <> label (pretty ρ) <> " "
         )
     <> punctuation ">"
@@ -752,11 +685,6 @@ prettyUnionType (Alternatives (keyType : keyTypes) alternatives) =
                     <>  punctuation "|"
                     <>  " "
                     <>  label (pretty ρ <> "?")
-                HoleAlternatives h ->
-                        " "
-                    <>  punctuation "|"
-                    <>  " "
-                    <>  pretty h
                 VariableAlternatives ρ ->
                         " "
                     <>  punctuation "|"
@@ -779,12 +707,6 @@ prettyUnionType (Alternatives (keyType : keyTypes) alternatives) =
                             punctuation "|"
                         <>  " "
                         <>  label (pretty ρ <> "?")
-                        <>  Pretty.hardline
-                        <>  punctuation ">"
-                    HoleAlternatives h ->
-                            punctuation "|"
-                        <>  " "
-                        <>  pretty h
                         <>  Pretty.hardline
                         <>  punctuation ">"
                     VariableAlternatives ρ ->

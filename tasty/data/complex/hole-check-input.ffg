@@ -1,2 +1,0 @@
-# Verify that checking an unsolved variable against a hole works
-\x -> [ 1, x ] : List ?

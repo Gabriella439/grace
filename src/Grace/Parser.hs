@@ -35,7 +35,7 @@ import Grace.Input (Input(..))
 import Grace.Lexer (LocatedToken(LocatedToken), ParseError(..), Token)
 import Grace.Location (Location(..), Offset(..))
 import Grace.Syntax (Binding(..), Syntax(..))
-import Grace.Type (Hole(..), Type(..))
+import Grace.Type (Type(..))
 import Text.Earley (Grammar, Prod, Report(..), rule, (<?>))
 
 import qualified Data.List.NonEmpty as NonEmpty
@@ -205,7 +205,6 @@ render t = case t of
     Lexer.Optional         -> "List"
     Lexer.Or               -> "||"
     Lexer.Plus             -> "+"
-    Lexer.Question         -> "?"
     Lexer.Text             -> "Text"
     Lexer.TextEqual        -> "Text/equal"
     Lexer.TextLiteral _    -> "a text literal"
@@ -215,7 +214,7 @@ render t = case t of
     Lexer.True_            -> "True"
     Lexer.URI _            -> "a URI"
 
-grammar :: Grammar r (Parser r (Syntax Hole Offset Input))
+grammar :: Grammar r (Parser r (Syntax Offset Input))
 grammar = mdo
     expression <- rule
         (   do  location <- locatedToken Lexer.Lambda
@@ -591,9 +590,7 @@ grammar = mdo
         )
 
     primitiveType <- rule
-        (   do  location <- locatedToken Lexer.Question
-                return Type{ node = Type.TypeHole Type.Hole, .. }
-        <|> do  location <- locatedToken Lexer.Bool
+        (   do  location <- locatedToken Lexer.Bool
                 return Type{ node = Type.Scalar Monotype.Bool, .. }
         <|> do  location <- locatedToken Lexer.Real
                 return Type{ node = Type.Scalar Monotype.Real, .. }
@@ -624,8 +621,6 @@ grammar = mdo
                 toFields <-
                     (   do  text_ <- recordLabel
                             pure (\fs -> Type.Fields fs (Monotype.VariableFields text_))
-                    <|> do  token Lexer.Question
-                            pure (\fs -> Type.Fields fs (Monotype.HoleFields Type.Hole))
                     <|> do  pure (\fs -> Type.Fields fs Monotype.EmptyFields)
                     <|> do  f <- fieldType
                             pure (\fs -> Type.Fields (fs <> [ f ]) Monotype.EmptyFields)
@@ -649,8 +644,6 @@ grammar = mdo
                 toAlternatives <-
                     (   do  text_ <- label
                             return (\as -> Type.Alternatives as (Monotype.VariableAlternatives text_))
-                    <|> do  token Lexer.Question
-                            pure (\as -> Type.Alternatives as (Monotype.HoleAlternatives Type.Hole))
                     <|> do  pure (\as -> Type.Alternatives as Monotype.EmptyAlternatives)
                     <|> do  a <- alternativeType
                             return (\as -> Type.Alternatives (as <> [ a ]) Monotype.EmptyAlternatives)
@@ -686,7 +679,7 @@ parse
     -- ^ Name of the input (used for error messages)
     -> Text
     -- ^ Source code
-    -> Either ParseError (Syntax Hole Offset Input)
+    -> Either ParseError (Syntax Offset Input)
 parse name code = do
     tokens <- Lexer.lex name code
 

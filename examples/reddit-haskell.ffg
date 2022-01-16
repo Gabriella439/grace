@@ -1,6 +1,16 @@
 # This is an example of extracting post titles from the Haskell subreddit
 let input
       = https://www.reddit.com/r/haskell.json
-      : { data: { children: List { data: { title: Text, ? }, ? }, ? }, ? }
+          : exists (a : Fields) .
+            exists (b : Fields) .
+              { data: { children: List
+                                    ( exists (c : Fields) .
+                                      exists (d : Fields) .
+                                        { data: { title: Text, d }, c }
+                                    )
+                      , b
+                      }
+              , a
+              }
 
 in  List/map (\child -> child.data.title) input.data.children

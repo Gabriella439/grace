@@ -6,7 +6,6 @@ module Main where
 
 import Control.Exception.Safe (Exception)
 import Data.Text (Text)
-import Data.Void (Void)
 import Grace.Interpret (Input(..), InterpretError)
 import Grace.Location (Location(..))
 import Grace.Pretty (Pretty(..))
@@ -39,7 +38,7 @@ pretty_ x =
         (pretty x <> Pretty.hardline)
 
 interpret
-    :: Input -> IO (Either InterpretError (Type Location Void, Value.Value))
+    :: Input -> IO (Either InterpretError (Type Location, Value.Value))
 interpret input = Except.runExceptT (Interpret.interpret input)
 
 throws :: Exception e => IO (Either e a) -> IO a

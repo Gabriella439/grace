@@ -14,7 +14,7 @@ module Grace.TH
     , typeOfInput
     ) where
 
-import Data.Bifunctor (first)
+import Data.Functor (void)
 import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Interpret (Input(..))
@@ -61,15 +61,15 @@ grace = QuasiQuoter
      >>> $$(expressionFromCode "\"hello\"")
      Syntax {location = (), node = Scalar (Text "hello")}
 -}
-expressionFromCode :: Text -> Q (TExp (Syntax Void () Void))
+expressionFromCode :: Text -> Q (TExp (Syntax () Void))
 expressionFromCode = expressionFromInput . Code "(input)"
 
 -- | Like `expressionFromCode`, but takes path of a source file as input.
-expressionFromFile :: FilePath -> Q (TExp (Syntax Void () Void))
+expressionFromFile :: FilePath -> Q (TExp (Syntax () Void))
 expressionFromFile = expressionFromInput . Path
 
 -- | Like `expressionFromCode`, but expects `Input` as an argument.
-expressionFromInput :: Input -> Q (TExp (Syntax Void () Void))
+expressionFromInput :: Input -> Q (TExp (Syntax () Void))
 expressionFromInput = helperFunction snd
 
 {- | Infer the type of an expression at compile time.
@@ -80,22 +80,21 @@ expressionFromInput = helperFunction snd
      >>> $$(typeOfCode "\"hello\"")
      Type {location = (), node = Scalar Text}
 -}
-typeOfCode :: Text -> Q (TExp (Type () Void))
+typeOfCode :: Text -> Q (TExp (Type ()))
 typeOfCode = typeOfInput . Code "(input)"
 
 -- | Like `typeOfCode`, but takes path of a source file as input.
-typeOfFile :: FilePath -> Q (TExp (Type () Void))
+typeOfFile :: FilePath -> Q (TExp (Type ()))
 typeOfFile = typeOfInput . Path
 
 -- | Like `typeOfCode`, but expects `Input` as an argument.
-typeOfInput :: Input -> Q (TExp (Type () Void))
+typeOfInput :: Input -> Q (TExp (Type ()))
 typeOfInput = helperFunction fst
 
 -- Internal functions
 
 helperFunction
-    :: Lift r
-    => ((Type () Void, Syntax Void () Void) -> r) -> Input -> Q (TExp r)
+    :: Lift r => ((Type (), Syntax () Void) -> r) -> Input -> Q (TExp r)
 helperFunction f input = do
     eitherResult <- Except.runExceptT (Interpret.interpret input)
 
@@ -103,7 +102,7 @@ helperFunction f input = do
         Left e -> fail (Exception.displayException e)
         Right result -> return result
 
-    let type_ = first (\_ -> ()) inferred
+    let type_ = void inferred
         syntax = Normalize.quote [] value
 
     TExp <$> TH.lift (f (type_, syntax))

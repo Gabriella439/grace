@@ -22,7 +22,6 @@ import Grace.HTTP (HttpException, Manager)
 import Grace.Input (Input(..))
 import Grace.Location (Location(..))
 import Grace.Syntax (Syntax)
-import Grace.Type (Hole)
 import System.FilePath ((</>))
 import Text.URI (Authority)
 import Text.URI.QQ (host, scheme)
@@ -38,7 +37,7 @@ import qualified System.Environment as Environment
 import qualified Text.URI as URI
 
 -- | Resolve an `Input` by returning the source code that it represents
-resolve :: Manager -> Input -> IO (Syntax Hole Location Input)
+resolve :: Manager -> Input -> IO (Syntax Location Input)
 resolve manager input = case input of
     URI uri
         | any (`elem` [ [scheme|http|], [scheme|https|] ]) (URI.uriScheme uri) -> do

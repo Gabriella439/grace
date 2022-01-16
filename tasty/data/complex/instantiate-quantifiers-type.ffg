@@ -4,10 +4,4 @@
 , d: Optional (forall (a : Type) . { })
 , e: Optional (forall (a : Fields) . { })
 , f: Optional (forall (a : Alternatives) . { })
-, g: Optional { }
-, h: Optional { }
-, i: Optional { }
-, j: Optional { }
-, k: Optional { }
-, l: Optional { }
 }

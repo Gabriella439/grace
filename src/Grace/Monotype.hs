@@ -19,7 +19,6 @@ module Grace.Monotype
 
 import Data.String (IsString(..))
 import Data.Text (Text)
-import Data.Void (Void)
 import GHC.Generics (Generic)
 import Grace.Existential (Existential)
 import Grace.Pretty (Pretty(..), builtin)
@@ -87,39 +86,35 @@ instance Pretty Scalar where
     pretty Text    = builtin "Text"
 
 -- | A monomorphic record type
-data Record = Fields [(Text, Monotype)] (RemainingFields Void)
+data Record = Fields [(Text, Monotype)] RemainingFields
     deriving stock (Eq, Generic, Show)
 
 -- | This represents whether or not the record type is open or closed
-data RemainingFields h
+data RemainingFields
     = EmptyFields
     -- ^ The record type is closed, meaning that all fields are known
     | UnsolvedFields (Existential Record)
     -- ^ The record type is open, meaning that some fields are known and there
     --   is an unsolved fields variable that is a placeholder for other fields
     --   that may or may not be present
-    | HoleFields h
-    -- ^ A fields hole inserted by the user
     | VariableFields Text
     -- ^ Same as `UnsolvedFields`, except that the user has given the fields
     --   variable an explicit name in the source code
-    deriving stock (Eq, Functor, Generic, Lift, Show)
+    deriving stock (Eq, Generic, Lift, Show)
 
 -- | A monomorphic union type
-data Union = Alternatives [(Text, Monotype)] (RemainingAlternatives Void)
+data Union = Alternatives [(Text, Monotype)] RemainingAlternatives
     deriving stock (Eq, Generic, Show)
 
 -- | This represents whether or not the union type is open or closed
-data RemainingAlternatives h
+data RemainingAlternatives
     = EmptyAlternatives
     -- ^ The union type is closed, meaning that all alternatives are known
     | UnsolvedAlternatives (Existential Union)
     -- ^ The union type is open, meaning that some alternatives are known and
     --   there is an unsolved alternatives variable that is a placeholder for
     --   other alternatives that may or may not be present
-    | HoleAlternatives h
-    -- ^ An alternatives hole inserted by the user
     | VariableAlternatives Text
     -- ^ Same as `UnsolvedAlternatives`, except that the user has given the
     --   alternatives variable an explicit name in the source code
-    deriving stock (Eq, Functor, Generic, Lift, Show)
+    deriving stock (Eq, Generic, Lift, Show)
