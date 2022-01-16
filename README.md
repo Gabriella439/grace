@@ -1059,7 +1059,7 @@ Grace supports the following URI schemes:
 * Environment variables: `env:…`
 
   ```bash
-  $ MY_VAR='"Hello !"' grace interpret - <<< 'env:///MY_VAR'
+  $ MY_VAR='"Hello !"' grace interpret - <<< 'env:MY_VAR'
   ```
   ```dhall
   "Hello !"
