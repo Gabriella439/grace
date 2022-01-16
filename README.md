@@ -84,7 +84,7 @@ Grace implements the following features so that you don't have to:
   expressions can be made valid with a type signature, like this:
 
   ```dhall
-  [ 1, [] ] : List ?
+  [ 1, [] ] : List (exists (a : Type) . a)
   ```
 
   … and this doesn't compromise the soundness of the type system.
@@ -725,17 +725,6 @@ should be `Natural` for each element.  You can read that type as saying that
 there `exists` a `Type` that we could assign to `a` that would make the type
 work, but we don't care which one.
 
-You can also use a typed hole instead of existential quantification if you
-don't need to name the existentially-quantified variable:
-
-```dhall
-let numbers : List ?
-            = [ 2, 3, 5 ]
-
-in  numbers
-```
-
-
 You don't need type annotations when the types of values exactly match, but
 you do require type annotations to unify types when one type is a proper
 subtype of another type.
@@ -787,9 +776,6 @@ $ grace interpret - <<< '[ { }, \x -> x ] : List (exists (a : Type) . a)'
 ```dhall
 [ { }, \x -> x ]
 ```
-
-A typed hole (i.e. `?`) is essentially the same thing as
-`exists (a : Type) . a`.
 
 Note that if you existentially quantify a value's type then you can't do
 anything meaningful with that value; it is now a black box as far as the
@@ -857,18 +843,12 @@ existentially quantifying them:
     : List (exists (a : Fields) . { x: Natural, a })
 ```
 
-… which we can further simplify using a typed hole:
-
-```dhall
-[ { x: 1, y: true }, { x: 2, z: "" } ] : List { x: Natural, ? }
-```
-
 We can still write a function that consumes this list so long as the function
 only accesses the field named `x`:
 
 ```dhall
 let values
-      : List { x: Natural, ? }
+      : exists (a : Fields) . List { x: Natural, a }
       =  [ { x: 1, y: true }, { x: 2, z: "" } ]
 
 in  List/map (\record -> record.x) values
