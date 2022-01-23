@@ -40,7 +40,7 @@ import qualified Language.Haskell.TH.Syntax as TH
      normalized AST.
 
      >>> [grace| "hello" |]
-     Syntax {location = (), node = Scalar (Text "hello")}
+     Scalar {location = (), scalar = Text "hello"}
 
      This quoter is implemented using `expressionFromCode`.
      Note that other quoting (declarations, patterns, types) is not supported.
@@ -59,7 +59,7 @@ grace = QuasiQuoter
      returns the fully normalized AST.
 
      >>> $$(expressionFromCode "\"hello\"")
-     Syntax {location = (), node = Scalar (Text "hello")}
+     Scalar {location = (), scalar = Text "hello"}
 -}
 expressionFromCode :: Text -> Q (TExp (Syntax () Void))
 expressionFromCode = expressionFromInput . Code "(input)"
@@ -78,7 +78,7 @@ expressionFromInput = helperFunction snd
      returns the inferred type of that expression.
 
      >>> $$(typeOfCode "\"hello\"")
-     Type {location = (), node = Scalar Text}
+     Scalar {location = (), scalar = Text}
 -}
 typeOfCode :: Text -> Q (TExp (Type ()))
 typeOfCode = typeOfInput . Code "(input)"

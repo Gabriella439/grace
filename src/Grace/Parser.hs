@@ -223,9 +223,7 @@ grammar = mdo
                 body0 <- expression
 
                 return do
-                    let cons (nameLocation, name) body = Syntax{..}
-                          where
-                            node = Syntax.Lambda nameLocation name body
+                    let cons (nameLocation, name) body = Syntax.Lambda{..}
                     foldr cons body0 locatedNames
 
         <|> do  bindings <- some1 binding
@@ -233,9 +231,9 @@ grammar = mdo
                 body <- expression
 
                 return do
-                    let location = nameLocation (NonEmpty.head bindings)
-                    let node = Syntax.Let bindings body
-                    Syntax{..}
+                    let Syntax.Binding{ nameLocation = location } =
+                            NonEmpty.head bindings
+                    Syntax.Let{..}
 
         <|> do  location <- locatedToken Lexer.If
                 predicate <- expression
@@ -244,17 +242,16 @@ grammar = mdo
                 token Lexer.Else
                 ifFalse <- expression
 
-                return do
-                    let node = Syntax.If predicate ifTrue ifFalse
-                    Syntax{..}
+                return Syntax.If{..}
 
-        <|> do  ~annotated@Syntax{ location } <- operatorExpression
+        <|> do  annotated <- operatorExpression
                 token Lexer.Colon
                 annotation <- quantifiedType
 
-                return do
-                    let node = Syntax.Annotation annotated annotation
-                    Syntax{..}
+                return Syntax.Annotation
+                    { location = Syntax.location annotated
+                    , ..
+                    }
 
         <|> do  operatorExpression
         )
@@ -262,9 +259,8 @@ grammar = mdo
     operatorExpression <- rule timesExpression
 
     let op token_ operator subExpression = do
-            let snoc l@Syntax{ location } (s, r) = Syntax{..}
-                  where
-                    node = Syntax.Operator l s operator r
+            let snoc left (operatorLocation, right) =
+                    Syntax.Operator{ location = Syntax.location left, ..}
 
             e0 <- subExpression
 
@@ -283,51 +279,43 @@ grammar = mdo
 
     andExpression <- rule (op Lexer.And Syntax.And applicationExpression)
 
-    let application left@Syntax{ location } right = Syntax{..}
-          where
-            node = Syntax.Application left right
+    let application function argument =
+            Syntax.Application{ location = Syntax.location function, .. }
 
     applicationExpression <- rule
         (   do  es <- some1 fieldExpression
                 return (foldl application (NonEmpty.head es) (NonEmpty.tail es))
         <|> do  location <- locatedToken Lexer.Merge
-                ~(e :| es) <- some1 fieldExpression
+                ~(handlers :| es) <- some1 fieldExpression
 
                 return do
-                    let nil = Syntax{ node = Syntax.Merge e, .. }
+                    let nil = Syntax.Merge{..}
                     foldl application nil es
         )
 
     fieldExpression <- rule do
-        let field Syntax{ location } l (fieldOffset, r) = Syntax{..}
-              where
-                node = Syntax.Field l fieldOffset r
+        let snoc record0 record (fieldLocation, field) =
+                Syntax.Field{ location = Syntax.location record0, .. }
 
         record <- primitiveExpression
         fields <- many (do token Lexer.Dot; l <- locatedRecordLabel; return l)
 
-        return (foldl (field record) record fields)
+        return (foldl (snoc record) record fields)
 
     primitiveExpression <- rule
         (   do  ~(location, name) <- locatedLabel
 
-                return do
-                    let node = Syntax.Variable name 0
-                    Syntax{..}
+                return Syntax.Variable{ index = 0, .. }
 
         <|> do  ~(location, name) <- locatedLabel
                 token Lexer.At
                 index <- int
 
-                return do
-                    let node = Syntax.Variable name index
-                    Syntax{..}
+                return Syntax.Variable{..}
 
-        <|> do  ~(location, alt) <- locatedAlternative
+        <|> do  ~(location, name) <- locatedAlternative
 
-                return do
-                    let node = Syntax.Alternative alt
-                    Syntax{..}
+                return Syntax.Alternative{..}
 
         <|> do  location <- locatedToken Lexer.OpenBracket
                 optional (token Lexer.Comma)
@@ -335,9 +323,7 @@ grammar = mdo
                 optional (token Lexer.Comma)
                 token Lexer.CloseBracket
 
-                return do
-                    let node = Syntax.List (Seq.fromList elements)
-                    Syntax{..}
+                return Syntax.List{ elements = Seq.fromList elements, .. }
 
         <|> do  location <- locatedToken Lexer.OpenBrace
                 optional (token Lexer.Comma)
@@ -345,146 +331,137 @@ grammar = mdo
                 optional (token Lexer.Comma)
                 token Lexer.CloseBrace
 
-                return do
-                    let node = Syntax.Record fieldValues
-                    Syntax{..}
+                return Syntax.Record{..}
 
         <|> do  location <- locatedToken Lexer.True_
 
-                return Syntax{ node = Syntax.Scalar (Syntax.Bool True), .. }
+                return Syntax.Scalar{ scalar = Syntax.Bool True, .. }
 
         <|> do  location <- locatedToken Lexer.False_
 
-                return Syntax{ node = Syntax.Scalar (Syntax.Bool False), .. }
+                return Syntax.Scalar{ scalar = Syntax.Bool False, .. }
 
         <|> do  location <- locatedToken Lexer.Null
 
-                return Syntax{ node = Syntax.Scalar Syntax.Null, .. }
+                return Syntax.Scalar{ scalar = Syntax.Null, .. }
 
         <|> do  sign <- (token Lexer.Dash $> negate) <|> pure id
 
                 ~(location, n) <- locatedReal
 
-                return do
-                    let node = Syntax.Scalar (Syntax.Real (sign n))
-                    Syntax{..}
+                return Syntax.Scalar{ scalar = Syntax.Real (sign n), .. }
 
         <|> do  token Lexer.Dash
 
                 ~(location, n) <- locatedInt
 
-                return do
-                    let node =
-                            Syntax.Scalar (Syntax.Integer (fromIntegral (negate n)))
-                    Syntax{..}
+                return Syntax.Scalar
+                    { scalar = Syntax.Integer (fromIntegral (negate n))
+                    , ..
+                    }
 
         <|> do  ~(location, n) <- locatedInt
 
-                return do
-                    let node = Syntax.Scalar (Syntax.Natural (fromIntegral n))
-                    Syntax{..}
+                return Syntax.Scalar
+                    { scalar = Syntax.Natural (fromIntegral n)
+                    , ..
+                    }
 
         <|> do  location <- locatedToken Lexer.RealEqual
 
-                return Syntax{ node = Syntax.Builtin Syntax.RealEqual, .. }
+                return Syntax.Builtin{ builtin = Syntax.RealEqual, .. }
 
         <|> do  location <- locatedToken Lexer.RealLessThan
 
-                return Syntax{ node = Syntax.Builtin Syntax.RealLessThan, .. }
+                return Syntax.Builtin{ builtin = Syntax.RealLessThan, .. }
 
         <|> do  location <- locatedToken Lexer.RealNegate
 
-                return Syntax{ node = Syntax.Builtin Syntax.RealNegate, .. }
+                return Syntax.Builtin{ builtin = Syntax.RealNegate, .. }
 
         <|> do  location <- locatedToken Lexer.RealShow
 
-                return Syntax{ node = Syntax.Builtin Syntax.RealShow, .. }
+                return Syntax.Builtin{ builtin = Syntax.RealShow, .. }
 
         <|> do  location <- locatedToken Lexer.ListDrop
 
-                return Syntax{ node = Syntax.Builtin Syntax.ListDrop, .. }
+                return Syntax.Builtin{ builtin = Syntax.ListDrop, .. }
 
         <|> do  location <- locatedToken Lexer.ListEqual
 
-                return Syntax{ node = Syntax.Builtin Syntax.ListEqual, .. }
+                return Syntax.Builtin{ builtin = Syntax.ListEqual, .. }
 
         <|> do  location <- locatedToken Lexer.ListFold
 
-                return Syntax{ node = Syntax.Builtin Syntax.ListFold, .. }
+                return Syntax.Builtin{ builtin = Syntax.ListFold, .. }
 
         <|> do  location <- locatedToken Lexer.ListHead
 
-                return Syntax{ node = Syntax.Builtin Syntax.ListHead, .. }
+                return Syntax.Builtin{ builtin = Syntax.ListHead, .. }
 
         <|> do  location <- locatedToken Lexer.ListIndexed
 
-                return Syntax{ node = Syntax.Builtin Syntax.ListIndexed, .. }
+                return Syntax.Builtin{ builtin = Syntax.ListIndexed, .. }
 
         <|> do  location <- locatedToken Lexer.ListLast
 
-                return Syntax{ node = Syntax.Builtin Syntax.ListLast, .. }
+                return Syntax.Builtin{ builtin = Syntax.ListLast, .. }
 
         <|> do  location <- locatedToken Lexer.ListLength
 
-                return Syntax{ node = Syntax.Builtin Syntax.ListLength, .. }
+                return Syntax.Builtin{ builtin = Syntax.ListLength, .. }
 
         <|> do  location <- locatedToken Lexer.ListMap
 
-                return Syntax{ node = Syntax.Builtin Syntax.ListMap, .. }
+                return Syntax.Builtin{ builtin = Syntax.ListMap, .. }
 
         <|> do  location <- locatedToken Lexer.ListReverse
 
-                return Syntax{ node = Syntax.Builtin Syntax.ListReverse, .. }
+                return Syntax.Builtin{ builtin = Syntax.ListReverse, .. }
 
         <|> do  location <- locatedToken Lexer.ListTake
 
-                return Syntax{ node = Syntax.Builtin Syntax.ListTake, .. }
+                return Syntax.Builtin{ builtin = Syntax.ListTake, .. }
 
         <|> do  location <- locatedToken Lexer.IntegerAbs
 
-                return Syntax{ node = Syntax.Builtin Syntax.IntegerAbs, .. }
+                return Syntax.Builtin{ builtin = Syntax.IntegerAbs, .. }
 
         <|> do  location <- locatedToken Lexer.IntegerEven
 
-                return Syntax{ node = Syntax.Builtin Syntax.IntegerEven, .. }
+                return Syntax.Builtin{ builtin = Syntax.IntegerEven, .. }
 
         <|> do  location <- locatedToken Lexer.IntegerNegate
 
-                return Syntax{ node = Syntax.Builtin Syntax.IntegerNegate, .. }
+                return Syntax.Builtin{ builtin = Syntax.IntegerNegate, .. }
 
         <|> do  location <- locatedToken Lexer.IntegerOdd
 
-                return Syntax{ node = Syntax.Builtin Syntax.IntegerOdd, .. }
+                return Syntax.Builtin{ builtin = Syntax.IntegerOdd, .. }
 
         <|> do  location <- locatedToken Lexer.JSONFold
 
-                return Syntax{ node = Syntax.Builtin Syntax.JSONFold, .. }
+                return Syntax.Builtin{ builtin = Syntax.JSONFold, .. }
 
         <|> do  location <- locatedToken Lexer.NaturalFold
 
-                return Syntax{ node = Syntax.Builtin Syntax.NaturalFold, .. }
+                return Syntax.Builtin{ builtin = Syntax.NaturalFold, .. }
 
         <|> do  location <- locatedToken Lexer.TextEqual
 
-                return Syntax{ node = Syntax.Builtin Syntax.TextEqual, .. }
+                return Syntax.Builtin{ builtin = Syntax.TextEqual, .. }
 
         <|> do  ~(location, t) <- locatedText
 
-                return do
-                    let node = Syntax.Scalar (Syntax.Text t)
-                    Syntax{..}
+                return Syntax.Scalar{ scalar = Syntax.Text t, .. }
 
         <|> do  ~(location, file) <- locatedFile
 
-                return do
-                    let node = Syntax.Embed (Path file)
-                    Syntax{..}
+                return Syntax.Embed{ embedded = Path file, .. }
 
         <|> do  ~(location, uri) <- locatedURI
 
-                return do
-                    let node = Syntax.Embed (URI uri)
-                    Syntax{..}
+                return Syntax.Embed{ embedded = URI uri, .. }
 
         <|> do  token Lexer.OpenParenthesis
                 e <- expression
@@ -533,9 +510,7 @@ grammar = mdo
 
     quantifiedType <- rule do
         let forall (forallOrExists, location, (typeVariableOffset, typeVariable), domain_) type_ =
-                Type{..}
-              where
-                node = forallOrExists typeVariableOffset typeVariable domain_ type_
+                forallOrExists location typeVariableOffset typeVariable domain_ type_
 
         fss <- many
             (   do  location <- locatedToken Lexer.Forall
@@ -564,53 +539,42 @@ grammar = mdo
         return (foldr ($) t (concat fss))
 
     functionType <- rule do
-        let function _A@Type{ location } _B = Type{..}
-              where
-                node = Type.Function _A _B
+        let function input output =
+                Type.Function{ location = Type.location input, ..}
 
         ts <- applicationType `sepBy1` token Lexer.Arrow
         return (foldr function (NonEmpty.last ts) (NonEmpty.init ts))
 
     applicationType <- rule
         (   do  location <- locatedToken Lexer.List
-                t <- primitiveType
+                type_ <- primitiveType
 
-                return do
-                    let node = Type.List t
-                    Type{..}
+                return Type.List{..}
 
         <|> do  location <- locatedToken Lexer.Optional
-                t <- primitiveType
+                type_ <- primitiveType
 
-                return do
-                    let node = Type.Optional t
-                    Type{..}
+                return Type.Optional{..}
 
         <|> do  primitiveType
         )
 
     primitiveType <- rule
         (   do  location <- locatedToken Lexer.Bool
-                return Type{ node = Type.Scalar Monotype.Bool, .. }
+                return Type.Scalar{ scalar = Monotype.Bool, .. }
         <|> do  location <- locatedToken Lexer.Real
-                return Type{ node = Type.Scalar Monotype.Real, .. }
+                return Type.Scalar{ scalar = Monotype.Real, .. }
         <|> do  location <- locatedToken Lexer.Integer
-                return Type{ node = Type.Scalar Monotype.Integer, .. }
+                return Type.Scalar{ scalar = Monotype.Integer, .. }
         <|> do  location <- locatedToken Lexer.JSON
-                return Type{ node = Type.Scalar Monotype.JSON, .. }
+                return Type.Scalar{ scalar = Monotype.JSON, .. }
         <|> do  location <- locatedToken Lexer.Natural
-                return Type{ node = Type.Scalar Monotype.Natural, .. }
+                return Type.Scalar{ scalar = Monotype.Natural, .. }
         <|> do  location <- locatedToken Lexer.Text
-                return Type{ node = Type.Scalar Monotype.Text, .. }
-        <|> do  let variable (location, name) = Type{..}
-                      where
-                        node = Type.VariableType name
-
-                located <- locatedLabel
-                return (variable located)
-        <|> do  let record location fields = Type{..}
-                      where
-                        node = Type.Record fields
+                return Type.Scalar{ scalar = Monotype.Text, .. }
+        <|> do  ~(location, name) <- locatedLabel
+                return Type.VariableType{..}
+        <|> do  let record location fields = Type.Record{..}
 
                 locatedOpenBrace <- locatedToken Lexer.OpenBrace
 
@@ -631,9 +595,7 @@ grammar = mdo
                 token Lexer.CloseBrace
 
                 return (record locatedOpenBrace (toFields fieldTypes))
-        <|> do  let union location alternatives = Type{..}
-                      where
-                        node = Type.Union alternatives
+        <|> do  let union location alternatives = Type.Union{..}
 
                 locatedOpenAngle <- locatedToken Lexer.OpenAngle
 

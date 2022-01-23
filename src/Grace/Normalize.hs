@@ -99,51 +99,51 @@ evaluate
     -- ^ Surface syntax
     -> Value
     -- ^ Result, free of reducible sub-expressions
-evaluate env Syntax.Syntax{..} =
-    case node of
-        Syntax.Variable name index ->
+evaluate env syntax =
+    case syntax of
+        Syntax.Variable{..} ->
             lookupVariable name index env
 
-        Syntax.Application function argument -> apply function' argument'
+        Syntax.Application{..} -> apply function' argument'
           where
             function' = evaluate env function
             argument' = evaluate env argument
 
-        Syntax.Lambda _ name body ->
+        Syntax.Lambda{..} ->
             Value.Lambda (Closure name env body)
 
-        Syntax.Annotation annotated _ ->
+        Syntax.Annotation{..} ->
             evaluate env annotated
 
-        Syntax.Let bindings body ->
+        Syntax.Let{..} ->
             evaluate (foldl snoc env bindings) body
           where
             snoc environment Syntax.Binding{ name, assignment} =
                 (name, evaluate environment assignment) : environment
 
-        Syntax.List elements ->
+        Syntax.List{..} ->
             Value.List (fmap (evaluate env) elements)
 
-        Syntax.Record keyValues ->
-            Value.Record (HashMap.fromList (map adapt keyValues))
+        Syntax.Record{..} ->
+            Value.Record (HashMap.fromList (map adapt fieldValues))
           where
             adapt (key, value) = (key, evaluate env value)
 
-        Syntax.Field record _ key ->
+        Syntax.Field{..} ->
             case evaluate env record of
-                Value.Record keyValues
-                    | Just value <- HashMap.lookup key keyValues ->
+                Value.Record fieldValues
+                    | Just value <- HashMap.lookup field fieldValues ->
                         value
                 other ->
-                    Value.Field other key
+                    Value.Field other field
 
-        Syntax.Alternative name ->
+        Syntax.Alternative{..} ->
             Value.Alternative name
 
-        Syntax.Merge record ->
-            Value.Merge (evaluate env record)
+        Syntax.Merge{..} ->
+            Value.Merge (evaluate env handlers)
 
-        Syntax.If predicate ifTrue ifFalse ->
+        Syntax.If{..} ->
             case predicate' of
                 Value.Scalar (Bool True) -> ifTrue'
                 Value.Scalar (Bool False) -> ifFalse'
@@ -153,10 +153,10 @@ evaluate env Syntax.Syntax{..} =
             ifTrue'    = evaluate env ifTrue
             ifFalse'   = evaluate env ifFalse
 
-        Syntax.Scalar scalar ->
+        Syntax.Scalar{..} ->
             Value.Scalar scalar
 
-        Syntax.Operator left _ Syntax.And right ->
+        Syntax.Operator{ operator = Syntax.And, .. } ->
             case left' of
                 Value.Scalar (Bool True) -> right'
                 Value.Scalar (Bool False) -> Value.Scalar (Bool False)
@@ -168,7 +168,7 @@ evaluate env Syntax.Syntax{..} =
             left'  = evaluate env left
             right' = evaluate env right
 
-        Syntax.Operator left _ Syntax.Or right ->
+        Syntax.Operator{ operator = Syntax.Or, .. } ->
             case left' of
                 Value.Scalar (Bool True) -> Value.Scalar (Bool True)
                 Value.Scalar (Bool False) -> right'
@@ -180,7 +180,7 @@ evaluate env Syntax.Syntax{..} =
             left'  = evaluate env left
             right' = evaluate env right
 
-        Syntax.Operator left _ Syntax.Times right ->
+        Syntax.Operator{ operator = Syntax.Times, .. } ->
             case (left', right') of
                 (Value.Scalar (Natural 1), _) ->
                     right'
@@ -206,7 +206,7 @@ evaluate env Syntax.Syntax{..} =
             left'  = evaluate env left
             right' = evaluate env right
 
-        Syntax.Operator left _ Syntax.Plus right ->
+        Syntax.Operator{ operator = Syntax.Plus, .. } ->
             case (left', right') of
                 (Value.Scalar (Natural 0), _) ->
                     right'
@@ -241,10 +241,10 @@ evaluate env Syntax.Syntax{..} =
             left'  = evaluate env left
             right' = evaluate env right
 
-        Syntax.Builtin builtin ->
+        Syntax.Builtin{..} ->
             Value.Builtin builtin
 
-        Syntax.Embed (_, value) ->
+        Syntax.Embed{ embedded = (_, value) } ->
             value
 
 {-| This is the function that implements function application, including
@@ -439,53 +439,65 @@ quote
     --   expression)
     -> Value
     -> Syntax () Void
-quote names value = Syntax.Syntax{..}
+quote names value =
+    case value of
+        Value.Variable name index ->
+            Syntax.Variable{ index = countNames name names - index - 1, .. }
+
+        Value.Lambda closure@(Closure name _ _) ->
+            Syntax.Lambda{ nameLocation = (), .. }
+          where
+            variable = fresh name names
+
+            body = quote (name : names) (instantiate closure variable)
+
+        Value.Application function argument ->
+            Syntax.Application
+                { function = quote names function
+                , argument = quote names argument
+                , ..
+                }
+
+        Value.List elements ->
+            Syntax.List{ elements = fmap (quote names) elements, .. }
+
+        Value.Record fieldValues ->
+            Syntax.Record
+                { fieldValues = map adapt (HashMap.toList fieldValues)
+                , ..
+                }
+          where
+            adapt (field, value_) = (field, quote names value_)
+
+        Value.Field record field ->
+            Syntax.Field{ record = quote names record, fieldLocation = (), .. }
+
+        Value.Alternative name ->
+            Syntax.Alternative{..}
+
+        Value.Merge handlers ->
+            Syntax.Merge{ handlers = quote names handlers, .. }
+
+        Value.If predicate ifTrue ifFalse ->
+            Syntax.If
+                { predicate = quote names predicate
+                , ifTrue = quote names ifTrue
+                , ifFalse = quote names ifFalse
+                , ..
+                }
+
+        Value.Scalar scalar ->
+            Syntax.Scalar{..}
+
+        Value.Operator left operator right ->
+            Syntax.Operator
+                { left = quote names left
+                , operatorLocation = ()
+                , right = quote names right
+                , ..
+                }
+
+        Value.Builtin builtin ->
+            Syntax.Builtin{..}
   where
     location = ()
-
-    node =
-        case value of
-            Value.Variable name index ->
-                Syntax.Variable name (countNames name names - index - 1)
-
-            Value.Lambda closure@(Closure name _ _) ->
-                Syntax.Lambda () name body
-              where
-                variable = fresh name names
-
-                body = quote (name : names) (instantiate closure variable)
-
-            Value.Application function argument ->
-                Syntax.Application (quote names function) (quote names argument)
-
-            Value.List elements ->
-                Syntax.List (fmap (quote names) elements)
-
-            Value.Record keyValues ->
-                Syntax.Record (map adapt (HashMap.toList keyValues))
-              where
-                adapt (key, value_) = (key, quote names value_)
-
-            Value.Field record key ->
-                Syntax.Field (quote names record) () key
-
-            Value.Alternative name ->
-                Syntax.Alternative name
-
-            Value.Merge record ->
-                Syntax.Merge (quote names record)
-
-            Value.If predicate ifTrue ifFalse ->
-                Syntax.If
-                    (quote names predicate)
-                    (quote names ifTrue)
-                    (quote names ifFalse)
-
-            Value.Scalar scalar ->
-                Syntax.Scalar scalar
-
-            Value.Operator left operator right ->
-                Syntax.Operator (quote names left) () operator (quote names right)
-
-            Value.Builtin builtin ->
-                Syntax.Builtin builtin

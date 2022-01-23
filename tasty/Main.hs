@@ -1,6 +1,8 @@
-{-# LANGUAGE BlockArguments    #-}
-{-# LANGUAGE NamedFieldPuns    #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE BlockArguments        #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE OverloadedStrings     #-}
 
 module Main where
 
@@ -147,11 +149,9 @@ interpretCode = Tasty.HUnit.testCase "interpret code" do
     actualValue <- throws (interpret (Code "(input)" "2 + 2"))
 
     let expectedValue =
-            (Type{ location, node }, Value.Scalar (Syntax.Natural 4))
+            (Type.Scalar{ scalar = Monotype.Natural, .. }, Value.Scalar (Syntax.Natural 4))
           where
             location = Location{ name = "(input)", code = "2 + 2", offset = 0 }
-
-            node = Type.Scalar Monotype.Natural
 
     Tasty.HUnit.assertEqual "" expectedValue actualValue
 
@@ -160,11 +160,9 @@ interpretCodeWithImport = Tasty.HUnit.testCase "interpret code with import from 
     actualValue <- throws (interpret (Code "(input)" "./tasty/data/unit/plus-input.ffg"))
 
     let expectedValue =
-            (Type{ location, node }, Value.Scalar (Syntax.Natural 5))
+            (Type.Scalar{ scalar = Monotype.Natural, .. }, Value.Scalar (Syntax.Natural 5))
           where
             location = Location{ name = "tasty/data/unit/plus-input.ffg", code = "2 + 3\n", offset = 0 }
-
-            node = Type.Scalar Monotype.Natural
 
     Tasty.HUnit.assertEqual "" expectedValue actualValue
 
@@ -188,11 +186,9 @@ interpretCodeWithEnvURI = Tasty.HUnit.testCase "interpret code with env: import"
         throws (interpret (Code "(input)" (Text.pack name)))
 
     let expectedValue =
-            (Type{ location, node }, Value.Scalar (Syntax.Bool True))
+            (Type.Scalar{ scalar = Monotype.Bool, .. }, Value.Scalar (Syntax.Bool True))
           where
             location = Location{ name, code = "true", offset = 0 }
-
-            node = Type.Scalar Monotype.Bool
 
     Tasty.HUnit.assertEqual "" expectedValue actualValue
 
@@ -205,10 +201,8 @@ interpretCodeWithFileURI = Tasty.HUnit.testCase "interpret code with file:// imp
     actualValue <- throws (interpret (Code "(input)" (Text.pack uri)))
 
     let expectedValue =
-            (Type{ location, node }, Value.Scalar (Syntax.Bool True))
+            (Type.Scalar{ scalar = Monotype.Bool, .. }, Value.Scalar (Syntax.Bool True))
           where
             location = Location{ name = absolute, code = "true\n", offset = 0 }
-
-            node = Type.Scalar Monotype.Bool
 
     Tasty.HUnit.assertEqual "" expectedValue actualValue

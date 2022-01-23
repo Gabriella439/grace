@@ -1,13 +1,14 @@
-{-# LANGUAGE ApplicativeDo      #-}
-{-# LANGUAGE DeriveGeneric      #-}
-{-# LANGUAGE DeriveLift         #-}
-{-# LANGUAGE DeriveTraversable  #-}
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE FlexibleInstances  #-}
-{-# LANGUAGE NamedFieldPuns     #-}
-{-# LANGUAGE OverloadedLists    #-}
-{-# LANGUAGE OverloadedStrings  #-}
-{-# LANGUAGE RecordWildCards    #-}
+{-# LANGUAGE ApplicativeDo         #-}
+{-# LANGUAGE DeriveGeneric         #-}
+{-# LANGUAGE DeriveLift            #-}
+{-# LANGUAGE DeriveTraversable     #-}
+{-# LANGUAGE DerivingStrategies    #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE OverloadedLists       #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RecordWildCards       #-}
 
 {-| This module contains the syntax tree used for the surface syntax (i.e. the
     result of parsing), representing the code as the user wrote it.
@@ -16,7 +17,6 @@
 module Grace.Syntax
     ( -- * Syntax
       Syntax(..)
-    , Node(..)
     , Scalar(..)
     , Operator(..)
     , Builtin(..)
@@ -31,14 +31,12 @@ import Data.Sequence (Seq((:<|)))
 import Data.String (IsString(..))
 import Data.Text (Text)
 import GHC.Generics (Generic)
+import Grace.Pretty (Pretty(..), keyword, label, punctuation)
 import Grace.Type (Type)
 import Language.Haskell.TH.Syntax (Lift)
 import Numeric.Natural (Natural)
 import Prettyprinter (Doc)
 import Prettyprinter.Render.Terminal (AnsiStyle)
-
-import Grace.Pretty
-    (Pretty(..), builtin, keyword, label, operator, punctuation, scalar)
 
 import qualified Data.Text as Text
 import qualified Grace.Pretty as Pretty
@@ -54,186 +52,165 @@ import qualified Prettyprinter as Pretty
 -}
 
 -- | The surface syntax for the language
-data Syntax s a = Syntax { location :: s, node :: Node s a }
+data Syntax s a
+    = Variable { location :: s, name :: Text, index :: Int }
+    -- ^
+    --   >>> pretty @(Syntax () Void) (Variable () "x" 0)
+    --   x
+    --   >>> pretty @(Syntax () Void) (Variable () "x" 1)
+    --   x@1
+    | Lambda { location :: s, nameLocation :: s, name :: Text, body :: Syntax s a }
+    -- ^
+    --   >>> pretty @(Syntax () Void) (Lambda () () "x" "x")
+    --   \x -> x
+    | Application { location :: s, function :: Syntax s a, argument :: Syntax s a }
+    -- ^
+    --   >>> pretty @(Syntax () Void) (Application () "f" "x")
+    --   f x
+    | Annotation { location :: s, annotated :: Syntax s a, annotation :: Type s }
+    -- ^
+    --   >>> pretty @(Syntax () Void) (Annotation () "x" "A")
+    --   x : A
+    | Let { location :: s, bindings :: NonEmpty (Binding s a), body :: Syntax s a }
+    -- ^
+    --   >>> pretty @(Syntax () Void) (Let () (Binding () "x" Nothing "y" :| []) "z")
+    --   let x = y in z
+    --   >>> pretty @(Syntax () Void) (Let () (Binding () "x" (Just "X") "y" :| []) "z")
+    --   let x : X = y in z
+    --   >>> pretty @(Syntax () Void) (Let () (Binding () "a" Nothing "b" :| [ Binding () "c" Nothing "d" ]) "e")
+    --   let a = b let c = d in e
+    | List { location :: s, elements :: Seq (Syntax s a) }
+    -- ^
+    --   >>> pretty @(Syntax () Void) (List () [ "x", "y", "z" ])
+    --   [ x, y, z ]
+    | Record { location :: s, fieldValues :: [(Text, Syntax s a)] }
+    -- ^
+    --   >>> pretty @(Syntax () Void) (Record () [ ("x", "a"), ("y", "b") ])
+    --   { "x": a, "y": b }
+    | Field { location :: s, record :: Syntax s a, fieldLocation :: s, field :: Text }
+    -- ^
+    --   >>> pretty @(Syntax () Void) (Field () "x" () "a")
+    --   x.a
+    | Alternative { location :: s, name :: Text }
+    -- ^
+    --   >>> pretty @(Syntax () Void) (Alternative () "Nil")
+    --   Nil
+    | Merge { location :: s, handlers :: Syntax s a }
+    -- ^
+    --   >>> pretty @(Syntax () Void) (Merge () "x")
+    --   merge x
+    | If { location :: s, predicate :: Syntax s a, ifTrue :: Syntax s a, ifFalse :: Syntax s a }
+    -- ^
+    --   >>> pretty @(Syntax () Void) (If () "x" "y" "z")
+    --   if x then y else z
+    | Scalar { location :: s, scalar :: Scalar }
+    | Operator { location :: s, left :: Syntax s a, operatorLocation :: s, operator :: Operator, right :: Syntax s a }
+    -- ^
+    --   >>> pretty @(Syntax () Void) (Operator () "x" () And "y")
+    --   x && y
+    --   >>> pretty @(Syntax () Void) (Operator () "x" () Plus "y")
+    --   x + y
+    | Builtin { location :: s, builtin :: Builtin }
+    | Embed { location :: s, embedded :: a }
     deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
 
-instance Bifunctor Syntax where
-    first f Syntax{ location, node } =
-        Syntax{ location = f location, node = first f node }
-
-    second = fmap
-
-instance IsString (Syntax () a) where
-    fromString string = Syntax { location = (), node = fromString string }
-
-instance Pretty a => Pretty (Syntax s a) where
-    pretty = liftSyntax prettyExpression
-
 instance Plated (Syntax s a) where
-    plate onSyntax Syntax{ node = oldNode, .. } = do
-        newNode <- case oldNode of
-            Variable name index -> do
-                pure (Variable name index)
-            Lambda s name oldBody -> do
+    plate onSyntax syntax =
+        case syntax of
+            Variable{..} -> do
+                pure Variable{..}
+            Lambda{ body = oldBody, ..} -> do
                 newBody <- onSyntax oldBody
-                return (Lambda s name newBody)
-            Application oldFunction oldArgument -> do
+                return Lambda{ body = newBody, .. }
+            Application{ function = oldFunction, argument = oldArgument, .. } -> do
                 newFunction <- onSyntax oldFunction
                 newArgument <- onSyntax oldArgument
-                return (Application newFunction newArgument)
-            Annotation oldAnnotated annotation -> do
+                return Application{ function = newFunction, argument = newArgument, .. }
+            Annotation{ annotated = oldAnnotated, .. } -> do
                 newAnnotated <- onSyntax oldAnnotated
-                return (Annotation newAnnotated annotation)
-            Let oldBindings oldBody -> do
+                return Annotation{ annotated = newAnnotated, .. }
+            Let{ bindings = oldBindings, body = oldBody, .. } -> do
                 let onBinding Binding{ assignment = oldAssignment, .. } = do
                         newAssignment <- onSyntax oldAssignment
                         return Binding{ assignment = newAssignment, .. }
                 newBindings <- traverse onBinding oldBindings
                 newBody <- onSyntax oldBody
-                return (Let newBindings newBody)
-            List oldElements -> do
+                return Let{ bindings = newBindings, body = newBody, .. }
+            List{ elements = oldElements, .. } -> do
                 newElements <- traverse onSyntax oldElements
-                return (List newElements)
-            Record oldFieldValues -> do
+                return List{ elements = newElements, .. }
+            Record{ fieldValues = oldFieldValues, .. } -> do
                 let onPair (field, oldValue) = do
                         newValue <- onSyntax oldValue
                         return (field, newValue)
 
                 newFieldValues <- traverse onPair oldFieldValues
-                return (Record newFieldValues)
-            Field oldRecord s field -> do
+                return Record{ fieldValues = newFieldValues, .. }
+            Field{ record = oldRecord, .. } -> do
                 newRecord <- onSyntax oldRecord
-                return (Field newRecord s field)
-            Alternative name -> do
-                pure (Alternative name)
-            Merge oldRecord -> do
-                newRecord <- onSyntax oldRecord
-                return (Merge newRecord)
-            If oldPredicate oldIfTrue oldIfFalse -> do
+                return Field{ record = newRecord, .. }
+            Alternative{..} -> do
+                pure Alternative{..}
+            Merge{ handlers = oldHandlers, .. } -> do
+                newHandlers <- onSyntax oldHandlers
+                return Merge{ handlers = newHandlers, .. }
+            If{ predicate = oldPredicate, ifTrue = oldIfTrue, ifFalse = oldIfFalse, .. } -> do
                 newPredicate <- onSyntax oldPredicate
                 newIfTrue <- onSyntax oldIfTrue
                 newIfFalse <- onSyntax oldIfFalse
-                return (If newPredicate newIfTrue newIfFalse)
-            Scalar s -> do
-                pure (Scalar s)
-            Operator oldLeft s o oldRight -> do
+                return If{ predicate = newPredicate, ifTrue = newIfTrue, ifFalse = newIfFalse, .. }
+            Scalar{..} -> do
+                pure Scalar{..}
+            Operator{ left = oldLeft, right = oldRight, .. } -> do
                 newLeft <- onSyntax oldLeft
                 newRight <- onSyntax oldRight
-                return (Operator newLeft s o newRight)
-            Builtin b -> do
-                pure (Builtin b)
-            Embed a -> do
-                pure (Embed a)
+                return Operator{ left = newLeft, right = newRight, .. }
+            Builtin{..} -> do
+                pure Builtin{..}
+            Embed{..} -> do
+                pure Embed{..}
 
-        return Syntax{ node = newNode, .. }
-
-liftSyntax
-    :: Pretty a => (Node s a -> Doc AnsiStyle) -> Syntax s a -> Doc AnsiStyle
-liftSyntax pretty_ Syntax{ node } = pretty_ node
-
--- | The constructors for `Syntax`
-data Node s a
-    = Variable Text Int
-    -- ^
-    --   >>> pretty @(Node () Void) (Variable "x" 0)
-    --   x
-    --   >>> pretty @(Node () Void) (Variable "x" 1)
-    --   x@1
-    | Lambda s Text (Syntax s a)
-    -- ^
-    --   >>> pretty @(Node () Void) (Lambda () "x" "x")
-    --   \x -> x
-    | Application (Syntax s a) (Syntax s a)
-    -- ^
-    --   >>> pretty @(Node () Void) (Application "f" "x")
-    --   f x
-    | Annotation (Syntax s a) (Type s)
-    -- ^
-    --   >>> pretty @(Node () Void) (Annotation "x" "A")
-    --   x : A
-    | Let (NonEmpty (Binding s a)) (Syntax s a)
-    -- ^
-    --   >>> pretty @(Node () Void) (Let (Binding () "x" Nothing "y" :| []) "z")
-    --   let x = y in z
-    --   >>> pretty @(Node () Void) (Let (Binding () "x" (Just "X") "y" :| []) "z")
-    --   let x : X = y in z
-    --   >>> pretty @(Node () Void) (Let (Binding () "a" Nothing "b" :| [ Binding () "c" Nothing "d" ]) "e")
-    --   let a = b let c = d in e
-    | List (Seq (Syntax s a))
-    -- ^
-    --   >>> pretty @(Node () Void) (List [ "x", "y", "z" ])
-    --   [ x, y, z ]
-    | Record [(Text, Syntax s a)]
-    -- ^
-    --   >>> pretty @(Node () Void) (Record [ ("x", "a"), ("y", "b") ])
-    --   { "x": a, "y": b }
-    | Field (Syntax s a) s Text
-    -- ^
-    --   >>> pretty @(Node () Void) (Field "x" () "a")
-    --   x.a
-    | Alternative Text
-    -- ^
-    --   >>> pretty @(Node () Void) (Alternative "Nil")
-    --   Nil
-    | Merge (Syntax s a)
-    -- ^
-    --   >>> pretty @(Node () Void) (Merge "x")
-    --   merge x
-    | If (Syntax s a) (Syntax s a) (Syntax s a)
-    -- ^
-    --   >>> pretty @(Node () Void) (If "x" "y" "z")
-    --   if x then y else z
-    | Scalar Scalar
-    | Operator (Syntax s a) s Operator (Syntax s a)
-    -- ^
-    --   >>> pretty @(Node () Void) (Operator "x" () And "y")
-    --   x && y
-    --   >>> pretty @(Node () Void) (Operator "x" () Plus "y")
-    --   x + y
-    | Builtin Builtin
-    | Embed a
-    deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
-
-instance Bifunctor Node where
-    first _ (Variable name index) =
-        Variable name index
-    first f (Lambda location name body) =
-        Lambda (f location) name (first f body)
-    first f (Application function argument) =
-        Application (first f function) (first f argument)
-    first f (Annotation annotated annotation) =
-        Annotation (first f annotated) (fmap f annotation)
-    first f (Let bindings body) =
-        Let (fmap (first f) bindings) (first f body)
-    first f (List elements) =
-        List (fmap (first f) elements)
-    first f (Record keyValues) =
-        Record (fmap adapt keyValues)
+instance Bifunctor Syntax where
+    first f Variable{..} =
+        Variable{ location = f location, ..}
+    first f Lambda{..} =
+        Lambda{ location = f location, nameLocation = f nameLocation, body = first f body, .. }
+    first f Application{..} =
+        Application{ location = f location, function = first f function, argument = first f argument, .. }
+    first f Annotation{..} =
+        Annotation{ location = f location, annotated = first f annotated, annotation = fmap f annotation, .. }
+    first f Let{..} =
+        Let{ location = f location, bindings = fmap (first f) bindings, body = first f body, .. }
+    first f List{..} =
+        List{ location = f location, elements = fmap (first f) elements, .. }
+    first f Record{..} =
+        Record{ location = f location, fieldValues = fmap adapt fieldValues, .. }
       where
-        adapt (key, value) = (key, first f value)
-    first f (Field record location key) =
-        Field (first f record) (f location) key
-    first _ (Alternative name) =
-        Alternative name
-    first f (Merge record) =
-        Merge (first f record)
-    first f (If predicate ifTrue ifFalse) =
-        If (first f predicate) (first f ifTrue) (first f ifFalse)
-    first _ (Scalar s) =
-        Scalar s
-    first f (Operator left location o right) =
-        Operator (first f left) (f location) o (first f right)
-    first _ (Builtin b) =
-        Builtin b
-    first _ (Embed a) =
-        Embed a
+        adapt (field, value) = (field, first f value)
+    first f Field{..} =
+        Field{ location = f location, record = first f record, fieldLocation = f fieldLocation, .. }
+    first f Alternative{..} =
+        Alternative{ location = f location, .. }
+    first f Merge{..} =
+        Merge{ location = f location, handlers = first f handlers, .. }
+    first f If{..} =
+        If{ location = f location, predicate = first f predicate, ifTrue = first f ifTrue, ifFalse = first f ifFalse, .. }
+    first f Scalar{..} =
+        Scalar{ location = f location, .. }
+    first f Operator{..} =
+        Operator{ location = f location, left = first f left, operatorLocation = f operatorLocation, right = first f right, .. }
+    first f Builtin{..} =
+        Builtin{ location = f location, .. }
+    first f Embed{..} =
+        Embed{ location = f location, .. }
 
     second = fmap
 
-instance IsString (Node s a) where
-    fromString string = Variable (fromString string) 0
+instance IsString (Syntax () a) where
+    fromString string =
+        Variable{ location = (), name = fromString string, index = 0 }
 
-instance Pretty a => Pretty (Node s a) where
+instance Pretty a => Pretty (Syntax s a) where
     pretty = prettyExpression
 
 -- | A scalar value
@@ -267,13 +244,13 @@ data Scalar
     deriving (Eq, Generic, Lift, Show)
 
 instance Pretty Scalar where
-    pretty (Bool True )     = scalar "true"
-    pretty (Bool False)     = scalar "false"
-    pretty (Real number)    = scalar (pretty number)
-    pretty (Integer number) = scalar (pretty number)
-    pretty (Natural number) = scalar (pretty number)
-    pretty (Text text)      = scalar (Type.prettyTextLiteral text)
-    pretty  Null            = scalar "null"
+    pretty (Bool True )     = Pretty.scalar "true"
+    pretty (Bool False)     = Pretty.scalar "false"
+    pretty (Real number)    = Pretty.scalar (pretty number)
+    pretty (Integer number) = Pretty.scalar (pretty number)
+    pretty (Natural number) = Pretty.scalar (pretty number)
+    pretty (Text text)      = Pretty.scalar (Type.prettyTextLiteral text)
+    pretty  Null            = Pretty.scalar "null"
 
 -- | A binary infix operator
 data Operator
@@ -296,10 +273,10 @@ data Operator
     deriving (Eq, Generic, Lift, Show)
 
 instance Pretty Operator where
-    pretty And    = operator "&&"
-    pretty Or     = operator "||"
-    pretty Plus   = operator "+"
-    pretty Times  = operator "*"
+    pretty And    = Pretty.operator "&&"
+    pretty Or     = Pretty.operator "||"
+    pretty Plus   = Pretty.operator "+"
+    pretty Times  = Pretty.operator "*"
 
 -- | A built-in function
 data Builtin
@@ -390,30 +367,30 @@ data Builtin
     deriving (Bounded, Enum, Eq, Generic, Lift, Show)
 
 instance Pretty Builtin where
-    pretty RealEqual      = builtin "Real/equal"
-    pretty RealLessThan   = builtin "Real/lessThan"
-    pretty RealNegate     = builtin "Real/negate"
-    pretty RealShow       = builtin "Real/show"
-    pretty IntegerAbs     = builtin "Integer/abs"
-    pretty IntegerEven    = builtin "Integer/even"
-    pretty IntegerNegate  = builtin "Integer/negate"
-    pretty IntegerOdd     = builtin "Integer/odd"
-    pretty JSONFold       = builtin "JSON/fold"
-    pretty ListDrop       = builtin "List/drop"
-    pretty ListEqual      = builtin "List/equal"
-    pretty ListFold       = builtin "List/fold"
-    pretty ListHead       = builtin "List/head"
-    pretty ListIndexed    = builtin "List/indexed"
-    pretty ListLast       = builtin "List/last"
-    pretty ListLength     = builtin "List/length"
-    pretty ListMap        = builtin "List/map"
-    pretty ListReverse    = builtin "List/reverse"
-    pretty ListTake       = builtin "List/take"
-    pretty NaturalFold    = builtin "Natural/fold"
-    pretty TextEqual      = builtin "Text/equal"
+    pretty RealEqual      = Pretty.builtin "Real/equal"
+    pretty RealLessThan   = Pretty.builtin "Real/lessThan"
+    pretty RealNegate     = Pretty.builtin "Real/negate"
+    pretty RealShow       = Pretty.builtin "Real/show"
+    pretty IntegerAbs     = Pretty.builtin "Integer/abs"
+    pretty IntegerEven    = Pretty.builtin "Integer/even"
+    pretty IntegerNegate  = Pretty.builtin "Integer/negate"
+    pretty IntegerOdd     = Pretty.builtin "Integer/odd"
+    pretty JSONFold       = Pretty.builtin "JSON/fold"
+    pretty ListDrop       = Pretty.builtin "List/drop"
+    pretty ListEqual      = Pretty.builtin "List/equal"
+    pretty ListFold       = Pretty.builtin "List/fold"
+    pretty ListHead       = Pretty.builtin "List/head"
+    pretty ListIndexed    = Pretty.builtin "List/indexed"
+    pretty ListLast       = Pretty.builtin "List/last"
+    pretty ListLength     = Pretty.builtin "List/length"
+    pretty ListMap        = Pretty.builtin "List/map"
+    pretty ListReverse    = Pretty.builtin "List/reverse"
+    pretty ListTake       = Pretty.builtin "List/take"
+    pretty NaturalFold    = Pretty.builtin "Natural/fold"
+    pretty TextEqual      = Pretty.builtin "Text/equal"
 
 -- | Pretty-print an expression
-prettyExpression :: Pretty a => Node s a -> Doc AnsiStyle
+prettyExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
 prettyExpression expression@Lambda{} =
     -- Anywhere you see `Pretty.group (Pretty.flatAlt long short)` that means
     -- that the pretty-printer will first attempt to display `short` if that
@@ -425,85 +402,85 @@ prettyExpression expression@Lambda{} =
 
     long = Pretty.align (prettyLong expression)
 
-    prettyShort (Lambda _ name body) =
+    prettyShort Lambda{..} =
             label (pretty name)
         <>  " "
-        <>  liftSyntax prettyShort body
+        <>  prettyShort body
     prettyShort body =
             punctuation "-> "
         <>  prettyExpression body
 
-    prettyLong (Lambda _ name body) =
+    prettyLong Lambda{..} =
             punctuation "\\"
         <>  label (pretty name)
         <>  " "
         <>  punctuation "->"
         <>  Pretty.hardline
-        <>  liftSyntax prettyLong body
+        <>  prettyLong body
     prettyLong body =
         "  " <> prettyExpression body
 
-prettyExpression (Let bindings body) = Pretty.group (Pretty.flatAlt long short)
+prettyExpression Let{..} = Pretty.group (Pretty.flatAlt long short)
   where
     short =
             foldMap (\binding -> pretty binding <> " ") bindings
         <>  keyword "in"
         <>  " "
-        <>  liftSyntax prettyExpression body
+        <>  prettyExpression body
 
     long =
         Pretty.align
             (   foldMap (\binding -> pretty binding <> Pretty.hardline <> Pretty.hardline) bindings
             <>  keyword "in"
             <>  "  "
-            <>  liftSyntax prettyExpression body
+            <>  prettyExpression body
             )
-prettyExpression (If predicate ifTrue ifFalse) =
+prettyExpression If{..} =
     Pretty.group (Pretty.flatAlt long short)
   where
     short =
             keyword "if"
         <>  " "
-        <>  liftSyntax prettyExpression predicate
+        <>  prettyExpression predicate
         <>  " "
         <>  keyword "then"
         <>  " "
-        <>  liftSyntax prettyExpression ifTrue
+        <>  prettyExpression ifTrue
         <>  " "
         <>  keyword "else"
         <>  " "
-        <> liftSyntax prettyExpression ifFalse
+        <> prettyExpression ifFalse
 
     long =
         Pretty.align
             (   keyword "if"
             <>  " "
-            <>  liftSyntax prettyExpression predicate
+            <>  prettyExpression predicate
             <>  Pretty.hardline
             <>  keyword "then"
             <>  " "
-            <>  liftSyntax prettyExpression ifTrue
+            <>  prettyExpression ifTrue
             <>  Pretty.hardline
             <>  keyword "else"
             <>  " "
-            <> liftSyntax prettyExpression ifFalse
+            <> prettyExpression ifFalse
             )
-prettyExpression (Annotation annotated annotation) =
+prettyExpression Annotation{..} =
     Pretty.group (Pretty.flatAlt long short)
   where
     short =
-            liftSyntax prettyTimesExpression annotated
+            prettyTimesExpression annotated
         <>  " "
-        <>  operator ":"
+        <>  Pretty.operator ":"
         <>  " "
         <>  pretty annotation
 
     long =
         Pretty.align
-            (   liftSyntax prettyTimesExpression annotated
+            (   prettyTimesExpression annotated
             <>  Pretty.hardline
             <>  "  "
-            <>  operator ":"
+            <>  Pretty.operator ":"
             <>  " "
             <>  pretty annotation
             )
@@ -513,32 +490,32 @@ prettyExpression other =
 prettyOperator
     :: Pretty a
     => Operator
-    -> (Node s a -> Doc AnsiStyle)
-    -> (Node s a -> Doc AnsiStyle)
-prettyOperator operator0 prettyNext expression@(Operator _ _ operator1 _)
+    -> (Syntax s a -> Doc AnsiStyle)
+    -> (Syntax s a -> Doc AnsiStyle)
+prettyOperator operator0 prettyNext expression@Operator{ operator = operator1 }
     | operator0 == operator1 = Pretty.group (Pretty.flatAlt long short)
   where
     short = prettyShort expression
 
     long = Pretty.align (prettyLong expression)
 
-    prettyShort (Operator left _ op right)
-        | operator0 == op =
-                liftSyntax prettyShort left
+    prettyShort Operator{..}
+        | operator0 == operator =
+                prettyShort left
             <>  " "
-            <>  pretty op
+            <>  pretty operator
             <>  " "
-            <>  liftSyntax prettyNext right
+            <>  prettyNext right
     prettyShort other =
         prettyNext other
 
-    prettyLong (Operator left _ op right)
-        | operator0 == op =
-                liftSyntax prettyLong left
+    prettyLong Operator{..}
+        | operator0 == operator =
+                prettyLong left
             <>  Pretty.hardline
-            <>  pretty op
+            <>  pretty operator
             <>  pretty (Text.replicate spacing " ")
-            <>  liftSyntax prettyNext right
+            <>  prettyNext right
     prettyLong other =
             pretty (Text.replicate indent " ")
         <>  prettyNext other
@@ -555,19 +532,19 @@ prettyOperator operator0 prettyNext expression@(Operator _ _ operator1 _)
 prettyOperator _ prettyNext other =
     prettyNext other
 
-prettyTimesExpression :: Pretty a => Node s a -> Doc AnsiStyle
+prettyTimesExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
 prettyTimesExpression = prettyOperator Times prettyPlusExpression
 
-prettyPlusExpression :: Pretty a => Node s a -> Doc AnsiStyle
+prettyPlusExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
 prettyPlusExpression = prettyOperator Plus prettyOrExpression
 
-prettyOrExpression :: Pretty a => Node s a -> Doc AnsiStyle
+prettyOrExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
 prettyOrExpression = prettyOperator Or prettyAndExpression
 
-prettyAndExpression :: Pretty a => Node s a -> Doc AnsiStyle
+prettyAndExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
 prettyAndExpression = prettyOperator And prettyApplicationExpression
 
-prettyApplicationExpression :: Pretty a => Node s a -> Doc AnsiStyle
+prettyApplicationExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
 prettyApplicationExpression expression
     | isApplication expression = Pretty.group (Pretty.flatAlt long short)
     | otherwise                = prettyFieldExpression expression
@@ -580,29 +557,29 @@ prettyApplicationExpression expression
 
     long = Pretty.align (prettyLong expression)
 
-    prettyShort (Application function argument) =
-            liftSyntax prettyShort function
+    prettyShort Application{..} =
+            prettyShort function
         <>  " "
-        <>  liftSyntax prettyFieldExpression argument
-    prettyShort (Merge record) =
-            keyword "merge" <> " " <> liftSyntax prettyFieldExpression record
+        <>  prettyFieldExpression argument
+    prettyShort Merge{..} =
+            keyword "merge" <> " " <> prettyFieldExpression handlers
     prettyShort other =
         prettyFieldExpression other
 
-    prettyLong (Application function argument) =
-            liftSyntax prettyLong function
+    prettyLong Application{..} =
+            prettyLong function
         <>  Pretty.hardline
         <>  "  "
-        <>  liftSyntax prettyFieldExpression argument
-    prettyLong (Merge record) =
+        <>  prettyFieldExpression argument
+    prettyLong Merge{..} =
             keyword "merge"
         <>  Pretty.hardline
         <>  "  "
-        <>  liftSyntax prettyFieldExpression record
+        <>  prettyFieldExpression handlers
     prettyLong other =
         prettyFieldExpression other
 
-prettyFieldExpression :: Pretty a => Node s a -> Doc AnsiStyle
+prettyFieldExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
 prettyFieldExpression expression@Field{}  =
     Pretty.group (Pretty.flatAlt long short)
   where
@@ -610,40 +587,40 @@ prettyFieldExpression expression@Field{}  =
 
     long = Pretty.align (prettyLong expression)
 
-    prettyShort (Field record _ key) =
-            liftSyntax prettyShort record
-        <>  operator "."
-        <>  Type.prettyRecordLabel False key
+    prettyShort Field{..} =
+            prettyShort record
+        <>  Pretty.operator "."
+        <>  Type.prettyRecordLabel False field
     prettyShort other =
         prettyPrimitiveExpression other
 
-    prettyLong (Field record _ key) =
-            liftSyntax prettyLong record
+    prettyLong Field{..} =
+            prettyLong record
         <>  Pretty.hardline
         <>  "  "
-        <>  operator "."
-        <>  Type.prettyRecordLabel False key
+        <>  Pretty.operator "."
+        <>  Type.prettyRecordLabel False field
     prettyLong record =
         prettyPrimitiveExpression record
 prettyFieldExpression other =
     prettyPrimitiveExpression other
 
-prettyPrimitiveExpression :: Pretty a => Node s a -> Doc AnsiStyle
-prettyPrimitiveExpression (Variable name index)
+prettyPrimitiveExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
+prettyPrimitiveExpression Variable{..}
     | index == 0 = label (pretty name)
-    | otherwise  = label (pretty name) <> "@" <> scalar (pretty index)
-prettyPrimitiveExpression (Alternative name) =
+    | otherwise  = label (pretty name) <> "@" <> Pretty.scalar (pretty index)
+prettyPrimitiveExpression Alternative{..} =
     label (pretty name)
-prettyPrimitiveExpression (List []) =
+prettyPrimitiveExpression List{ elements = [] } =
     punctuation "[" <> " " <> punctuation "]"
-prettyPrimitiveExpression (List (element :<| elements)) =
+prettyPrimitiveExpression List{ elements = element :<| elements } =
     Pretty.group (Pretty.flatAlt long short)
   where
     short =
             punctuation "["
         <>  " "
-        <>  liftSyntax prettyExpression element
-        <>  foldMap (\e -> punctuation "," <> " " <> liftSyntax prettyExpression e) elements
+        <>  prettyExpression element
+        <>  foldMap (\e -> punctuation "," <> " " <> prettyExpression e) elements
         <>  " "
         <>  punctuation "]"
 
@@ -655,18 +632,17 @@ prettyPrimitiveExpression (List (element :<| elements)) =
             <>   "]"
             )
 
-    prettyLongElement e =
-        liftSyntax prettyExpression e <> Pretty.hardline
-prettyPrimitiveExpression (Record []) =
+    prettyLongElement e = prettyExpression e <> Pretty.hardline
+prettyPrimitiveExpression Record{ fieldValues = [] } =
     punctuation "{" <> " " <> punctuation "}"
-prettyPrimitiveExpression (Record (keyValue : keyValues)) =
+prettyPrimitiveExpression Record { fieldValues = fieldValue : fieldValues } =
     Pretty.group (Pretty.flatAlt long short)
   where
     short =
             punctuation "{"
         <>  " "
-        <>  prettyShortKeyValue keyValue
-        <>  foldMap (\kv -> punctuation "," <> " " <> prettyShortKeyValue kv) keyValues
+        <>  prettyShortFieldValue fieldValue
+        <>  foldMap (\fv -> punctuation "," <> " " <> prettyShortFieldValue fv) fieldValues
         <>  " "
         <>  punctuation "}"
 
@@ -674,29 +650,29 @@ prettyPrimitiveExpression (Record (keyValue : keyValues)) =
         Pretty.align
             (   punctuation "{"
             <>  " "
-            <>  prettyLongKeyValue keyValue
-            <>  foldMap (\kv -> punctuation "," <> " " <> prettyLongKeyValue kv) keyValues
+            <>  prettyLongFieldValue fieldValue
+            <>  foldMap (\fv -> punctuation "," <> " " <> prettyLongFieldValue fv) fieldValues
             <>  punctuation "}"
             )
 
-    prettyShortKeyValue (key, value) =
-            Type.prettyRecordLabel True key
-        <>  operator ":"
+    prettyShortFieldValue (field, value) =
+            Type.prettyRecordLabel True field
+        <>  Pretty.operator ":"
         <>  " "
-        <>  liftSyntax prettyExpression value
+        <>  prettyExpression value
 
-    prettyLongKeyValue (key, value) =
-            Type.prettyRecordLabel True key
-        <>  operator ":"
+    prettyLongFieldValue (field, value) =
+            Type.prettyRecordLabel True field
+        <>  Pretty.operator ":"
         <>  Pretty.group (Pretty.flatAlt (Pretty.hardline <> "    ") " ")
-        <>  liftSyntax prettyExpression value
+        <>  prettyExpression value
         <>  Pretty.hardline
-prettyPrimitiveExpression (Builtin b) =
-    pretty b
-prettyPrimitiveExpression (Scalar s) =
-    pretty s
-prettyPrimitiveExpression (Embed a) =
-    pretty a
+prettyPrimitiveExpression Builtin{..} =
+    pretty builtin
+prettyPrimitiveExpression Scalar{..} =
+    pretty scalar
+prettyPrimitiveExpression Embed{..} =
+    pretty embedded
 prettyPrimitiveExpression other = Pretty.group (Pretty.flatAlt long short)
   where
     short = punctuation "(" <> prettyExpression other <> punctuation ")"
@@ -767,7 +743,7 @@ instance Pretty a => Pretty (Binding s a) where
                 <>  label (pretty name)
                 <>  Pretty.hardline
                 <>  "      "
-                <>  operator ":"
+                <>  Pretty.operator ":"
                 <>  " "
                 <>  pretty type_
                 <>  Pretty.hardline
@@ -781,7 +757,7 @@ instance Pretty a => Pretty (Binding s a) where
             <>  " "
             <>  label (pretty name)
             <>  " "
-            <>  operator ":"
+            <>  Pretty.operator ":"
             <>  " "
             <>  pretty type_
             <>  " "

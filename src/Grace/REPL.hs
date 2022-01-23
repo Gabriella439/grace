@@ -164,8 +164,8 @@ repl = do
 
                                     Monad.guard (c0 == name)
 
-                                    case Type.node type_ of
-                                        Type.Record (Type.Fields keyTypes _) -> do
+                                    case type_ of
+                                        Type.Record{ fields = Type.Fields keyTypes _ } -> do
                                             keyTypes
                                         _ -> do
                                             empty

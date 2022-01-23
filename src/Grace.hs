@@ -15,12 +15,12 @@ module Grace
 import Control.Applicative (many, (<|>))
 import Control.Exception.Safe (Exception(..))
 import Data.Foldable (traverse_)
-import Data.String.Interpolate (__i)
 import Data.Functor (void)
+import Data.String.Interpolate (__i)
 import Data.Void (Void)
 import Grace.Interpret (Input(..))
 import Grace.Location (Location(..))
-import Grace.Syntax (Builtin(..), Node(..), Syntax(..))
+import Grace.Syntax (Builtin(..), Syntax(..))
 import Grace.Type (Type(..))
 import Options.Applicative (Parser, ParserInfo)
 import Prettyprinter (Doc)
@@ -193,9 +193,9 @@ main = do
 
             let annotatedExpression
                     | annotate =
-                        Syntax
-                            { node =
-                                Annotation syntax (void inferred)
+                        Annotation
+                            { annotated = syntax
+                            , annotation = void inferred
                             , location = ()
                             }
                     | otherwise =
@@ -219,7 +219,7 @@ main = do
                         , offset = 4
                         }
 
-            let expected = Type{ node = Type.Scalar Monotype.Text, .. }
+            let expected = Type.Scalar{ scalar = Monotype.Text, .. }
 
             manager <- HTTP.newManager
 
@@ -268,7 +268,7 @@ main = do
             let displayBuiltin :: Builtin -> IO ()
                 displayBuiltin builtin = do
                     let expression =
-                            Syntax
+                            Syntax.Builtin
                                 { location =
                                     Location
                                         { name = "(input)"
@@ -279,13 +279,18 @@ main = do
                                                 (Grace.Pretty.pretty builtin)
                                         , offset = 0
                                         }
-                                , node = Builtin builtin
+                                , ..
                                 }
 
                     type_ <- throws (Infer.typeOf expression)
 
-                    let annotated :: Node Location Void
-                        annotated = Annotation expression type_
+                    let annotated :: Syntax Location Void
+                        annotated =
+                            Annotation
+                                { annotated = expression
+                                , annotation = type_
+                                , location = Syntax.location expression
+                                }
 
                     render <- getRender highlight
 

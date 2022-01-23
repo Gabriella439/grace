@@ -28,7 +28,7 @@ import Grace.Domain (Domain)
 import Grace.Existential (Existential)
 import Grace.Monotype (Monotype)
 import Grace.Pretty (Pretty(..), label, operator, punctuation)
-import Grace.Type (Type(..))
+import Grace.Type (Type)
 import Prelude hiding (lookup)
 import Prettyprinter (Doc)
 import Prettyprinter.Render.Terminal (AnsiStyle)
@@ -239,7 +239,7 @@ prettyAlternativeType (k, τ) =
 
 {-| Substitute a `Type` using the solved entries of a `Context`
 
-    >>> original = Type{ location = (), node = Type.UnsolvedType 0 }
+    >>> original = Type.UnsolvedType () 0
     >>> pretty @(Type ()) original
     a?
 
@@ -256,7 +256,7 @@ solveType context type_ = foldl snoc type_ context
 
 {-| Substitute a t`Type.Record` using the solved entries of a `Context`
 
-    >>> original = Type.Fields [("x", Type{ location = (), node = Type.Scalar Monotype.Bool })] (Monotype.UnsolvedFields 0)
+    >>> original = Type.Fields [("x", Type.Scalar () Monotype.Bool)] (Monotype.UnsolvedFields 0)
     >>> pretty @(Record ()) original
     { x: Bool, a? }
 
@@ -268,19 +268,19 @@ solveType context type_ = foldl snoc type_ context
     { x: Bool }
 -}
 solveRecord :: Context s -> Type.Record s -> Type.Record s
-solveRecord context record = record'
+solveRecord context oldFields = newFields
   where
+    location =
+        error "Grace.Context.solveRecord: Internal error - Missing location field"
+
     -- TODO: Come up with total solution
-    Type.Type{ node = Type.Record record' } =
-        solveType context Type.Type
-            { location = error "Grace.Context.solveRecord: Internal error - Missing location field"
-            , node = Type.Record record
-            }
+    Type.Record{ fields = newFields } =
+        solveType context Type.Record{ fields = oldFields, .. }
 
 {-| Substitute a t`Type.Union` using the solved entries of a `Context`
     `Context`
 
-    >>> original = Type.Alternatives [("A", Type{ location = (), node = Type.Scalar Monotype.Bool })] (Monotype.UnsolvedAlternatives 0)
+    >>> original = Type.Alternatives [("A", Type.Scalar () Monotype.Bool)] (Monotype.UnsolvedAlternatives 0)
     >>> pretty @(Union ()) original
     < A: Bool | a? >
 
@@ -292,14 +292,14 @@ solveRecord context record = record'
     < A: Bool >
 -}
 solveUnion :: Context s -> Type.Union s -> Type.Union s
-solveUnion context union = union'
+solveUnion context oldAlternatives = newAlternatives
   where
+    location =
+        error "Grace.Context.solveUnion: Internal error - Missing location field"
+
     -- TODO: Come up with total solution
-    Type.Type{ node = Type.Union union' }=
-        solveType context Type.Type
-            { location = error "Grace.Context.solveUnion: Internal error - Missing location field"
-            , node = Type.Union union
-            }
+    Type.Union{ alternatives = newAlternatives } =
+        solveType context Type.Union{ alternatives = oldAlternatives, .. }
 
 {-| This function is used at the end of the bidirectional type-checking
     algorithm to complete the inferred type by:
@@ -308,7 +308,7 @@ solveUnion context union = union'
 
     * Adding universal quantifiers for all unsolved entries in the `Context`
 
-    >>> original = Type{ location = (), node = Type.Function Type{ location = (), node = Type.UnsolvedType 1 } Type{ location = (), node = Type.UnsolvedType 0 } }
+    >>> original = Type.Function () (Type.UnsolvedType () 1) (Type.UnsolvedType () 0)
     >>> pretty @(Type ()) original
     b? -> a?
 
@@ -316,8 +316,8 @@ solveUnion context union = union'
     forall (a : Type) . a -> Bool
 -}
 complete :: Context s -> Type s -> Type s
-complete context type_ = do
-    State.evalState (Monad.foldM snoc type_ context) 0
+complete context type0 = do
+    State.evalState (Monad.foldM snoc type0 context) 0
   where
     numUnsolved = fromIntegral (length (filter predicate context)) - 1
       where
@@ -334,40 +334,49 @@ complete context type_ = do
 
         State.put $! n + 1
 
-        let b = Existential.toVariable (numUnsolved - n)
+        let name = Existential.toVariable (numUnsolved - n)
 
-        let Type{ location } = t
+        let domain = Domain.Type
 
-        let node =
-                Type.Forall location b Domain.Type (Type.solveType a (Monotype.VariableType b) t)
+        let type_ = Type.solveType a (Monotype.VariableType name) t
 
-        return Type.Type{..}
+        let location = Type.location t
+
+        let nameLocation = location
+
+        return Type.Forall{..}
     snoc t (UnsolvedFields p) | p `Type.fieldsFreeIn` t = do
         n <- State.get
 
         State.put $! n + 1
 
-        let b = Existential.toVariable (numUnsolved - n)
+        let name = Existential.toVariable (numUnsolved - n)
 
-        let Type{ location } = t
+        let domain = Domain.Fields
 
-        let node =
-                Type.Forall location b Domain.Fields (Type.solveFields p (Monotype.Fields [] (Monotype.VariableFields b)) t)
+        let type_ = Type.solveFields p (Monotype.Fields [] (Monotype.VariableFields name)) t
 
-        return Type.Type{..}
+        let location = Type.location t
+
+        let nameLocation = location
+
+        return Type.Forall{..}
     snoc t (UnsolvedAlternatives p) | p `Type.alternativesFreeIn` t = do
         n <- State.get
 
         State.put $! n + 1
 
-        let b = Existential.toVariable (numUnsolved - n)
+        let name = Existential.toVariable (numUnsolved - n)
 
-        let Type{ location } = t
+        let domain = Domain.Alternatives
 
-        let node =
-                Type.Forall location b Domain.Alternatives (Type.solveAlternatives p (Monotype.Alternatives [] (Monotype.VariableAlternatives b)) t)
+        let type_ = Type.solveAlternatives p (Monotype.Alternatives [] (Monotype.VariableAlternatives name)) t
 
-        return Type.Type{..}
+        let location = Type.location t
+
+        let nameLocation = location
+
+        return Type.Forall{..}
     snoc t _ = do
         return t
 
@@ -443,8 +452,8 @@ splitOnUnsolvedAlternatives _ [] = Nothing
 {-| Retrieve a variable's annotated type from a `Context`, given the variable's
     label and index
 
-    >>> lookup "x" 0 [ Annotation "x" Type{ location = (), node = Type.Scalar Monotype.Bool }, Annotation "y" Type{ location = (), node = Type.Scalar Monotype.Natural } ]
-    Just (Type {location = (), node = Scalar Bool})
+    >>> lookup "x" 0 [ Annotation "x" (Type.Scalar () Monotype.Bool), Annotation "y" (Type.Scalar () Monotype.Natural) ]
+    Just (Scalar {location = (), scalar = Bool})
 -}
 lookup
     :: Text

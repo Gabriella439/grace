@@ -18,12 +18,11 @@ module Grace.Interpret
 import Control.Exception.Safe (Exception(..), Handler(..))
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import Data.Generics.Product (the)
 import Data.Text (Text)
 import Grace.HTTP (Manager)
 import Grace.Input (Input(..))
 import Grace.Location (Location(..))
-import Grace.Syntax (Node(..), Syntax(..))
+import Grace.Syntax (Syntax(..))
 import Grace.Type (Type)
 import Grace.Value (Value)
 import Text.URI.QQ (scheme)
@@ -88,9 +87,10 @@ interpretWith bindings maybeAnnotation manager input = do
             case maybeAnnotation of
                 Nothing         -> resolvedExpression
                 Just annotation ->
-                    Syntax
-                        { node = Annotation resolvedExpression annotation
-                        , location = Syntax.location resolvedExpression
+                    Annotation
+                        { location = Syntax.location resolvedExpression
+                        , annotated = resolvedExpression
+                        , ..
                         }
 
     let typeContext = do
@@ -154,12 +154,10 @@ referentiallySane parent child
 annotate :: Syntax s a -> Syntax s (Maybe (Type s), a)
 annotate = Lens.transform transformSyntax . fmap ((,) Nothing)
   where
-    transformSyntax = Lens.over (the @"node") transformNode
-
-    transformNode (Annotation Syntax{ node = Embed (_, a) } annotation) =
-        Embed (Just annotation, a)
-    transformNode node =
-        node
+    transformSyntax Annotation{ annotated = Embed{ embedded = (_, a) }, .. } =
+        Embed{ embedded = (Just annotation, a), .. }
+    transformSyntax syntax =
+        syntax
 
 -- | Errors related to interpretation of an expression
 data InterpretError
