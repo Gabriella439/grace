@@ -26,7 +26,7 @@ library
                      , scientific
                      , string-interpolate
                      , template-haskell
-                     , text
+                     , text >= 1.2.4.0
                      , unordered-containers
 
   exposed-modules:     Grace.Context
