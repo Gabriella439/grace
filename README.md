@@ -24,7 +24,7 @@ You can build the `grace` executable using `cabal`:
 $ cabal build exe:grace
 ```
 
-Note: For newer versions of cabal, use `cabal new-build exe:grace`
+Note: For older versions of cabal (e.g. version <3), use `cabal new-build exe:grace`.  Known to work for at least cabal v.2.4
 
 You can also build this project using Nix:
 
