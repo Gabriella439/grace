@@ -1,5 +1,6 @@
 {-# LANGUAGE BlockArguments    #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE MultiWayIf        #-}
 
 module Main where
 
@@ -64,7 +65,7 @@ foreign import javascript unsafe "replaceChildrenWorkaround($1, $2)"
 
 valueToJSString :: Value -> JSString
 valueToJSString =
-    JSString.pack . Text.unpack . Pretty.toText . Normalize.quote []
+    JSString.pack . Text.unpack . Pretty.renderStrict False 80 . Normalize.quote []
 
 renderValue :: JSVal -> Value -> IO ()
 renderValue parent value@Variable{} = do
@@ -81,25 +82,23 @@ renderValue parent (Scalar (Bool bool)) = do
     Monad.when bool (setAttribute input "checked" "")
     setAttribute input "disabled" ""
     replaceChild parent input
+renderValue parent (Scalar Null) = do
+    span <- createElement "span"
+    setTextContent span "∅"
+    replaceChild parent span
 renderValue parent value@Scalar{} = do
     span <- createElement "span"
     setTextContent span (valueToJSString value)
     replaceChild parent span
-renderValue parent (List values)
-    | null values = do
-        span <- createElement "span"
-        setTextContent span "∅"
-        replaceChild parent span
-    | otherwise = do
-        ul <- createElement "ul"
-        lis <- forM values \value -> do
-            li <- createElement "li"
-            renderValue li value
-            return li
-        replaceChildren ul (Array.fromList (toList lis))
-        replaceChild parent ul
+renderValue parent (List values) = do
+    lis <- forM values \value -> do
+        li <- createElement "li"
+        renderValue li value
+        return li
+    ul <- createElement "ul"
+    replaceChildren ul (Array.fromList (toList lis))
+    replaceChild parent ul
 renderValue parent (Record keyValues) = do
-    dl <- createElement "dl"
     let process key value = do
             dt <- createElement "dt"
             setTextContent dt (JSString.pack (Text.unpack key))
@@ -107,11 +106,16 @@ renderValue parent (Record keyValues) = do
             renderValue dd value
             return [ dt, dd ]
     dtds <- HashMap.traverseWithKey process keyValues
+    dl <- createElement "dl"
     replaceChildren dl (Array.fromList (toList (concat dtds)))
     replaceChild parent dl
+renderValue parent (Application (Alternative alternative) value) = do
+    renderValue parent (Record (HashMap.singleton alternative value))
 renderValue parent value = do
+    code <- createElement "code"
+    setTextContent code (valueToJSString value)
     pre <- createElement "pre"
-    setTextContent pre (valueToJSString value)
+    replaceChild pre code
     replaceChild parent pre
 
 main :: IO ()
@@ -137,15 +141,20 @@ main = do
     let interpret = do
             text <- getInput
 
-            let input = Code "(input)" text
+            if  | Text.null text -> do
+                    setError ""
+                | otherwise -> do
+                    let input = Code "(input)" text
 
-            result <- Except.runExceptT (Interpret.interpret input)
+                    setError "…"
 
-            case result of
-                Left interpretError -> do
-                    setError (Text.pack (displayException interpretError))
-                Right (_, value) -> do
-                    setOutput value
+                    result <- Except.runExceptT (Interpret.interpret input)
+
+                    case result of
+                        Left interpretError -> do
+                            setError (Text.pack (displayException interpretError))
+                        Right (_, value) -> do
+                            setOutput value
 
     callback <- Callback.asyncCallback interpret
 

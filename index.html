@@ -11,10 +11,13 @@
 </style>
 </head>
 <body>
-<textarea id="input" cols=80></textarea>
-<hr>
+<div class="container">
+<h1 class="display-4">JSON to HTML</h1>
+<div style="width: 100%;"><textarea placeholder="Enter a Grace expression" style="width: 100%; max-width: 100%;" id="input" cols=80></textarea></div>
+<br/>
 <div id="output"></div>
 <pre id="error"></pre>
+</div>
 </body>
 <script>
 function replaceChildrenWorkaround(x, y) {
