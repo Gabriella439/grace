@@ -1,5 +1,6 @@
 <html>
 <head>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-0evHe/X+R7YkIZDRvuzKMRqM+OrBnVFBL6DOitfPri4tjfHxaWutUpFmBp4vmVor" crossorigin="anonymous">
 <style>
   .CodeMirror {
     margin-bottom: 20px;
@@ -7,21 +8,18 @@
     height: 24rem !important;
     text-align: start;
   }
-
-  #grace-output {
-    font-family: monospace
-  }
 </style>
 </head>
 <body>
-<textarea id="input"></textarea>
-<pre id="output"></pre>
+<textarea id="input" cols=80></textarea>
+<hr>
+<div id="output"></div>
 <pre id="error"></pre>
 </body>
 <script>
-  let input = document.getElementById("input");
-  let output = document.getElementById("output");
-  let error = document.getElementById("error");
+function replaceChildrenWorkaround(x, y) {
+    x.replaceChildren(...y)
+}
 </script>
 <script defer language="javascript" src="dist/build/try-grace/try-grace.jsexe/all.js"></script>
 </html>

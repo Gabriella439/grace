@@ -88,6 +88,7 @@ executable try-grace
   build-depends:       base
                      , ghcjs-base
                      , grace
+                     , insert-ordered-containers
                      , mtl
                      , text
 
