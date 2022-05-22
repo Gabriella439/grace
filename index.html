@@ -1,0 +1,27 @@
+<html>
+<head>
+<style>
+  .CodeMirror {
+    margin-bottom: 20px;
+    outline: 1px solid black;
+    height: 24rem !important;
+    text-align: start;
+  }
+
+  #grace-output {
+    font-family: monospace
+  }
+</style>
+</head>
+<body>
+<textarea id="input"></textarea>
+<pre id="output"></pre>
+<pre id="error"></pre>
+</body>
+<script>
+  let input = document.getElementById("input");
+  let output = document.getElementById("output");
+  let error = document.getElementById("error");
+</script>
+<script defer language="javascript" src="dist/build/try-grace/try-grace.jsexe/all.js"></script>
+</html>
