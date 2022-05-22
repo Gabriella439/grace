@@ -2528,4 +2528,4 @@ listToText elements = Text.intercalate "\n" (map prettyEntry elements)
     prettyEntry entry = prettyToText ("• " <> Pretty.align (pretty entry))
 
 prettyToText :: Pretty a => a -> Text
-prettyToText = Grace.Pretty.renderStrict True Width.defaultWidth
+prettyToText = Grace.Pretty.renderStrict False Width.defaultWidth

@@ -9,6 +9,8 @@ module Grace.Value
     , Value(..)
     ) where
 
+import Data.Aeson (FromJSON(..))
+import Data.Foldable (toList)
 import Data.HashMap.Strict.InsOrd (InsOrdHashMap)
 import Data.Sequence (Seq)
 import Data.String (IsString(..))
@@ -16,6 +18,11 @@ import Data.Text (Text)
 import Grace.Location (Location)
 import Grace.Syntax (Builtin, Operator, Scalar, Syntax)
 import Grace.Type (Type)
+
+import qualified Data.Aeson as Aeson
+import qualified Data.HashMap.Strict.InsOrd as HashMap
+import qualified Data.Sequence as Seq
+import qualified Grace.Syntax as Syntax
 
 {-| A `Closure` captures the current evaluation environment in order to defer
     evaluation until the value of some bound variable is known
@@ -93,3 +100,19 @@ data Value
 
 instance IsString Value where
     fromString string = Variable (fromString string) 0
+
+instance FromJSON Value where
+    parseJSON (Aeson.Object object) = do
+        values <- traverse parseJSON object
+        pure (Record (HashMap.fromHashMap values))
+    parseJSON (Aeson.Array array) = do
+        values <- traverse parseJSON array
+        pure (List (Seq.fromList (toList values)))
+    parseJSON (Aeson.String text) = do
+        pure (Scalar (Syntax.Text text))
+    parseJSON (Aeson.Number scientific) = do
+        pure (Scalar (Syntax.Real scientific))
+    parseJSON (Aeson.Bool bool) = do
+        pure (Scalar (Syntax.Bool bool))
+    parseJSON Aeson.Null = do
+        pure (Scalar Syntax.Null)

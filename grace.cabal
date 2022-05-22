@@ -10,6 +10,7 @@ library
   hs-source-dirs:      src
 
   build-depends:       base
+                     , aeson
                      , Earley
                      , containers
                      , filepath
@@ -86,10 +87,12 @@ executable try-grace
   main-is:             Main.hs
 
   build-depends:       base
+                     , aeson
                      , ghcjs-base
                      , grace
                      , insert-ordered-containers
                      , mtl
+                     , scientific
                      , text
 
   hs-source-dirs:      try-grace

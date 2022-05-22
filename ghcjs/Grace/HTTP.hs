@@ -14,11 +14,16 @@ module Grace.HTTP
     ) where
 
 import Control.Exception (Exception(..))
+import Data.HashMap.Strict (HashMap)
+import Data.IORef (IORef)
 import Data.Text (Text)
 
 import qualified Control.Exception as Exception
+import qualified Data.HashMap.Strict as HashMap
+import qualified Data.IORef as IORef
 import qualified Data.Text as Text
 import qualified JavaScript.XHR as XHR
+import qualified System.IO.Unsafe as Unsafe
 
 {-| The GHCJS implementation of HTTP requests doesn't require a real `Manager`
     so this supplies an empty placeholder
@@ -39,6 +44,10 @@ instance Exception HttpException where
 newManager :: IO Manager
 newManager = mempty
 
+cache :: IORef (HashMap Text Text)
+cache = Unsafe.unsafePerformIO (IORef.newIORef HashMap.empty)
+{-# NOINLINE cache #-}
+
 -- | Fetch a URL (using @XMLHttpRequest@)
 fetch
     :: Manager
@@ -47,11 +56,19 @@ fetch
     -> IO Text
     -- ^ Response body
 fetch _manager url = do
-    (statusCode, body) <- XHR.get url
+    m <- IORef.readIORef cache
 
-    case statusCode of
-        200 -> return body
-        _   -> Exception.throwIO (UnexpectedStatusCode statusCode)
+    case HashMap.lookup url m of
+        Nothing -> do
+            (statusCode, body) <- XHR.get url
+
+            case statusCode of
+                200 -> do
+                    IORef.writeIORef cache $! HashMap.insert url body m
+                    return body
+                _   -> Exception.throwIO (UnexpectedStatusCode statusCode)
+        Just body -> do
+            return body
 
 -- | Render an `HttpException` as `Text`
 renderError :: HttpException -> Text

@@ -1,4 +1,5 @@
 {-# LANGUAGE BlockArguments    #-}
+{-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MultiWayIf        #-}
 
@@ -9,24 +10,31 @@ import Data.Foldable (toList)
 import Data.JSString (JSString)
 import Data.Text (Text)
 import Data.Traversable (forM)
+import Grace.Type (Type(..))
 import GHCJS.Foreign.Callback (Callback)
 import GHCJS.Types (JSVal)
 import Grace.Input (Input(..))
 import Grace.Syntax (Scalar(..))
-import Grace.Value (Value(..))
+import Grace.Value (Closure(..), Value(..))
 import JavaScript.Array (JSArray)
 import Prelude hiding (error)
 
 import qualified Control.Monad as Monad
 import qualified Control.Monad.Except as Except
+import qualified Data.Aeson as Aeson
 import qualified Data.HashMap.Strict.InsOrd as HashMap
 import qualified Data.JSString as JSString
+import qualified Data.Scientific as Scientific
 import qualified Data.Text as Text
+import qualified Data.Text.Lazy as Text.Lazy
+import qualified Data.Text.Lazy.Encoding as Text.Encoding
 import qualified GHCJS.Foreign.Callback as Callback
 import qualified Grace.Interpret as Interpret
+import qualified Grace.Monotype as Monotype
 import qualified Grace.Normalize as Normalize
 import qualified Grace.Pretty as Pretty
-import qualified Grace.Normalize as Normalize
+import qualified Grace.Type as Type
+import qualified Grace.Value as Value
 import qualified JavaScript.Array as Array
 
 foreign import javascript unsafe "document.getElementById($1)"
@@ -34,6 +42,15 @@ foreign import javascript unsafe "document.getElementById($1)"
 
 foreign import javascript unsafe "$1.value"
     getValue :: JSVal -> IO JSString
+
+foreign import javascript unsafe "$1.value"
+    getDoubleValue :: JSVal -> IO Double
+
+foreign import javascript unsafe "$1.value"
+    getIntValue :: JSVal -> IO Int
+
+foreign import javascript unsafe "$1.checked"
+    getChecked :: JSVal -> IO Bool
 
 foreign import javascript unsafe "$1.innerText = $2"
     setInnerText :: JSVal -> JSString -> IO ()
@@ -65,58 +82,137 @@ foreign import javascript unsafe "replaceChildrenWorkaround($1, $2)"
 
 valueToJSString :: Value -> JSString
 valueToJSString =
-    JSString.pack . Text.unpack . Pretty.renderStrict False 80 . Normalize.quote []
+      JSString.pack
+    . Text.unpack
+    . Pretty.renderStrict False 80
+    . Normalize.quote []
 
-renderValue :: JSVal -> Value -> IO ()
-renderValue parent value@Variable{} = do
+renderValue :: JSVal -> Type s -> Value -> IO ()
+renderValue parent _ value@Variable{} = do
     var <- createElement "var"
     setTextContent var (valueToJSString value)
-renderValue parent (Scalar (Text text))= do
-    pre <- createElement "pre"
-    setTextContent pre (JSString.pack (Text.unpack text))
-    replaceChild parent pre
-renderValue parent (Scalar (Bool bool)) = do
+renderValue parent _ (Value.Scalar (Text text))= do
+    p <- createElement "p"
+    setTextContent p (JSString.pack (Text.unpack text))
+    replaceChild parent p
+renderValue parent _ (Value.Scalar (Bool bool)) = do
     input <- createElement "input"
     setAttribute input "type" "checkbox"
     setAttribute input "class" "form-check-input"
     Monad.when bool (setAttribute input "checked" "")
     setAttribute input "disabled" ""
     replaceChild parent input
-renderValue parent (Scalar Null) = do
+renderValue parent _ (Value.Scalar Null) = do
     span <- createElement "span"
     setTextContent span "∅"
     replaceChild parent span
-renderValue parent value@Scalar{} = do
+renderValue parent _ value@Value.Scalar{} = do
     span <- createElement "span"
     setTextContent span (valueToJSString value)
     replaceChild parent span
-renderValue parent (List values) = do
+renderValue parent outer (Value.List values) = do
+    inner <- case outer of
+            Type.List{ type_ } -> do
+                return type_
+            Type.Scalar{ scalar = Monotype.JSON } -> do
+                return outer
+            _ -> do
+                fail "renderValue: Missing element type"
     lis <- forM values \value -> do
         li <- createElement "li"
-        renderValue li value
+        renderValue li inner value
         return li
     ul <- createElement "ul"
     replaceChildren ul (Array.fromList (toList lis))
     replaceChild parent ul
-renderValue parent (Record keyValues) = do
+renderValue parent Type.Record{ fields = Type.Fields keyTypes _ } (Value.Record keyValues) = do
     let process key value = do
+            type_ <- case lookup key keyTypes of
+                Nothing    -> fail "renderValue: Missing field type"
+                Just type_ -> return type_
             dt <- createElement "dt"
             setTextContent dt (JSString.pack (Text.unpack key))
             dd <- createElement "dd"
-            renderValue dd value
+            renderValue dd type_ value
             return [ dt, dd ]
     dtds <- HashMap.traverseWithKey process keyValues
     dl <- createElement "dl"
     replaceChildren dl (Array.fromList (toList (concat dtds)))
     replaceChild parent dl
-renderValue parent (Application (Alternative alternative) value) = do
-    renderValue parent (Record (HashMap.singleton alternative value))
-renderValue parent value = do
+renderValue parent Type.Union{ alternatives = Type.Alternatives keyTypes _ } (Application (Value.Alternative alternative) value) = do
+    type_ <- case lookup alternative keyTypes of
+        Nothing    -> fail "renderValue: Missing alternative type"
+        Just type_ -> return type_
+    renderValue parent type_ (Value.Record (HashMap.singleton alternative value))
+renderValue parent Type.Function{ input, output } (Lambda closure) = do
+    (input, get) <- renderInput input
+    div <- createElement "div"
+    let invoke = do
+            value <- get
+            renderValue div output (Normalize.instantiate closure value)
+    callback <- Callback.asyncCallback invoke
+    addEventListener input "input" callback
+    invoke
+    replaceChildren parent (Array.fromList [ input, div ])
+renderValue parent _ value = do
     code <- createElement "code"
     setTextContent code (valueToJSString value)
-    pre <- createElement "pre"
-    replaceChild pre code
-    replaceChild parent pre
+    replaceChild parent code
+
+renderInput :: Type s -> IO (JSVal, IO Value)
+renderInput Type.Scalar{ scalar = Monotype.Bool } = do
+    input <- createElement "input"
+    setAttribute input "type" "checkbox"
+    setAttribute input "class" "form-check-input"
+    let get = do
+            bool <- getChecked input
+            return (Value.Scalar (Bool bool))
+    return (input, get)
+renderInput Type.Scalar{ scalar = Monotype.Real } = do
+    input <- createElement "input"
+    setAttribute input "type" "number"
+    setAttribute input "step" "any"
+    setAttribute input "value" "0"
+    let get = do
+            double <- getDoubleValue input
+            return (Value.Scalar (Real (Scientific.fromFloatDigits double)))
+    return (input, get)
+renderInput Type.Scalar{ scalar = Monotype.Integer } = do
+    input <- createElement "input"
+    setAttribute input "type" "number"
+    setAttribute input "value" "0"
+    let get = do
+            integer <- getIntValue input
+            return (Value.Scalar (Integer (fromIntegral integer)))
+    return (input, get)
+renderInput Type.Scalar{ scalar = Monotype.Natural } = do
+    input <- createElement "input"
+    setAttribute input "type" "number"
+    setAttribute input "value" "0"
+    setAttribute input "min" "0"
+    let get = do
+            integer <- getIntValue input
+            return (Value.Scalar (Natural (fromIntegral integer)))
+    return (input, get)
+renderInput Type.Scalar{ scalar = Monotype.JSON } = do
+    input <- createElement "input"
+    setAttribute input "value" "null"
+    let get = do
+            string <- getValue input
+            case Aeson.eitherDecode (Text.Encoding.encodeUtf8 (Text.Lazy.fromStrict (Text.pack (JSString.unpack string)))) of
+                Left _ -> do
+                    setAttribute input "class" "form-control is-invalid"
+                    return (Value.Scalar Null)
+                Right value -> do
+                    setAttribute input "class" "form-control is-valid"
+                    return value
+    return (input, get)
+renderInput Type.Scalar{ scalar = Monotype.Text } = do
+    textarea <- createElement "textarea"
+    let get = do
+            string <- getValue textarea
+            return (Value.Scalar (Text (Text.pack (JSString.unpack string))))
+    return (textarea, get)
 
 main :: IO ()
 main = do
@@ -133,8 +229,8 @@ main = do
             setDisplay output "none"
             setDisplay error "block"
 
-    let setOutput value = do
-            renderValue output value
+    let setOutput type_ value = do
+            renderValue output type_ value
             setDisplay error "none"
             setDisplay output "block"
 
@@ -153,8 +249,8 @@ main = do
                     case result of
                         Left interpretError -> do
                             setError (Text.pack (displayException interpretError))
-                        Right (_, value) -> do
-                            setOutput value
+                        Right (type_, value) -> do
+                            setOutput type_ value
 
     callback <- Callback.asyncCallback interpret
 

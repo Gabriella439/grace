@@ -10,6 +10,7 @@ module Grace.Normalize
     ( -- * Normalization
       evaluate
     , quote
+    , instantiate
     ) where
 
 import Data.Scientific (Scientific)
