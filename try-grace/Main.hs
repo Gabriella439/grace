@@ -29,6 +29,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Lazy as Text.Lazy
 import qualified Data.Text.Lazy.Encoding as Text.Encoding
 import qualified GHCJS.Foreign.Callback as Callback
+import qualified Grace.Domain as Domain
 import qualified Grace.Interpret as Interpret
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Normalize as Normalize
@@ -88,6 +89,12 @@ valueToJSString =
     . Normalize.quote []
 
 renderValue :: JSVal -> Type s -> Value -> IO ()
+renderValue parent Type.Forall{ name, nameLocation, domain = Domain.Type, type_ } value =
+    renderValue parent (Type.substituteType name 0 Type.Scalar{ location = nameLocation, scalar = Monotype.JSON } type_) value
+renderValue parent Type.Forall{ name, domain = Domain.Fields, type_ } value =
+    renderValue parent (Type.substituteFields name 0 (Type.Fields [] Monotype.EmptyFields) type_) value
+renderValue parent Type.Forall{ name, domain = Domain.Alternatives, type_ } value =
+    renderValue parent (Type.substituteAlternatives name 0 (Type.Alternatives [] Monotype.EmptyAlternatives) type_) value
 renderValue parent _ value@Variable{} = do
     var <- createElement "var"
     setTextContent var (valueToJSString value)
@@ -139,17 +146,21 @@ renderValue parent Type.Record{ fields = Type.Fields keyTypes _ } (Value.Record 
     dl <- createElement "dl"
     replaceChildren dl (Array.fromList (toList (concat dtds)))
     replaceChild parent dl
-renderValue parent Type.Union{ alternatives = Type.Alternatives keyTypes _ } (Application (Value.Alternative alternative) value) = do
-    type_ <- case lookup alternative keyTypes of
-        Nothing    -> fail "renderValue: Missing alternative type"
-        Just type_ -> return type_
-    renderValue parent type_ (Value.Record (HashMap.singleton alternative value))
-renderValue parent Type.Function{ input, output } (Lambda closure) = do
+renderValue parent outer (Application (Value.Alternative alternative) value) = do
+    inner <- case outer of
+            Type.Union{ alternatives = Type.Alternatives keyTypes _ } ->
+                case lookup alternative keyTypes of
+                    Nothing    -> fail "renderValue: Missing alternative type"
+                    Just type_ -> return type_
+            _ -> do
+                fail "renderValue: Missing alternative type"
+    renderValue parent Type.Record{ location = location outer, fields = Type.Fields [(alternative, inner)] Monotype.EmptyFields } (Value.Record (HashMap.singleton alternative value))
+renderValue parent Type.Function{ input, output } function = do
     (input, get) <- renderInput input
     div <- createElement "div"
     let invoke = do
             value <- get
-            renderValue div output (Normalize.instantiate closure value)
+            renderValue div output (Normalize.apply function value)
     callback <- Callback.asyncCallback invoke
     addEventListener input "input" callback
     invoke
@@ -213,6 +224,27 @@ renderInput Type.Scalar{ scalar = Monotype.Text } = do
             string <- getValue textarea
             return (Value.Scalar (Text (Text.pack (JSString.unpack string))))
     return (textarea, get)
+renderInput Type.Record{ fields = Type.Fields keyTypes _ } = do
+    let process (key, type_) = do
+            (jsVal, get) <- renderInput type_
+            dt <- createElement "dt"
+            setTextContent dt (JSString.pack (Text.unpack key))
+            dd <- createElement "dd"
+            replaceChild dd jsVal
+            return ([ dt, dd ], key, get)
+    triples <- traverse process keyTypes
+    dl <- createElement "dl"
+    let children = do
+            (nodes, _, _) <- triples
+            nodes
+    replaceChildren dl (Array.fromList children)
+    let get = do
+            let getEach (_, key, get) = do
+                    value <- get
+                    return (key, value)
+            keyValues <- traverse getEach triples
+            return (Value.Record (HashMap.fromList keyValues))
+    return (dl, get)
 
 main :: IO ()
 main = do
