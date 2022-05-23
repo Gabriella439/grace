@@ -109,6 +109,8 @@ renderValue parent Type.Forall{ name, domain = Domain.Fields, type_ } value =
     renderValue parent (Type.substituteFields name 0 (Type.Fields [] Monotype.EmptyFields) type_) value
 renderValue parent Type.Forall{ name, domain = Domain.Alternatives, type_ } value =
     renderValue parent (Type.substituteAlternatives name 0 (Type.Alternatives [] Monotype.EmptyAlternatives) type_) value
+renderValue parent Type.Optional{ type_ } value =
+    renderValue parent type_ value
 renderValue parent _ value@Variable{} = do
     var <- createElement "var"
     setTextContent var (valueToJSString value)
@@ -262,8 +264,21 @@ renderInput Type.Record{ fields = Type.Fields keyTypes _ } = do
             keyValues <- traverse getWithKey triples
             return (Value.Record (HashMap.fromList keyValues))
     return (dl, get)
+renderInput Type.Optional{ type_ } = do
+    (jsVal, getInner) <- renderInput type_
+    input <- createElement "input"
+    setAttribute input "type" "checkbox"
+    setAttribute input "class" "form-check-input"
+    span <- createElement "span"
+    setTextContent span " "
+    div <- createElement "div"
+    replaceChildren div (Array.fromList [input, span, jsVal])
+    let get = do
+            bool <- getChecked input
+            if  | bool      -> getInner
+                | otherwise -> return (Value.Scalar Null)
+    return (div, get)
 renderInput Type.List{ type_ } = do
-    -- (jsVal, getInner) <- renderInput type_
     ul <- createElement "ul"
     childrenRef <- IORef.newIORef IntMap.empty
     plus <- createElement "button"
