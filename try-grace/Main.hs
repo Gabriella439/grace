@@ -12,6 +12,7 @@ import Control.Monad.Trans.Maybe (MaybeT)
 import Data.Foldable (toList)
 import Data.IORef (IORef)
 import Data.JSString (JSString)
+import Data.Text (Text)
 import Data.Traversable (forM)
 import Grace.Type (Type(..))
 import GHCJS.Foreign.Callback (Callback)
@@ -48,22 +49,31 @@ import qualified Grace.Value as Value
 import qualified JavaScript.Array as Array
 
 foreign import javascript unsafe "document.getElementById($1)"
-    getElementById :: JSString -> IO JSVal
+    getElementById_ :: JSString -> IO JSVal
+
+getElementById :: Text -> IO JSVal
+getElementById a = getElementById_ (JSString.pack (Text.unpack a))
 
 foreign import javascript unsafe "$1.value"
-    getValue :: JSVal -> IO JSString
+    getValue_ :: JSVal -> IO JSString
+
+getValue :: MonadIO io => JSVal -> io Text
+getValue a = liftIO (fmap (Text.pack . JSString.unpack) (getValue_ a))
+
+getIntegerValue :: MonadIO io => JSVal -> io Integer
+getIntegerValue a = liftIO (fmap (read . JSString.unpack) (getValue_ a))
 
 foreign import javascript unsafe "$1.value"
-    getDoubleValue :: JSVal -> IO Double
+    getDoubleValue_ :: JSVal -> IO Double
 
-foreign import javascript unsafe "$1.value"
-    getIntValue :: JSVal -> IO Int
+getDoubleValue :: MonadIO io => JSVal -> io Double
+getDoubleValue a = liftIO (getDoubleValue_ a)
 
 foreign import javascript unsafe "$1.checked"
-    getChecked :: JSVal -> IO Bool
+    getChecked_ :: JSVal -> IO Bool
 
-foreign import javascript unsafe "$1.innerText = $2"
-    setInnerText :: JSVal -> JSString -> IO ()
+getChecked :: MonadIO io => JSVal -> io Bool
+getChecked a = liftIO (getChecked_ a)
 
 foreign import javascript unsafe "$1.textContent= $2"
     setTextContent_ :: JSVal -> JSString -> IO ()
@@ -72,7 +82,10 @@ setTextContent :: MonadIO io => JSVal -> JSString -> io ()
 setTextContent a b = liftIO (setTextContent_ a b)
 
 foreign import javascript unsafe "$1.style.display = $2"
-    setDisplay :: JSVal -> JSString -> IO ()
+    setDisplay_ :: JSVal -> JSString -> IO ()
+
+setDisplay :: MonadIO io => JSVal -> Text -> io ()
+setDisplay a b = liftIO (setDisplay_ a (JSString.pack (Text.unpack b)))
 
 foreign import javascript unsafe "$1.addEventListener($2, $3)"
     addEventListener_ :: JSVal -> JSString -> Callback (IO ()) -> IO ()
@@ -99,10 +112,16 @@ replaceChild :: MonadIO io => JSVal -> JSVal -> io ()
 replaceChild a b = liftIO (replaceChild_ a b)
 
 foreign import javascript unsafe "new MutationObserver($1)"
-    newObserver :: Callback (IO ()) -> IO JSVal
+    newObserver_ :: Callback (IO ()) -> IO JSVal
+
+newObserver :: MonadIO io => Callback (IO ()) -> io JSVal
+newObserver a = liftIO (newObserver_ a)
 
 foreign import javascript unsafe "$1.observe($2, { childList: true, subtree: true })"
-    observe :: JSVal -> JSVal -> IO ()
+    observe_ :: JSVal -> JSVal -> IO ()
+
+observe :: MonadIO io => JSVal -> JSVal -> io ()
+observe a b = liftIO (observe_ a b)
 
 -- @$1.replaceChildren(...$2)@ does not work because GHCJS fails to parse the
 -- spread operator, we work around this by defining the
@@ -361,10 +380,9 @@ renderInput _ Type.Scalar{ scalar = Monotype.Integer } = do
     setAttribute input "value" "0"
 
     let get = do
-            -- NOTE: This does not handle unlimited precision integers
-            int <- getIntValue input
+            integer <- getIntegerValue input
 
-            return (Value.Scalar (Integer (fromIntegral int)))
+            return (Value.Scalar (Integer integer))
 
     return (input, get)
 
@@ -376,10 +394,9 @@ renderInput _ Type.Scalar{ scalar = Monotype.Natural } = do
     setAttribute input "min"   "0"
 
     let get = do
-            -- NOTE: This does not handle unlimited precision integers
-            int <- getIntValue input
+            integer <- getIntegerValue input
 
-            return (Value.Scalar (Natural (fromIntegral int)))
+            return (Value.Scalar (Natural (fromInteger integer)))
 
     return (input, get)
 
@@ -389,9 +406,7 @@ renderInput _ Type.Scalar{ scalar = Monotype.JSON } = do
     setAttribute input "value" "null"
 
     let get = do
-            string <- getValue input
-
-            let strictText = Text.pack (JSString.unpack string)
+            strictText <- getValue input
 
             let lazyText = Text.Lazy.fromStrict strictText
 
@@ -412,9 +427,9 @@ renderInput _ Type.Scalar{ scalar = Monotype.Text } = do
     textarea <- createElement "textarea"
 
     let get = do
-            string <- getValue textarea
+            text <- getValue textarea
 
-            return (Value.Scalar (Text (Text.pack (JSString.unpack string))))
+            return (Value.Scalar (Text text))
 
     return (textarea, get)
 
@@ -628,11 +643,6 @@ main = do
 
     ref <- IORef.newIORef 0
 
-    let getInput = do
-            jsString <- getValue input
-
-            return (Text.pack (JSString.unpack jsString))
-
     let setError text = do
             setTextContent error (JSString.pack (Text.unpack text))
 
@@ -646,7 +656,7 @@ main = do
             setDisplay output "block"
 
     let interpret = do
-            text <- getInput
+            text <- getValue input
 
             if  | Text.null text -> do
                     setError ""
