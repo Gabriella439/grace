@@ -270,6 +270,25 @@ renderValue parent _ value = do
     replaceChild parent code
 
 renderInput :: Type s -> IO (JSVal, IO Value)
+renderInput Type.Exists{ name, nameLocation, domain = Type, type_ } = do
+    -- If an expression has an existential type, specialize the type to { }
+    let unit = Type.Record
+            { location = nameLocation
+            , fields = Type.Fields [] EmptyFields
+            }
+
+    renderInput (Type.substituteType name 0 unit type_)
+
+renderInput Type.Exists{ name, domain = Fields, type_ } = do
+    let empty = Type.Fields [] EmptyFields
+
+    renderInput (Type.substituteFields name 0 empty type_)
+
+renderInput Type.Exists{ name, domain = Alternatives, type_ } = do
+    let empty = Type.Alternatives [] EmptyAlternatives
+
+    renderInput (Type.substituteAlternatives name 0 empty type_)
+
 renderInput Type.Scalar{ scalar = Monotype.Bool } = do
     input <- createElement "input"
 
