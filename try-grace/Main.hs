@@ -8,7 +8,6 @@ module Main where
 import Control.Exception (Exception(..))
 import Data.Foldable (toList)
 import Data.JSString (JSString)
-import Data.Sequence ((|>))
 import Data.Traversable (forM)
 import Grace.Type (Type(..))
 import GHCJS.Foreign.Callback (Callback)
@@ -17,12 +16,13 @@ import Grace.Input (Input(..))
 import Grace.Syntax (Scalar(..))
 import Grace.Value (Value(..))
 import JavaScript.Array (JSArray)
-import Prelude hiding (div, error, span)
+import Prelude hiding (div, error, span, subtract)
 
 import qualified Control.Monad as Monad
 import qualified Control.Monad.Except as Except
 import qualified Data.Aeson as Aeson
 import qualified Data.HashMap.Strict.InsOrd as HashMap
+import qualified Data.IntMap as IntMap
 import qualified Data.IORef as IORef
 import qualified Data.JSString as JSString
 import qualified Data.Scientific as Scientific
@@ -91,6 +91,9 @@ foreign import javascript unsafe "replaceChildrenWorkaround($1, $2)"
 
 foreign import javascript unsafe "$1.before($2)"
     before :: JSVal -> JSVal -> IO ()
+
+foreign import javascript unsafe "$1.remove()"
+    remove :: JSVal -> IO ()
 
 valueToJSString :: Value -> JSString
 valueToJSString =
@@ -262,25 +265,41 @@ renderInput Type.Record{ fields = Type.Fields keyTypes _ } = do
 renderInput Type.List{ type_ } = do
     -- (jsVal, getInner) <- renderInput type_
     ul <- createElement "ul"
-    childrenReference <- IORef.newIORef Seq.empty
-    button <- createElement "button"
-    setAttribute button "type" "button"
-    setAttribute button "class" "btn btn-primary"
-    setTextContent button "+"
-    plus <- createElement "li"
-    replaceChild plus button
-    replaceChild ul plus
+    childrenRef <- IORef.newIORef IntMap.empty
+    plus <- createElement "button"
+    setAttribute plus "type" "button"
+    setAttribute plus "class" "btn btn-primary"
+    setTextContent plus "+"
+    add <- createElement "li"
+    replaceChild add plus
+    replaceChild ul add
     insert <- Callback.asyncCallback do
         (jsVal, getInner) <- renderInput type_
+        minus <- createElement "button"
+        setAttribute minus "type" "button"
+        setAttribute minus "class" "btn btn-danger"
+        setAttribute minus "display" "inline"
+        setTextContent minus "-"
+        span <- createElement "span"
+        setTextContent span " "
         li <- createElement "li"
-        replaceChild li jsVal
-        IORef.modifyIORef childrenReference (|> getInner)
+        let adapt m = (IntMap.insert n getInner m, n) 
+              where
+                n = case IntMap.lookupMax m of
+                    Nothing -> 0
+                    Just (i, _)  -> i + 1
+        n <- IORef.atomicModifyIORef childrenRef adapt
+        delete <- Callback.asyncCallback do
+            IORef.atomicModifyIORef childrenRef (\m -> (IntMap.delete n m, ()))
+            remove li
+        addEventListener minus "click" delete
+        replaceChildren li (Array.fromList [ minus, span, jsVal ])
         before plus li
-    addEventListener button "click" insert
+    addEventListener plus "click" insert
     let get = do
-            getInners <- IORef.readIORef childrenReference
-            values <- sequence getInners
-            return (Value.List values)
+            m <- IORef.readIORef childrenRef
+            values <- sequence (IntMap.elems m)
+            return (Value.List (Seq.fromList values))
     return (ul, get)
 
 main :: IO ()
