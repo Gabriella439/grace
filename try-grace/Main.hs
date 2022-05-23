@@ -18,7 +18,7 @@ import Grace.Monotype (RemainingAlternatives(..), RemainingFields(..))
 import Grace.Syntax (Scalar(..))
 import Grace.Value (Value(..))
 import JavaScript.Array (JSArray)
-import Prelude hiding (div, error, span, subtract)
+import Prelude hiding (div, error, id, span, subtract)
 
 import qualified Control.Monad as Monad
 import qualified Control.Monad.Except as Except
@@ -131,11 +131,11 @@ renderValue parent _ value@Variable{} = do
     replaceChild parent var
 
 renderValue parent _ (Value.Scalar (Text text))= do
-    span <- createElement "span"
+    p <- createElement "p"
 
-    setTextContent span (JSString.pack (Text.unpack text))
+    setTextContent p (JSString.pack (Text.unpack text))
 
-    replaceChild parent span
+    replaceChild parent p
 
 renderValue parent _ (Value.Scalar (Bool bool)) = do
     input <- createElement "input"
@@ -143,6 +143,7 @@ renderValue parent _ (Value.Scalar (Bool bool)) = do
     setAttribute input "type"     "checkbox"
     setAttribute input "class"    "form-check-input"
     setAttribute input "disabled" ""
+
     Monad.when bool (setAttribute input "checked" "")
 
     replaceChild parent input
@@ -275,12 +276,18 @@ renderInput Type.Scalar{ scalar = Monotype.Bool } = do
     setAttribute input "type"  "checkbox"
     setAttribute input "class" "form-check-input"
 
+    span <- createElement "span"
+
+    setAttribute span "class" "form-check"
+
+    replaceChild span input
+
     let get = do
             bool <- getChecked input
 
             return (Value.Scalar (Bool bool))
 
-    return (input, get)
+    return (span, get)
 
 renderInput Type.Scalar{ scalar = Monotype.Real } = do
     input <- createElement "input"
@@ -396,6 +403,75 @@ renderInput Type.Record{ fields = Type.Fields keyTypes _ } = do
             return (Value.Record (HashMap.fromList keyValues))
 
     return (dl, get)
+
+renderInput Type.Union{ alternatives = Type.Alternatives keyTypes _ } = do
+    -- TODO: What happens if the union type is <>?
+    let process (checked, (key, type_)) = do
+            (nestedVal, nestedGet) <- renderInput type_
+
+            input <- createElement "input"
+
+            let keyString = JSString.pack (Text.unpack key)
+
+            -- FIXME
+            let name = "foo"
+
+            let id = name <> "-" <> keyString
+
+            setAttribute input "class" "form-check-input"
+            setAttribute input "type"  "radio"
+            setAttribute input "name"  name
+            setAttribute input "id"    id
+
+            Monad.when checked (setAttribute input "checked" "")
+
+            label <- createElement "label"
+
+            setAttribute label "class" "form-check-label"
+            setAttribute label "for"   id
+
+            setTextContent label keyString
+
+            span <- createElement "span"
+
+            setTextContent span " "
+
+            div <- createElement "div"
+
+            setAttribute div "class" "form-check"
+
+            replaceChildren div (Array.fromList [ input, label, span, nestedVal ])
+
+            let get = do
+                    value <- nestedGet
+
+                    return (Application (Alternative key) value)
+
+            return (div, getChecked input, get)
+
+    triples <- traverse process (zip (True : repeat False) keyTypes)
+
+    div <- createElement "div"
+
+    let children = do
+            (node, _, _) <- triples
+
+            return node
+
+    replaceChildren div (Array.fromList children)
+
+    let loop [] = do
+            fail "renderInput: No radio button is enabled"
+        loop ((_, checkEnabled, getNested) : rest) = do
+            enabled <- checkEnabled
+            if  | enabled -> do
+                    getNested
+                | otherwise -> do
+                    loop rest
+
+    let get = loop triples
+
+    return (div, get)
 
 renderInput Type.Optional{ type_ } = do
     (nestedVal, getInner) <- renderInput type_
