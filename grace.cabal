@@ -95,6 +95,7 @@ executable try-grace
                      , mtl
                      , scientific
                      , text
+                     , transformers
 
   hs-source-dirs:      try-grace
 
