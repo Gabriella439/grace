@@ -12,7 +12,9 @@ import Data.Traversable (forM)
 import Grace.Type (Type(..))
 import GHCJS.Foreign.Callback (Callback)
 import GHCJS.Types (JSVal)
+import Grace.Domain (Domain(..))
 import Grace.Input (Input(..))
+import Grace.Monotype (RemainingAlternatives(..), RemainingFields(..))
 import Grace.Syntax (Scalar(..))
 import Grace.Value (Value(..))
 import JavaScript.Array (JSArray)
@@ -31,7 +33,6 @@ import qualified Data.Text as Text
 import qualified Data.Text.Lazy as Text.Lazy
 import qualified Data.Text.Lazy.Encoding as Text.Encoding
 import qualified GHCJS.Foreign.Callback as Callback
-import qualified Grace.Domain as Domain
 import qualified Grace.Interpret as Interpret
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Normalize as Normalize
@@ -103,218 +104,385 @@ valueToJSString =
     . Normalize.quote []
 
 renderValue :: JSVal -> Type s -> Value -> IO ()
-renderValue parent Type.Forall{ name, nameLocation, domain = Domain.Type, type_ } value =
-    renderValue parent (Type.substituteType name 0 Type.Scalar{ location = nameLocation, scalar = Monotype.JSON } type_) value
-renderValue parent Type.Forall{ name, domain = Domain.Fields, type_ } value =
-    renderValue parent (Type.substituteFields name 0 (Type.Fields [] Monotype.EmptyFields) type_) value
-renderValue parent Type.Forall{ name, domain = Domain.Alternatives, type_ } value =
-    renderValue parent (Type.substituteAlternatives name 0 (Type.Alternatives [] Monotype.EmptyAlternatives) type_) value
+renderValue parent Type.Forall{ name, nameLocation, domain = Type, type_ } value = do
+    -- If an expression has a polymorphic type, specialize the type to JSON
+    let json = Type.Scalar{ location = nameLocation, scalar = Monotype.JSON }
+
+    renderValue parent (Type.substituteType name 0 json type_) value
+
+renderValue parent Type.Forall{ name, domain = Fields, type_ } value = do
+    let empty = Type.Fields [] EmptyFields
+
+    renderValue parent (Type.substituteFields name 0 empty type_) value
+
+renderValue parent Type.Forall{ name, domain = Alternatives, type_ } value = do
+    let empty = Type.Alternatives [] EmptyAlternatives
+
+    renderValue parent (Type.substituteAlternatives name 0 empty type_) value
+
 renderValue parent Type.Optional{ type_ } value =
     renderValue parent type_ value
+
 renderValue parent _ value@Variable{} = do
     var <- createElement "var"
+
     setTextContent var (valueToJSString value)
+
     replaceChild parent var
+
 renderValue parent _ (Value.Scalar (Text text))= do
-    p <- createElement "p"
-    setTextContent p (JSString.pack (Text.unpack text))
-    replaceChild parent p
+    span <- createElement "span"
+
+    setTextContent span (JSString.pack (Text.unpack text))
+
+    replaceChild parent span
+
 renderValue parent _ (Value.Scalar (Bool bool)) = do
     input <- createElement "input"
-    setAttribute input "type" "checkbox"
-    setAttribute input "class" "form-check-input"
-    Monad.when bool (setAttribute input "checked" "")
+
+    setAttribute input "type"     "checkbox"
+    setAttribute input "class"    "form-check-input"
     setAttribute input "disabled" ""
+    Monad.when bool (setAttribute input "checked" "")
+
     replaceChild parent input
+
 renderValue parent _ (Value.Scalar Null) = do
     span <- createElement "span"
+
     setTextContent span "∅"
+
     replaceChild parent span
+
 renderValue parent _ value@Value.Scalar{} = do
     span <- createElement "span"
+
     setTextContent span (valueToJSString value)
+
     replaceChild parent span
+
 renderValue parent outer (Value.List values) = do
     inner <- case outer of
             Type.List{ type_ } -> do
                 return type_
+
             Type.Scalar{ scalar = Monotype.JSON } -> do
                 return outer
+
             _ -> do
                 fail "renderValue: Missing element type"
+
     lis <- forM values \value -> do
         li <- createElement "li"
+
         renderValue li inner value
+
         return li
+
     ul <- createElement "ul"
+
     replaceChildren ul (Array.fromList (toList lis))
+
     replaceChild parent ul
-renderValue parent Type.Record{ fields = Type.Fields keyTypes _ } (Value.Record keyValues) = do
+
+renderValue parent outer (Value.Record keyValues) = do
+    let lookupKey = case outer of
+            Type.Record{ fields = Type.Fields keyTypes _ } ->
+                \key -> lookup key keyTypes
+
+            Type.Scalar{ scalar = Monotype.JSON } ->
+                \_ -> Just outer
+
+            _ ->
+                \_ -> Nothing
+
     let process key value = do
-            type_ <- case lookup key keyTypes of
+            type_ <- case lookupKey key of
                 Nothing    -> fail "renderValue: Missing field type"
                 Just type_ -> return type_
+
             dt <- createElement "dt"
+
             setTextContent dt (JSString.pack (Text.unpack key))
+
             dd <- createElement "dd"
+
             renderValue dd type_ value
+
             return [ dt, dd ]
+
     dtds <- HashMap.traverseWithKey process keyValues
+
     dl <- createElement "dl"
+
     replaceChildren dl (Array.fromList (toList (concat dtds)))
+
     replaceChild parent dl
+
 renderValue parent outer (Application (Value.Alternative alternative) value) = do
     inner <- case outer of
             Type.Union{ alternatives = Type.Alternatives keyTypes _ } ->
                 case lookup alternative keyTypes of
                     Nothing    -> fail "renderValue: Missing alternative type"
                     Just type_ -> return type_
+
             _ -> do
                 fail "renderValue: Missing alternative type"
-    renderValue parent Type.Record{ location = location outer, fields = Type.Fields [(alternative, inner)] Monotype.EmptyFields } (Value.Record (HashMap.singleton alternative value))
+
+    -- Render unions the same as a record with one field
+    let recordType = Type.Record
+            { location = location outer
+            , fields = Type.Fields [(alternative, inner)] EmptyFields
+            }
+
+    let recordValue = Value.Record (HashMap.singleton alternative value)
+
+    renderValue parent recordType recordValue
+
 renderValue parent Type.Function{ input, output } function = do
-    (input_, get) <- renderInput input
-    div <- createElement "div"
+    (inputVal, get) <- renderInput input
+
+    outputVal <- createElement "div"
+
     let invoke = do
             value <- get
-            renderValue div output (Normalize.apply function value)
+
+            renderValue outputVal output (Normalize.apply function value)
+
     callback <- Callback.asyncCallback invoke
-    addEventListener input_ "input" callback
+
     observer <- newObserver callback
-    observe observer input_
+
+    observe observer inputVal
+
+    addEventListener inputVal "input" callback
+
     invoke
-    replaceChildren parent (Array.fromList [ input_, div ])
+
+    replaceChildren parent (Array.fromList [ inputVal, outputVal ])
+
 renderValue parent _ value = do
     code <- createElement "code"
+
     setTextContent code (valueToJSString value)
+
     replaceChild parent code
 
 renderInput :: Type s -> IO (JSVal, IO Value)
 renderInput Type.Scalar{ scalar = Monotype.Bool } = do
     input <- createElement "input"
-    setAttribute input "type" "checkbox"
+
+    setAttribute input "type"  "checkbox"
     setAttribute input "class" "form-check-input"
+
     let get = do
             bool <- getChecked input
+
             return (Value.Scalar (Bool bool))
+
     return (input, get)
+
 renderInput Type.Scalar{ scalar = Monotype.Real } = do
     input <- createElement "input"
-    setAttribute input "type" "number"
-    setAttribute input "step" "any"
+
+    setAttribute input "type"  "number"
+    setAttribute input "step"  "any"
     setAttribute input "value" "0"
+
     let get = do
             double <- getDoubleValue input
+
             return (Value.Scalar (Real (Scientific.fromFloatDigits double)))
+
     return (input, get)
+
 renderInput Type.Scalar{ scalar = Monotype.Integer } = do
     input <- createElement "input"
-    setAttribute input "type" "number"
+
+    setAttribute input "type"  "number"
     setAttribute input "value" "0"
+
     let get = do
-            integer <- getIntValue input
-            return (Value.Scalar (Integer (fromIntegral integer)))
+            -- NOTE: This does not handle unlimited precision integers
+            int <- getIntValue input
+
+            return (Value.Scalar (Integer (fromIntegral int)))
+
     return (input, get)
+
 renderInput Type.Scalar{ scalar = Monotype.Natural } = do
     input <- createElement "input"
-    setAttribute input "type" "number"
+
+    setAttribute input "type"  "number"
     setAttribute input "value" "0"
-    setAttribute input "min" "0"
+    setAttribute input "min"   "0"
+
     let get = do
-            integer <- getIntValue input
-            return (Value.Scalar (Natural (fromIntegral integer)))
+            -- NOTE: This does not handle unlimited precision integers
+            int <- getIntValue input
+
+            return (Value.Scalar (Natural (fromIntegral int)))
+
     return (input, get)
+
 renderInput Type.Scalar{ scalar = Monotype.JSON } = do
     input <- createElement "input"
+
     setAttribute input "value" "null"
+
     let get = do
             string <- getValue input
-            case Aeson.eitherDecode (Text.Encoding.encodeUtf8 (Text.Lazy.fromStrict (Text.pack (JSString.unpack string)))) of
+
+            let strictText = Text.pack (JSString.unpack string)
+
+            let lazyText = Text.Lazy.fromStrict strictText
+
+            case Aeson.eitherDecode (Text.Encoding.encodeUtf8 lazyText) of
                 Left _ -> do
                     setAttribute input "class" "form-control is-invalid"
+
                     return (Value.Scalar Null)
+
                 Right value -> do
                     setAttribute input "class" "form-control is-valid"
+
                     return value
+
     return (input, get)
+
 renderInput Type.Scalar{ scalar = Monotype.Text } = do
     textarea <- createElement "textarea"
+
     let get = do
             string <- getValue textarea
+
             return (Value.Scalar (Text (Text.pack (JSString.unpack string))))
+
     return (textarea, get)
+
 renderInput Type.Record{ fields = Type.Fields keyTypes _ } = do
     let process (key, type_) = do
-            (jsVal, get) <- renderInput type_
+            (fieldVal, get) <- renderInput type_
+
             dt <- createElement "dt"
+
             setTextContent dt (JSString.pack (Text.unpack key))
+
             dd <- createElement "dd"
-            replaceChild dd jsVal
+
+            replaceChild dd fieldVal
+
             return ([ dt, dd ], key, get)
+
     triples <- traverse process keyTypes
+
     dl <- createElement "dl"
+
     let children = do
             (nodes, _, _) <- triples
+
             nodes
+
     replaceChildren dl (Array.fromList children)
+
     let get = do
             let getWithKey (_, key, getInner) = do
                     value <- getInner
+
                     return (key, value)
+
             keyValues <- traverse getWithKey triples
+
             return (Value.Record (HashMap.fromList keyValues))
+
     return (dl, get)
+
 renderInput Type.Optional{ type_ } = do
-    (jsVal, getInner) <- renderInput type_
+    (nestedVal, getInner) <- renderInput type_
+
     input <- createElement "input"
-    setAttribute input "type" "checkbox"
+
+    setAttribute input "type"  "checkbox"
     setAttribute input "class" "form-check-input"
+
     span <- createElement "span"
+
     setTextContent span " "
+
     div <- createElement "div"
-    replaceChildren div (Array.fromList [input, span, jsVal])
+
+    replaceChildren div (Array.fromList [input, span, nestedVal])
+
     let get = do
             bool <- getChecked input
+
             if  | bool      -> getInner
                 | otherwise -> return (Value.Scalar Null)
+
     return (div, get)
+
 renderInput Type.List{ type_ } = do
-    ul <- createElement "ul"
-    childrenRef <- IORef.newIORef IntMap.empty
     plus <- createElement "button"
-    setAttribute plus "type" "button"
+
+    setAttribute plus "type"  "button"
     setAttribute plus "class" "btn btn-primary"
+
     setTextContent plus "+"
-    add <- createElement "li"
-    replaceChild add plus
-    replaceChild ul add
+
+    childrenRef <- IORef.newIORef IntMap.empty
+
     insert <- Callback.asyncCallback do
-        (jsVal, getInner) <- renderInput type_
+        (elementVal, getInner) <- renderInput type_
         minus <- createElement "button"
-        setAttribute minus "type" "button"
-        setAttribute minus "class" "btn btn-danger"
+
+        setAttribute minus "type"    "button"
+        setAttribute minus "class"   "btn btn-danger"
         setAttribute minus "display" "inline"
+
         setTextContent minus "-"
+
         span <- createElement "span"
+
         setTextContent span " "
+
         li <- createElement "li"
+
         let adapt m = (IntMap.insert n getInner m, n) 
               where
                 n = case IntMap.lookupMax m of
                     Nothing -> 0
                     Just (i, _)  -> i + 1
+
         n <- IORef.atomicModifyIORef childrenRef adapt
+
         delete <- Callback.asyncCallback do
             IORef.atomicModifyIORef childrenRef (\m -> (IntMap.delete n m, ()))
+
             remove li
+
         addEventListener minus "click" delete
-        replaceChildren li (Array.fromList [ minus, span, jsVal ])
+
+        replaceChildren li (Array.fromList [ minus, span, elementVal ])
+
         before plus li
+
     addEventListener plus "click" insert
+
+    add <- createElement "li"
+
+    replaceChild add plus
+
+    ul <- createElement "ul"
+
+    replaceChild ul add
+
     let get = do
             m <- IORef.readIORef childrenRef
+
             values <- sequence (IntMap.elems m)
+
             return (Value.List (Seq.fromList values))
+
     return (ul, get)
 
 main :: IO ()
@@ -325,16 +493,19 @@ main = do
 
     let getInput = do
             jsString <- getValue input
+
             return (Text.pack (JSString.unpack jsString))
 
     let setError text = do
             setTextContent error (JSString.pack (Text.unpack text))
+
             setDisplay output "none"
-            setDisplay error "block"
+            setDisplay error  "block"
 
     let setOutput type_ value = do
             renderValue output type_ value
-            setDisplay error "none"
+
+            setDisplay error  "none"
             setDisplay output "block"
 
     let interpret = do
