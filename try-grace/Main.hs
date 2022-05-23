@@ -290,6 +290,8 @@ renderValue ref parent Type.Function{ input, output } function = do
         Nothing -> do
             renderDefault parent function
         Just (inputVal, get) -> do
+            hr <- createElement "hr"
+
             outputVal <- createElement "div"
 
             let invoke = do
@@ -307,7 +309,7 @@ renderValue ref parent Type.Function{ input, output } function = do
 
             invoke
 
-            replaceChildren parent (Array.fromList [ inputVal, outputVal ])
+            replaceChildren parent (Array.fromList [ inputVal, hr, outputVal ])
 
 renderValue _ parent _ value = do
     renderDefault parent value
