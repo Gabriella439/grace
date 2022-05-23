@@ -8,23 +8,25 @@ module Main where
 import Control.Exception (Exception(..))
 import Data.Foldable (toList)
 import Data.JSString (JSString)
-import Data.Text (Text)
+import Data.Sequence ((|>))
 import Data.Traversable (forM)
 import Grace.Type (Type(..))
 import GHCJS.Foreign.Callback (Callback)
 import GHCJS.Types (JSVal)
 import Grace.Input (Input(..))
 import Grace.Syntax (Scalar(..))
-import Grace.Value (Closure(..), Value(..))
+import Grace.Value (Value(..))
 import JavaScript.Array (JSArray)
-import Prelude hiding (error)
+import Prelude hiding (div, error, span)
 
 import qualified Control.Monad as Monad
 import qualified Control.Monad.Except as Except
 import qualified Data.Aeson as Aeson
 import qualified Data.HashMap.Strict.InsOrd as HashMap
+import qualified Data.IORef as IORef
 import qualified Data.JSString as JSString
 import qualified Data.Scientific as Scientific
+import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as Text.Lazy
 import qualified Data.Text.Lazy.Encoding as Text.Encoding
@@ -74,12 +76,21 @@ foreign import javascript unsafe "$1.setAttribute($2,$3)"
 foreign import javascript unsafe "$1.replaceChildren($2)"
     replaceChild :: JSVal -> JSVal -> IO ()
 
+foreign import javascript unsafe "new MutationObserver($1)"
+    newObserver :: Callback (IO ()) -> IO JSVal
+
+foreign import javascript unsafe "$1.observe($2, { childList: true, subtree: true })"
+    observe :: JSVal -> JSVal -> IO ()
+
 -- @$1.replaceChildren(...$2)@ does not work because GHCJS fails to parse the
 -- spread operator, we work around this by defining the
 -- @replaceChildrenWorkaround@ function in JavaScript which takes care of the
 -- spread operator for us
 foreign import javascript unsafe "replaceChildrenWorkaround($1, $2)"
     replaceChildren :: JSVal -> JSArray -> IO ()
+
+foreign import javascript unsafe "$1.before($2)"
+    before :: JSVal -> JSVal -> IO ()
 
 valueToJSString :: Value -> JSString
 valueToJSString =
@@ -98,6 +109,7 @@ renderValue parent Type.Forall{ name, domain = Domain.Alternatives, type_ } valu
 renderValue parent _ value@Variable{} = do
     var <- createElement "var"
     setTextContent var (valueToJSString value)
+    replaceChild parent var
 renderValue parent _ (Value.Scalar (Text text))= do
     p <- createElement "p"
     setTextContent p (JSString.pack (Text.unpack text))
@@ -156,15 +168,17 @@ renderValue parent outer (Application (Value.Alternative alternative) value) = d
                 fail "renderValue: Missing alternative type"
     renderValue parent Type.Record{ location = location outer, fields = Type.Fields [(alternative, inner)] Monotype.EmptyFields } (Value.Record (HashMap.singleton alternative value))
 renderValue parent Type.Function{ input, output } function = do
-    (input, get) <- renderInput input
+    (input_, get) <- renderInput input
     div <- createElement "div"
     let invoke = do
             value <- get
             renderValue div output (Normalize.apply function value)
     callback <- Callback.asyncCallback invoke
-    addEventListener input "input" callback
+    addEventListener input_ "input" callback
+    observer <- newObserver callback
+    observe observer input_
     invoke
-    replaceChildren parent (Array.fromList [ input, div ])
+    replaceChildren parent (Array.fromList [ input_, div ])
 renderValue parent _ value = do
     code <- createElement "code"
     setTextContent code (valueToJSString value)
@@ -239,12 +253,35 @@ renderInput Type.Record{ fields = Type.Fields keyTypes _ } = do
             nodes
     replaceChildren dl (Array.fromList children)
     let get = do
-            let getEach (_, key, get) = do
-                    value <- get
+            let getWithKey (_, key, getInner) = do
+                    value <- getInner
                     return (key, value)
-            keyValues <- traverse getEach triples
+            keyValues <- traverse getWithKey triples
             return (Value.Record (HashMap.fromList keyValues))
     return (dl, get)
+renderInput Type.List{ type_ } = do
+    -- (jsVal, getInner) <- renderInput type_
+    ul <- createElement "ul"
+    childrenReference <- IORef.newIORef Seq.empty
+    button <- createElement "button"
+    setAttribute button "type" "button"
+    setAttribute button "class" "btn btn-primary"
+    setTextContent button "+"
+    plus <- createElement "li"
+    replaceChild plus button
+    replaceChild ul plus
+    insert <- Callback.asyncCallback do
+        (jsVal, getInner) <- renderInput type_
+        li <- createElement "li"
+        replaceChild li jsVal
+        IORef.modifyIORef childrenReference (|> getInner)
+        before plus li
+    addEventListener button "click" insert
+    let get = do
+            getInners <- IORef.readIORef childrenReference
+            values <- sequence getInners
+            return (Value.List values)
+    return (ul, get)
 
 main :: IO ()
 main = do
@@ -272,11 +309,11 @@ main = do
             if  | Text.null text -> do
                     setError ""
                 | otherwise -> do
-                    let input = Code "(input)" text
+                    let input_ = Code "(input)" text
 
                     setError "…"
 
-                    result <- Except.runExceptT (Interpret.interpret input)
+                    result <- Except.runExceptT (Interpret.interpret input_)
 
                     case result of
                         Left interpretError -> do
