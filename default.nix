@@ -78,38 +78,10 @@ let
       };
     };
 
-    twitterBootstrap = pkgsNew.stdenv.mkDerivation rec {
-      name = "bootstrap-${version}";
-      version = "5.2.0-beta1";
-
-      src = pkgsNew.fetchurl {
-        url = "https://github.com/twbs/bootstrap/releases/download/v${version}/bootstrap-${version}-dist.zip";
-        sha256 = "1h7lrmzy35f0nkrlx3jmagxx803jz2jhc3l1xrxnwms86h0janab";
-      };
-
-      # sourceRoot = ".";
-
-      buildInputs = [ pkgsNew.unzip ];
-
-      dontBuild = true;
-      installPhase = ''
-        mkdir $out
-        cp -r {css,js} $out/
-      '';
-
-      meta = {
-        description = "Front-end framework for faster and easier web development";
-        homepage = http://getbootstrap.com/;
-        license = pkgsNew.lib.licenses.mit;
-      };
-    };
-
     website = pkgsNew.runCommand "try-grace" { } ''
       mkdir $out
-      mkdir $out/{css,js}
-      cp ${./website/index.html} $out/index.html
-      cp ${./website/css/grace.css} $out/css/grace.css
-      cp ${pkgsNew.twitterBootstrap}/css/bootstrap.min.css $out/css
+      ${pkgsNew.rsync}/bin/rsync --archive ${./website}/ $out
+      chmod u+w $out/js
       cp ${pkgsNew.haskell.packages."${compiler}".grace}/bin/try-grace.jsexe/all.min.js $out/js
     '';
   };
