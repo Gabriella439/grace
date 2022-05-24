@@ -247,21 +247,27 @@ renderValue ref parent outer (Value.Record keyValues) = do
 
             dt <- createElement "dt"
 
+            setAttribute dt "class" "col-auto"
+
             setTextContent dt (JSString.pack (Text.unpack key))
 
             dd <- createElement "dd"
 
+            setAttribute dd "class" "col"
+
             renderValue ref dd type_ value
 
-            return [ dt, dd ]
+            dl <- createElement "dl"
 
-    dtds <- HashMap.traverseWithKey process keyValues
+            setAttribute dl "class" "row"
 
-    dl <- createElement "dl"
+            replaceChildren dl (Array.fromList [ dt, dd ])
 
-    replaceChildren dl (Array.fromList (toList (concat dtds)))
+            return dl
 
-    replaceChild parent dl
+    dls <- HashMap.traverseWithKey process keyValues
+
+    replaceChildren parent (Array.fromList (HashMap.elems dls))
 
 renderValue ref parent outer (Application (Value.Alternative alternative) value) = do
     inner <- case outer of
@@ -290,6 +296,8 @@ renderValue ref parent Type.Function{ input, output } function = do
         Nothing -> do
             renderDefault parent function
         Just (inputVal, get) -> do
+            hr <- createElement "hr"
+
             outputVal <- createElement "div"
 
             let invoke = do
@@ -307,7 +315,7 @@ renderValue ref parent Type.Function{ input, output } function = do
 
             invoke
 
-            replaceChildren parent (Array.fromList [ inputVal, outputVal ])
+            replaceChildren parent (Array.fromList [ inputVal, hr, outputVal ])
 
 renderValue _ parent _ value = do
     renderDefault parent value
@@ -439,24 +447,34 @@ renderInput ref Type.Record{ fields = Type.Fields keyTypes _ } = do
 
             dt <- createElement "dt"
 
+            setAttribute dt "class" "col-auto"
+
             setTextContent dt (JSString.pack (Text.unpack key))
 
             dd <- createElement "dd"
 
+            setAttribute dd "class" "col"
+
             replaceChild dd fieldVal
 
-            return ([ dt, dd ], key, get)
+            dl <- createElement "dl"
+
+            setAttribute dl "class" "row"
+
+            replaceChildren dl (Array.fromList [ dt, dd ])
+
+            return (dl, key, get)
 
     triples <- traverse process keyTypes
 
-    dl <- createElement "dl"
-
     let children = do
-            (nodes, _, _) <- triples
+            (dl, _, _) <- triples
 
-            nodes
+            return dl
 
-    replaceChildren dl (Array.fromList children)
+    div <- createElement "div"
+
+    replaceChildren div (Array.fromList children)
 
     let get = do
             let getWithKey (_, key, getInner) = do
@@ -468,7 +486,7 @@ renderInput ref Type.Record{ fields = Type.Fields keyTypes _ } = do
 
             return (Value.Record (HashMap.fromList keyValues))
 
-    return (dl, get)
+    return (div, get)
 
 renderInput ref Type.Union{ alternatives = Type.Alternatives keyTypes _ }
     | not (null keyTypes) = do
