@@ -80,14 +80,14 @@ let
 
     twitterBootstrap = pkgsNew.stdenv.mkDerivation rec {
       name = "bootstrap-${version}";
-      version = "4.1.3";
+      version = "5.2.0-beta1";
 
       src = pkgsNew.fetchurl {
         url = "https://github.com/twbs/bootstrap/releases/download/v${version}/bootstrap-${version}-dist.zip";
-        sha256 = "0yr6mbqcb4mizpgi6nkzcb899q410dr30wd4wqj9w9pmn6jrrjgn";
+        sha256 = "1h7lrmzy35f0nkrlx3jmagxx803jz2jhc3l1xrxnwms86h0janab";
       };
 
-      sourceRoot = ".";
+      # sourceRoot = ".";
 
       buildInputs = [ pkgsNew.unzip ];
 
@@ -109,8 +109,8 @@ let
       mkdir $out/{css,js}
       cp ${./website/index.html} $out/index.html
       cp ${./website/css/grace.css} $out/css/grace.css
-      ln --symbolic ${pkgsNew.twitterBootstrap}/css/bootstrap.min.css $out/css
-      ln --symbolic ${pkgsNew.haskell.packages."${compiler}".grace}/bin/try-grace.jsexe/all.min.js $out/js
+      cp ${pkgsNew.twitterBootstrap}/css/bootstrap.min.css $out/css
+      cp ${pkgsNew.haskell.packages."${compiler}".grace}/bin/try-grace.jsexe/all.min.js $out/js
     '';
   };
 
