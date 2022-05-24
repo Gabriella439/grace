@@ -96,6 +96,7 @@ executable try-grace
                      , scientific
                      , text
                      , transformers
+                     , uri-encode
 
   hs-source-dirs:      try-grace
 

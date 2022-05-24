@@ -47,6 +47,7 @@ import qualified Grace.Pretty as Pretty
 import qualified Grace.Type as Type
 import qualified Grace.Value as Value
 import qualified JavaScript.Array as Array
+import qualified Network.URI.Encode as URI.Encode
 
 foreign import javascript unsafe "document.getElementById($1)"
     getElementById_ :: JSString -> IO JSVal
@@ -78,8 +79,8 @@ getChecked a = liftIO (getChecked_ a)
 foreign import javascript unsafe "$1.textContent= $2"
     setTextContent_ :: JSVal -> JSString -> IO ()
 
-setTextContent :: MonadIO io => JSVal -> JSString -> io ()
-setTextContent a b = liftIO (setTextContent_ a b)
+setTextContent :: MonadIO io => JSVal -> Text -> io ()
+setTextContent a b = liftIO (setTextContent_ a (JSString.pack (Text.unpack b)))
 
 foreign import javascript unsafe "$1.style.display = $2"
     setDisplay_ :: JSVal -> JSString -> IO ()
@@ -123,6 +124,38 @@ foreign import javascript unsafe "$1.observe($2, { childList: true, subtree: tru
 observe :: MonadIO io => JSVal -> JSVal -> io ()
 observe a b = liftIO (observe_ a b)
 
+foreign import javascript unsafe "(new URL(document.location)).searchParams"
+    getSearchParams_ :: IO JSVal
+
+getSearchParams :: MonadIO io => io JSVal
+getSearchParams = liftIO getSearchParams_
+
+foreign import javascript unsafe "$1.has($2)"
+    hasParam_ :: JSVal -> JSString -> IO Bool
+
+hasParam :: MonadIO io => JSVal -> Text -> io Bool
+hasParam a b = liftIO (hasParam_ a (JSString.pack (Text.unpack b)))
+
+foreign import javascript unsafe "$1.get($2)"
+    getParam_ :: JSVal -> JSString -> IO JSString
+
+getParam :: MonadIO io => JSVal -> Text -> io Text
+getParam a b =
+    liftIO (fmap (Text.pack . JSString.unpack) (getParam_ a (JSString.pack (Text.unpack b))))
+
+foreign import javascript unsafe "$1.set($2,$3)"
+    setParam_ :: JSVal -> JSString -> JSString -> IO ()
+
+setParam :: MonadIO io => JSVal -> Text -> Text -> io ()
+setParam a b c =
+    liftIO (setParam_ a (JSString.pack (Text.unpack b)) (JSString.pack (Text.unpack c)))
+
+foreign import javascript unsafe "history.replaceState(null, null, '?'+$1.toString())"
+  saveSearchParams_ :: JSVal -> IO ()
+
+saveSearchParams :: MonadIO io => JSVal -> io ()
+saveSearchParams a = liftIO (saveSearchParams_ a)
+
 -- @$1.replaceChildren(...$2)@ does not work because GHCJS fails to parse the
 -- spread operator, we work around this by defining the
 -- @replaceChildrenWorkaround@ function in JavaScript which takes care of the
@@ -139,12 +172,8 @@ foreign import javascript unsafe "$1.before($2)"
 foreign import javascript unsafe "$1.remove()"
     remove :: JSVal -> IO ()
 
-valueToJSString :: Value -> JSString
-valueToJSString =
-      JSString.pack
-    . Text.unpack
-    . Pretty.renderStrict False 80
-    . Normalize.quote []
+valueToText :: Value -> Text
+valueToText = Pretty.renderStrict False 80 . Normalize.quote []
 
 renderValue :: IORef Natural -> JSVal -> Type s -> Value -> IO ()
 renderValue ref parent Type.Forall{ name, nameLocation, domain = Type, type_ } value = do
@@ -169,14 +198,14 @@ renderValue ref parent Type.Optional{ type_ } value =
 renderValue _ parent _ value@Variable{} = do
     var <- createElement "var"
 
-    setTextContent var (valueToJSString value)
+    setTextContent var (valueToText value)
 
     replaceChild parent var
 
 renderValue _ parent _ (Value.Scalar (Text text))= do
     span <- createElement "span"
 
-    setTextContent span (JSString.pack (Text.unpack text))
+    setTextContent span text
 
     replaceChild parent span
 
@@ -201,7 +230,7 @@ renderValue _ parent _ (Value.Scalar Null) = do
 renderValue _ parent _ value@Value.Scalar{} = do
     span <- createElement "span"
 
-    setTextContent span (valueToJSString value)
+    setTextContent span (valueToText value)
 
     replaceChild parent span
 
@@ -249,7 +278,7 @@ renderValue ref parent outer (Value.Record keyValues) = do
 
             setAttribute dt "class" "col-auto"
 
-            setTextContent dt (JSString.pack (Text.unpack key))
+            setTextContent dt key
 
             dd <- createElement "dd"
 
@@ -324,7 +353,7 @@ renderDefault :: JSVal -> Value -> IO ()
 renderDefault parent value = do
     code <- createElement "code"
 
-    setTextContent code (valueToJSString value)
+    setTextContent code (valueToText value)
 
     replaceChild parent code
 
@@ -449,7 +478,7 @@ renderInput ref Type.Record{ fields = Type.Fields keyTypes _ } = do
 
             setAttribute dt "class" "col-auto"
 
-            setTextContent dt (JSString.pack (Text.unpack key))
+            setTextContent dt key
 
             dd <- createElement "dd"
 
@@ -515,7 +544,7 @@ renderInput ref Type.Union{ alternatives = Type.Alternatives keyTypes _ }
                 setAttribute label "class" "form-check-label"
                 setAttribute label "for"   id
 
-                setTextContent label keyString
+                setTextContent label key
 
                 span <- createElement "span"
 
@@ -659,10 +688,12 @@ main = do
     output <- getElementById "output"
     error  <- getElementById "error"
 
+    params <- getSearchParams
+
     ref <- IORef.newIORef 0
 
     let setError text = do
-            setTextContent error (JSString.pack (Text.unpack text))
+            setTextContent error text
 
             setDisplay output "none"
             setDisplay error  "block"
@@ -675,6 +706,10 @@ main = do
 
     let interpret = do
             text <- getValue input
+
+            setParam params "expression" (URI.Encode.encodeText text)
+
+            saveSearchParams params
 
             if  | Text.null text -> do
                     setError ""
@@ -694,3 +729,12 @@ main = do
     callback <- Callback.asyncCallback interpret
 
     addEventListener input "input" callback
+
+    exists <- hasParam params "expression"
+
+    Monad.when exists do
+        expression <- getParam params "expression"
+
+        setTextContent input (URI.Encode.decodeText expression)
+
+        interpret
