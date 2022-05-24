@@ -28,16 +28,17 @@ let
                               { inherit (old) src;
 
                                 filter = path: type:
-                                  !( (pkgsNew.lib.hasPrefix "result" (baseNameOf path) && type == "symlink")
-                                  || (pkgsNew.lib.hasSuffix ".nix" (baseNameOf path) && type == "regular")
-                                  || (pkgsNew.lib.hasSuffix ".md" (baseNameOf path) && type == "regular")
-                                  || (baseNameOf path == "cabal.project.local" && type == "regular")
-                                  || (baseNameOf path == "dist" && type == "directory")
-                                  || (baseNameOf path == "dist-newstyle" && type == "directory")
-                                  || (baseNameOf path == "examples" && type == "directory")
-                                  || (baseNameOf path == "prelude" && type == "directory")
-                                  || (baseNameOf path == "website" && type == "directory")
-                                  );
+                                      pkgsNew.lib.cleanSourceFilter path type
+                                  &&  (!((pkgsNew.lib.hasPrefix "result" (baseNameOf path) && type == "symlink")
+                                      || (pkgsNew.lib.hasSuffix ".nix" (baseNameOf path) && type == "regular")
+                                      || (pkgsNew.lib.hasSuffix ".md" (baseNameOf path) && type == "regular")
+                                      || (baseNameOf path == "cabal.project.local" && type == "regular")
+                                      || (baseNameOf path == "dist" && type == "directory")
+                                      || (baseNameOf path == "dist-newstyle" && type == "directory")
+                                      || (baseNameOf path == "examples" && type == "directory")
+                                      || (baseNameOf path == "prelude" && type == "directory")
+                                      || (baseNameOf path == "website" && type == "directory")
+                                      ));
                               };
                         });
 
