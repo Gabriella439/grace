@@ -20,15 +20,24 @@ let
                     drv =
                       pkgsNew.haskell.lib.overrideCabal
                         haskellPackagesOld.grace
-                        (old: {;
+                        (old: {
                           doCheck = false;
+
                           src =
                             pkgsNew.lib.cleanSourceWith
                               { inherit (old) src;
+
                                 filter = path: type:
-                                     (baseNameOfPath path != "result" && type == "symlink")
-                                  || (baseNameOfPath path != "dist" && type == "directory")
-                                  || (baseNameOfPath path != "dist-newstyle" && type == "directory")
+                                  !( (pkgsNew.lib.hasPrefix "result" (baseNameOf path) && type == "symlink")
+                                  || (pkgsNew.lib.hasSuffix ".nix" (baseNameOf path) && type == "regular")
+                                  || (pkgsNew.lib.hasSuffix ".md" (baseNameOf path) && type == "regular")
+                                  || (baseNameOf path == "cabal.project.local" && type == "regular")
+                                  || (baseNameOf path == "dist" && type == "directory")
+                                  || (baseNameOf path == "dist-newstyle" && type == "directory")
+                                  || (baseNameOf path == "examples" && type == "directory")
+                                  || (baseNameOf path == "prelude" && type == "directory")
+                                  || (baseNameOf path == "website" && type == "directory")
+                                  );
                               };
                         });
 
@@ -99,7 +108,7 @@ let
       mkdir $out/{css,js}
       cp ${./website/index.html} $out/index.html
       cp ${./website/css/grace.css} $out/css/grace.css
-      ln --symbolic ${pkgsNew.twitterBootstrap}/css/bootstrap.min.css $out/js
+      ln --symbolic ${pkgsNew.twitterBootstrap}/css/bootstrap.min.css $out/css
       ln --symbolic ${pkgsNew.haskell.packages."${compiler}".grace}/bin/try-grace.jsexe/all.min.js $out/js
     '';
   };
