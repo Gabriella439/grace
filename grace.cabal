@@ -10,6 +10,7 @@ library
   hs-source-dirs:      src
 
   build-depends:       base
+                     , aeson
                      , Earley
                      , containers
                      , filepath
@@ -80,6 +81,28 @@ executable grace
 
   default-language:    Haskell2010
   if impl(ghcjs)
+    buildable:         False
+
+executable try-grace
+  main-is:             Main.hs
+
+  build-depends:       base
+                     , aeson
+                     , ghcjs-base
+                     , containers
+                     , grace
+                     , insert-ordered-containers
+                     , mtl
+                     , scientific
+                     , text
+                     , transformers
+
+  hs-source-dirs:      try-grace
+
+  ghc-options:         -Wall
+
+  default-language:    Haskell2010
+  if !impl(ghcjs)
     buildable:         False
 
 test-suite tasty

@@ -29,7 +29,13 @@ Note: For older versions of cabal (e.g. version <3), use `cabal new-build exe:gr
 You can also build this project using Nix:
 
 ```bash
-$ nix build
+$ nix build --file ./default.nix grace
+```
+
+… and you can build the live demo website for this project also using Nix:
+
+```bash
+$ nix build --file ./default.nix website --argstr compiler ghcjs
 ```
 
 ## Features

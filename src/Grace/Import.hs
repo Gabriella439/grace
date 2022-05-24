@@ -15,6 +15,8 @@ module Grace.Import
 import Control.Exception.Safe (Exception(..))
 import Data.Bifunctor (first)
 import Data.Foldable (foldl')
+import Data.HashMap.Strict (HashMap)
+import Data.IORef (IORef)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.String.Interpolate (__i)
 import Data.Text (Text)
@@ -27,6 +29,8 @@ import Text.URI (Authority)
 import Text.URI.QQ (host, scheme)
 
 import qualified Control.Exception.Safe as Exception
+import qualified Data.HashMap.Strict as HashMap
+import qualified Data.IORef as IORef
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text.IO
@@ -34,7 +38,26 @@ import qualified Grace.HTTP as HTTP
 import qualified Grace.Parser as Parser
 import qualified Grace.Pretty as Pretty
 import qualified System.Environment as Environment
+import qualified System.IO.Unsafe as Unsafe
 import qualified Text.URI as URI
+
+cache :: IORef (HashMap Text Text)
+cache = Unsafe.unsafePerformIO (IORef.newIORef HashMap.empty)
+{-# NOINLINE cache #-}
+
+fetch :: Manager -> Text -> IO Text
+fetch manager url = do
+    m <- IORef.readIORef cache
+
+    case HashMap.lookup url m of
+        Nothing -> do
+            body  <- HTTP.fetch manager url
+
+            IORef.writeIORef cache $! HashMap.insert url body m
+
+            return body
+        Just body -> do
+            return body
 
 -- | Resolve an `Input` by returning the source code that it represents
 resolve :: Manager -> Input -> IO (Syntax Location Input)
@@ -45,7 +68,7 @@ resolve manager input = case input of
 
             let handler e = throw (HTTPError e)
 
-            code <- Exception.handle handler (HTTP.fetch manager (Text.pack name))
+            code <- Exception.handle handler (fetch manager (Text.pack name))
 
             result <- case Parser.parse name code of
                 Left e -> Exception.throw e
