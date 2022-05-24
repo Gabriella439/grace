@@ -174,11 +174,11 @@ renderValue _ parent _ value@Variable{} = do
     replaceChild parent var
 
 renderValue _ parent _ (Value.Scalar (Text text))= do
-    p <- createElement "p"
+    span <- createElement "span"
 
-    setTextContent p (JSString.pack (Text.unpack text))
+    setTextContent span (JSString.pack (Text.unpack text))
 
-    replaceChild parent p
+    replaceChild parent span
 
 renderValue _ parent _ (Value.Scalar (Bool bool)) = do
     input <- createElement "input"
@@ -290,8 +290,6 @@ renderValue ref parent Type.Function{ input, output } function = do
         Nothing -> do
             renderDefault parent function
         Just (inputVal, get) -> do
-            hr <- createElement "hr"
-
             outputVal <- createElement "div"
 
             let invoke = do
@@ -309,7 +307,7 @@ renderValue ref parent Type.Function{ input, output } function = do
 
             invoke
 
-            replaceChildren parent (Array.fromList [ inputVal, hr, outputVal ])
+            replaceChildren parent (Array.fromList [ inputVal, outputVal ])
 
 renderValue _ parent _ value = do
     renderDefault parent value
