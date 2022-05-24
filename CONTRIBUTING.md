@@ -44,6 +44,30 @@ Generally speaking, if you're not sure where to begin then start by identifying
 the most closely-related language feature and searching the codebase for all
 occurrences of the matching constructor in the [`Syntax`][syntax] tree.
 
+## GHCJS instructions
+
+If you want to make changes to the website you will need to build using GHCJS,
+which entails the following commands:
+
+```bash
+$ nix-shell --argstr compiler ghcjs
+[nix-shell]$ cabal v1-configure --ghcjs --disable-tests
+[nix-shell]$ cabal v1-build
+```
+
+… and if you want to test the website, then run the following additional
+command after each build:
+
+```bash
+[nix-shell]$ cp dist/build/try-grace/try-grace.jsexe/all.js website/js/all.min.js
+```
+
+… and then open [`./website/index.html`](./website/index.html) in your
+browser.
+
+The test suite will not work and also `ghcid` will not work when developing
+using GHCJS.  Also, the build will be much slower.
+
 ## Adding a new built-in function
 
 To add a new built-in function, edit the [`Syntax`][syntax] module to add a new
