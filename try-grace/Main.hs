@@ -690,7 +690,21 @@ main = do
     output <- getElementById "output"
     error  <- getElementById "error"
 
+    spinner <- createElement "div"
+
+    setAttribute spinner "class" "spinner-border text-primary"
+    setAttribute spinner "role"  "status"
+
     params <- getSearchParams
+
+    exists <- hasParam params "expression"
+
+    Monad.when exists do
+        expression <- getParam params "expression"
+
+        setTextContent input (URI.Encode.decodeText expression)
+
+        replaceChild error spinner
 
     ref <- IORef.newIORef 0
 
@@ -705,11 +719,6 @@ main = do
 
             setDisplay error  "none"
             setDisplay output "block"
-
-    spinner <- createElement "div"
-
-    setAttribute spinner "class" "spinner-border text-primary"
-    setAttribute spinner "role"  "status"
 
     let interpret = do
             text <- getValue input
@@ -737,11 +746,5 @@ main = do
 
     addEventListener input "input" callback
 
-    exists <- hasParam params "expression"
-
     Monad.when exists do
-        expression <- getParam params "expression"
-
-        setTextContent input (URI.Encode.decodeText expression)
-
         interpret
