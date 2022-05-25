@@ -706,6 +706,11 @@ main = do
             setDisplay error  "none"
             setDisplay output "block"
 
+    spinner <- createElement "div"
+
+    setAttribute spinner "class" "spinner-border text-primary"
+    setAttribute spinner "role"  "status"
+
     let interpret = do
             text <- getValue input
 
@@ -718,7 +723,7 @@ main = do
                 | otherwise -> do
                     let input_ = Code "(input)" text
 
-                    setError "…"
+                    replaceChild error spinner
 
                     result <- Except.runExceptT (Interpret.interpret input_)
 
