@@ -10,7 +10,7 @@ library
   hs-source-dirs:      src
 
   build-depends:       base
-                     , aeson
+                     , aeson < 2.0
                      , Earley
                      , containers
                      , filepath
