@@ -15,22 +15,19 @@ module Grace.HTTP
 
 import Control.Exception (Exception(..))
 import Data.Text (Text)
+import GHCJS.Fetch (Request(..), JSPromiseException)
 
-import qualified Control.Exception as Exception
+import qualified Data.JSString as JSString
 import qualified Data.Text as Text
-import qualified JavaScript.XHR as XHR
+import qualified GHCJS.Fetch as Fetch
 
 {-| The GHCJS implementation of HTTP requests doesn't require a real `Manager`
     so this supplies an empty placeholder
 -}
 type Manager = ()
 
--- | Exception type thrown by `fetch` in the event of any failure
-data HttpException = UnexpectedStatusCode Int
-    deriving stock (Show)
-
-instance Exception HttpException where
-    displayException = Text.unpack . renderError
+-- | An `HttpException` is just a type synonym for a `JSPromiseException`
+type HttpException = JSPromiseException
 
 {-| Acquire a new `Manager`
 
@@ -47,13 +44,17 @@ fetch
     -> IO Text
     -- ^ Response body
 fetch _manager url = do
-    (statusCode, body) <- XHR.get url
+    let request = Request
+            { reqUrl = JSString.pack (Text.unpack url)
+            , reqOptions = Fetch.defaultRequestOptions
+            }
 
-    case statusCode of
-        200 -> return body
-        _   -> Exception.throwIO (UnexpectedStatusCode statusCode)
+    response <- Fetch.fetch request
+
+    jsString <- Fetch.responseText response
+
+    return (Text.pack (JSString.unpack jsString))
 
 -- | Render an `HttpException` as `Text`
 renderError :: HttpException -> Text
-renderError (UnexpectedStatusCode code) =
-    "Non-200 status code: " <> Text.pack (show code)
+renderError = Text.pack . displayException

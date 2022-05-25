@@ -15,6 +15,13 @@ let
               oldOverrides = old.overrides or (_: _: {});
 
               manualOverrides = haskellPackagesNew: haskellPackagesOld: {
+                ghcjs-fetch =
+                  pkgsNew.haskell.lib.addBuildDepend
+                    (pkgsNew.haskell.lib.doJailbreak
+                      (pkgsNew.haskell.lib.dontCheck haskellPackagesOld.ghcjs-fetch)
+                    )
+                    [ haskellPackagesNew.ghcjs-base ];
+
                 grace =
                   let
                     drv =

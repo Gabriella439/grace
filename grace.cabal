@@ -57,7 +57,7 @@ library
   if impl(ghcjs)
     hs-source-dirs:    ghcjs
     build-depends:     ghcjs-base
-                     , ghcjs-xhr
+                     , ghcjs-fetch
   else
     hs-source-dirs:    ghc
     build-depends:     ansi-terminal
