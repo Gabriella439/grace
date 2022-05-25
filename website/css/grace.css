@@ -21,6 +21,10 @@ code {
   vertical-align: top !important;
 }
 
+.form-check {
+  display: inline-block !important;
+}
+
 .form-check-label {
   vertical-align: top;
 }
