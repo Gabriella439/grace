@@ -11,12 +11,14 @@ code {
 }
 
 .form-control {
-  width: auto;
-  display: inline;
+  width: auto !important;
+  display: inline !important;
+  font-family: monospace !important;
 }
 
 .btn {
-  font-family: monospace;
+  font-family: monospace !important;
+  vertical-align: top !important;
 }
 
 .form-check-label {
@@ -26,4 +28,8 @@ code {
 dt {
   font-family: monospace;
   border-right: solid;
+}
+
+li {
+  margin: 1px;
 }

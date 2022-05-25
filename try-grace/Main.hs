@@ -623,6 +623,10 @@ renderInput ref Type.List{ type_ } = do
 
     setTextContent plus "+"
 
+    add <- createElement "li"
+
+    replaceChild add plus
+
     childrenRef <- liftIO (IORef.newIORef IntMap.empty)
 
     insert <- (liftIO . Callback.asyncCallback) do
@@ -658,15 +662,13 @@ renderInput ref Type.List{ type_ } = do
 
         replaceChildren li (Array.fromList [ minus, span, elementVal ])
 
-        before plus li
+        before add li
 
     addEventListener plus "click" insert
 
-    add <- createElement "li"
-
-    replaceChild add plus
-
     ul <- createElement "ul"
+
+    setAttribute ul "class" "list-unstyled"
 
     replaceChild ul add
 
