@@ -1,4 +1,4 @@
-Unbound variable: [0mx[0m
+Unbound variable: x
 
 tasty/data/error/type/unbound-input.ffg:1:1: 
   │

@@ -3,7 +3,7 @@ Must merge a concrete record
 The first argument to a merge expression must be a record where all fields are
 statically known.  However, you provided an argument of type:
 
-  [0;32;1m{[0m [0m[0mc[0m?[0m [0;32;1m}[0m
+  { c? }
 
 tasty/data/error/type/abstract-merge-input.ffg:1:13: 
   │

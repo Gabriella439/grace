@@ -2,7 +2,7 @@ Union type mismatch
 
 The following union type:
 
-  [0;32;1m<[0m [0mRight[0m[0;32;1m:[0m [0;4mBool[0m [0;32;1m|[0m [0m[0me[0m?[0m [0;32;1m>[0m
+  < Right: Bool | e? >
 
 tasty/data/error/type/alternatives-variable-input.ffg:2:44: 
   │
@@ -11,7 +11,7 @@ tasty/data/error/type/alternatives-variable-input.ffg:2:44:
 
 … is not a subtype of the following union type:
 
-  [0;32;1m<[0m [0mLeft[0m[0;32;1m:[0m [0;4mNatural[0m [0;32;1m|[0m [0ma[0m [0;32;1m>[0m
+  < Left: Natural | a >
 
 tasty/data/error/type/alternatives-variable-input.ffg:1:40: 
   │

@@ -2,7 +2,7 @@ Record type mismatch
 
 The following record type:
 
-  [0;32;1m{[0m [0ma[0m [0;32;1m}[0m
+  { a }
 
 tasty/data/error/type/pin-fields-variable-input.ffg:3:31: 
   │
@@ -11,7 +11,7 @@ tasty/data/error/type/pin-fields-variable-input.ffg:3:31:
 
 … is not a subtype of the following record type:
 
-  [0;32;1m{[0m [0mx[0m[0;32;1m:[0m [0;4mBool[0m[0;32;1m,[0m [0ma[0m [0;32;1m}[0m
+  { x: Bool, a }
 
 tasty/data/error/type/pin-fields-variable-input.ffg:3:40: 
   │

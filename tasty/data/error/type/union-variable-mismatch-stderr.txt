@@ -2,7 +2,7 @@ Not a union subtype
 
 The following type:
 
-  [0;32;1m<[0m [0mb[0m [0;32;1m>[0m
+  < b >
 
 tasty/data/error/type/union-variable-mismatch-input.ffg:1:74: 
   │
@@ -11,7 +11,7 @@ tasty/data/error/type/union-variable-mismatch-input.ffg:1:74:
 
 … cannot be a subtype of:
 
-  [0;32;1m<[0m [0ma[0m [0;32;1m>[0m
+  < a >
 
 tasty/data/error/type/union-variable-mismatch-input.ffg:1:83: 
   │

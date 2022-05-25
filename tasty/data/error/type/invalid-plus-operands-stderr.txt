@@ -2,7 +2,7 @@ Invalid operands
 
 You cannot add values of type:
 
-  [0;4mBool[0m
+  Bool
 
 tasty/data/error/type/invalid-plus-operands-input.ffg:2:1: 
   │

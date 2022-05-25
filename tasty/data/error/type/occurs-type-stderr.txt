@@ -2,7 +2,7 @@ Not a subtype
 
 The following type:
 
-  [0m[0mc[0m?[0m [0;32;1m->[0m [0m[0md[0m?[0m
+  c? -> d?
 
 tasty/data/error/type/occurs-type-input.ffg:2:2: 
   │
@@ -11,7 +11,7 @@ tasty/data/error/type/occurs-type-input.ffg:2:2:
 
 … cannot be a subtype of:
 
-  [0m[0mc[0m?[0m
+  c?
 
 tasty/data/error/type/occurs-type-input.ffg:2:2: 
   │
