@@ -53,13 +53,13 @@ foreign import javascript unsafe "document.getElementById($1)"
     getElementById_ :: JSString -> IO JSVal
 
 getElementById :: Text -> IO JSVal
-getElementById a = getElementById_ (JSString.pack (Text.unpack a))
+getElementById a = getElementById_ (fromText a)
 
 foreign import javascript unsafe "$1.value"
     getValue_ :: JSVal -> IO JSString
 
 getValue :: MonadIO io => JSVal -> io Text
-getValue a = liftIO (fmap (Text.pack . JSString.unpack) (getValue_ a))
+getValue a = liftIO (fmap toText (getValue_ a))
 
 getIntegerValue :: MonadIO io => JSVal -> io Integer
 getIntegerValue a = liftIO (fmap (read . JSString.unpack) (getValue_ a))
@@ -80,31 +80,31 @@ foreign import javascript unsafe "$1.textContent= $2"
     setTextContent_ :: JSVal -> JSString -> IO ()
 
 setTextContent :: MonadIO io => JSVal -> Text -> io ()
-setTextContent a b = liftIO (setTextContent_ a (JSString.pack (Text.unpack b)))
+setTextContent a b = liftIO (setTextContent_ a (fromText b))
 
 foreign import javascript unsafe "$1.style.display = $2"
     setDisplay_ :: JSVal -> JSString -> IO ()
 
 setDisplay :: MonadIO io => JSVal -> Text -> io ()
-setDisplay a b = liftIO (setDisplay_ a (JSString.pack (Text.unpack b)))
+setDisplay a b = liftIO (setDisplay_ a (fromText b))
 
 foreign import javascript unsafe "$1.addEventListener($2, $3)"
     addEventListener_ :: JSVal -> JSString -> Callback (IO ()) -> IO ()
 
-addEventListener :: MonadIO io => JSVal -> JSString -> Callback (IO ()) -> io ()
-addEventListener a b c = liftIO (addEventListener_ a b c)
+addEventListener :: MonadIO io => JSVal -> Text -> Callback (IO ()) -> io ()
+addEventListener a b c = liftIO (addEventListener_ a (fromText b) c)
 
 foreign import javascript unsafe "document.createElement($1)"
     createElement_ :: JSString -> IO JSVal
 
-createElement :: MonadIO io => JSString -> io JSVal
-createElement a = liftIO (createElement_ a)
+createElement :: MonadIO io => Text -> io JSVal
+createElement a = liftIO (createElement_ (fromText a))
 
 foreign import javascript unsafe "$1.setAttribute($2,$3)"
     setAttribute_ :: JSVal -> JSString -> JSString -> IO ()
 
-setAttribute :: MonadIO io => JSVal -> JSString -> JSString -> io ()
-setAttribute a b c = liftIO (setAttribute_ a b c)
+setAttribute :: MonadIO io => JSVal -> Text -> Text -> io ()
+setAttribute a b c = liftIO (setAttribute_ a (fromText b) (fromText c))
 
 foreign import javascript unsafe "$1.replaceChildren($2)"
     replaceChild_ :: JSVal -> JSVal -> IO ()
@@ -134,21 +134,20 @@ foreign import javascript unsafe "$1.has($2)"
     hasParam_ :: JSVal -> JSString -> IO Bool
 
 hasParam :: MonadIO io => JSVal -> Text -> io Bool
-hasParam a b = liftIO (hasParam_ a (JSString.pack (Text.unpack b)))
+hasParam a b = liftIO (hasParam_ a (fromText b))
 
 foreign import javascript unsafe "$1.get($2)"
     getParam_ :: JSVal -> JSString -> IO JSString
 
 getParam :: MonadIO io => JSVal -> Text -> io Text
-getParam a b =
-    liftIO (fmap (Text.pack . JSString.unpack) (getParam_ a (JSString.pack (Text.unpack b))))
+getParam a b = liftIO (fmap toText (getParam_ a (fromText b)))
 
 foreign import javascript unsafe "$1.set($2,$3)"
     setParam_ :: JSVal -> JSString -> JSString -> IO ()
 
 setParam :: MonadIO io => JSVal -> Text -> Text -> io ()
 setParam a b c =
-    liftIO (setParam_ a (JSString.pack (Text.unpack b)) (JSString.pack (Text.unpack c)))
+    liftIO (setParam_ a (fromText b) (fromText c))
 
 foreign import javascript unsafe "history.replaceState(null, null, '?'+$1.toString())"
   saveSearchParams_ :: JSVal -> IO ()
@@ -171,6 +170,12 @@ foreign import javascript unsafe "$1.before($2)"
 
 foreign import javascript unsafe "$1.remove()"
     remove :: JSVal -> IO ()
+
+toText :: JSString -> Text
+toText = Text.pack . JSString.unpack
+
+fromText :: Text -> JSString
+fromText = JSString.pack . Text.unpack
 
 valueToText :: Value -> Text
 valueToText = Pretty.renderStrict False 80 . Normalize.quote []
@@ -526,11 +531,9 @@ renderInput ref Type.Union{ alternatives = Type.Alternatives keyTypes _ }
 
                 input <- createElement "input"
 
-                let keyString = JSString.pack (Text.unpack key)
+                let name = "radio" <> Text.pack (show n)
 
-                let name = "radio" <> JSString.pack (show n)
-
-                let id = name <> "-" <> keyString
+                let id = name <> "-" <> key
 
                 setAttribute input "class" "form-check-input"
                 setAttribute input "type"  "radio"
