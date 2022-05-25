@@ -283,6 +283,14 @@ renderValue ref parent outer (Value.Record keyValues) = do
 
             setAttribute dt "class" "col-auto"
 
+            case value of
+                Value.Record kvs | HashMap.null kvs -> do
+                    mempty
+                Value.List xs | Seq.null xs -> do
+                    mempty
+                _ -> do
+                    setAttribute dt "style" "border-right: solid;"
+
             setTextContent dt key
 
             dd <- createElement "dd"
