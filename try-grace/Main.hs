@@ -399,6 +399,7 @@ renderInput _ Type.Scalar{ scalar = Monotype.Bool } = do
     span <- createElement "span"
 
     setAttribute span "class" "form-check"
+    setAttribute span "style" "display: inline-block !important;"
 
     replaceChild span input
 
