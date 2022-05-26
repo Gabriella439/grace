@@ -94,6 +94,7 @@ executable try-grace
                      , insert-ordered-containers
                      , mtl
                      , scientific
+                     , string-interpolate
                      , text
                      , transformers
                      , uri-encode
