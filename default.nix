@@ -89,7 +89,7 @@ let
       mkdir -p $out/prelude
       ${pkgsNew.rsync}/bin/rsync --archive ${./website}/ $out
       ${pkgsNew.rsync}/bin/rsync --archive ${./prelude}/ $out/prelude
-      chmod u+w $out/js
+      chmod -R u+w $out
       cp ${pkgsNew.haskell.packages."${compiler}".grace}/bin/try-grace.jsexe/all.min.js $out/js
     '';
   };
