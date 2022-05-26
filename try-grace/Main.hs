@@ -58,19 +58,19 @@ getElementById :: Text -> IO JSVal
 getElementById a = getElementById_ (fromText a)
 
 foreign import javascript unsafe "$1.value"
-    getValue_ :: JSVal -> IO JSString
+    toValue_ :: JSVal -> IO JSString
 
-getValue :: MonadIO io => JSVal -> io Text
-getValue a = liftIO (fmap toText (getValue_ a))
+toValue :: MonadIO io => JSVal -> io Text
+toValue a = liftIO (fmap toText (toValue_ a))
 
-getIntegerValue :: MonadIO io => JSVal -> io Integer
-getIntegerValue a = liftIO (fmap (read . JSString.unpack) (getValue_ a))
+toIntegerValue :: MonadIO io => JSVal -> io Integer
+toIntegerValue a = liftIO (fmap (read . JSString.unpack) (toValue_ a))
 
 foreign import javascript unsafe "$1.value"
-    getDoubleValue_ :: JSVal -> IO Double
+    toDoubleValue_ :: JSVal -> IO Double
 
-getDoubleValue :: MonadIO io => JSVal -> io Double
-getDoubleValue a = liftIO (getDoubleValue_ a)
+toDoubleValue :: MonadIO io => JSVal -> io Double
+toDoubleValue a = liftIO (toDoubleValue_ a)
 
 foreign import javascript unsafe "$1.checked"
     getChecked_ :: JSVal -> IO Bool
@@ -168,10 +168,40 @@ replaceChildren :: MonadIO io => JSVal -> JSArray -> io ()
 replaceChildren a b = liftIO (replaceChildren_ a b)
 
 foreign import javascript unsafe "$1.before($2)"
-    before :: JSVal -> JSVal -> IO ()
+    before_ :: JSVal -> JSVal -> IO ()
+
+before :: MonadIO io => JSVal -> JSVal -> io ()
+before a b = liftIO (before_ a b)
 
 foreign import javascript unsafe "$1.remove()"
-    remove :: JSVal -> IO ()
+    remove_ :: JSVal -> IO ()
+
+remove :: MonadIO io => JSVal -> io ()
+remove a = liftIO (remove_ a)
+
+foreign import javascript unsafe "CodeMirror.fromTextArea($1, { lineNumbers: true, mode: 'python' })"
+    setupCodemirror_ :: JSVal -> IO JSVal
+
+setupCodemirror :: MonadIO io => JSVal -> io JSVal
+setupCodemirror a = liftIO (setupCodemirror_ a)
+
+foreign import javascript unsafe "$1.on('change', $2)"
+    onChange_ :: JSVal -> Callback (IO ()) -> IO ()
+
+onChange :: MonadIO io => JSVal -> Callback (IO ()) -> io ()
+onChange a b = liftIO (onChange_ a b)
+
+foreign import javascript unsafe "$1.setValue($2)"
+    setValue_ :: JSVal -> JSString -> IO ()
+
+setValue :: MonadIO io => JSVal -> Text -> io ()
+setValue a b = liftIO (setValue_ a (fromText b))
+
+foreign import javascript unsafe "$1.getValue()"
+    getValue_ :: JSVal -> IO JSString
+
+getValue :: MonadIO io => JSVal -> io Text
+getValue a = liftIO (fmap toText (getValue_ a))
 
 toText :: JSString -> Text
 toText = Text.pack . JSString.unpack
@@ -420,7 +450,7 @@ renderInput _ Type.Scalar{ scalar = Monotype.Real } = do
     setAttribute input "value" "0"
 
     let get = do
-            double <- getDoubleValue input
+            double <- toDoubleValue input
 
             return (Value.Scalar (Real (Scientific.fromFloatDigits double)))
 
@@ -433,7 +463,7 @@ renderInput _ Type.Scalar{ scalar = Monotype.Integer } = do
     setAttribute input "value" "0"
 
     let get = do
-            integer <- getIntegerValue input
+            integer <- toIntegerValue input
 
             return (Value.Scalar (Integer integer))
 
@@ -447,7 +477,7 @@ renderInput _ Type.Scalar{ scalar = Monotype.Natural } = do
     setAttribute input "min"   "0"
 
     let get = do
-            integer <- getIntegerValue input
+            integer <- toIntegerValue input
 
             return (Value.Scalar (Natural (fromInteger integer)))
 
@@ -459,7 +489,7 @@ renderInput _ Type.Scalar{ scalar = Monotype.JSON } = do
     setAttribute input "value" "null"
 
     let get = do
-            strictText <- getValue input
+            strictText <- toValue input
 
             let lazyText = Text.Lazy.fromStrict strictText
 
@@ -480,7 +510,7 @@ renderInput _ Type.Scalar{ scalar = Monotype.Text } = do
     textarea <- createElement "textarea"
 
     let get = do
-            text <- getValue textarea
+            text <- toValue textarea
 
             return (Value.Scalar (Text text))
 
@@ -705,6 +735,8 @@ main = do
     error    <- getElementById "error"
     tutorial <- getElementById "tutorial"
 
+    codeInput <- setupCodemirror input
+
     spinner <- createElement "div"
 
     setAttribute spinner "class" "spinner-border text-primary"
@@ -717,7 +749,7 @@ main = do
     Monad.when exists do
         expression <- getParam params "expression"
 
-        setTextContent input (URI.Encode.decodeText expression)
+        setValue codeInput (URI.Encode.decodeText expression)
 
         replaceChild error spinner
 
@@ -736,13 +768,15 @@ main = do
             setDisplay output "block"
 
     let interpret = do
-            text <- getValue input
+            text <- getValue codeInput
 
             setParam params "expression" (URI.Encode.encodeText text)
 
             saveSearchParams params
 
             if  | Text.null text -> do
+                    setDisplay tutorial "inline-block"
+
                     setError ""
 
                 | otherwise -> do
@@ -762,12 +796,10 @@ main = do
 
     inputCallback <- Callback.asyncCallback interpret
 
-    addEventListener input "input" inputCallback
+    onChange codeInput inputCallback
 
     tutorialCallback <- Callback.asyncCallback do
-        setTextContent input tutorialText
-
-        setAttribute input "style" "width: 100%; max-width: 100%; height: 20em;"
+        setValue codeInput tutorialText
 
         interpret
 
@@ -778,8 +810,7 @@ main = do
 
 tutorialText :: Text
 tutorialText = [Interpolate.i|\# This is an interactive tutorial for the Fall-from-Grace language (a.k.a.
-\# "Grace" for short).  Feel free to make this text area larger so that you can
-\# more easily read the code.
+\# "Grace" for short).
 \#
 \# This is not a complete tour of the Grace language, but rather just enough of a
 \# tour to pique your interest.

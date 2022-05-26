@@ -9,17 +9,20 @@
 <meta name="twitter:description" content="Live demo for the Fall-from-Grace functional programming language" />
 <link rel="stylesheet" href="./css/grace.css">
 <link rel="stylesheet" href="./css/bootstrap.min.css">
+<link rel="stylesheet" href="./css/codemirror.css">
 </head>
 <body>
 <div class="container">
 <h1 class="display-4">Grace browser</h1>
-<div style="width: 100%;"><textarea placeholder="Enter any Fall-from-Grace expression" style="width: 100%; max-width: 100%;" id="input" cols=80></textarea></div>
+<div style="width: 100%;"><textarea style="width: 100%; max-width: 100%;" id="input" cols=80></textarea></div>
 <br/>
 <div id="output"></div>
 <pre id="error"></pre>
 <button id="tutorial" type="button" class="btn btn-primary">Try the tutorial</button>
 </div>
 </body>
+<script language="javascript" src="js/codemirror.js"></script>
+<script language="javascript" src="js/python.js"></script>
 <script>
 function replaceChildrenWorkaround(x, y) {
     x.replaceChildren(...y)
