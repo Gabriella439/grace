@@ -815,7 +815,8 @@ main = do
 
                     replaceChild error spinner
 
-                    setDisplay error "block"
+                    setDisplay output "none"
+                    setDisplay error  "block"
 
                     result <- Except.runExceptT (Interpret.interpret input_)
 
