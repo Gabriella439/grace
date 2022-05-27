@@ -903,6 +903,8 @@ main = do
 
             prelude <- createExample False "Prelude" preludeExample
 
+            conclusion <- createExample False "Conclusion" conclusionExample
+
             setAttribute ul "class" "nav nav-tabs"
 
             replaceChildren ul
@@ -916,6 +918,7 @@ main = do
                     , polymorphism
                     , builtins
                     , prelude
+                    , conclusion
                     ]
                 )
 
@@ -956,6 +959,9 @@ helloWorldExample =
     \# Second, any change you make to this editable code area will show up\n\
     \# below.  Try editing the string \"Hello, world!\" below to replace\n\
     \# \"world\" with your name.\n\
+    \#\n\
+    \# Once you are done, click on the \"HTML\" tab above to proceed to the\n\
+    \# next example.\n\
     \\n\
     \\"Hello, world!\""
 
@@ -963,30 +969,33 @@ checkboxesExample :: Text
 checkboxesExample =
     "# This Grace browser attempts to faithfully render any Grace expression\n\
     \# as an equivalent HTML representation.  For example, a list of boolean\n\
-    \# values such as these will render as an HTML list of checkboxes.\n\
+    \# values such as these will render as an HTML list of checkboxes:\n\
     \\n\
-    \# Try adding another false value to the list.\n\
+    \[ true, false, true ]\n\
     \\n\
-    \[ true, false, true ]"
+    \# Try adding another false value to the above list."
 
 functionExample :: Text
 functionExample =
     "# This Grace browser really attempts to faithfully render ANY Grace\n\
     \# expression, including functions.  For example, the following function\n\
-    \# takes an integer as input and returns the next integer as the result,\n\
-    \# so this demo renders that as a web form with a numeric input and a\n\
-    \# numeric output\n\
+    \# takes an integer (n) as input and returns the next integer (n + 1) as\n\
+    \# the function's output:\n\
+    \\n\
+    \\\n -> n + 1\n\
+    \\n\
+    \# … so this demo renders that as a web form with a numeric input and a\n\
+    \# numeric output.\n\
     \#\n\
     \# Do not edit the code this time.  Instead, enter a number into the\n\
-    \# input field and watch the output update in response.\n\
-    \\n\
-    \\\x -> x + 1"
+    \# input field below and watch the output update in response."
 
 importExample :: Text
 importExample =
     "# You can reference other Grace expressions by their URL.  For example,\n\
     \# the following URL encodes a function for computing US federal income\n\
-    \# tax for 2022.\n\
+    \# tax for 2022:\n\
+    \\n\
     \https://gist.githubusercontent.com/Gabriella439/712d0648bbdcfcc83eadd0ee394beed3/raw/1b03f661577521b4d3dc6ca73dd11475a30c1594/incomeTax.ffg"
 
 jsonExample :: Text
@@ -994,13 +1003,16 @@ jsonExample =
     "# Grace is a superset of JSON, so the Grace browser is also a JSON\n\
     \# browser.\n\
     \\n\
-    \{ # Strongly-typed JSON requires no type annotation\n\
+    \{ # \"Strongly typed\" JSON requires no type annotation\n\
     \  \"Sensible JSON\": [ { \"Name\": \"John Doe\" , \"Grade\": 95 }\n\
     \                   , { \"Name\": \"Mary Jane\", \"Grade\": 98 }\n\
     \                   ]\n\
-    \  # Weakly-typed JSON requires a type annotation\n\
-    \, \"Weird JSON\": [ 1, true, { } ] : JSON\n\
+    \\n\
+    \, # \"Weakly typed\" JSON requires a type annotation\n\
+    \  \"Weird JSON\": [ 1, true, { } ] : JSON\n\
+    \\n\
     \, \"GitHub API\": https://api.github.com\n\
+    \\n\
     \, \"Reddit API\": https://reddit.com/r/haskell.json : JSON\n\
     \}"
 
@@ -1016,6 +1028,8 @@ programmingExample =
     \          , privateKey: privateKey\n\
     \          , publicKey: publicKey\n\
     \          }\n\
+    \\n\
+    \    # Try adding another user to this list\n\
     \in  [ makeUser \"bill\"\n\
     \    , makeUser \"jane\"\n\
     \    ]"
@@ -1026,17 +1040,20 @@ polymorphismExample =
     \let twice : forall (a : Type) . a -> List a\n\
     \          = \\x -> [ x, x ]\n\
     \\n\
-    \in  { \"Nested lists\": twice (twice (twice (twice 2)))\n\
+    \in  { \"Nested lists\": twice (twice (twice 2))\n\
     \\n\
     \      # If you try to render a polymorphic function, it will render as a\n\
     \      # function that accepts JSON input:\n\
-    \    , \"Duplicate JSON input\": twice\n\
+    \    , \"Input any JSON value\": twice\n\
     \    }"
 
 builtinsExample :: Text
 builtinsExample =
     "# Grace has a limited number of built-in functions, and you can\n\
-    \# test-drive them below:\n\
+    \# test-drive them below.\n\
+    \#\n\
+    \# Note: Not all functions can be rendered, and when that happens the\n\
+    \# Grace browser falls back to rendering the function as code.\n\
     \\n\
     \{ \"Real/equal\": Real/equal\n\
     \, \"Real/lessThan\": Real/lessThan\n\
@@ -1080,3 +1097,20 @@ preludeExample =
     \    , \"negative\": negative\n\
     \    , \"The entire Prelude\": prelude\n\
     \    }"
+
+conclusionExample :: Text
+conclusionExample =
+    "# Feel free to play with the Grace browser as much as you want.  All of\n\
+    \# this runs client-side (in your Browser), so this is cheap to host.\n\
+    \#\n\
+    \# You can easily fork Grace to customize the language to your liking by\n\
+    \# visiting:\n\
+    \#\n\
+    \#     https://github.com/Gabriella439/grace#grace\n\
+    \#\n\
+    \# You can even host your own interactive browser just like this one for\n\
+    \# your own custom language.\n\
+    \\\input ->\n\
+    \    if input.\"Do you want to build your own language?\"\n\
+    \    then \"Fork Grace on GitHub!\"\n\
+    \    else \"Have fun using the Grace browser!\""
