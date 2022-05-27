@@ -2,7 +2,6 @@
 {-# LANGUAGE BlockArguments     #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE OverloadedStrings  #-}
-{-# LANGUAGE QuasiQuotes        #-}
 {-# LANGUAGE RecordWildCards    #-}
 {-# LANGUAGE TypeApplications   #-}
 
@@ -36,14 +35,13 @@ import Control.Exception.Safe (Exception(..))
 import Control.Monad.Combinators (many, manyTill, sepBy1)
 import Data.HashSet (HashSet)
 import Data.List.NonEmpty (NonEmpty(..))
+import Data.Maybe (fromJust)
 import Data.Scientific (Scientific)
-import Data.String.Interpolate (__i)
 import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Location (Location(..), Offset(..))
 import Prelude hiding (lex)
 import Text.Megaparsec (ParseErrorBundle(..), try, (<?>))
-import Text.URI.QQ (scheme)
 
 import qualified Control.Monad as Monad
 import qualified Control.Monad.Combinators as Combinators
@@ -227,11 +225,7 @@ uri = (lexeme . try) do
     u <- URI.parser
 
     let schemes =
-            [ [scheme|https|]
-            , [scheme|http|]
-            , [scheme|env|]
-            , [scheme|file|]
-            ]
+            map (fromJust . URI.mkScheme) [ "https", "http", "env", "file" ]
 
     if any (`elem` schemes) (URI.uriScheme u)
         then return (URI u)
@@ -257,9 +251,7 @@ text = lexeme do
                 Right (n, "") -> do
                     return (Text.singleton (Char.chr n))
                 _             -> do
-                    fail [__i|
-                    Internal error - invalid unicode escape sequence
-                    |]
+                    fail "Internal error - invalid unicode escape sequence"
 
     let escaped =
             Combinators.choice

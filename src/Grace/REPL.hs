@@ -1,7 +1,6 @@
 {-# LANGUAGE BlockArguments    #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes       #-}
 {-# LANGUAGE RecordWildCards   #-}
 
 -- | This module contains the implementation of the @grace repl@ subcommand
@@ -17,7 +16,6 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad.State (MonadState(..))
 import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
-import Data.String.Interpolate (__i)
 import Grace.Interpret (Input(..))
 import Grace.Lexer (reserved)
 import System.Console.Haskeline (Interrupt(..))
@@ -68,19 +66,18 @@ repl = do
                     liftIO (Pretty.renderIO True width IO.stdout (Pretty.pretty syntax <> "\n"))
 
     let help _string = do
-            liftIO (putStrLn [__i|
-                Type any expression to normalize it or use one of the following commands:
-                :help
-                    Print help text and describe options
-                :paste
-                    Start a multi-line input. Submit with <Ctrl-D>
-                :type EXPRESSION
-                    Infer the type of an expression
-                :let IDENTIFIER = EXPRESSION
-                    Assign an expression to a variable
-                :quit
-                    Exit the REPL
-            |])
+            liftIO (putStrLn
+                "Type any expression to normalize it or use one of the following commands:\n\
+                \:help\n\
+                \    Print help text and describe options\n\
+                \:paste\n\
+                \    Start a multi-line input. Submit with <Ctrl-D>\n\
+                \:type EXPRESSION\n\
+                \    Infer the type of an expression\n\
+                \:let IDENTIFIER = EXPRESSION\n\
+                \    Assign an expression to a variable\n\
+                \:quit\n\
+                \    Exit the REPL")
 
     let assignment string
             | (var, '=' : expr) <- break (== '=') string = do

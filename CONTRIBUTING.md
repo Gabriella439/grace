@@ -66,7 +66,7 @@ command after each build:
 browser.
 
 The test suite will not work and also `ghcid` will not work when developing
-using GHCJS.  Also, the build will be much slower.
+using GHCJS.
 
 ## Adding a new built-in function
 

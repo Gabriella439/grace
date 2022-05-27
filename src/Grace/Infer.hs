@@ -3,7 +3,6 @@
 {-# LANGUAGE MultiWayIf        #-}
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes       #-}
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE TypeApplications  #-}
 
@@ -36,7 +35,6 @@ import Control.Monad.Except (MonadError(..))
 import Control.Monad.State.Strict (MonadState)
 import Data.Foldable (traverse_)
 import Data.Sequence (ViewL(..))
-import Data.String.Interpolate (__i)
 import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Context (Context, Entry)
@@ -2097,433 +2095,407 @@ data TypeInferenceError
     deriving (Eq, Show)
 
 instance Exception TypeInferenceError where
-    displayException (IllFormedAlternatives location a0 _Γ) = [__i|
-        Internal error: Invalid context
+    displayException (IllFormedAlternatives location a0 _Γ) =
+        "Internal error: Invalid context\n\
+        \\n\
+        \The following unsolved alternatives variable:\n\
+        \\n\
+        \" <> insert (Context.UnsolvedAlternatives a0) <> "\n\
+        \\n\
+        \… is not well-formed within the following context:\n\
+        \\n\
+        \#{listToText _Γ}\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" location)
 
-        The following unsolved alternatives variable:
+    displayException (IllFormedFields location a0 _Γ) =
+        "Internal error: Invalid context\n\
+        \\n\
+        \The following unsolved fields variable:\n\
+        \\n\
+        \" <> insert (Context.UnsolvedFields a0) <> "\n\
+        \\n\
+        \… is not well-formed within the following context:\n\
+        \\n\
+        \" <> listToText _Γ <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" location)
 
-        #{insert (Context.UnsolvedAlternatives a0)}
+    displayException (IllFormedType location _A _Γ) =
+        "Internal error: Invalid context\n\
+        \\n\
+        \The following type:\n\
+        \\n\
+        \" <> insert _A <> "\n\
+        \\n\
+        \… is not well-formed within the following context:\n\
+        \\n\
+        \" <> listToText _Γ <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" location)
 
-        … is not well-formed within the following context:
+    displayException (InvalidOperands location _L') =
+        "Invalid operands\n\
+        \\n\
+        \You cannot add values of type:\n\
+        \\n\
+        \" <> insert _L' <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" location)
 
-        #{listToText _Γ}
+    displayException (MergeConcreteRecord location _R) =
+        "Must merge a concrete record\n\
+        \\n\
+        \The first argument to a merge expression must be a record where all fields are\n\
+        \statically known.  However, you provided an argument of type:\n\
+        \\n\
+        \" <> insert _R <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" location) <> "\n\
+        \\n\
+        \… where not all fields could be inferred."
 
-        #{Location.renderError "" location}
-        |]
+    displayException (MergeInvalidHandler location _A) =
+        "Invalid handler\n\
+        \\n\
+        \The merge keyword expects a record of handlers where all handlers are functions,\n\
+        \but you provided a handler of the following type:\n\
+        \\n\
+        \" <> insert _A <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" location) <> "\n\
+        \\n\
+        \… which is not a function type."
 
-    displayException (IllFormedFields location a0 _Γ) = [__i|
-        Internal error: Invalid context
+    displayException (MergeRecord location _R) =
+        "Must merge a record\n\
+        \\n\
+        \The first argument to a merge expression must be a record, but you provided an\n\
+        \expression of the following type:\n\
+        \\n\
+        \" <> insert _R <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" location) <> "\n\
+        \\n\
+        \… which is not a record type."
 
-        The following unsolved fields variable:
+    displayException (MissingAllAlternatives p0 _Γ) =
+        "Internal error: Invalid context\n\
+        \\n\
+        \The following unsolved alternatives variable:\n\
+        \\n\
+        \" <> insert (Context.UnsolvedAlternatives p0) <> "\n\
+        \\n\
+        \… cannot be instantiated because the alternatives variable is missing from the\n\
+        \context:\n\
+        \\n\
+        \" <> listToText _Γ
 
-        #{insert (Context.UnsolvedFields a0)}
+    displayException (MissingAllFields p0 _Γ) =
+        "Internal error: Invalid context\n\
+        \\n\
+        \The following unsolved fields variable:\n\
+        \\n\
+        \" <> insert (Context.UnsolvedFields p0) <> "\n\
+        \\n\
+        \… cannot be instantiated because the fields variable is missing from the\n\
+        \context:\n\
+        \\n\
+        \" <> listToText _Γ
 
-        … is not well-formed within the following context:
-
-        #{listToText _Γ}
-
-        #{Location.renderError "" location}
-        |]
-
-    displayException (IllFormedType location _A _Γ) = [__i|
-        Internal error: Invalid context
-
-        The following type:
-
-        #{insert _A}
-
-        … is not well-formed within the following context:
-
-        #{listToText _Γ}
-
-        #{Location.renderError "" location}
-        |]
-
-    displayException (InvalidOperands location _L') = [__i|
-        Invalid operands
-
-        You cannot add values of type:
-
-        #{insert _L'}
-
-        #{Location.renderError "" location}
-        |]
-
-    displayException (MergeConcreteRecord location _R) = [__i|
-        Must merge a concrete record
-
-        The first argument to a merge expression must be a record where all fields are
-        statically known.  However, you provided an argument of type:
-
-        #{insert _R}
-
-        #{Location.renderError "" location}
-
-        … where not all fields could be inferred.
-        |]
-
-    displayException (MergeInvalidHandler location _A) = [__i|
-        Invalid handler
-
-        The merge keyword expects a record of handlers where all handlers are functions,
-        but you provided a handler of the following type:
-
-        #{insert _A}
-
-        #{Location.renderError "" location}
-
-        … which is not a function type.
-        |]
-
-    displayException (MergeRecord location _R) = [__i|
-        Must merge a record
-
-        The first argument to a merge expression must be a record, but you provided an
-        expression of the following type:
-
-        #{insert _R}
-
-        #{Location.renderError "" location}
-
-        … which is not a record type.
-        |]
-
-    displayException (MissingAllAlternatives p0 _Γ) = [__i|
-        Internal error: Invalid context
-
-        The following unsolved alternatives variable:
-
-        #{insert (Context.UnsolvedAlternatives p0)}}
-
-        … cannot be instantiated because the alternatives variable is missing from the
-        context:
-
-        #{listToText _Γ}
-        |]
-
-    displayException (MissingAllFields p0 _Γ) = [__i|
-        Internal error: Invalid context
-
-        The following unsolved fields variable:
-
-        #{insert (Context.UnsolvedFields p0)}
-
-        … cannot be instantiated because the fields variable is missing from the
-        context:
-
-        #{listToText _Γ}
-        |]
-
-    displayException (MissingOneOfAlternatives locations p0 p1 _Γ) = [__i|
-        Internal error: Invalid context
-
-        One of the following alternatives variables:
-
-        #{listToText [Context.UnsolvedAlternatives p0, Context.UnsolvedAlternatives p1 ]}
-
-        … is missing from the following context:
-
-        #{listToText _Γ}
-
-        #{locations'}
-        |]
+    displayException (MissingOneOfAlternatives locations p0 p1 _Γ) =
+        "Internal error: Invalid context\n\
+        \\n\
+        \One of the following alternatives variables:\n\
+        \\n\
+        \" <> listToText [Context.UnsolvedAlternatives p0, Context.UnsolvedAlternatives p1 ] <> "\n\
+        \\n\
+        \… is missing from the following context:\n\
+        \\n\
+        \" <> listToText _Γ <> "\n\
+        \\n\
+        \" <> locations'
         where
-            locations' = Text.unlines (map (Location.renderError "") locations)
+            locations' =
+                Text.unpack (Text.unlines (map (Location.renderError "") locations))
 
-    displayException (MissingOneOfFields locations p0 p1 _Γ) = [__i|
-        Internal error: Invalid context
-
-        One of the following fields variables:
-
-        #{listToText [Context.UnsolvedFields p0, Context.UnsolvedFields p1 ]}
-
-        … is missing from the following context:
-
-        #{listToText _Γ}
-
-        #{locations'}
-        |]
+    displayException (MissingOneOfFields locations p0 p1 _Γ) =
+        "Internal error: Invalid context\n\
+        \\n\
+        \One of the following fields variables:\\n\
+        \\n\
+        \" <> listToText [Context.UnsolvedFields p0, Context.UnsolvedFields p1 ] <> "\n\
+        \\n\
+        \… is missing from the following context:\n\
+        \\n\
+        \" <> listToText _Γ <> "\n\
+        \\n\
+        \" <> locations'
         where
-            locations' = Text.unlines (map (Location.renderError "") locations)
+            locations' =
+                Text.unpack (Text.unlines (map (Location.renderError "") locations))
 
-    displayException (MissingVariable a _Γ) = [__i|
-        Internal error: Invalid context
+    displayException (MissingVariable a _Γ) =
+        "Internal error: Invalid context\n\
+        \\n\
+        \The following unsolved variable:\n\
+        \\n\
+        \" <> insert (Context.UnsolvedType a) <> "\n\
+        \\n\
+        \… cannot be solved because the variable is missing from the context:\n\
+        \\n\
+        \" <> listToText _Γ
 
-        The following unsolved variable:
+    displayException (NotFunctionType location _A) =
+        "Not a function type\n\
+        \\n\
+        \An expression of the following type:\n\
+        \\n\
+        \" <> insert _A <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" location) <> "\n\
+        \\n\
+        \… was invoked as if it were a function, but the above type is not a function\n\
+        \type."
 
-        #{insert (Context.UnsolvedType a)}
+    displayException (NotNecessarilyFunctionType location a) =
+        "Not necessarily a function type\n\
+        \\n\
+        \The following type variable:\n\
+        \\n\
+        \" <> insert a <> "\n\
+        \\n\
+        \… could potentially be any type and is not necessarily a function type.\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" location)
 
-        … cannot be solved because the variable is missing from the context:
+    displayException (NotAlternativesSubtype location p0 alternatives) =
+        "Not an alternatives subtype\n\
+        \\n\
+        \The following alternatives variable:\n\
+        \\n\
+        \" <> insert p0 <> "\n\
+        \\n\
+        \… cannot be instantiated to the following union type:\n\
+        \\n\
+        \" <> insert (Type.Union location alternatives) <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" location) <> "\n\
+        \\n\
+        \… because the same alternatives variable appears within that union type."
 
-        #{listToText _Γ}
-        |]
+    displayException (NotFieldsSubtype location p0 fields) =
+        "Not a fields subtype\n\
+        \\n\
+        \The following fields variable:\n\
+        \\n\
+        \" <> insert p0 <> "\n\
+        \\n\
+        \… cannot be instantiated to the following record type:\n\
+        \\n\
+        \" <> insert (Type.Record location fields) <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" location) <> "\n\
+        \\n\
+        \… because the same fields variable appears within that record type."
 
-    displayException (NotFunctionType location _A) = [__i|
-        Not a function type
+    displayException (NotRecordSubtype locA0 _A locB0 _B) =
+        "Not a record subtype\n\
+        \\n\
+        \The following type:\n\
+        \\n\
+        \" <> insert _A <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" locA0) <> "\n\
+        \\n\
+        \… cannot be a subtype of:\n\
+        \\n\
+        \" <> insert _B <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" locB0)
 
-        An expression of the following type:
+    displayException (NotUnionSubtype locA0 _A locB0 _B) =
+        "Not a union subtype\n\
+        \\n\
+        \The following type:\n\
+        \\n\
+        \" <> insert _A <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" locA0) <> "\n\
+        \\n\
+        \… cannot be a subtype of:\n\
+        \\n\
+        \" <> insert _B <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" locB0)
 
-        #{insert _A}
+    displayException (NotSubtype locA0 _A locB0 _B) =
+        "Not a subtype\n\
+        \\n\
+        \The following type:\n\
+        \\n\
+        \" <> insert _A <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" locA0) <> "\n\
+        \\n\
+        \… cannot be a subtype of:\n\
+        \\n\
+        \" <> insert _B <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" locB0)
 
-        #{Location.renderError "" location}
+    displayException (UnboundAlternatives location a) =
+        "Unbound alternatives variable: " <> Text.unpack a <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" location)
 
-        … was invoked as if it were a function, but the above type is not a function
-        type.
-        |]
+    displayException (UnboundFields location a) =
+        "Unbound fields variable: " <> Text.unpack a <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" location)
 
-    displayException (NotNecessarilyFunctionType location a) = [__i|
-        Not necessarily a function type
+    displayException (UnboundTypeVariable location a) =
+        "Unbound type variable: " <> Text.unpack a <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" location)
 
-        The following type variable:
-
-        #{insert a}
-
-        … could potentially be any type and is not necessarily a function type.
-
-        #{Location.renderError "" location}
-        |]
-
-    displayException (NotAlternativesSubtype location p0 alternatives) = [__i|
-        Not an alternatives subtype
-
-        The following alternatives variable:
-
-        #{insert p0}
-
-        … cannot be instantiated to the following union type:
-
-        #{insert (Type.Union location alternatives)}
-
-        #{Location.renderError "" location}
-
-        … because the same alternatives variable appears within that union type.
-        |]
-
-    displayException (NotFieldsSubtype location p0 fields) = [__i|
-        Not a fields subtype
-
-        The following fields variable:
-
-        #{insert p0}
-
-        … cannot be instantiated to the following record type:
-
-        #{insert (Type.Record location fields)}
-
-        #{Location.renderError "" location}
-
-        … because the same fields variable appears within that record type.
-        |]
-
-    displayException (NotRecordSubtype locA0 _A locB0 _B) = [__i|
-        Not a record subtype
-
-        The following type:
-
-        #{insert _A}
-
-        #{Location.renderError "" locA0}
-
-        … cannot be a subtype of:
-
-        #{insert _B}
-
-        #{Location.renderError "" locB0}
-        |]
-
-    displayException (NotUnionSubtype locA0 _A locB0 _B) = [__i|
-        Not a union subtype
-
-        The following type:
-
-        #{insert _A}
-
-        #{Location.renderError "" locA0}
-
-        … cannot be a subtype of:
-
-        #{insert _B}
-
-        #{Location.renderError "" locB0}
-        |]
-
-    displayException (NotSubtype locA0 _A locB0 _B) = [__i|
-        Not a subtype
-
-        The following type:
-
-        #{insert _A}
-
-        #{Location.renderError "" locA0}
-
-        … cannot be a subtype of:
-
-        #{insert _B}
-
-        #{Location.renderError "" locB0}
-        |]
-
-    displayException (UnboundAlternatives location a) = [__i|
-        Unbound alternatives variable: #{a}
-
-        #{Location.renderError "" location}
-        |]
-
-    displayException (UnboundFields location a) = [__i|
-        Unbound fields variable: #{a}
-
-        #{Location.renderError "" location}
-        |]
-
-    displayException (UnboundTypeVariable location a) = [__i|
-        Unbound type variable: #{a}
-
-        #{Location.renderError "" location}
-        |]
-
-    displayException (UnboundVariable location name index) = [__i|
-        Unbound variable: #{var}
-
-        #{Location.renderError "" location }
-        |]
+    displayException (UnboundVariable location name index) =
+        "Unbound variable: " <> Text.unpack var <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" location)
         where
             var = prettyToText @(Syntax.Syntax () Void) Syntax.Variable{ location = (), .. }
 
-    displayException (RecordTypeMismatch _A0 _B0 extraA extraB) | extraB == mempty = [__i|
-        Record type mismatch
+    displayException (RecordTypeMismatch _A0 _B0 extraA extraB) | extraB == mempty =
+        "Record type mismatch\n\
+        \\n\
+        \The following record type:\n\
+        \\n\
+        \" <> insert _A0 <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _A0)) <> "\n\
+        \\n\
+        \… is not a subtype of the following record type:\n\
+        \\n\
+        \" <> insert _B0 <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _B0)) <> "\n\
+        \\n\
+        \The former record has the following extra fields:\n\
+        \\n\
+        \" <> listToText (Map.keys extraA)
 
-        The following record type:
+    displayException (RecordTypeMismatch _A0 _B0 extraA extraB) | extraA == mempty =
+        "Record type mismatch\n\
+        \\n\
+        \The following record type:\n\
+        \\n\
+        \" <> insert _A0 <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _A0)) <> "\n\
+        \\n\
+        \… is not a subtype of the following record type:\n\
+        \\n\
+        \" <> insert _B0 <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _B0)) <> "\n\
+        \\n\
+        \The latter record has the following extra fields:\n\
+        \\n\
+        \" <> listToText (Map.keys extraB)
 
-        #{insert _A0}
+    displayException (RecordTypeMismatch _A0 _B0 extraA extraB) =
+        "Record type mismatch\n\
+        \\n\
+        \The following record type:\n\
+        \\n\
+        \" <> insert _A0 <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _A0)) <> "\n\
+        \\n\
+        \… is not a subtype of the following record type:\n\
+        \\n\
+        \" <> insert _B0 <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _B0)) <> "\n\
+        \\n\
+        \The former record has the following extra fields:\n\
+        \\n\
+        \" <> listToText (Map.keys extraA) <> "\n\
+        \\n\
+        \… while the latter record has the following extra fields:\n\
+        \\n\
+        \" <> listToText (Map.keys extraB)
 
-        #{Location.renderError "" (Type.location _A0)}
+    displayException (UnionTypeMismatch _A0 _B0 extraA extraB) | extraB == mempty =
+        "Union type mismatch\n\
+        \\n\
+        \The following union type:\n\
+        \\n\
+        \" <> insert _A0 <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _A0)) <> "\n\
+        \\n\
+        \… is not a subtype of the following union type:\n\
+        \\n\
+        \" <> insert _B0 <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _B0)) <> "\n\
+        \\n\
+        \The former union has the following extra alternatives:\n\
+        \\n\
+        \" <> listToText (Map.keys extraA)
 
-        … is not a subtype of the following record type:
+    displayException (UnionTypeMismatch _A0 _B0 extraA extraB) | extraA == mempty =
+        "Union type mismatch\n\
+        \\n\
+        \The following union type:\n\
+        \\n\
+        \" <> insert _A0 <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _A0)) <> "\n\
+        \\n\
+        \… is not a subtype of the following union type:\n\
+        \\n\
+        \" <> insert _B0 <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _B0)) <> "\n\
+        \\n\
+        \The latter union has the following extra alternatives:\n\
+        \\n\
+        \" <> listToText (Map.keys extraB)
 
-        #{insert _B0}
-
-        #{Location.renderError "" (Type.location _B0)}
-
-        The former record has the following extra fields:
-
-        #{listToText (Map.keys extraA)}
-        |]
-
-    displayException (RecordTypeMismatch _A0 _B0 extraA extraB) | extraA == mempty = [__i|
-        Record type mismatch
-
-        The following record type:
-
-        #{insert _A0}
-
-        #{Location.renderError "" (Type.location _A0)}
-
-        … is not a subtype of the following record type:
-
-        #{insert _B0}
-
-        #{Location.renderError "" (Type.location _B0)}
-
-        The latter record has the following extra fields:
-
-        #{listToText (Map.keys extraB)}
-        |]
-
-    displayException (RecordTypeMismatch _A0 _B0 extraA extraB) = [__i|
-        Record type mismatch
-
-        The following record type:
-
-        #{insert _A0}
-
-        #{Location.renderError "" (Type.location _A0)}
-
-        … is not a subtype of the following record type:
-
-        #{insert _B0}
-
-        #{Location.renderError "" (Type.location _B0)}
-
-        The former record has the following extra fields:
-
-        #{listToText (Map.keys extraA)}
-
-        … while the latter record has the following extra fields:
-
-        #{listToText (Map.keys extraB)}
-        |]
-
-    displayException (UnionTypeMismatch _A0 _B0 extraA extraB) | extraB == mempty = [__i|
-        Union type mismatch
-
-        The following union type:
-
-        #{insert _A0}
-
-        #{Location.renderError "" (Type.location _A0)}
-
-        … is not a subtype of the following union type:
-
-        #{insert _B0}
-
-        #{Location.renderError "" (Type.location _B0)}
-
-        The former union has the following extra alternatives:
-
-        #{listToText (Map.keys extraA)}
-        |]
-
-    displayException (UnionTypeMismatch _A0 _B0 extraA extraB) | extraA == mempty = [__i|
-        Union type mismatch
-
-        The following union type:
-
-        #{insert _A0}
-
-        #{Location.renderError "" (Type.location _A0)}
-
-        … is not a subtype of the following union type:
-
-        #{insert _B0}
-
-        #{Location.renderError "" (Type.location _B0)}
-
-        The latter union has the following extra alternatives:
-
-        #{listToText (Map.keys extraB)}
-        |]
-
-    displayException (UnionTypeMismatch _A0 _B0 extraA extraB) = [__i|
-        Union type mismatch
-
-        The following union type:
-
-        #{insert _A0}
-
-        #{Location.renderError "" (Type.location _A0)}
-
-        … is not a subtype of the following union type:
-
-        #{insert _B0}
-
-        #{Location.renderError "" (Type.location _B0)}
-
-        The former union has the following extra alternatives:
-
-        #{listToText (Map.keys extraA)}
-
-        … while the latter union has the following extra alternatives:
-
-        #{listToText (Map.keys extraB)}
-        |]
+    displayException (UnionTypeMismatch _A0 _B0 extraA extraB) =
+        "Union type mismatch\n\
+        \\n\
+        \The following union type:\n\
+        \\n\
+        \" <> insert _A0 <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _A0)) <> "\n\
+        \\n\
+        \… is not a subtype of the following union type:\n\
+        \\n\
+        \" <> insert _B0 <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _B0)) <> "\n\
+        \\n\
+        \The former union has the following extra alternatives:\n\
+        \\n\
+        \" <> listToText (Map.keys extraA) <> "\n\
+        \\n\
+        \… while the latter union has the following extra alternatives:\n\
+        \\n\
+        \" <> listToText (Map.keys extraB)
 
 -- Helper functions for displaying errors
 
-insert :: Pretty a => a -> Text
-insert a = prettyToText ("  " <> Pretty.align (pretty a))
+insert :: Pretty a => a -> String
+insert a = Text.unpack (prettyToText ("  " <> Pretty.align (pretty a)))
 
-listToText :: Pretty a => [a] -> Text
-listToText elements = Text.intercalate "\n" (map prettyEntry elements)
+listToText :: Pretty a => [a] -> String
+listToText elements =
+    Text.unpack (Text.intercalate "\n" (map prettyEntry elements))
   where
     prettyEntry entry = prettyToText ("• " <> Pretty.align (pretty entry))
 

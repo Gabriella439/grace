@@ -1,7 +1,6 @@
 {-# LANGUAGE DerivingStrategies         #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE QuasiQuotes                #-}
 {-# LANGUAGE RecordWildCards            #-}
 
 {-| This module contains the `Location` type used for attaching source code to
@@ -14,7 +13,6 @@ module Grace.Location
     , renderError
     ) where
 
-import Data.String.Interpolate (__i)
 import Data.Text (Text)
 import Text.Megaparsec (PosState(..), SourcePos(..))
 
@@ -77,15 +75,17 @@ renderError message Location{..} = prefix <> "\n" <> suffix
 
                 caret = Text.replicate (column - 1) " " <> "↑"
 
-            in  [__i|
-                #{outer}
-                #{inner} #{string}
-                #{outer} #{caret}
-                |]
+            in  outer <> "\n\
+                \" <> inner <> " " <> Text.pack string <> "\n\
+                \" <> outer <> " " <> caret
         Nothing ->
             ""
 
     prefix =
-        [__i|
-        #{name}:#{line}:#{column}: #{message}
-        |]
+            Text.pack name
+        <>  ":"
+        <>  Text.pack (show line)
+        <>  ":"
+        <>  Text.pack (show column)
+        <>  ": "
+        <>  message

@@ -1,7 +1,6 @@
 {-# LANGUAGE ApplicativeDo     #-}
 {-# LANGUAGE BlockArguments    #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes       #-}
 {-# LANGUAGE RecordWildCards   #-}
 
 {-| This module contains the top-level `main` function that implements the
@@ -16,7 +15,6 @@ import Control.Applicative (many, (<|>))
 import Control.Exception.Safe (Exception(..))
 import Data.Foldable (traverse_)
 import Data.Functor (void)
-import Data.String.Interpolate (__i)
 import Data.Void (Void)
 import Grace.Interpret (Input(..))
 import Grace.Location (Location(..))
@@ -231,12 +229,11 @@ main = do
             case value of
                 Value.Scalar (Syntax.Text text) -> Text.IO.putStr text
                 _ -> do
-                    Text.IO.hPutStrLn IO.stderr [__i|
-                    Internal error: Not a Text literal
-
-                    The input expression did not evaluate to a Text literal, even though it had the
-                    correct type
-                    |]
+                    Text.IO.hPutStrLn IO.stderr
+                        "Internal error: Not a Text literal\n\
+                        \\n\
+                        \The input expression did not evaluate to a Text literal, even though it had the\n\
+                        \correct type"
                     Exit.exitFailure
 
         Format{..} -> do

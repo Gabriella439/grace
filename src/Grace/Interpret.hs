@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds          #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts   #-}
-{-# LANGUAGE QuasiQuotes        #-}
+{-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE RecordWildCards    #-}
 {-# LANGUAGE TypeApplications   #-}
 
@@ -18,6 +18,7 @@ module Grace.Interpret
 import Control.Exception.Safe (Exception(..), Handler(..))
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.IO.Class (MonadIO, liftIO)
+import Data.Maybe (fromJust)
 import Data.Text (Text)
 import Grace.HTTP (Manager)
 import Grace.Input (Input(..))
@@ -25,7 +26,6 @@ import Grace.Location (Location(..))
 import Grace.Syntax (Syntax(..))
 import Grace.Type (Type)
 import Grace.Value (Value)
-import Text.URI.QQ (scheme)
 
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
@@ -111,10 +111,10 @@ interpretWith bindings maybeAnnotation manager input = do
             return (inferred, Normalize.evaluate evaluationContext resolvedExpression)
 
 remote :: Input -> Bool
-remote (URI uri) =
-    any (`elem` [ [scheme|https|], [scheme|http|] ]) (URI.uriScheme uri)
-remote _ =
-    False
+remote (URI uri) = any (`elem` schemes) (URI.uriScheme uri)
+  where
+    schemes = map (fromJust . URI.mkScheme) [ "https", "http" ]
+remote _ = False
 
 referentiallySane :: MonadError InterpretError m => Input -> Input -> m ()
 referentiallySane parent child

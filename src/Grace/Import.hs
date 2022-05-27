@@ -1,6 +1,5 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE OverloadedStrings  #-}
-{-# LANGUAGE QuasiQuotes        #-}
 {-# LANGUAGE RecordWildCards    #-}
 
 -- | This module contains the import resolution logic
@@ -18,7 +17,7 @@ import Data.Foldable (foldl')
 import Data.HashMap.Strict (HashMap)
 import Data.IORef (IORef)
 import Data.List.NonEmpty (NonEmpty(..))
-import Data.String.Interpolate (__i)
+import Data.Maybe (fromJust)
 import Data.Text (Text)
 import Grace.HTTP (HttpException, Manager)
 import Grace.Input (Input(..))
@@ -26,7 +25,6 @@ import Grace.Location (Location(..))
 import Grace.Syntax (Syntax)
 import System.FilePath ((</>))
 import Text.URI (Authority)
-import Text.URI.QQ (host, scheme)
 
 import qualified Control.Exception.Safe as Exception
 import qualified Data.HashMap.Strict as HashMap
@@ -63,7 +61,8 @@ fetch manager url = do
 resolve :: Manager -> Input -> IO (Syntax Location Input)
 resolve manager input = case input of
     URI uri
-        | any (`elem` [ [scheme|http|], [scheme|https|] ]) (URI.uriScheme uri) -> do
+        | let schemes = map (fromJust . URI.mkScheme) [ "http", "https" ]
+        , any (`elem` schemes) (URI.uriScheme uri) -> do
             let name = URI.renderStr uri
 
             let handler e = throw (HTTPError e)
@@ -78,7 +77,7 @@ resolve manager input = case input of
 
             return (first locate result)
 
-        | URI.uriScheme uri == Just [scheme|env|] -> do
+        | URI.uriScheme uri == URI.mkScheme "env" -> do
             case URI.uriAuthority uri of
                 Left False -> do
                     var <- case URI.uriPath uri of
@@ -106,7 +105,7 @@ resolve manager input = case input of
                 Right _ -> do
                     throw UnsupportedAuthority
 
-        | URI.uriScheme uri == Just [scheme|file|] -> do
+        | URI.uriScheme uri == URI.mkScheme "file" -> do
             if all (== emptyAuthority) (URI.uriAuthority uri)
                 then do
                     pieces <- case URI.uriPath uri of
@@ -151,7 +150,7 @@ resolve manager input = case input of
 emptyAuthority :: Authority
 emptyAuthority = URI.Authority
     { URI.authUserInfo = Nothing
-    , URI.authHost = [host||]
+    , URI.authHost = fromJust (URI.mkHost "")
     , URI.authPort = Nothing
     }
 
@@ -174,11 +173,11 @@ data ImportError = ImportError
 
 instance Exception ImportError where
     displayException ImportError{..} =
-        Text.unpack [__i|
-        Import resolution failed: #{renderedInput}
-
-        #{renderedError}
-        |]
+        Text.unpack
+            ("Import resolution failed: " <> renderedInput <> "\n\
+            \\n\
+            \" <> renderedError
+            )
       where
         renderedInput = case input of
             URI  uri  -> URI.render uri
@@ -196,11 +195,9 @@ instance Exception ImportError where
             MissingPath ->
                 "Missing path"
             ReferentiallyInsane child ->
-                [__i|
-                Local imports are rejected within remote imports
-
-                Rejected local import: #{Pretty.pretty child}
-                |]
+                "Local imports are rejected within remote imports\n\
+                \\n\
+                \Rejected local import: " <> Text.pack (show (Pretty.pretty child))
             UnsupportedPathSeparators ->
                 "Unsupported path separators"
             UnsupportedAuthority ->

@@ -1,6 +1,5 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE OverloadedStrings  #-}
-{-# LANGUAGE QuasiQuotes        #-}
 
 {-| This module provides a uniform interface for making HTTP requests using both
     GHC and GHCJS
@@ -14,7 +13,6 @@ module Grace.HTTP
     ) where
 
 import Control.Exception (Exception(..))
-import Data.String.Interpolate (__i)
 import Data.Text (Text)
 import Data.Text.Encoding.Error (UnicodeException)
 import Network.HTTP.Client (HttpExceptionContent(..), Manager)
@@ -94,30 +92,26 @@ renderError (HttpException httpException) = case httpException of
                     _   -> "HTTP request failure"
 
             suffix =
-                    "\n\n"
-                <>  [__i|
-                    HTTP status code: #{statusCode}#{responseBody}
-                    |]
+                    "\n\
+                    \\n\
+                    \HTTP status code: " <> Text.pack (show statusCode) <> responseBody
 
             responseBody :: Text
             responseBody =
                 case Encoding.decodeUtf8' body of
                     Left _ ->
-                            "\n\n"
-                        <>  [__i|
-                            Response body (non-UTF8 bytes):
-
-                            #{body}
-                            |]
+                            "\n\
+                            \\n\
+                            \Response body (non-UTF8 bytes):\n\
+                            \\n\
+                            \" <> Text.pack (show body)
                     Right "" ->
                         ""
                     Right bodyText ->
                             "\n\n"
-                        <>  [__i|
-                            Response body:
-
-                            #{prefixedText}
-                            |]
+                        <>  "Response body:\n\
+                            \\n\
+                            \" <> prefixedText
                       where
                         prefixedLines =
                                 zipWith combine prefixes
@@ -131,14 +125,10 @@ renderError (HttpException httpException) = case httpException of
 
                         prefixedText = Text.unlines prefixedLines
         _ ->
-           [__i|
-           HTTP request failure
-
-           #{displayException httpException}
-           |]
+           "HTTP request failure\n\
+           \\n\
+           \" <> Text.pack (displayException httpException)
 renderError (NotUTF8 unicodeException) =
-    [__i|
-    Not UTF8
-
-    #{Exception.displayException unicodeException}
-    |]
+    "Not UTF8\n\
+    \\n\
+    \" <> Text.pack (displayException unicodeException)
