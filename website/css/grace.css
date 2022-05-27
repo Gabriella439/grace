@@ -33,14 +33,8 @@ li {
   margin: 1px;
 }
 
-.Codemirror {
-  height: auto !important;
-  max-height: 20em !important;
-}
-
-.Codemirror-scroll {
-  height: auto !important;
-  max-height: 20em !important;
+.CodeMirror {
+  height: auto;
 }
 
 #stop-tutorial {

@@ -1,3 +1,4 @@
+<!doctype html>
 <html>
 <head>
 <title>Grace browser</title>
@@ -7,14 +8,14 @@
 <meta name="twitter:card" content="summary" />
 <meta name="twitter:title" content="Grace browser" />
 <meta name="twitter:description" content="Live demo for the Fall-from-Grace functional programming language" />
-<link rel="stylesheet" href="./css/grace.css">
 <link rel="stylesheet" href="./css/bootstrap.min.css">
 <link rel="stylesheet" href="./css/codemirror.css">
+<link rel="stylesheet" href="./css/grace.css">
 </head>
 <body>
 <div class="container">
 <h1 class="display-4">Grace browser</h1>
-<div style="width: 100%;"><textarea style="width: 100%; max-width: 100%;" id="input" cols=80></textarea></div>
+<textarea style="display: none" id="input"></textarea>
 <br/>
 <button id="start-tutorial" type="button" class="btn btn-primary">Try the tutorial</button>
 <div id="output"></div>

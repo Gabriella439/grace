@@ -184,7 +184,7 @@ foreign import javascript unsafe "$1.remove()"
 remove :: MonadIO io => JSVal -> io ()
 remove a = liftIO (remove_ a)
 
-foreign import javascript unsafe "CodeMirror.fromTextArea($1, { lineNumbers: true, mode: 'python' })"
+foreign import javascript unsafe "CodeMirror.fromTextArea($1, { lineNumbers: true, viewportMargin: Infinity })"
     setupCodemirror_ :: JSVal -> IO JSVal
 
 setupCodemirror :: MonadIO io => JSVal -> io JSVal
