@@ -150,6 +150,15 @@ setParam :: MonadIO io => JSVal -> Text -> Text -> io ()
 setParam a b c =
     liftIO (setParam_ a (fromText b) (fromText c))
 
+-- @$1.delete($2)@ doesn't work because GHCJS treats delete as a forbidden
+-- reserved keyword
+foreign import javascript unsafe "deleteSearchParamWorkaround($1, $2)"
+    deleteParam_ :: JSVal -> JSString -> IO ()
+
+deleteParam :: MonadIO io => JSVal -> Text -> io ()
+deleteParam a b =
+    liftIO (deleteParam_ a (fromText b))
+
 foreign import javascript unsafe "history.replaceState(null, null, '?'+$1.toString())"
   saveSearchParams_ :: JSVal -> IO ()
 
@@ -772,9 +781,9 @@ main = do
 
     params <- getSearchParams
 
-    exists <- hasParam params "expression"
+    hasExpression <- hasParam params "expression"
 
-    Monad.when exists do
+    Monad.when hasExpression do
         expression <- getParam params "expression"
 
         setValue codeInput (URI.Encode.decodeText expression)
@@ -783,7 +792,9 @@ main = do
 
     ref <- IORef.newIORef 0
 
-    tutorialRef <- IORef.newIORef False
+    hasTutorial <- hasParam params "tutorial"
+
+    tutorialRef <- IORef.newIORef hasTutorial
 
     let setError text = do
             setTextContent error text
@@ -800,12 +811,19 @@ main = do
     let interpret = do
             text <- getValue codeInput
 
-            setParam params "expression" (URI.Encode.encodeText text)
+            if text == ""
+                then deleteParam params "expression"
+                else setParam params "expression" (URI.Encode.encodeText text)
+
+            tutorial <- IORef.readIORef tutorialRef
+
+            if tutorial == False
+                then deleteParam params "tutorial"
+                else setParam params "tutorial" "true"
 
             saveSearchParams params
 
             if  | Text.null text -> do
-                    tutorial <- IORef.readIORef tutorialRef
 
                     Monad.unless tutorial do
                         setDisplay startTutorial "inline-block"
@@ -834,124 +852,127 @@ main = do
 
     onChange codeInput inputCallback
 
-    startTutorialCallback <- Callback.asyncCallback do
-        stopTutorial <- createElement "button"
+    let enableTutorial = do
+            stopTutorial <- createElement "button"
 
-        setAttribute stopTutorial "type"  "button"
-        setAttribute stopTutorial "class" "btn btn-primary"
-        setAttribute stopTutorial "id"    "stop-tutorial"
+            setAttribute stopTutorial "type"  "button"
+            setAttribute stopTutorial "class" "btn btn-primary"
+            setAttribute stopTutorial "id"    "stop-tutorial"
 
-        setTextContent stopTutorial "Exit the tutorial"
+            setTextContent stopTutorial "Exit the tutorial"
 
-        let createExample active name code = do
-                n <- State.get
+            let createExample active name code = do
+                    n <- State.get
 
-                State.put (n + 1)
+                    State.put (n + 1)
 
-                let id = "example-" <> Text.pack (show n)
+                    let id = "example-" <> Text.pack (show n)
 
-                a <- createElement "a"
+                    a <- createElement "a"
 
-                setAttribute a "id"           id
-                setAttribute a "aria-current" "page"
-                setAttribute a "href"         "#"
-                setAttribute a "onclick"      "return false;"
+                    setAttribute a "id"           id
+                    setAttribute a "aria-current" "page"
+                    setAttribute a "href"         "#"
+                    setAttribute a "onclick"      "return false;"
 
-                setAttribute a "class"
-                    (if active then "nav-link active" else "nav-link")
+                    setAttribute a "class"
+                        (if active then "nav-link active" else "nav-link")
 
-                setTextContent a name
+                    setTextContent a name
 
-                li <- createElement "li"
+                    li <- createElement "li"
 
-                setAttribute li "class" "nav-item"
+                    setAttribute li "class" "nav-item"
 
-                replaceChild li a
+                    replaceChild li a
 
-                callback <- (liftIO . Callback.asyncCallback) do
-                    setValue codeInput code
+                    callback <- (liftIO . Callback.asyncCallback) do
+                        setValue codeInput code
 
-                    elements <- getElementsByClassName "nav-link"
+                        elements <- getElementsByClassName "nav-link"
 
-                    Monad.forM_ elements \element -> do
-                        removeClass element "active"
+                        Monad.forM_ elements \element -> do
+                            removeClass element "active"
 
-                    element <- getElementById id
+                        element <- getElementById id
 
-                    addClass element "active"
+                        addClass element "active"
 
-                Monad.when active (setValue codeInput code)
+                    Monad.when active (setValue codeInput code)
 
-                addEventListener a "click" callback
+                    addEventListener a "click" callback
 
-                return li
+                    return li
 
-        ul <- createElement "ul"
+            ul <- createElement "ul"
 
-        flip State.evalStateT (0 :: Int) do
-            helloWorld <- createExample True "Hello, world!"
-                helloWorldExample
+            flip State.evalStateT (0 :: Int) do
+                helloWorld <- createExample True "Hello, world!"
+                    helloWorldExample
 
-            checkboxes <- createExample False "HTML" checkboxesExample
+                checkboxes <- createExample False "HTML" checkboxesExample
 
-            function <- createExample False "Functions" functionExample
+                function <- createExample False "Functions" functionExample
 
-            import_ <- createExample False "Imports" importExample
+                import_ <- createExample False "Imports" importExample
 
-            json_ <- createExample False "JSON" jsonExample
+                json_ <- createExample False "JSON" jsonExample
 
-            programming <- createExample False "Programming" programmingExample
+                programming <- createExample False "Programming" programmingExample
 
-            polymorphism <- createExample False "Polymorphism" polymorphismExample
+                polymorphism <- createExample False "Polymorphism" polymorphismExample
 
-            builtins <- createExample False "Builtins" builtinsExample
+                builtins <- createExample False "Builtins" builtinsExample
 
-            prelude <- createExample False "Prelude" preludeExample
+                prelude <- createExample False "Prelude" preludeExample
 
-            conclusion <- createExample False "Conclusion" conclusionExample
+                conclusion <- createExample False "Conclusion" conclusionExample
 
-            setAttribute ul "class" "nav nav-tabs"
+                setAttribute ul "class" "nav nav-tabs"
 
-            replaceChildren ul
-                (Array.fromList
-                    [ helloWorld
-                    , checkboxes
-                    , function
-                    , import_
-                    , json_
-                    , programming
-                    , polymorphism
-                    , builtins
-                    , prelude
-                    , conclusion
-                    ]
-                )
+                replaceChildren ul
+                    (Array.fromList
+                        [ helloWorld
+                        , checkboxes
+                        , function
+                        , import_
+                        , json_
+                        , programming
+                        , polymorphism
+                        , builtins
+                        , prelude
+                        , conclusion
+                        ]
+                    )
 
-        before input ul
+            before input ul
 
-        stopTutorialCallback <- Callback.asyncCallback do
-            setDisplay stopTutorial  "none"
+            stopTutorialCallback <- Callback.asyncCallback do
+                setDisplay stopTutorial  "none"
 
-            IORef.writeIORef tutorialRef False
+                IORef.writeIORef tutorialRef False
 
-            interpret
+                interpret
 
-            remove stopTutorial
+                remove stopTutorial
 
-            remove ul
+                remove ul
 
-        addEventListener stopTutorial "click" stopTutorialCallback
+            addEventListener stopTutorial "click" stopTutorialCallback
 
-        after startTutorial stopTutorial
+            after startTutorial stopTutorial
 
-        IORef.writeIORef tutorialRef True
+            IORef.writeIORef tutorialRef True
 
-        setDisplay startTutorial "none"
+            setDisplay startTutorial "none"
+
+    startTutorialCallback <- Callback.asyncCallback enableTutorial
 
     addEventListener startTutorial "click" startTutorialCallback
 
-    Monad.when exists do
-        interpret
+    Monad.when hasTutorial enableTutorial
+
+    Monad.when hasExpression interpret
 
 helloWorldExample :: Text
 helloWorldExample =
