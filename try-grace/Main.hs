@@ -851,6 +851,7 @@ main = do
                 setAttribute a "id"           id
                 setAttribute a "aria-current" "page"
                 setAttribute a "href"         "#"
+                setAttribute a "onclick"      "return false;"
 
                 setAttribute a "class"
                     (if active then "nav-link active" else "nav-link")
