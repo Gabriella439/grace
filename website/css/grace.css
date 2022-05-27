@@ -1,36 +1,39 @@
-span {
-  white-space: pre;
+@font-face {
+    font-family: 'FiraMono';
+    src: url('fonts/firamono-regular-webfont.woff2') format('woff2'),
+         url('fonts/firamono-regular-webfont.woff') format('woff');
+    font-weight: normal;
+    font-style: normal;
 }
 
 code {
+  font-family: 'FiraMono', monospace !important;
   white-space: pre;
 }
 
-#input {
-  font-family: monospace;
+dt {
+  white-space: pre;
+}
+
+pre {
+  font-family: 'FiraMono', monospace !important;
+  line-height: 1.0;
 }
 
 .form-control {
   width: auto !important;
   display: inline !important;
-  font-family: monospace !important;
+  font-family: 'FiraMono', monospace !important;
 }
 
-.btn {
-  font-family: monospace !important;
+li .btn {
+  font-family: 'FiraMono', monospace !important;
   vertical-align: top !important;
+  margin: 1px;
 }
 
 .form-check-label {
   vertical-align: top;
-}
-
-dt {
-  font-family: monospace;
-}
-
-li {
-  margin: 1px;
 }
 
 .CodeMirror {

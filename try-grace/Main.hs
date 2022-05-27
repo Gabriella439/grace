@@ -266,6 +266,8 @@ renderValue _ parent _ value@Variable{} = do
 renderValue _ parent _ (Value.Scalar (Text text))= do
     span <- createElement "span"
 
+    setAttribute span "style" "whitespace: pre"
+
     setTextContent span text
 
     replaceChild parent span
@@ -292,6 +294,8 @@ renderValue _ parent _ value@Value.Scalar{} = do
     span <- createElement "span"
 
     setTextContent span (valueToText value)
+
+    setAttribute span "style" "whitespace: pre"
 
     replaceChild parent span
 
@@ -1013,8 +1017,6 @@ jsonExample =
     \  \"Weird JSON\": [ 1, true, { } ] : JSON\n\
     \\n\
     \, \"GitHub API\": https://api.github.com\n\
-    \\n\
-    \, \"Reddit API\": https://reddit.com/r/haskell.json : JSON\n\
     \}"
 
 programmingExample :: Text
