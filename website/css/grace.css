@@ -42,3 +42,7 @@ li {
   height: auto !important;
   max-height: 20em !important;
 }
+
+#stop-tutorial {
+  margin-bottom: 1em;
+}

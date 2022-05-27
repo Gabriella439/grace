@@ -2,7 +2,6 @@
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MultiWayIf        #-}
-{-# LANGUAGE QuasiQuotes       #-}
 
 module Main where
 
@@ -29,6 +28,7 @@ import Prelude hiding (div, error, id, span, subtract)
 
 import qualified Control.Monad as Monad
 import qualified Control.Monad.Except as Except
+import qualified Control.Monad.State as State
 import qualified Control.Monad.Trans.Maybe as Maybe
 import qualified Data.Aeson as Aeson
 import qualified Data.HashMap.Strict.InsOrd as HashMap
@@ -37,7 +37,6 @@ import qualified Data.IORef as IORef
 import qualified Data.JSString as JSString
 import qualified Data.Scientific as Scientific
 import qualified Data.Sequence as Seq
-import qualified Data.String.Interpolate as Interpolate
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as Text.Lazy
 import qualified Data.Text.Lazy.Encoding as Text.Encoding
@@ -173,6 +172,12 @@ foreign import javascript unsafe "$1.before($2)"
 before :: MonadIO io => JSVal -> JSVal -> io ()
 before a b = liftIO (before_ a b)
 
+foreign import javascript unsafe "$1.after($2)"
+    after_ :: JSVal -> JSVal -> IO ()
+
+after :: MonadIO io => JSVal -> JSVal -> io ()
+after a b = liftIO (after_ a b)
+
 foreign import javascript unsafe "$1.remove()"
     remove_ :: JSVal -> IO ()
 
@@ -202,6 +207,25 @@ foreign import javascript unsafe "$1.getValue()"
 
 getValue :: MonadIO io => JSVal -> io Text
 getValue a = liftIO (fmap toText (getValue_ a))
+
+foreign import javascript unsafe "document.getElementsByClassName($1)"
+    getElementsByClassName_ :: JSString -> IO JSArray
+
+getElementsByClassName :: MonadIO io => Text -> io [JSVal]
+getElementsByClassName a =
+    fmap Array.toList (liftIO (getElementsByClassName_ (fromText a)))
+
+foreign import javascript unsafe "$1.classList.remove($2)"
+    removeClass_ :: JSVal -> JSString -> IO ()
+
+removeClass :: MonadIO io => JSVal -> Text -> io ()
+removeClass a b = liftIO (removeClass_ a (fromText b))
+
+foreign import javascript unsafe "$1.classList.add($2)"
+    addClass_ :: JSVal -> JSString -> IO ()
+
+addClass :: MonadIO io => JSVal -> Text -> io ()
+addClass a b = liftIO (addClass_ a (fromText b))
 
 toText :: JSString -> Text
 toText = Text.pack . JSString.unpack
@@ -730,10 +754,10 @@ renderInput _ _ = do
 
 main :: IO ()
 main = do
-    input    <- getElementById "input"
-    output   <- getElementById "output"
-    error    <- getElementById "error"
-    tutorial <- getElementById "tutorial"
+    input         <- getElementById "input"
+    output        <- getElementById "output"
+    error         <- getElementById "error"
+    startTutorial <- getElementById "start-tutorial"
 
     codeInput <- setupCodemirror input
 
@@ -755,6 +779,8 @@ main = do
 
     ref <- IORef.newIORef 0
 
+    tutorialRef <- IORef.newIORef False
+
     let setError text = do
             setTextContent error text
 
@@ -775,16 +801,21 @@ main = do
             saveSearchParams params
 
             if  | Text.null text -> do
-                    setDisplay tutorial "inline-block"
+                    tutorial <- IORef.readIORef tutorialRef
+
+                    Monad.unless tutorial do
+                        setDisplay startTutorial "inline-block"
 
                     setError ""
 
                 | otherwise -> do
-                    setDisplay tutorial "none"
+                    setDisplay startTutorial "none"
 
                     let input_ = Code "(input)" text
 
                     replaceChild error spinner
+
+                    setDisplay error "block"
 
                     result <- Except.runExceptT (Interpret.interpret input_)
 
@@ -798,308 +829,253 @@ main = do
 
     onChange codeInput inputCallback
 
-    tutorialCallback <- Callback.asyncCallback do
-        setValue codeInput tutorialText
+    startTutorialCallback <- Callback.asyncCallback do
+        stopTutorial <- createElement "button"
 
-        interpret
+        setAttribute stopTutorial "type"  "button"
+        setAttribute stopTutorial "class" "btn btn-primary"
+        setAttribute stopTutorial "id"    "stop-tutorial"
 
-    addEventListener tutorial "click" tutorialCallback
+        setTextContent stopTutorial "Exit the tutorial"
+
+        let createExample active name code = do
+                n <- State.get
+
+                State.put (n + 1)
+
+                let id = "example-" <> Text.pack (show n)
+
+                a <- createElement "a"
+
+                setAttribute a "id"           id
+                setAttribute a "aria-current" "page"
+                setAttribute a "href"         "#"
+
+                setAttribute a "class"
+                    (if active then "nav-link active" else "nav-link")
+
+                setTextContent a name
+
+                li <- createElement "li"
+
+                setAttribute li "class" "nav-item"
+
+                replaceChild li a
+
+                callback <- (liftIO . Callback.asyncCallback) do
+                    setValue codeInput code
+
+                    elements <- getElementsByClassName "nav-link"
+
+                    Monad.forM_ elements \element -> do
+                        removeClass element "active"
+
+                    element <- getElementById id
+
+                    addClass element "active"
+
+                Monad.when active (setValue codeInput code)
+
+                addEventListener a "click" callback
+
+                return li
+
+        ul <- createElement "ul"
+
+        flip State.evalStateT (0 :: Int) do
+            helloWorld <- createExample True "Hello, world!"
+                helloWorldExample
+
+            checkboxes <- createExample False "HTML" checkboxesExample
+
+            function <- createExample False "Functions" functionExample
+
+            import_ <- createExample False "Imports" importExample
+
+            json_ <- createExample False "JSON" jsonExample
+
+            programming <- createExample False "Programming" programmingExample
+
+            polymorphism <- createExample False "Polymorphism" polymorphismExample
+
+            builtins <- createExample False "Builtins" builtinsExample
+
+            prelude <- createExample False "Prelude" preludeExample
+
+            setAttribute ul "class" "nav nav-tabs"
+
+            replaceChildren ul
+                (Array.fromList
+                    [ helloWorld
+                    , checkboxes
+                    , function
+                    , import_
+                    , json_
+                    , programming
+                    , polymorphism
+                    , builtins
+                    , prelude
+                    ]
+                )
+
+        before input ul
+
+        stopTutorialCallback <- Callback.asyncCallback do
+            setDisplay stopTutorial  "none"
+
+            IORef.writeIORef tutorialRef False
+
+            interpret
+
+            remove stopTutorial
+
+            remove ul
+
+        addEventListener stopTutorial "click" stopTutorialCallback
+
+        after startTutorial stopTutorial
+
+        IORef.writeIORef tutorialRef True
+
+        setDisplay startTutorial "none"
+
+    addEventListener startTutorial "click" startTutorialCallback
 
     Monad.when exists do
         interpret
 
-tutorialText :: Text
-tutorialText = [Interpolate.i|\# This is an interactive tutorial for the Fall-from-Grace language (a.k.a.
-\# "Grace" for short).
-\#
-\# This is not a complete tour of the Grace language, but rather just enough of a
-\# tour to pique your interest.
-\#
-\# First off, any line prefixed with a "\#" character is a comment, like this one.
-\#
-\# Grace does not support special syntax for multi-line comments.  Instead, you
-\# have to prefix each comment line with a single-line comment.
-{ \# A Grace record begins with an opening brace (i.e. "{") and ends with a
-  \# closing brace (i.e. "}").  This tutorial is implemented inside of one large
-  \# Grace record.
-  \#
-  \# Records have zero or more fields and each field is associated with a value.
-  \# For example, the first field in our record is named "Example Bool" and the
-  \# associated value is `true`:
-  "Example Bool": true
+helloWorldExample :: Text
+helloWorldExample =
+    "# This is a brief tour of the Fall-from-Grace language (a.k.a.\n\
+    \# \"Grace\" for short).\n\
+    \#\n\
+    \# First, any line prefixed with a \"#\" character is a comment, like\n\
+    \# this one.\n\
+    \#\n\
+    \# Second, any change you make to this editable code area will show up\n\
+    \# below.  Try editing the string \"Hello, world!\" below to replace\n\
+    \# \"world\" with your name.\n\
+    \\n\
+    \\"Hello, world!\""
 
-, \# Fields are separated by commas, such as the comma preceding this comment.
-  \# Grace is not whitespace-sensitive, so commas can be present at the
-  \# beginning or end of a line.  This tutorial uses the "leading comma"
-  \# convention.
-  \#
-  \# Our next field is named "Example number", which is associated with the value
-  \# `1`.  Note that each field of a record may store a different type of value.
-  \# For example, the field named "Example Bool" stores a Bool value (e.g.
-  \# true) whereas the field named "Example number stores a Natural number (e.g.
-  \# 1):
-  "Example number": 1
+checkboxesExample :: Text
+checkboxesExample =
+    "# This Grace browser attempts to faithfully render any Grace expression\n\
+    \# as an equivalent HTML representation.  For example, a list of boolean\n\
+    \# values such as these will render as an HTML list of checkboxes.\n\
+    \\n\
+    \# Try adding another false value to the list.\n\
+    \\n\
+    \[ true, false, true ]"
 
-, \# Immediately after this code you'll see the HTML output of this code.  The
-  \# Grace expression inside of this text area is converted to the equivalent
-  \# web page.  For example, the field named "Example Bool" that stores the value
-  \# true is rendered as a text label ("Example Bool") followed by the Bool
-  \# value rendered as a checkbox (which is checked, because the value was true).
-  \#
-  \# This next field stores some Text, which is also rendered as Text when
-  \# converted to HTML.  Try to modify the text to replace "{name}" with your
-  \# name.  As you edit the text, watch how the HTML output updates in response.
-  \#
-  \# After doing, change the value of the "Example Bool" field above from true to
-  \# false.  This will uncheck the matching checkbox below.
-  "Example text": "My name is {name}"
+functionExample :: Text
+functionExample =
+    "# This Grace browser really attempts to faithfully render ANY Grace\n\
+    \# expression, including functions.  For example, the following function\n\
+    \# takes an integer as input and returns the next integer as the result,\n\
+    \# so this demo renders that as a web form with a numeric input and a\n\
+    \# numeric output\n\
+    \#\n\
+    \# Do not edit the code this time.  Instead, enter a number into the\n\
+    \# input field and watch the output update in response.\n\
+    \\n\
+    \\\x -> x + 1"
 
-, \# This web page is interactive in two different ways:
-  \#
-  \# * The HTML output interactively updates whenever you change the code in this
-  \#   box
-  \#
-  \# * Any function you create is turned into an interactive web form
-  \#
-  \# We've already seen the first type of interactivity: when we edit this code
-  \# the HTML output changes.  Now let's illustrate the latter type of
-  \# interactivity by having the following field store a function.  This will
-  \# create a web form underneath the "Example function" label with a text input
-  \# and a text output.  Edit the text input underneath the "Example function"
-  \# label to enter your name and watch the matching text output update as you do
-  \# so.
-  "Example function": \\name -> "My name is " + name
+importExample :: Text
+importExample =
+    "# You can reference other Grace expressions by their URL.  For example,\n\
+    \# the following URL encodes a function for computing US federal income\n\
+    \# tax for 2022.\n\
+    \https://gist.githubusercontent.com/Gabriella439/712d0648bbdcfcc83eadd0ee394beed3/raw/1b03f661577521b4d3dc6ca73dd11475a30c1594/incomeTax.ffg"
 
-, \# This page generates inputs and outputs that intelligently match the
-  \# inferred type of the code.  For example, we will annotate the following
-  \# function with this type signature:
-  \#
-  \#     Bool -> List Bool
-  \#
-  \# … which means that our function has a single input (of type Bool) and
-  \# a single output (a List of Bool)s.  The corresponding web form underneath
-  \# the "Triplicate Bool" label will prompt the user with a single checkbox for
-  \# input and the output will be a list of three checkboxes whose values all
-  \# match the input:
-  "Triplicate Bool": (\\x -> [ x, x, x ]) : Bool -> List Bool
+jsonExample :: Text
+jsonExample =
+    "# Grace is a superset of JSON, so the Grace browser is also a JSON\n\
+    \# browser.\n\
+    \\n\
+    \{ # Strongly-typed JSON requires no type annotation\n\
+    \  \"Sensible JSON\": [ { \"Name\": \"John Doe\" , \"Grade\": 95 }\n\
+    \                   , { \"Name\": \"Mary Jane\", \"Grade\": 98 }\n\
+    \                   ]\n\
+    \  # Weakly-typed JSON requires a type annotation\n\
+    \, \"Weird JSON\": [ 1, true, { } ] : JSON\n\
+    \, \"GitHub API\": https://api.github.com\n\
+    \, \"Reddit API\": https://reddit.com/r/haskell.json : JSON\n\
+    \}"
 
-, \# By default, if multiple types of values would work then this live demo
-  \# will infer a type of JSON.  For example, if we omit the type annotation as
-  \# in the following example then the interpreter will infer this more general
-  \# type:
-  \#
-  \#     forall (a : Type) . a -> List a
-  \#
-  \# … and then for the purpose of generating a form it will replace the
-  \# arbitrary type "a" with JSON, producing this more specific type:
-  \#
-  \#     JSON -> List JSON
-  \#
-  \# … so the following example will differ from the prior example by prompting
-  \# the user for a JSON input and then producing three matching copies of that
-  \# JSON as output.  Try replacing the "null" input underneat the "Triplicate
-  \# JSON" label with "[ 1, true ]" and see what happens:
-  "Triplicate JSON": \\x -> [ x, x, x ]
+programmingExample :: Text
+programmingExample =
+    "# You can use let expressions to defined reusable values or functions:\n\
+    \\n\
+    \let makeUser = \\user ->\n\
+    \      let home       = \"/home/\" + user\n\
+    \      let privateKey = home + \"/.ssh/id_ed25519\"\n\
+    \      let publicKey  = privateKey + \".pub\"\n\
+    \      in  { home: home\n\
+    \          , privateKey: privateKey\n\
+    \          , publicKey: publicKey\n\
+    \          }\n\
+    \in  [ makeUser \"bill\"\n\
+    \    , makeUser \"jane\"\n\
+    \    ]"
 
-, \# In fact, Grace is a superset of JSON, meaning that any JSON expression is
-  \# syntactically legal.  For some JSON expressions they will work without a
-  \# type annotation if the interpreter can infer a sensible type for them, like
-  \# this one:
-  "Example JSON":
-    {
-      "clients": [
-        {
-          "isActive": true,
-          "age": 36,
-          "name": "Dunlap Hubbard",
-          "email": "dunlaphubbard@cedward.com",
-          "phone": "+1 (890) 543-2508"
-        },
-        {
-          "isActive": true,
-          "age": 24,
-          "name": "Kirsten Sellers",
-          "email": "kirstensellers@emergent.com",
-          "phone": "+1 (831) 564-2190"
-        }
-      ]
-    }
+polymorphismExample :: Text
+polymorphismExample =
+    "# Grace permits polymorphic functions, like this one:\n\
+    \let twice : forall (a : Type) . a -> List a\n\
+    \          = \\x -> [ x, x ]\n\
+    \\n\
+    \in  { \"Nested lists\": twice (twice (twice (twice 2)))\n\
+    \\n\
+    \      # If you try to render a polymorphic function, it will render as a\n\
+    \      # function that accepts JSON input:\n\
+    \    , \"Duplicate JSON input\": twice\n\
+    \    }"
 
-, \# However, even weirder JSON expressions will still type-check if you add an
-  \# explicit JSON type annotation to them.  However, there's a tradeoff:
-  \# expressions of type JSON are easier to produce, but harder to consume
-  \# because the type-checker cannot provide as many guarantees about what they
-  \# contain:
-  "Weird example JSON":
-    [ [ 1, true ], { x: "ABC" } ] : JSON
+builtinsExample :: Text
+builtinsExample =
+    "# Grace has a limited number of built-in functions, and you can\n\
+    \# test-drive them below:\n\
+    \\n\
+    \{ \"Real/equal\": Real/equal\n\
+    \, \"Real/lessThan\": Real/lessThan\n\
+    \, \"Real/negate\": Real/negate\n\
+    \, \"Real/show\": Real/show\n\
+    \, \"List/drop\": List/drop\n\
+    \, \"List/equal\": List/equal\n\
+    \, \"List/fold\": List/fold\n\
+    \, \"List/equal\": List/equal\n\
+    \, \"List/head\": List/head\n\
+    \, \"List/indexed\": List/indexed\n\
+    \, \"List/last\": List/last\n\
+    \, \"List/length\": List/length\n\
+    \, \"List/map\": List/map\n\
+    \, \"List/reverse\": List/reverse\n\
+    \, \"List/take\": List/take\n\
+    \, \"Integer/even\": Integer/even\n\
+    \, \"Integer/negate\": Integer/negate\n\
+    \, \"Integer/odd\": Integer/odd\n\
+    \, \"Integer/abs\": Integer/abs\n\
+    \, \"JSON/fold\": JSON/fold\n\
+    \, \"Natural/fold\": Natural/fold\n\
+    \, \"Text/equal\": Text/equal\n\
+    \}"
 
-  \# Grace supports importing arbitrary subexpressions by URL.  For example,
-  \# we can import a US federal tax income calculator for 2022 by uncommenting
-  \# following "Tax calculator" field containing a URL for that calculator.  The
-  \# field is commented out by default to keep the demo snappier when making code
-  \# changes and you will want to comment this out again when you're done with
-  \# this example:
-  \# , "Tax calculator": https://gist.githubusercontent.com/Gabriella439/712d0648bbdcfcc83eadd0ee394beed3/raw/1b03f661577521b4d3dc6ca73dd11475a30c1594/incomeTax.ffg
-
-, \# Now let's do a quick tour of all the simple (scalar) types that we can
-  \# convert to HTML outputs:
-  "Sample scalar values":
-    { "Sample Bool values": [ false, true ]
-    , "Sample Natural numbers": [ 0, 1, 2 ]
-    , "Sample Integers": [ -2, -1, 0, 1, 2 ]
-    , "Sample Real numbers": [ -2.1, 3.14159265, 2.718281828459 ]
-    , "Sample Text strings": [ "ABC", "Hello, world!" ]
-    , "Sample JSON values": [ 1, true, [ "ABC", null ] ] : List JSON
-    }
-
-, \# We can also create more complex data structures, like:
-  "Sample complex data structures":
-    { "Sample record": { "Name": "John Doe", "Age": 24 }
-    , "Sample list": [ 1, 2, 3, 4, 5 ]
-    , "Sample optional values": [ null, 1 ]
-    }
-
-, \# Note that all values in a list have to have the same type.  For example,
-  \# try replacing the number 2 in the following list with a true and you'll
-  \# get a type error.  Then change the element back to 2 when you're done:
-  "List of numbers": [ 1, 2 ]
-
-, \# There are two common ways to store values of different types in the same
-  \# list.  The first (and most general way) is to wrap each element in a
-  \# union alternative, which is any identifier beginning with a capital letter,
-  \# like this:
-  "List of union alternatives": [ Left 1, Right true ]
-
-, \# The second (and more limited way) is that if all the values are valid
-  \# JSON, then you can add a type annotation declaring the list elements to all
-  \# be JSON and then the type-checker will accept that:
-  "List of JSON": [ 1, true ] : List JSON
-
-, \# You can also nest complex types arbitrarily, like this:
-  "Sample nested data structures":
-    { "List of lists": [ [ 1, 2 ], [ 3, 4, 5 ] ]
-    , "Record of records":
-        { "Position": { "x": 1.4, "y": -2.1 }
-        , "Status": { "Health": 100, "Turn": 4 }
-        }
-    , "List of records":
-        [ { "Name": "John Doe", "Grade": 93 }
-        , { "Name": "Mary Jane", "Grade": 95 }
-        ]
-    , "List of unions of records":
-        [ GitHub
-            { "Repository":
-                "https://github.com/Gabriel439/Haskell-Turtle-Library.git"
-            , "Revision": "ae5edf227b515b34c1cb6c89d9c58ea0eece12d5"
-            }
-        , Local { "Relative path": "~/proj/optparse-applicative" }
-        , Local { "Relative path": "~/proj/discrimination" }
-        , Hackage { "Package": "lens", "Version": "4.15.4" }
-        , GitHub
-            { "Repository": "https://github.com/haskell/text.git"
-            , "Revision": "ccbfabedea1cf5b38ff19f37549feaf01225e537"
-            }
-        , Local { "Relative path": "~/proj/servant-swagger" }
-        , Hackage { "Package": "aeson", "Version": "1.2.3.0" }
-        ]
-    }
-
-, \# All of these types work as function inputs, too.
-  \#
-  \# In Grace, you write a user-defined function using this syntax:
-  \#
-  \#     \\input -> output
-  \#
-  \# … where "input" is the name of the function input and "output" is the
-  \# "body" of the function (i.e. the function's result), which can refer to the
-  \# function's input.
-  \#
-  \# For example, the following function has this inferred type:
-  \#
-  \#    { "x": Bool, "y": Bool } -> { "x || y": Bool }
-  \#
-  \# … meaning that the function takes a record with two fields as input and
-  \# produces a record with one field as output.  The generated form will
-  \# match the inferred type.  In particular, the input section will have two
-  \# fields labeled "x" and "y" (since our input record has two fields named
-  \# "x" and "y"), and each field will be associated with a checkbox (since our
-  \# input record fields both had type Bool).
-  "Boolean OR": \\record -> { "x || y": record.x || record.y }
-
-, \# Here is a quick tour of all of the supported input types, which we'll
-  \# illustrate by creating a trivial function for each input type that returns
-  \# the input as the output:
-  "Sample inputs and outputs":
-    { "Bool input and output": \\x -> x : Bool
-    , "Numeric input and output": \\x -> x : Real
-    , "Text input and output": \\x -> x : Text
-    , "JSON input and output": \\x -> x : JSON
-    , "Optional input and output": \\x -> x : Optional Bool
-    , "List input and output": \\x -> x : List Bool
-    , "Record input and output": \\x -> x : { a: Bool, b: Bool }
-    , "Union input and output": \\x -> x : < Left : Bool | Right: Natural >
-    }
-
-, \# Not everything can be sensibly converted to HTML and when that happens the
-  \# result will just render the code.  For example, the following function will
-  \# just render as code:
-  "Function that renders as plain code": \\f x -> f x
-
-, \# However, the interpreter will still try to intelligently do something when
-  \# possible.  For example, try entering ", " in the text input underneath the
-  \# "Partially interpreted function" example and watch what happens to the
-  \# rendered code:
-  "Partially interpreted function":
-    \\separator function -> (function "ABC" + separator + function "DEF") : Text
-
-, \# Grace supports let expressions, which mean that you can define intermediate
-  \# values anywhere within Grace code; even in the middle of a record like this
-  \# one.  For example:
-  "Example let expression":
-    let x = 2
-
-    in  x + x
-
-, \# Intermediate expressions can be plain data (such as the "x" in the previous
-  \# example), or functions, like this:
-  "Examplet let-defined function":
-    let twice = \\x -> [ x, x ]
-    in  twice 2
-
-, \# Grace also has the following built-in functions, many of which you can
-  \# directly test below using the generated form for that function:
-  "Built-in functions":
-    { "Real/equal": Real/equal
-    , "Real/lessThan": Real/lessThan
-    , "Real/negate": Real/negate
-    , "Real/show": Real/show
-    , "List/drop": List/drop
-    , "List/equal": List/equal
-    , "List/fold": List/fold
-    , "List/equal": List/equal
-    , "List/head": List/head
-    , "List/indexed": List/indexed
-    , "List/last": List/last
-    , "List/length": List/length
-    , "List/map": List/map
-    , "List/reverse": List/reverse
-    , "List/take": List/take
-    , "Integer/even": Integer/even
-    , "Integer/negate": Integer/negate
-    , "Integer/odd": Integer/odd
-    , "Integer/abs": Integer/abs
-    , "JSON/fold": JSON/fold
-    , "Natural/fold": Natural/fold
-    , "Text/equal": Text/equal
-    }
-
-  \# Grace also has a Prelude of utility functions which are derived from
-  \# built-in functions.  You can test-drive the Prelude by commenting out the
-  \# following field:
-  \# , "Grace Prelude": https://raw.githubusercontent.com/Gabriella439/grace/main/prelude/package.ffg
-
-  \# That's the end of this tutorial.  Have fun and if you want to learn more
-  \# about Grace, visit the project on GitHub here:
-  \#
-  \# https://github.com/Gabriella439/grace\#grace
-}|]
+preludeExample :: Text
+preludeExample =
+    "# Grace also has a Prelude of utility functions derived from built-in\n\
+    \# functions that you can also use.\n\
+    \\n\
+    \# You can import functions individually, like this:\n\
+    \let not = https://raw.githubusercontent.com/Gabriella439/grace/main/prelude/bool/not.ffg\n\
+    \\n\
+    \# You can also import the Prelude as a whole, which is a nested record:\n\
+    \let prelude = https://raw.githubusercontent.com/Gabriella439/grace/main/prelude/package.ffg\n\
+    \\n\
+    \# Then you can access functions as record fields:\n\
+    \let negative = prelude.real.negative\n\
+    \\n\
+    \in  { \"not\": not\n\
+    \    , \"negative\": negative\n\
+    \    , \"The entire Prelude\": prelude\n\
+    \    }"
