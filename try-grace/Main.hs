@@ -58,8 +58,8 @@ import qualified Network.URI.Encode as URI.Encode
 foreign import javascript unsafe "document.getElementById($1)"
     getElementById_ :: JSString -> IO JSVal
 
-getElementById :: Text -> IO JSVal
-getElementById a = getElementById_ (fromText a)
+getElementById :: MonadIO io => Text -> io JSVal
+getElementById a = liftIO (getElementById_ (fromText a))
 
 foreign import javascript unsafe "$1.value"
     toValue_ :: JSVal -> IO JSString
@@ -156,7 +156,9 @@ setParam a b c =
     liftIO (setParam_ a (fromText b) (fromText c))
 
 -- @$1.delete($2)@ doesn't work because GHCJS treats delete as a forbidden
--- reserved keyword
+-- reserved keyword, so we work around this by defining the
+-- @deleteSearchParamWorkaround@ function in JavaScript which takes care of this
+-- for us
 foreign import javascript unsafe "deleteSearchParamWorkaround($1, $2)"
     deleteParam_ :: JSVal -> JSString -> IO ()
 
@@ -171,7 +173,7 @@ saveSearchParams :: MonadIO io => JSVal -> io ()
 saveSearchParams a = liftIO (saveSearchParams_ a)
 
 -- @$1.replaceChildren(...$2)@ does not work because GHCJS fails to parse the
--- spread operator, we work around this by defining the
+-- spread operator, so we work around this by defining the
 -- @replaceChildrenWorkaround@ function in JavaScript which takes care of the
 -- spread operator for us
 foreign import javascript unsafe "replaceChildrenWorkaround($1, $2)"
@@ -815,9 +817,9 @@ main = do
     setAttribute spinner "class" "spinner-border text-primary"
     setAttribute spinner "role"  "status"
 
-    params <- getSearchParams
+    counter <- IORef.newIORef 0
 
-    ref <- IORef.newIORef 0
+    params <- getSearchParams
 
     hasTutorial <- hasParam params "tutorial"
 
@@ -830,50 +832,49 @@ main = do
             setDisplay error  "block"
 
     let setOutput type_ value = do
-            renderValue ref output type_ value
+            renderValue counter output type_ value
 
             setDisplay error  "none"
             setDisplay output "block"
 
     interpret <- debounce do
-            text <- getValue codeInput
+        text <- getValue codeInput
 
-            if text == ""
-                then deleteParam params "expression"
-                else setParam params "expression" (URI.Encode.encodeText text)
+        if text == ""
+            then deleteParam params "expression"
+            else setParam params "expression" (URI.Encode.encodeText text)
 
-            tutorial <- IORef.readIORef tutorialRef
+        tutorial <- IORef.readIORef tutorialRef
 
-            if tutorial == False
-                then deleteParam params "tutorial"
-                else setParam params "tutorial" "true"
+        if tutorial == False
+            then deleteParam params "tutorial"
+            else setParam params "tutorial" "true"
 
-            saveSearchParams params
+        saveSearchParams params
 
-            if  | Text.null text -> do
+        if  | Text.null text -> do
+                Monad.unless tutorial do
+                    setDisplay startTutorial "inline-block"
 
-                    Monad.unless tutorial do
-                        setDisplay startTutorial "inline-block"
+                setError ""
 
-                    setError ""
+            | otherwise -> do
+                setDisplay startTutorial "none"
 
-                | otherwise -> do
-                    setDisplay startTutorial "none"
+                let input_ = Code "(input)" text
 
-                    let input_ = Code "(input)" text
+                replaceChild error spinner
 
-                    replaceChild error spinner
+                setDisplay output "none"
+                setDisplay error  "block"
 
-                    setDisplay output "none"
-                    setDisplay error  "block"
+                result <- Except.runExceptT (Interpret.interpret input_)
 
-                    result <- Except.runExceptT (Interpret.interpret input_)
-
-                    case result of
-                        Left interpretError -> do
-                            setError (Text.pack (displayException interpretError))
-                        Right (type_, value) -> do
-                            setOutput type_ value
+                case result of
+                    Left interpretError -> do
+                        setError (Text.pack (displayException interpretError))
+                    Right (type_, value) -> do
+                        setOutput type_ value
 
     inputCallback <- Callback.asyncCallback interpret
 
