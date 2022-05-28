@@ -1071,13 +1071,19 @@ polymorphismExample =
 
 builtinsExample :: Text
 builtinsExample =
-    "# Grace has a limited number of built-in functions, and you can\n\
-    \# test-drive them below.\n\
+    "# Grace has a limited number of operators and built-in functions, and\n\
+    \# you can test-drive them below.\n\
     \#\n\
     \# Note: Not all functions can be rendered, and when that happens the\n\
     \# Grace browser falls back to rendering the function as code.\n\
     \\n\
-    \{ \"Real/equal\": Real/equal\n\
+    \{ \"x + y : Natural\": \\input -> (input.x + input.y) : Natural\n\
+    \, \"x + y : Text\": \\input -> (input.x + input.y) : Text\n\
+    \, \"x + y : List Bool\": \\input -> (input.x + input.y) : List Bool\n\
+    \, \"x * y : Natural\": \\input -> (input.x * input.y) : Natural\n\
+    \, \"x || y\": \\input -> input.x || input.y\n\
+    \, \"x && y\": \\input -> input.x && input.y\n\
+    \, \"Real/equal\": Real/equal\n\
     \, \"Real/lessThan\": Real/lessThan\n\
     \, \"Real/negate\": Real/negate\n\
     \, \"Real/show\": Real/show\n\
