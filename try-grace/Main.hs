@@ -200,7 +200,7 @@ foreign import javascript unsafe "$1.remove()"
 remove :: MonadIO io => JSVal -> io ()
 remove a = liftIO (remove_ a)
 
-foreign import javascript unsafe "CodeMirror.fromTextArea($1, { lineNumbers: true, viewportMargin: Infinity })"
+foreign import javascript unsafe "CodeMirror.fromTextArea($1, { lineNumbers: true, viewportMargin: Infinity, extraKeys: { Tab: false } })"
     setupCodemirror_ :: JSVal -> IO JSVal
 
 setupCodemirror :: MonadIO io => JSVal -> io JSVal
@@ -242,6 +242,12 @@ foreign import javascript unsafe "$1.classList.add($2)"
 
 addClass :: MonadIO io => JSVal -> Text -> io ()
 addClass a b = liftIO (addClass_ a (fromText b))
+
+foreign import javascript unsafe "$1.focus()"
+    focus_ :: JSVal -> IO ()
+
+focus :: MonadIO io => JSVal -> io ()
+focus a = liftIO (focus_ a)
 
 toText :: JSString -> Text
 toText = Text.pack . JSString.unpack
@@ -812,6 +818,8 @@ main = do
 
     codeInput <- setupCodemirror input
 
+    focus codeInput
+
     spinner <- createElement "div"
 
     setAttribute spinner "class" "spinner-border text-primary"
@@ -986,6 +994,8 @@ main = do
 
                 remove ul
 
+                focus codeInput
+
             addEventListener stopTutorial "click" stopTutorialCallback
 
             after startTutorial stopTutorial
@@ -993,6 +1003,8 @@ main = do
             IORef.writeIORef tutorialRef True
 
             setDisplay startTutorial "none"
+
+            focus codeInput
 
     startTutorialCallback <- Callback.asyncCallback enableTutorial
 
