@@ -1042,7 +1042,7 @@ jsonExample =
 
 programmingExample :: Text
 programmingExample =
-    "# You can use let expressions to defined reusable values or functions:\n\
+    "# You can use let expressions to define reusable values or functions:\n\
     \\n\
     \let makeUser = \\user ->\n\
     \      let home       = \"/home/\" + user\n\
@@ -1125,7 +1125,7 @@ preludeExample =
 conclusionExample :: Text
 conclusionExample =
     "# Feel free to play with the Grace browser as much as you want.  All of\n\
-    \# this runs client-side (in your Browser), so this is cheap to host.\n\
+    \# this runs client-side (in your browser), so this is cheap to host.\n\
     \#\n\
     \# You can easily fork Grace to customize the language to your liking by\n\
     \# visiting:\n\
