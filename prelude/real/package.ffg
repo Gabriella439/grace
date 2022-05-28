@@ -8,5 +8,7 @@
 , nonNegative: ./nonNegative.ffg
 , nonPositive: ./nonPositive.ffg
 , positive: ./positive.ffg
+, product: ./product.ffg
 , show: ./show.ffg
+, sum: ./sum.ffg
 }

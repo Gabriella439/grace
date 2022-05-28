@@ -2,5 +2,6 @@
 , real: ./real/package.ffg
 , integer: ./integer/package.ffg
 , list: ./list/package.ffg
+, natural: ./natural/package.ffg
 , text: ./text/package.ffg
 }

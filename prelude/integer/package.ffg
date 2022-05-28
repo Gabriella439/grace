@@ -3,5 +3,7 @@
 , even: ./even.ffg
 , negate: ./negate.ffg
 , odd: ./odd.ffg
+, product: ./product.ffg
+, sum: ./sum.ffg
 , toNatural: ./toNatural.ffg
 }
