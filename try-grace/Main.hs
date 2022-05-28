@@ -781,15 +781,6 @@ main = do
 
     params <- getSearchParams
 
-    hasExpression <- hasParam params "expression"
-
-    Monad.when hasExpression do
-        expression <- getParam params "expression"
-
-        setValue codeInput (URI.Encode.decodeText expression)
-
-        replaceChild error spinner
-
     ref <- IORef.newIORef 0
 
     hasTutorial <- hasParam params "tutorial"
@@ -972,7 +963,14 @@ main = do
 
     Monad.when hasTutorial enableTutorial
 
-    Monad.when hasExpression interpret
+    hasExpression <- hasParam params "expression"
+
+    Monad.when hasExpression do
+        expression <- getParam params "expression"
+
+        setValue codeInput (URI.Encode.decodeText expression)
+
+    interpret
 
 helloWorldExample :: Text
 helloWorldExample =
