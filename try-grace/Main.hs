@@ -6,6 +6,7 @@
 module Main where
 
 import Control.Applicative (empty)
+import Control.Concurrent.Async (Async)
 import Control.Exception (Exception(..))
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Maybe (MaybeT)
@@ -26,6 +27,10 @@ import JavaScript.Array (JSArray)
 import Numeric.Natural (Natural)
 import Prelude hiding (div, error, id, span, subtract)
 
+import qualified Control.Concurrent.Async as Async
+import qualified Control.Concurrent.STM as STM
+import qualified Control.Concurrent.STM.TVar as TVar
+import qualified Control.Exception as Exception
 import qualified Control.Monad as Monad
 import qualified Control.Monad.Except as Except
 import qualified Control.Monad.State as State
@@ -765,6 +770,37 @@ renderInput ref Type.List{ type_ } = do
 renderInput _ _ = do
     empty
 
+data DebounceStatus = Ready | Lock | Running (Async ())
+
+debounce :: IO () -> IO (IO ())
+debounce io = do
+    tvar <- TVar.newTVarIO Ready
+
+    return do
+        let open = do
+                STM.atomically do
+                    status <- TVar.readTVar tvar
+
+                    case status of
+                        Ready -> do
+                            TVar.writeTVar tvar Lock
+                            return Nothing
+                        Lock -> do
+                            empty
+                        Running async -> do
+                            return (Just async)
+
+        let close _ = STM.atomically (TVar.writeTVar tvar Ready)
+
+        Exception.bracket open close \m -> do
+            case m of
+                Nothing    -> mempty
+                Just async -> Async.cancel async
+
+            async <- Async.async io
+
+            STM.atomically (TVar.writeTVar tvar (Running async))
+
 main :: IO ()
 main = do
     input         <- getElementById "input"
@@ -799,7 +835,7 @@ main = do
             setDisplay error  "none"
             setDisplay output "block"
 
-    let interpret = do
+    interpret <- debounce do
             text <- getValue codeInput
 
             if text == ""
