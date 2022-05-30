@@ -26,6 +26,7 @@ module Grace.Lexer
     , reserved
       -- * Miscellaneous
     , validRecordLabel
+    , validAlternativeLabel
       -- * Errors related to parsing
     , ParseError(..)
     ) where
@@ -160,6 +161,7 @@ parseToken =
         , number
         , text
         , alternative
+        , quotedAlternative
         ]
 
 parseLocatedToken :: Parser LocatedToken
@@ -272,16 +274,31 @@ text = lexeme do
 
     return (TextLiteral (Text.concat texts))
 
+isLabel0 :: Char -> Bool
+isLabel0 c = Char.isLower c || c == '_'
+
 isLabel :: Char -> Bool
 isLabel c = Char.isAlphaNum c || c == '_' || c == '-' || c == '/'
 
--- | Returns `True` if the given label is valid
+-- | Returns `True` if the given record label is valid when unquoted
 validRecordLabel :: Text -> Bool
-validRecordLabel text_  =
+validRecordLabel text_ =
     case Text.uncons text_ of
-        Nothing     -> False
+        Nothing ->
+            False
         Just (h, t) ->
-                (Char.isAlpha h || h == '_')
+                isLabel0 h
+            &&  Text.all isLabel t
+            &&  not (HashSet.member text_ reserved)
+
+-- | Returns `True` if the given alternative label is a valid when unquoted
+validAlternativeLabel :: Text -> Bool
+validAlternativeLabel text_ =
+    case Text.uncons text_ of
+        Nothing ->
+            False
+        Just (h, t) ->
+                Char.isUpper h
             &&  Text.all isLabel t
             &&  not (HashSet.member text_ reserved)
 
@@ -334,8 +351,6 @@ reserved =
 
 label :: Parser Token
 label = (lexeme . try) do
-    let isLabel0 c = Char.isLower c || c == '_'
-
     c0 <- Megaparsec.satisfy isLabel0 <?> "label character"
 
     cs <- Megaparsec.takeWhileP (Just "label character") isLabel
@@ -353,6 +368,47 @@ alternative = lexeme do
     cs <- Megaparsec.takeWhileP (Just "alternative character") isLabel
 
     return (Alternative (Text.cons c0 cs))
+
+quotedAlternative :: Parser Token
+quotedAlternative = lexeme do
+    "'"
+
+    let isText c =
+                ('\x20' <= c && c <=     '\x26')
+            ||  ('\x28' <= c && c <=     '\x5b')
+            ||  ('\x5d' <= c && c <= '\x10FFFF')
+
+    let unescaped = Megaparsec.takeWhile1P (Just "alternative character") isText
+
+    let unicodeEscape = do
+            "\\u"
+
+            codepoint <- Combinators.count 4 Megaparsec.Char.hexDigitChar
+
+            case Read.hexadecimal (Text.pack codepoint) of
+                Right (n, "") -> do
+                    return (Text.singleton (Char.chr n))
+                _             -> do
+                    fail "Internal error - invalid unicode escape sequence"
+
+    let escaped =
+            Combinators.choice
+                [ "'"  <$ "\\\'"
+                , "\\" <$ "\\\\"
+                , "/"  <$ "\\/"
+                , "\b" <$ "\\b"
+                , "\f" <$ "\\f"
+                , "\n" <$ "\\n"
+                , "\r" <$ "\\r"
+                , "\t" <$ "\\t"
+                , unicodeEscape
+                ] <?> "escape sequence"
+
+    texts <- many (unescaped <|> escaped)
+
+    "'"
+
+    return (Alternative (Text.concat texts))
 
 -- | Tokens produced by lexing
 data Token

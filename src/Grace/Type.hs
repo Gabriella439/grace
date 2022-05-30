@@ -32,6 +32,7 @@ module Grace.Type
     , substituteAlternatives
       -- * Pretty-printing
     , prettyRecordLabel
+    , prettyAlternativeLabel
     , prettyTextLiteral
     ) where
 
@@ -112,10 +113,10 @@ data Type s
     | Union { location :: s, alternatives :: Union s }
     -- ^ Union type
     --
-    -- >>> pretty @(Type ()) (Union () (Alternatives [("x", "X"), ("y", "Y")] Monotype.EmptyAlternatives))
-    -- < x: X | y: Y >
-    -- >>> pretty @(Type ()) (Union () (Alternatives [("x", "X"), ("y", "Y")] (Monotype.UnsolvedAlternatives 0)))
-    -- < x: X | y: Y | a? >
+    -- >>> pretty @(Type ()) (Union () (Alternatives [("X", "X"), ("Y", "Y")] Monotype.EmptyAlternatives))
+    -- < X: X | Y: Y >
+    -- >>> pretty @(Type ()) (Union () (Alternatives [("X", "X"), ("Y", "Y")] (Monotype.UnsolvedAlternatives 0)))
+    -- < X: X | Y: Y | a? >
     | Scalar { location :: s, scalar :: Scalar }
     deriving stock (Eq, Functor, Generic, Lift, Show)
 
@@ -751,13 +752,13 @@ prettyUnionType (Alternatives (keyType : keyTypes) alternatives) =
             )
 
     prettyShortAlternativeType (key, type_) =
-            label (pretty key)
+            prettyAlternativeLabel key
         <>  operator ":"
         <>  " "
         <>  prettyQuantifiedType type_
 
     prettyLongAlternativeType (key, type_) =
-            label (pretty key)
+            prettyAlternativeLabel key
         <>  operator ":"
         <>  Pretty.group (Pretty.flatAlt (Pretty.hardline <> "    ") " ")
         <>  prettyQuantifiedType type_
@@ -778,6 +779,21 @@ prettyTextLiteral text =
         ) text
     <>  "\""
 
+-- | Pretty-print a @Text@ literal
+prettyQuotedAlternative :: Text -> Doc AnsiStyle
+prettyQuotedAlternative text =
+        "'"
+    <>  ( pretty
+        . Text.replace "'" "\\\'"
+        . Text.replace "\b" "\\b"
+        . Text.replace "\f" "\\f"
+        . Text.replace "\n" "\\n"
+        . Text.replace "\r" "\\r"
+        . Text.replace "\t" "\\t"
+        . Text.replace "\\" "\\\\"
+        ) text
+    <>  "'"
+
 -- | Pretty-print a record label
 prettyRecordLabel
     :: Bool
@@ -792,3 +808,13 @@ prettyRecordLabel alwaysQuote field
         label (pretty field)
     | otherwise =
         label (prettyTextLiteral field)
+
+-- | Pretty-print an alternative label
+prettyAlternativeLabel
+    :: Text
+    -> Doc AnsiStyle
+prettyAlternativeLabel alternative
+    | Lexer.validAlternativeLabel alternative =
+        label (pretty alternative)
+    | otherwise =
+        label (prettyQuotedAlternative alternative)

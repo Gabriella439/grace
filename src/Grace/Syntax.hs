@@ -611,7 +611,7 @@ prettyPrimitiveExpression Variable{..}
     | index == 0 = label (pretty name)
     | otherwise  = label (pretty name) <> "@" <> Pretty.scalar (pretty index)
 prettyPrimitiveExpression Alternative{..} =
-    label (pretty name)
+    Type.prettyAlternativeLabel name
 prettyPrimitiveExpression List{ elements = [] } =
     punctuation "[" <> " " <> punctuation "]"
 prettyPrimitiveExpression List{ elements = element :<| elements } =
