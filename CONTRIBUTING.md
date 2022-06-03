@@ -28,7 +28,7 @@ or
 [`haskell-language-server`](https://github.com/haskell/haskell-language-server)
 for interactive development.
 
-This project also provides a `shell.nix` for Nix users, but it's not necessary
+This project also provides `devShells` for Nix users, but it's not necessary
 for project development.
 
 The project tries to be as maintainable possible, meaning that most mistakes
@@ -50,7 +50,7 @@ If you want to make changes to the website you will need to build using GHCJS,
 which entails the following commands:
 
 ```bash
-$ nix-shell --argstr compiler ghcjs
+$ nix develop .#ghcjs
 [nix-shell]$ cabal v1-configure --ghcjs --disable-tests
 [nix-shell]$ cabal v1-build
 ```
