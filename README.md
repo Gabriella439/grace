@@ -16,6 +16,10 @@ If you're interested in code samples, then you can either jump down to the
 [Quick tour](#quick-tour) section or check out the
 [examples directory](./examples).
 
+You can also try out Fall-from-Grace in your browser by visiting this page:
+
+* [Grace browser](https://trygrace.dev/)
+
 ## Build
 
 You can build the `grace` executable using `cabal`:
