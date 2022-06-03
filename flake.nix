@@ -103,26 +103,23 @@
              in
             { inherit grace graceNoTests website; };
 
-          compilers = [ "ghc8107" "ghcjs" ]; # Supported compilers
-          defaultCompiler = "ghc8107";
-          withDefaultCompiler = withCompiler defaultCompiler;
+          withDefaultCompiler = withCompiler "ghc8107";
+          withghcjs = withCompiler "ghcjs";
        in
       {
-        packages = let inherit (nixpkgs.lib.attrsets) mapAttrs' nameValuePair;
-                       inherit (nixpkgs.lib.lists) foldl forEach;
-                       mergeAttrs = foldl (a: b: a // b) {};
-                    in mergeAttrs
-                         (forEach compilers
-                                  (compiler: mapAttrs' (name: nameValuePair "${name}-${compiler}")
-                                                       (withCompiler compiler)));
+        packages = {
+          default = withDefaultCompiler.grace;
+          website = withghcjs.website;
+        };
 
         apps.default = {
           type = "app";
           program = "${withDefaultCompiler.graceNoTests}/bin/grace";
         };
-      }
-      // utils.lib.eachSystem compilers (compiler: {
-          devShells = (withCompiler compiler).grace.env;
-        })
-      );
+
+        devShells = {
+          default = withDefaultCompiler.grace.env;
+          ghcjs = withghcjs.grace.env;
+        };
+      });
 }
