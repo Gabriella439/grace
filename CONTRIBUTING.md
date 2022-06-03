@@ -28,7 +28,7 @@ or
 [`haskell-language-server`](https://github.com/haskell/haskell-language-server)
 for interactive development.
 
-This project also provides a `devShells` for Nix users, but it's not necessary
+This project also provides `devShells` for Nix users, but it's not necessary
 for project development.
 
 The project tries to be as maintainable possible, meaning that most mistakes
