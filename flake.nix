@@ -5,7 +5,7 @@
   };
 
   outputs = { nixpkgs, utils, ... }:
-    utils.lib.eachSystem ["x86_64-linux"] (system:
+    utils.lib.eachDefaultSystem (system:
       let withCompiler = compiler:
             let overlay = pkgsNew: pkgsOld: {
                   haskell = pkgsOld.haskell // {
