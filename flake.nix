@@ -99,9 +99,14 @@
 
           grace = pkgs.haskell.packages."${compiler}".grace;
           graceNoTests = grace.overrideAttrs (_: { doCheck = false; });
+          website = pkgs.website;
        in
       {
-        packages.default = grace;
+        packages = {
+          inherit website;
+          default = grace;
+        };
+
         apps.default = {
           type = "app";
           program = "${graceNoTests}/bin/grace";
