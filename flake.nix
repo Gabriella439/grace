@@ -106,20 +106,26 @@
           withDefaultCompiler = withCompiler "ghc8107";
           withghcjs = withCompiler "ghcjs";
        in
-      {
+      rec {
         packages = {
           default = withDefaultCompiler.grace;
           website = withghcjs.website;
         };
+
+        defaultPackage = packages.default;
 
         apps.default = {
           type = "app";
           program = "${withDefaultCompiler.graceNoTests}/bin/grace";
         };
 
+        defaultApp = apps.default;
+
         devShells = {
           default = withDefaultCompiler.grace.env;
           ghcjs = withghcjs.grace.env;
         };
+
+        devShell = devShells.default;
       });
 }
