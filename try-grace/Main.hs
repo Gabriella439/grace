@@ -88,6 +88,12 @@ foreign import javascript unsafe "$1.textContent= $2"
 setTextContent :: MonadIO io => JSVal -> Text -> io ()
 setTextContent a b = liftIO (setTextContent_ a (fromText b))
 
+foreign import javascript unsafe "$1.innerText= $2"
+    setInnerText_ :: JSVal -> JSString -> IO ()
+
+setInnerText :: MonadIO io => JSVal -> Text -> io ()
+setInnerText a b = liftIO (setInnerText_ a (fromText b))
+
 foreign import javascript unsafe "$1.style.display = $2"
     setDisplay_ :: JSVal -> JSString -> IO ()
 
@@ -290,7 +296,7 @@ renderValue _ parent _ (Value.Scalar (Text text))= do
 
     setAttribute span "style" "whitespace: pre"
 
-    setTextContent span text
+    setInnerText span text
 
     replaceChild parent span
 
