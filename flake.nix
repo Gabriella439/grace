@@ -98,17 +98,21 @@
                 pkgs = import nixpkgs { inherit config system; overlays = [ overlay ]; };
 
                 grace = pkgs.haskell.packages."${compiler}".grace;
-                graceNoTests = grace.overrideAttrs (_: { doCheck = false; });
+
+                graceMinimal =
+                  pkgs.haskell.lib.justStaticExecutables
+                    (grace.overrideAttrs (_: { doCheck = false; }));
+
                 website = pkgs.website;
              in
-            { inherit grace graceNoTests website; };
+            { inherit grace graceMinimal website; };
 
           withDefaultCompiler = withCompiler "ghc8107";
           withghcjs = withCompiler "ghcjs";
        in
       rec {
         packages = {
-          default = withDefaultCompiler.grace;
+          default = withDefaultCompiler.graceMinimal;
           website = withghcjs.website;
         };
 
@@ -116,7 +120,7 @@
 
         apps.default = {
           type = "app";
-          program = "${withDefaultCompiler.graceNoTests}/bin/grace";
+          program = "${withDefaultCompiler.graceMinimal}/bin/grace";
         };
 
         defaultApp = apps.default;
