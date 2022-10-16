@@ -4,6 +4,7 @@
 
 {-# OPTIONS_GHC -Wno-orphans #-}
 
+-- | A utility module for backwards compatibility and other utility functions.
 module Grace.Utils where
 
 #if !MIN_VERSION_containers(0, 6, 6)
