@@ -47,6 +47,7 @@ library
                      , Grace.HTTP
                      , Grace.TH
                      , Grace.Type
+                     , Grace.Utils
                      , Grace.Value
                      , Grace.Width
 
