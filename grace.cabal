@@ -47,9 +47,10 @@ library
                      , Grace.HTTP
                      , Grace.TH
                      , Grace.Type
-                     , Grace.Utils
                      , Grace.Value
                      , Grace.Width
+
+  other-modules:       Grace.Compat
 
   default-language:    Haskell2010
 

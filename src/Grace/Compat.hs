@@ -4,8 +4,9 @@
 
 {-# OPTIONS_GHC -Wno-orphans #-}
 
--- | A utility module for backwards compatibility and other utility functions.
-module Grace.Utils where
+-- | An internal utility module for backwards compatibility across GHC releases
+-- and different libary versions.
+module Grace.Compat where
 
 import Data.HashMap.Strict.InsOrd (InsOrdHashMap)
 import Data.Text (Text)
