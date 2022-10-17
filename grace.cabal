@@ -10,7 +10,7 @@ library
   hs-source-dirs:      src
 
   build-depends:       base
-                     , aeson < 2.0
+                     , aeson
                      , Earley
                      , containers
                      , filepath
@@ -49,6 +49,8 @@ library
                      , Grace.Type
                      , Grace.Value
                      , Grace.Width
+
+  other-modules:       Grace.Compat
 
   default-language:    Haskell2010
 

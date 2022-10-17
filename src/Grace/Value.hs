@@ -20,8 +20,8 @@ import Grace.Syntax (Builtin, Operator, Scalar, Syntax)
 import Grace.Type (Type)
 
 import qualified Data.Aeson as Aeson
-import qualified Data.HashMap.Strict.InsOrd as HashMap
 import qualified Data.Sequence as Seq
+import qualified Grace.Compat as Compat
 import qualified Grace.Syntax as Syntax
 
 {-| A `Closure` captures the current evaluation environment in order to defer
@@ -63,7 +63,7 @@ data Value
       -- >              │             │
       -- >              v             │
       -- > \x -> \y -> \x     ->    x@0
-      -- > 
+      -- >
       -- > ┌─────────refers to────────┐
       -- > │                          │
       -- > v                          │
@@ -104,7 +104,7 @@ instance IsString Value where
 instance FromJSON Value where
     parseJSON (Aeson.Object object) = do
         values <- traverse parseJSON object
-        pure (Record (HashMap.fromHashMap values))
+        pure (Record (Compat.fromAesonMap values))
     parseJSON (Aeson.Array array) = do
         values <- traverse parseJSON array
         pure (List (Seq.fromList (toList values)))
