@@ -929,7 +929,7 @@ JSON/fold
   , "string": \_ -> 2
   , "null": 3
   , "object": List/length
-  , "array": \vs -> List/fold vs (\x -> \y -> x + y : Natural) 0
+  , "array": List/fold { nil: 0, cons: \x -> \y -> x + y : Natural }
   }
   [ true, 1, [ -2, false, "" ], null, { foo: { } } ]
 ```
