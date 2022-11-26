@@ -1,11 +1,5 @@
 builds:
  exclude: []
  include:
- - packages.aarch64-darwin.*
- - apps.aarch64-darwin.*
- - packages.x86_64-darwin.*
- - apps.x86_64-darwin.*
- - packages.aarch64-linux.*
- - apps.aarch64-linux.*
- - packages.x86_64-linux.*
- - apps.x86_64-linux.*
+ - packages.*.default
+ - apps.*.*
