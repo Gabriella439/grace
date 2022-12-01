@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = github:NixOS/nixpkgs/22.11;
+    nixpkgs.url = github:NixOS/nixpkgs/22.05;
     utils.url = github:numtide/flake-utils;
   };
 
@@ -63,10 +63,21 @@
                                   else
                                     drv;
 
+                              aeson = haskellPackagesNew.aeson_1_5_6_0;
+
                               haskeline = haskellPackagesNew.haskeline_0_8_2;
 
+                              insert-ordered-containers =
+                                pkgsNew.haskell.lib.dontCheck
+                                  haskellPackagesOld.insert-ordered-containers;
+
                               prettyprinter-ansi-terminal =
-                                pkgsNew.haskell.lib.dontCheck haskellPackagesOld.prettyprinter-ansi-terminal;
+                                pkgsNew.haskell.lib.dontCheck
+                                  haskellPackagesOld.prettyprinter-ansi-terminal;
+
+                              text-short =
+                                pkgsNew.haskell.lib.dontCheck
+                                  haskellPackagesOld.text-short;
 
                               vector =
                                 pkgsNew.haskell.lib.dontCheck haskellPackagesOld.vector;
@@ -107,7 +118,7 @@
              in
             { inherit grace graceMinimal website; };
 
-          withDefaultCompiler = withCompiler "ghc90";
+          withDefaultCompiler = withCompiler "ghc902";
           withghcjs = withCompiler "ghcjs";
        in
       rec {
