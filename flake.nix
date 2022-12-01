@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = github:NixOS/nixpkgs/21a3136d25e1652cb32197445e9799e6a5154588;
+    nixpkgs.url = github:NixOS/nixpkgs/22.11;
     utils.url = github:numtide/flake-utils;
   };
 
@@ -107,7 +107,7 @@
              in
             { inherit grace graceMinimal website; };
 
-          withDefaultCompiler = withCompiler "ghc8107";
+          withDefaultCompiler = withCompiler "ghc90";
           withghcjs = withCompiler "ghcjs";
        in
       rec {
