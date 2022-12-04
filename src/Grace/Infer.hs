@@ -377,6 +377,21 @@ subtype _A0 _B0 = do
         (_, Type.Optional{..}) -> do
             subtype _A0 type_
 
+        (Type.Scalar{ }, Type.Scalar{ scalar = Monotype.JSON }) -> do
+            return ()
+
+        (Type.List{ type_ = _A }, Type.Scalar{ scalar = Monotype.JSON }) -> do
+            subtype _A _B0
+            return ()
+
+        (Type.Record{ fields = Type.Fields kAs Monotype.EmptyFields }, Type.Scalar{ scalar = Monotype.JSON }) -> do
+            let process (_, _A) = do
+                    _Γ <- get
+
+                    subtype _A (Context.solveType _Γ _B0)
+
+            traverse_ process kAs
+
         -- The type-checking code for records is the first place where we
         -- implement a non-trivial type that wasn't already covered by the
         -- paper, so we'll go into more detail here to explain the general
