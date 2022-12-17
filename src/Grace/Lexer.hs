@@ -291,7 +291,7 @@ validRecordLabel text_ =
             &&  Text.all isLabel t
             &&  not (HashSet.member text_ reserved)
 
--- | Returns `True` if the given alternative label is a valid when unquoted
+-- | Returns `True` if the given alternative label is valid when unquoted
 validAlternativeLabel :: Text -> Bool
 validAlternativeLabel text_ =
     case Text.uncons text_ of
