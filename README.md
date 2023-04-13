@@ -33,19 +33,19 @@ Note: For older versions of cabal (e.g. version <3), use `cabal new-build exe:gr
 You can also build this project using Nix:
 
 ```bash
-$ nix --extra-experimental-features nix-command --extra-experimental-features flakes build
+$ nix --extra-experimental-features 'nix-command flakes' build
 ```
 
 … and you can build the live demo website for this project also using Nix:
 
 ```bash
-$ nix --extra-experimental-features nix-command --extra-experimental-features flakes build .#website
+$ nix --extra-experimental-features 'nix-command flakes' build .#website
 ```
 
 You can also run `grace` without explicitly installing it:
 
 ```bash
-$ nix --extra-experimental-features nix-command --extra-experimental-features flakes run github:Gabriella439/grace -- --help
+$ nix --extra-experimental-features 'nix-command flakes' run github:Gabriella439/grace -- --help
 ```
 
 ## Features
