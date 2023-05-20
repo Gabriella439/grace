@@ -124,8 +124,7 @@ repl = do
             , ("type", Repline.dontCrash . infer)
             ]
 
-    let tabComplete =
-            Custom (Repline.runMatcher [ (":", completeCommands) ] complete)
+    let tabComplete = Prefix complete [ (":", completeCommands) ]
           where
             completeCommands =
                 Repline.listCompleter (fmap adapt options)
