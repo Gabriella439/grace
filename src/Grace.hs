@@ -27,6 +27,7 @@ import Prettyprinter.Render.Terminal (AnsiStyle)
 import qualified Control.Monad.Except as Except
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text.IO
+import qualified GHC.IO.Encoding
 import qualified Grace.HTTP as HTTP
 import qualified Grace.Infer as Infer
 import qualified Grace.Interpret as Interpret
@@ -172,6 +173,8 @@ throws (Right result) = do
 -- | Command-line entrypoint
 main :: IO ()
 main = do
+    GHC.IO.Encoding.setLocaleEncoding IO.utf8
+
     options <- Options.execParser parserInfo
 
     case options of
