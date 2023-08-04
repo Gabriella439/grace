@@ -49,7 +49,6 @@ import qualified Control.Monad.Combinators as Combinators
 import qualified Data.Char as Char
 import qualified Data.HashSet as HashSet
 import qualified Data.List as List
-import qualified Data.Scientific as Scientific
 import qualified Data.Text as Text
 import qualified Data.Text.Read as Read
 import qualified Grace.Location as Location
@@ -193,12 +192,15 @@ lex name code =
             return tokens
 
 number :: Parser Token
-number = do
-    scientific <- lexeme Lexer.scientific
-
-    case Scientific.toBoundedInteger scientific of
-        Nothing  -> return (RealLiteral scientific)
-        Just int -> return (Int int)
+number =
+  try parseInteger <|> parseScientific
+  where
+    parseInteger = Int
+      <$> lexeme Lexer.decimal
+      <* Megaparsec.notFollowedBy (Megaparsec.Char.char '.')
+    parseScientific = do
+        scientific <- lexeme Lexer.scientific
+        return (RealLiteral scientific)
 
 file :: Parser Token
 file = lexeme do
