@@ -313,6 +313,16 @@ subtype _A0 _B0 = do
         -- except with the arguments flipped.  Similarly, the <:∃L rule is
         -- basically the same as the <:∀R rule with the arguments flipped.
 
+        -- <:∃L
+        (Type.Exists{..}, _) -> do
+            scoped (Context.Variable domain name) do
+                subtype type_ _B0
+
+        -- <:∀R
+        (_, Type.Forall{..}) -> do
+            scoped (Context.Variable domain name) do
+                subtype _A0 type_
+
         -- <:∃R
         (_, Type.Exists{ domain = Domain.Type, .. }) -> do
             scopedUnsolvedType nameLocation \a ->
@@ -338,16 +348,6 @@ subtype _A0 _B0 = do
         (Type.Forall{ domain = Domain.Alternatives, .. }, _) -> do
             scopedUnsolvedAlternatives \a -> do
                 subtype (Type.substituteAlternatives name 0 a type_) _B0
-
-        -- <:∃L
-        (Type.Exists{..}, _) -> do
-            scoped (Context.Variable domain name) do
-                subtype type_ _B0
-
-        -- <:∀R
-        (_, Type.Forall{..}) -> do
-            scoped (Context.Variable domain name) do
-                subtype _A0 type_
 
         (Type.Scalar{ scalar = s0 }, Type.Scalar{ scalar = s1 })
             | s0 == s1 -> do

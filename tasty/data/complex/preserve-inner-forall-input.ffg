@@ -1,0 +1,4 @@
+let wrappedId
+  : { wrapped : forall (a : Type). a -> a }
+  = { wrapped : \x -> x }
+in wrappedId : { wrapped: forall (a : Type). a -> a }
