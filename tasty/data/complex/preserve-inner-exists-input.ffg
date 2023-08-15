@@ -1,0 +1,4 @@
+let wrappedVal
+  : { wrapped : exists (a : Type). a }
+  = { wrapped : 0 }
+in wrappedVal : { wrapped: exists (a : Type). a }
