@@ -326,28 +326,28 @@ subtype _A0 _B0 = do
         -- <:∃R
         (_, Type.Exists{ domain = Domain.Type, .. }) -> do
             scopedUnsolvedType nameLocation \a ->
-                subtype _A0 (Type.substituteType name 0 a type_)
+                subtype _A0 (Type.substituteType name a type_)
 
         (_, Type.Exists{ domain = Domain.Fields, .. }) -> do
             scopedUnsolvedFields \a -> do
-                subtype _A0 (Type.substituteFields name 0 a type_)
+                subtype _A0 (Type.substituteFields name a type_)
 
         (_, Type.Exists{ domain = Domain.Alternatives, .. }) -> do
             scopedUnsolvedAlternatives \a -> do
-                subtype _A0 (Type.substituteAlternatives name 0 a type_)
+                subtype _A0 (Type.substituteAlternatives name a type_)
 
         -- <:∀L
         (Type.Forall{ domain = Domain.Type, .. }, _) -> do
             scopedUnsolvedType nameLocation \a -> do
-                subtype (Type.substituteType name 0 a type_) _B0
+                subtype (Type.substituteType name a type_) _B0
 
         (Type.Forall{ domain = Domain.Fields, .. }, _) -> do
             scopedUnsolvedFields \a -> do
-                subtype (Type.substituteFields name 0 a type_) _B0
+                subtype (Type.substituteFields name a type_) _B0
 
         (Type.Forall{ domain = Domain.Alternatives, .. }, _) -> do
             scopedUnsolvedAlternatives \a -> do
-                subtype (Type.substituteAlternatives name 0 a type_) _B0
+                subtype (Type.substituteAlternatives name a type_) _B0
 
         (Type.Scalar{ scalar = s0 }, Type.Scalar{ scalar = s1 })
             | s0 == s1 -> do
@@ -791,13 +791,13 @@ instantiateTypeL a _A0 = do
         -- InstLExt
         Type.Exists{ domain = Domain.Type, .. } -> do
             scopedUnsolvedType nameLocation \b -> do
-                instantiateTypeR (Type.substituteType name 0 b type_) a
+                instantiateTypeR (Type.substituteType name b type_) a
         Type.Exists{ domain = Domain.Fields, .. } -> do
             scopedUnsolvedFields \b -> do
-                instantiateTypeR (Type.substituteFields name 0 b type_) a
+                instantiateTypeR (Type.substituteFields name b type_) a
         Type.Exists{ domain = Domain.Alternatives, .. } -> do
             scopedUnsolvedAlternatives \b -> do
-                instantiateTypeR (Type.substituteAlternatives name 0 b type_) a
+                instantiateTypeR (Type.substituteAlternatives name b type_) a
 
         -- InstLArr
         Type.Function{..} -> do
@@ -966,13 +966,13 @@ instantiateTypeR _A0 a = do
         -- InstRAllL
         Type.Forall{ domain = Domain.Type, .. } -> do
             scopedUnsolvedType nameLocation \b -> do
-                instantiateTypeR (Type.substituteType name 0 b type_) a
+                instantiateTypeR (Type.substituteType name b type_) a
         Type.Forall{ domain = Domain.Fields, .. } -> do
             scopedUnsolvedFields \b -> do
-                instantiateTypeR (Type.substituteFields name 0 b type_) a
+                instantiateTypeR (Type.substituteFields name b type_) a
         Type.Forall{ domain = Domain.Alternatives, .. } -> do
             scopedUnsolvedAlternatives \b -> do
-                instantiateTypeR (Type.substituteAlternatives name 0 b type_) a
+                instantiateTypeR (Type.substituteAlternatives name b type_) a
 
         Type.Optional{..} -> do
             let _ΓL = _Γ
@@ -1890,13 +1890,13 @@ check Syntax.Lambda{ location = _, ..} Type.Function{..} = do
 -- ∃I
 check e Type.Exists{ domain = Domain.Type, .. } = do
     scopedUnsolvedType nameLocation \a -> do
-        check e (Type.substituteType name 0 a type_)
+        check e (Type.substituteType name a type_)
 check e Type.Exists{ domain = Domain.Fields, .. } = do
     scopedUnsolvedFields \a -> do
-        check e (Type.substituteFields name 0 a type_)
+        check e (Type.substituteFields name a type_)
 check e Type.Exists{ domain = Domain.Alternatives, .. } = do
     scopedUnsolvedAlternatives \a -> do
-        check e (Type.substituteAlternatives name 0 a type_)
+        check e (Type.substituteAlternatives name a type_)
 
 -- ∀I
 check e Type.Forall{..} = do
@@ -2012,7 +2012,7 @@ inferApplication Type.Forall{ domain = Domain.Type, .. } e = do
 
     let a' = Type.UnsolvedType{ location = nameLocation, existential = a}
 
-    inferApplication (Type.substituteType name 0 a' type_) e
+    inferApplication (Type.substituteType name a' type_) e
 inferApplication Type.Forall{ domain = Domain.Fields, .. } e = do
     a <- fresh
 
@@ -2020,7 +2020,7 @@ inferApplication Type.Forall{ domain = Domain.Fields, .. } e = do
 
     let a' = Type.Fields [] (Monotype.UnsolvedFields a)
 
-    inferApplication (Type.substituteFields name 0 a' type_) e
+    inferApplication (Type.substituteFields name a' type_) e
 inferApplication Type.Forall{ domain = Domain.Alternatives, .. } e = do
     a <- fresh
 
@@ -2028,7 +2028,7 @@ inferApplication Type.Forall{ domain = Domain.Alternatives, .. } e = do
 
     let a' = Type.Alternatives [] (Monotype.UnsolvedAlternatives a)
 
-    inferApplication (Type.substituteAlternatives name 0 a' type_) e
+    inferApplication (Type.substituteAlternatives name a' type_) e
 
 -- ∃App
 inferApplication Type.Exists{..} e = do

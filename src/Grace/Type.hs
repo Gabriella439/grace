@@ -1,10 +1,12 @@
 {-# LANGUAGE ApplicativeDo      #-}
+{-# LANGUAGE BlockArguments     #-}
 {-# LANGUAGE DataKinds          #-}
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE DeriveLift         #-}
 {-# LANGUAGE DeriveTraversable  #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleInstances  #-}
+{-# LANGUAGE LambdaCase         #-}
 {-# LANGUAGE NamedFieldPuns     #-}
 {-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE RecordWildCards    #-}
@@ -36,7 +38,7 @@ module Grace.Type
     , prettyTextLiteral
     ) where
 
-import Control.Lens (Plated(..))
+import Control.Lens (Plated(..), (%~))
 import Data.Bifunctor (Bifunctor(..))
 import Data.Generics.Product (the)
 import Data.Generics.Sum (_As)
@@ -262,166 +264,53 @@ solveAlternatives unsolved (Monotype.Alternatives alternativeMonotypes alternati
     transformType type_ =
         type_
 
-{-| Replace all occurrences of a variable within one `Type` with another `Type`,
-    given the variable's label and index
+{-| Helper function for traversing the tree during `Type` substitutions.
 -}
-substituteType :: Text -> Int -> Type s -> Type s -> Type s
-substituteType a n _A type_ =
-    case type_ of
-        VariableType{..}
-            | a == name && n == 0 -> _A
-            | otherwise           -> VariableType{..}
+substitute :: Text -> Domain -> (Type s -> Type s) -> Type s -> Type s
+substitute a aDomain substituter = sub
+    where
+        sub x =
+            let result = substituter x
+            in (plate . Lens.filtered allowed %~ sub) result
 
-        UnsolvedType{..} ->
-            UnsolvedType{..}
+        allowed Exists{ .. }
+            | a == name && domain == aDomain = False
+        allowed Forall{ .. }
+            | a == name && domain == aDomain = False
+        allowed _ = True
+    
+{-| Replace all occurrences of a variable within one `Type` with another `Type`,
+    given the variable's label
+-}
+substituteType :: Text -> Type s -> Type s -> Type s
+substituteType a _A = substitute a Domain.Type \case
+    VariableType {..}
+        | a == name -> _A
+    v -> v
 
-        Exists{ type_ = oldType, .. } -> Exists{ type_ = newType, .. }
-          where
-            newType = substituteType a n' _A oldType
-
-            n'  | a == name && domain == Domain.Type = n + 1
-                | otherwise                          = n
-
-        Forall{ type_ = oldType, .. } -> Forall{ type_ = newType, .. }
-          where
-            newType = substituteType a n' _A oldType
-
-            n'  | a == name && domain == Domain.Type = n + 1
-                | otherwise                          = n
-
-        Function{ input = oldInput, output = oldOutput, .. } ->
-            Function{ input = newInput, output = newOutput, .. }
-          where
-            newInput = substituteType a n _A oldInput
-
-            newOutput = substituteType a n _A oldOutput
-
-        Optional{ type_ = oldType, .. } -> Optional{ type_ = newType, .. }
-          where
-            newType = substituteType a n _A oldType
-
-        List{ type_ = oldType, .. } -> List{ type_ = newType, .. }
-          where
-            newType = substituteType a n _A oldType
-
-        Record{ fields = Fields kAs ρ, .. } ->
-            Record{ fields = Fields (map (second (substituteType a n _A)) kAs) ρ, .. }
-
-        Union{ alternatives = Alternatives kAs ρ, .. } ->
-            Union{ alternatives = Alternatives (map (second (substituteType a n _A)) kAs) ρ, .. }
-
-        Scalar{..} ->
-            Scalar{..}
+{-| Replace all occurrences of a variable within one `Type` with another `Type`,
+    given the variable's label
+-}
+substituteFields :: Text -> Record s -> Type s -> Type s
+substituteFields ρ0 (Fields kτs ρ1) = substitute ρ0 Domain.Fields \case
+    Record{ fields = Fields kAs0 ρ, .. }
+        | VariableFields ρ0 == ρ ->
+            Record{ fields = Fields kAs1 ρ1, .. }
+      where
+        kAs1 = kAs0 <> map (second (fmap (\_ -> location))) kτs
+    v -> v
 
 {-| Replace all occurrences of a variable within one `Type` with another `Type`,
     given the variable's label and index
 -}
-substituteFields :: Text -> Int -> Record s -> Type s -> Type s
-substituteFields ρ0 n r@(Fields kτs ρ1) type_ =
-    case type_ of
-        VariableType{..} ->
-            VariableType{..}
-
-        UnsolvedType{..} ->
-            UnsolvedType{..}
-
-        Exists{ type_ = oldType, .. } -> Exists{ type_ = newType, .. }
-          where
-            newType = substituteFields ρ0 n' r oldType
-
-            n'  | ρ0 == name && domain == Domain.Fields = n + 1
-                | otherwise                             = n
-
-        Forall{ type_ = oldType, .. } -> Forall{ type_ = newType, .. }
-          where
-            newType = substituteFields ρ0 n' r oldType
-
-            n'  | ρ0 == name && domain == Domain.Fields = n + 1
-                | otherwise                             = n
-
-        Function{ input = oldInput, output = oldOutput, .. } ->
-            Function{ input = newInput, output = newOutput, .. }
-          where
-            newInput = substituteFields ρ0 n r oldInput
-
-            newOutput = substituteFields ρ0 n r oldOutput
-
-        Optional{ type_ = oldType, .. } -> Optional{ type_ = newType, .. }
-          where
-            newType = substituteFields ρ0 n r oldType
-
-        List{ type_ = oldType, .. } -> List{ type_ = newType, .. }
-          where
-            newType = substituteFields ρ0 n r oldType
-
-        Record{ fields = Fields kAs0 ρ, .. }
-            | VariableFields ρ0 == ρ && n == 0 ->
-                Record{ fields = Fields (map (second (substituteFields ρ0 n r)) kAs1) ρ1, .. }
-            | otherwise ->
-                Record{ fields = Fields (map (second (substituteFields ρ0 n r)) kAs0) ρ, .. }
-          where
-            kAs1 = kAs0 <> map (second (fmap (\_ -> location))) kτs
-
-        Union{ alternatives = Alternatives kAs ρ, .. } ->
-            Union{ alternatives = Alternatives (map (second (substituteFields ρ0 n r)) kAs) ρ, .. }
-
-        Scalar{..} ->
-            Scalar{..}
-
-{-| Replace all occurrences of a variable within one `Type` with another `Type`,
-    given the variable's label and index
--}
-substituteAlternatives :: Text -> Int -> Union s -> Type s -> Type s
-substituteAlternatives ρ0 n r@(Alternatives kτs ρ1) type_ =
-    case type_ of
-        VariableType{..} ->
-            VariableType{..}
-
-        UnsolvedType{..} ->
-            UnsolvedType{..}
-
-        Exists{ type_ = oldType, .. } -> Exists{ type_ = newType, .. }
-          where
-            newType = substituteAlternatives ρ0 n' r oldType
-
-            n'  | ρ0 == name && domain == Domain.Alternatives = n + 1
-                | otherwise                                   = n
-
-        Forall{ type_ = oldType, .. } -> Forall{ type_ = newType, .. }
-          where
-            newType = substituteAlternatives ρ0 n' r oldType
-
-            n'  | ρ0 == name && domain == Domain.Alternatives = n + 1
-                | otherwise                                   = n
-
-        Function{ input = oldInput, output = oldOutput, .. } ->
-            Function{ input = newInput, output = newOutput, .. }
-          where
-            newInput = substituteAlternatives ρ0 n r oldInput
-
-            newOutput = substituteAlternatives ρ0 n r oldOutput
-
-        Optional{ type_ = oldType, .. } -> Optional{ type_ = newType, .. }
-         where
-            newType = substituteAlternatives ρ0 n r oldType
-
-        List{ type_ = oldType, .. } -> List{ type_ = newType, .. }
-         where
-            newType = substituteAlternatives ρ0 n r oldType
-
-        Record{ fields = Fields kAs ρ, .. } ->
-            Record{ fields = Fields (map (second (substituteAlternatives ρ0 n r)) kAs) ρ, .. }
-
-        Union{ alternatives = Alternatives kAs0 ρ, .. }
-            | Monotype.VariableAlternatives ρ0 == ρ && n == 0 ->
-                Union{ alternatives = Alternatives (map (second (substituteAlternatives ρ0 n r)) kAs1) ρ1, .. }
-            | otherwise ->
-                Union{ alternatives = Alternatives (map (second (substituteAlternatives ρ0 n r)) kAs0) ρ, .. }
-          where
-            kAs1 = kAs0 <> map (second (fmap (\_ -> location))) kτs
-
-        Scalar{..} ->
-            Scalar{..}
+substituteAlternatives :: Text -> Union s -> Type s -> Type s
+substituteAlternatives ρ0 (Alternatives kτs ρ1) = substitute ρ0 Domain.Alternatives \case
+    Union{ alternatives = Alternatives kAs0 ρ, .. }
+        | Monotype.VariableAlternatives ρ0 == ρ ->
+            Union{ alternatives = Alternatives kAs1 ρ1, .. }
+      where
+        kAs1 = kAs0 <> map (second (fmap (\_ -> location))) kτs
+    v -> v
 
 {-| Count how many times the given `Existential` `Type` variable appears within
     a `Type`
