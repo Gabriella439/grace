@@ -629,6 +629,9 @@ subtype _A0 _B0 = do
             traverse_ process both
 
             case (alternatives0, alternatives1) of
+                _ | null extraA && null extraB && alternatives0 == alternatives1 -> do
+                        return ()
+
                 (Monotype.UnsolvedAlternatives p0, Monotype.UnsolvedAlternatives p1) -> do
                     p2 <- fresh
 
