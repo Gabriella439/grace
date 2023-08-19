@@ -9,20 +9,46 @@
 -}
 module Grace.Monotype
     ( -- * Types
-      Monotype(..)
+      VariableId(..)
+    , Monotype(..)
     , Scalar(..)
     , Record(..)
     , RemainingFields(..)
     , Union(..)
     , RemainingAlternatives(..)
+      -- * Utilities
+    , variableId
     ) where
 
+import Data.List (elemIndex)
 import Data.String (IsString(..))
-import Data.Text (Text)
+import Data.Text (Text, pack, unsnoc)
 import GHC.Generics (Generic)
 import Grace.Existential (Existential)
-import Grace.Pretty (Pretty(..), builtin)
+import Grace.Pretty (Pretty(..), builtin, label)
 import Language.Haskell.TH.Syntax (Lift)
+
+data VariableId = VariableId Text Int
+    deriving (Eq, Show, Lift)
+
+{-| Construct non-unique VariableId out of raw Text. -}
+variableId :: Text -> VariableId
+variableId = \text ->
+  let (name, ind) = takeIntFromEnd 0 1 text
+  in VariableId name ind
+  where
+    takeIntFromEnd :: Int -> Int -> Text -> (Text, Int)
+    takeIntFromEnd curr mult text
+      | Just (xs, x) <- unsnoc text
+      , Just ind <- x `elemIndex` "0123456789"
+        = takeIntFromEnd (curr + ind*mult) (10*mult) xs
+    takeIntFromEnd curr _ xs = (xs, curr)
+
+instance IsString VariableId where
+  fromString = variableId . pack
+
+instance Pretty VariableId where
+  pretty (VariableId text ind) = label $ pretty (text <> if ind == 0 then "" else fromString $ show (ind - 1))
 
 {-| A monomorphic type
 
@@ -30,7 +56,7 @@ import Language.Haskell.TH.Syntax (Lift)
     `Grace.Type.Forall` and `Grace.Type.Exists` constructors
 -}
 data Monotype
-    = VariableType Text
+    = VariableType VariableId
     | UnsolvedType (Existential Monotype)
     | Function Monotype Monotype
     | Optional Monotype
@@ -41,7 +67,7 @@ data Monotype
     deriving stock (Eq, Generic, Show)
 
 instance IsString Monotype where
-    fromString string = VariableType (fromString string)
+    fromString = VariableType . fromString
 
 -- | A scalar type
 data Scalar
@@ -97,7 +123,7 @@ data RemainingFields
     -- ^ The record type is open, meaning that some fields are known and there
     --   is an unsolved fields variable that is a placeholder for other fields
     --   that may or may not be present
-    | VariableFields Text
+    | VariableFields VariableId
     -- ^ Same as `UnsolvedFields`, except that the user has given the fields
     --   variable an explicit name in the source code
     deriving stock (Eq, Generic, Lift, Show)
@@ -114,7 +140,7 @@ data RemainingAlternatives
     -- ^ The union type is open, meaning that some alternatives are known and
     --   there is an unsolved alternatives variable that is a placeholder for
     --   other alternatives that may or may not be present
-    | VariableAlternatives Text
+    | VariableAlternatives VariableId
     -- ^ Same as `UnsolvedAlternatives`, except that the user has given the
     --   alternatives variable an explicit name in the source code
     deriving stock (Eq, Generic, Lift, Show)

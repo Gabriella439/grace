@@ -13,7 +13,7 @@ module Grace.Existential
     ( -- * Types
       Existential
       -- * Utilities
-    , toVariable
+    , internalName
     ) where
 
 import Data.Text (Text)
@@ -38,23 +38,14 @@ newtype Existential a = UnsafeExistential Int
     deriving newtype (Eq, Num, Show)
 
 instance Pretty (Existential a) where
-    pretty x = label (pretty (toVariable x))
+    pretty (UnsafeExistential n) = label $ pretty $ prefix <> suffix
+      where
+        (prefix, q) = internalName n
+        suffix = if q == 0 then "" else Text.pack (show (q - 1))
 
-{-| Convert an existential variable to a user-friendly `Text`
-    representation
-
-    >>> toVariable 0
-    "a"
-    >>> toVariable 1
-    "b"
-    >>> toVariable 26
-    "a0"
--}
-toVariable :: Existential a -> Text
-toVariable (UnsafeExistential n) = Text.cons prefix suffix
+internalName :: Int -> (Text, Int)
+internalName n = (prefix, q)
   where
     (q, r) = n `quotRem` 26
 
-    prefix = Char.chr (Char.ord 'a' + r)
-
-    suffix = if q == 0 then "" else Text.pack (show (q - 1))
+    prefix = Text.singleton $ Char.chr (Char.ord 'a' + r)

@@ -30,6 +30,7 @@ import Grace.Value (Value)
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
 import qualified Control.Monad.Except as Except
+import qualified Data.Map as Map
 import qualified Grace.Context as Context
 import qualified Grace.HTTP as HTTP
 import qualified Grace.Import as Import
@@ -98,7 +99,7 @@ interpretWith bindings maybeAnnotation manager input = do
 
             return (Context.Annotation variable type_)
 
-    case Infer.typeWith typeContext annotatedExpression of
+    case Infer.typeWith (Context.Context typeContext Map.empty) annotatedExpression of
         Left message -> do
             Except.throwError (TypeInferenceError message)
 

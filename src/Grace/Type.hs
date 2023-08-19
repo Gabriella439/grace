@@ -53,7 +53,12 @@ import Prettyprinter (Doc)
 import Prettyprinter.Render.Terminal (AnsiStyle)
 
 import Grace.Monotype
-    (Monotype, RemainingAlternatives(..), RemainingFields(..), Scalar(..))
+    ( Monotype
+    , RemainingAlternatives(..)
+    , RemainingFields(..)
+    , Scalar(..)
+    , VariableId
+    )
 
 import qualified Control.Lens as Lens
 import qualified Data.Text as Text
@@ -70,7 +75,7 @@ import qualified Prettyprinter as Pretty
 
 -- | A potentially polymorphic type
 data Type s
-    = VariableType { location :: s, name :: Text }
+    = VariableType { location :: s, name :: VariableId }
     -- ^ Type variable
     --
     -- >>> pretty @(Type ()) (VariableType () "a")
@@ -80,12 +85,12 @@ data Type s
     --
     -- >>> pretty @(Type ()) (UnsolvedType () 0)
     -- a?
-    | Exists { location :: s, nameLocation :: s, name :: Text, domain :: Domain, type_ :: Type s }
+    | Exists { location :: s, nameLocation :: s, name :: VariableId, domain :: Domain, type_ :: Type s }
     -- ^ Existentially quantified type
     --
     -- >>> pretty @(Type ()) (Exists () () "a" Domain.Type "a")
     -- exists (a : Type) . a
-    | Forall { location :: s, nameLocation :: s, name :: Text, domain :: Domain, type_ :: Type s }
+    | Forall { location :: s, nameLocation :: s, name :: VariableId, domain :: Domain, type_ :: Type s }
     -- ^ Universally quantified type
     --
     -- >>> pretty @(Type ()) (Forall () () "a" Domain.Type "a")
@@ -266,7 +271,7 @@ solveAlternatives unsolved (Monotype.Alternatives alternativeMonotypes alternati
 
 {-| Helper function for traversing the tree during `Type` substitutions.
 -}
-substitute :: Text -> Domain -> (Type s -> Type s) -> Type s -> Type s
+substitute :: VariableId -> Domain -> (Type s -> Type s) -> Type s -> Type s
 substitute a aDomain substituter = sub
     where
         sub x =
@@ -280,18 +285,18 @@ substitute a aDomain substituter = sub
         allowed _ = True
     
 {-| Replace all occurrences of a variable within one `Type` with another `Type`,
-    given the variable's label
+    given the variable's id
 -}
-substituteType :: Text -> Type s -> Type s -> Type s
+substituteType :: VariableId -> Type s -> Type s -> Type s
 substituteType a _A = substitute a Domain.Type \case
     VariableType {..}
         | a == name -> _A
     v -> v
 
 {-| Replace all occurrences of a variable within one `Type` with another `Type`,
-    given the variable's label
+    given the variable's id
 -}
-substituteFields :: Text -> Record s -> Type s -> Type s
+substituteFields :: VariableId -> Record s -> Type s -> Type s
 substituteFields ρ0 (Fields kτs ρ1) = substitute ρ0 Domain.Fields \case
     Record{ fields = Fields kAs0 ρ, .. }
         | VariableFields ρ0 == ρ ->
@@ -301,9 +306,9 @@ substituteFields ρ0 (Fields kτs ρ1) = substitute ρ0 Domain.Fields \case
     v -> v
 
 {-| Replace all occurrences of a variable within one `Type` with another `Type`,
-    given the variable's label and index
+    given the variable's id
 -}
-substituteAlternatives :: Text -> Union s -> Type s -> Type s
+substituteAlternatives :: VariableId -> Union s -> Type s -> Type s
 substituteAlternatives ρ0 (Alternatives kτs ρ1) = substitute ρ0 Domain.Alternatives \case
     Union{ alternatives = Alternatives kAs0 ρ, .. }
         | Monotype.VariableAlternatives ρ0 == ρ ->

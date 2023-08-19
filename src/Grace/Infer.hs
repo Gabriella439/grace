@@ -30,6 +30,8 @@ module Grace.Infer
 
 import Control.Applicative ((<|>))
 import Control.Exception.Safe (Exception(..))
+import Control.Lens (view, (%~), (.~))
+import Control.Lens.Lens (Lens', lens)
 import Control.Monad (when)
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.State.Strict (MonadState)
@@ -37,17 +39,17 @@ import Data.Foldable (traverse_)
 import Data.Sequence (ViewL(..))
 import Data.Text (Text)
 import Data.Void (Void)
-import Grace.Context (Context, Entry)
+import Grace.Context (Context(..), Entry)
 import Grace.Existential (Existential)
 import Grace.Location (Location(..))
-import Grace.Monotype (Monotype)
+import Grace.Monotype (Monotype, VariableId(..))
 import Grace.Pretty (Pretty(..))
 import Grace.Syntax (Syntax)
 import Grace.Type (Type(..))
 import Grace.Value (Value)
 
 import qualified Control.Monad as Monad
-import qualified Control.Monad.State as State
+import qualified Control.Monad.State.Strict as State
 import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
@@ -83,22 +85,28 @@ fresh = do
 
     return (fromIntegral n)
 
+_Context :: Lens' Status (Context Location)
+_Context = lens context (\s context -> s { context })
+
+_Entries :: Lens' Status [Entry Location]
+_Entries = _Context . Context._Entries
+
 -- Unlike the original paper, we don't explicitly thread the `Context` around.
 -- Instead, we modify the ambient state using the following utility functions:
 
 -- | Push a new `Context` `Entry` onto the stack
 push :: MonadState Status m => Entry Location -> m ()
-push entry = State.modify (\s -> s { context = entry : context s })
+push entry = State.modify (_Entries %~ (entry:))
 
--- | Retrieve the current `Context`
-get :: MonadState Status m => m (Context Location)
-get = State.gets context
+-- | Retrieve the current `Context` `Entry`s
+get :: MonadState Status m => m [Entry Location]
+get = State.gets (view _Entries)
 
--- | Set the `Context` to a new value
-set :: MonadState Status m => Context Location -> m ()
-set context = State.modify (\s -> s{ context })
+-- | Set the `Context` `Entry`s to a new value
+set :: MonadState Status m => [Entry Location] -> m ()
+set entries = State.modify (_Entries .~ entries)
 
-{-| This is used to temporarily add a `Context` entry that is discarded at the
+{-| This is used to temporarily add a `Context` `Entry` that is discarded at the
     end of the entry's scope, along with any downstream entries that were
     created within that same scope
 -}
@@ -108,7 +116,27 @@ scoped entry k = do
 
     r <- k
 
-    State.modify (\s -> s{ context = Context.discardUpTo entry (context s) })
+    State.modify (_Entries %~ Context.discardUpTo entry)
+
+    return r
+
+{-| Scoped `VariableType`, which possible requires substitutions to preserve uniqueness -}
+scopedVariableType :: MonadState Status m => s -> Domain.Domain -> VariableId -> ((Type.Type s -> Type.Type s) -> m a) -> m a
+scopedVariableType location domain oldId@(VariableId name ind) k = do
+    (newId, oldVariables) <- do
+        Context entries oldVariables <- State.gets (view _Context)
+        let (newInd, variables) = State.runState (Context.uniqueVariableId name ind) oldVariables
+        State.modify (_Context .~ Context entries variables)
+        return (newInd, oldVariables)
+
+    r <- scoped (Context.Variable domain newId) $ k $ if newId == oldId
+        then id
+        else case domain of
+            Domain.Type -> Type.substituteType oldId (Type.VariableType { name = newId, ..})
+            Domain.Fields -> Type.substituteFields oldId (Type.Fields [] $ Monotype.VariableFields newId)
+            Domain.Alternatives -> Type.substituteAlternatives oldId (Type.Alternatives [] $ Monotype.VariableAlternatives newId)  
+    State.modify (_Context %~ (\(Context entries _) ->
+        Context entries oldVariables))
 
     return r
 
@@ -148,7 +176,7 @@ scopedUnsolvedAlternatives k = do
 -}
 wellFormedType
     :: MonadError TypeInferenceError m
-    => Context Location -> Type Location -> m ()
+    => [Entry Location] -> Type Location -> m ()
 wellFormedType _Γ type0 =
     case type0 of
         -- UvarWF
@@ -315,13 +343,13 @@ subtype _A0 _B0 = do
 
         -- <:∃L
         (Type.Exists{..}, _) -> do
-            scoped (Context.Variable domain name) do
-                subtype type_ _B0
+            scopedVariableType nameLocation domain name \substitute ->
+                subtype (substitute type_) _B0
 
         -- <:∀R
         (_, Type.Forall{..}) -> do
-            scoped (Context.Variable domain name) do
-                subtype _A0 type_
+            scopedVariableType nameLocation domain name \substitute->
+                subtype _A0 (substitute type_)
 
         -- <:∃R
         (_, Type.Exists{ domain = Domain.Type, .. }) -> do
@@ -817,8 +845,8 @@ instantiateTypeL a _A0 = do
 
         -- InstLAllR
         Type.Forall{..} -> do
-            scoped (Context.Variable domain name) do
-                instantiateTypeL a type_
+            scopedVariableType nameLocation domain name \substitute ->
+                instantiateTypeL a (substitute type_)
 
         -- This case is the first example of a general pattern we have to
         -- follow when solving unsolved variables.
@@ -960,8 +988,8 @@ instantiateTypeR _A0 a = do
 
         -- InstRExtL
         Type.Exists{..} -> do
-            scoped (Context.Variable domain name) do
-                instantiateTypeL a type_
+            scopedVariableType nameLocation domain name \substitute ->
+                instantiateTypeL a (substitute type_)
 
         -- InstRAllL
         Type.Forall{ domain = Domain.Type, .. } -> do
@@ -1900,8 +1928,8 @@ check e Type.Exists{ domain = Domain.Alternatives, .. } = do
 
 -- ∀I
 check e Type.Forall{..} = do
-    scoped (Context.Variable domain name) do
-        check e type_
+    scopedVariableType nameLocation domain name \substitute ->
+        check e (substitute type_)
 
 check Syntax.Operator{ operator = Syntax.Times, .. } _B@Type.Scalar{ scalar }
     | scalar `elem` ([ Monotype.Natural, Monotype.Integer, Monotype.Real ] :: [Monotype.Scalar])= do
@@ -2032,8 +2060,8 @@ inferApplication Type.Forall{ domain = Domain.Alternatives, .. } e = do
 
 -- ∃App
 inferApplication Type.Exists{..} e = do
-    scoped (Context.Variable domain name) do
-        inferApplication type_ e
+    scopedVariableType nameLocation domain name \substitute ->
+        inferApplication (substitute type_) e
 
 -- αApp
 inferApplication Type.UnsolvedType{ existential = a, .. } e = do
@@ -2062,9 +2090,9 @@ inferApplication _A _ = do
 typeOf
     :: Syntax Location (Type Location, Value)
     -> Either TypeInferenceError (Type Location)
-typeOf = typeWith []
+typeOf = typeWith (Context [] Map.empty)
 
--- | Like `typeOf`, but accepts a custom type-checking `Context`
+-- | Like `typeOf`, but accepts a custom type-checking `[Entry Location]`
 typeWith
     :: Context Location
     -> Syntax Location (Type Location, Value)
@@ -2078,9 +2106,9 @@ typeWith context syntax = do
 
 -- | A data type holding all errors related to type inference
 data TypeInferenceError
-    = IllFormedAlternatives Location (Existential Monotype.Union) (Context Location)
-    | IllFormedFields Location (Existential Monotype.Record) (Context Location)
-    | IllFormedType Location (Type Location) (Context Location)
+    = IllFormedAlternatives Location (Existential Monotype.Union) ([Entry Location])
+    | IllFormedFields Location (Existential Monotype.Record) ([Entry Location])
+    | IllFormedType Location (Type Location) ([Entry Location])
     --
     | InvalidOperands Location (Type Location)
     --
@@ -2088,14 +2116,14 @@ data TypeInferenceError
     | MergeInvalidHandler Location (Type Location)
     | MergeRecord Location (Type Location)
     --
-    | MissingAllAlternatives (Existential Monotype.Union) (Context Location)
-    | MissingAllFields (Existential Monotype.Record) (Context Location)
-    | MissingOneOfAlternatives [Location] (Existential Monotype.Union) (Existential Monotype.Union) (Context Location)
-    | MissingOneOfFields [Location] (Existential Monotype.Record) (Existential Monotype.Record) (Context Location)
-    | MissingVariable (Existential Monotype) (Context Location)
+    | MissingAllAlternatives (Existential Monotype.Union) ([Entry Location])
+    | MissingAllFields (Existential Monotype.Record) ([Entry Location])
+    | MissingOneOfAlternatives [Location] (Existential Monotype.Union) (Existential Monotype.Union) ([Entry Location])
+    | MissingOneOfFields [Location] (Existential Monotype.Record) (Existential Monotype.Record) ([Entry Location])
+    | MissingVariable (Existential Monotype) ([Entry Location])
     --
     | NotFunctionType Location (Type Location)
-    | NotNecessarilyFunctionType Location Text
+    | NotNecessarilyFunctionType Location VariableId
     --
     | NotAlternativesSubtype Location (Existential Monotype.Union) (Type.Union Location)
     | NotFieldsSubtype Location (Existential Monotype.Record) (Type.Record Location)
@@ -2103,14 +2131,14 @@ data TypeInferenceError
     | NotUnionSubtype Location (Type Location) Location (Type Location)
     | NotSubtype Location (Type Location) Location (Type Location)
     --
-    | UnboundAlternatives Location Text
-    | UnboundFields Location Text
-    | UnboundTypeVariable Location Text
+    | UnboundAlternatives Location VariableId
+    | UnboundFields Location VariableId
+    | UnboundTypeVariable Location VariableId
     | UnboundVariable Location Text Int
     --
     | RecordTypeMismatch (Type Location) (Type Location) (Map.Map Text (Type Location)) (Map.Map Text (Type Location))
     | UnionTypeMismatch (Type Location) (Type Location) (Map.Map Text (Type Location)) (Map.Map Text (Type Location))
-    deriving (Eq, Show)
+    deriving Show
 
 instance Exception TypeInferenceError where
     displayException (IllFormedAlternatives location a0 _Γ) =
@@ -2363,17 +2391,17 @@ instance Exception TypeInferenceError where
         \" <> Text.unpack (Location.renderError "" locB0)
 
     displayException (UnboundAlternatives location a) =
-        "Unbound alternatives variable: " <> Text.unpack a <> "\n\
+        "Unbound alternatives variable: " <> Text.unpack (prettyToText a) <> "\n\
         \\n\
         \" <> Text.unpack (Location.renderError "" location)
 
     displayException (UnboundFields location a) =
-        "Unbound fields variable: " <> Text.unpack a <> "\n\
+        "Unbound fields variable: " <> Text.unpack (prettyToText a) <> "\n\
         \\n\
         \" <> Text.unpack (Location.renderError "" location)
 
     displayException (UnboundTypeVariable location a) =
-        "Unbound type variable: " <> Text.unpack a <> "\n\
+        "Unbound type variable: " <> Text.unpack (prettyToText a) <> "\n\
         \\n\
         \" <> Text.unpack (Location.renderError "" location)
 

@@ -1,0 +1,19 @@
+Not a subtype
+
+The following type:
+
+  a0
+
+tasty/data/error/type/conflicting-names-input.ffg:4:15: 
+  │
+4 │     : exists (a : Type). a
+  │               ↑
+
+… cannot be a subtype of:
+
+  a
+
+tasty/data/error/type/conflicting-names-input.ffg:6:30: 
+  │
+6 │ in test : forall (a : Type). a
+  │                              ↑

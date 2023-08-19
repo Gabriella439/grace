@@ -10,12 +10,14 @@
 module Grace.Context
     ( -- * Types
       Entry(..)
-    , Context
+    , Context(..)
       -- * Utilities
+    , _Entries
     , lookup
     , splitOnUnsolvedType
     , splitOnUnsolvedFields
     , splitOnUnsolvedAlternatives
+    , uniqueVariableId
     , discardUpTo
     , solveType
     , solveRecord
@@ -23,18 +25,22 @@ module Grace.Context
     , complete
     ) where
 
+import Control.Lens.Lens (Lens', lens)
+import Control.Lens.Tuple (_1, _2)
+import Control.Lens.Zoom (zoom)
+import Control.Monad.State.Strict (State)
 import Data.Text (Text)
 import Grace.Domain (Domain)
 import Grace.Existential (Existential)
-import Grace.Monotype (Monotype)
+import Grace.Monotype (Monotype, VariableId(..))
 import Grace.Pretty (Pretty(..), label, operator, punctuation)
 import Grace.Type (Type)
 import Prelude hiding (lookup)
 import Prettyprinter (Doc)
 import Prettyprinter.Render.Terminal (AnsiStyle)
 
-import qualified Control.Monad as Monad
 import qualified Control.Monad.State.Strict as State
+import qualified Data.Map as Map
 import qualified Grace.Domain as Domain
 import qualified Grace.Existential as Existential
 import qualified Grace.Monotype as Monotype
@@ -50,7 +56,7 @@ import qualified Prettyprinter as Pretty
 
 -- | An element of the `Context` list
 data Entry s
-    = Variable Domain Text
+    = Variable Domain VariableId
     -- ^ Universally quantified variable
     --
     -- >>> pretty @(Entry ()) (Variable Domain.Type "a")
@@ -120,7 +126,7 @@ data Entry s
 instance Pretty (Entry s) where
     pretty = prettyEntry
 
-{-| A `Context` is an ordered list of `Entry`s
+{-| A `Context` is an ordered list of `Entry`s with a Map of occupied `VariableId`s
 
     Note that this representation stores the `Context` entries in reverse
     order, meaning that the beginning of the list represents the entries that
@@ -147,7 +153,11 @@ instance Pretty (Entry s) where
       in the context past a certain entry to reflect the end of their
       \"lifetime\"
 -}
-type Context s = [Entry s]
+data Context s = Context [Entry s] (Map.Map Text Int)
+    deriving Show
+
+_Entries :: Lens' (Context s) [Entry s]
+_Entries = lens (\(Context x _) -> x) (\(Context _ y) x -> Context x y)
 
 prettyEntry :: Entry s -> Doc AnsiStyle
 prettyEntry (Variable domain a) =
@@ -246,8 +256,8 @@ prettyAlternativeType (k, τ) =
     >>> pretty @(Type ()) (solveType [ UnsolvedType 1, SolvedType 0 (Monotype.Scalar Monotype.Bool) ] original)
     Bool
 -}
-solveType :: Context s -> Type s -> Type s
-solveType context type_ = foldl snoc type_ context
+solveType :: [Entry s] -> Type s -> Type s
+solveType entries type_ = foldl snoc type_ entries
   where
     snoc t (SolvedType         a τ) = Type.solveType         a τ t
     snoc t (SolvedFields       a r) = Type.solveFields       a r t
@@ -267,18 +277,17 @@ solveType context type_ = foldl snoc type_ context
     >>> pretty @(Record ()) (solveRecord [ entry ] original)
     { x: Bool }
 -}
-solveRecord :: Context s -> Type.Record s -> Type.Record s
-solveRecord context oldFields = newFields
+solveRecord :: [Entry s] -> Type.Record s -> Type.Record s
+solveRecord entries oldFields = newFields
   where
     location =
         error "Grace.Context.solveRecord: Internal error - Missing location field"
 
     -- TODO: Come up with total solution
     Type.Record{ fields = newFields } =
-        solveType context Type.Record{ fields = oldFields, .. }
+        solveType entries Type.Record{ fields = oldFields, .. }
 
 {-| Substitute a t`Type.Union` using the solved entries of a `Context`
-    `Context`
 
     >>> original = Type.Alternatives [("A", Type.Scalar () Monotype.Bool)] (Monotype.UnsolvedAlternatives 0)
     >>> pretty @(Union ()) original
@@ -291,15 +300,21 @@ solveRecord context oldFields = newFields
     >>> pretty @(Union ()) (solveUnion [ entry ] original)
     < A: Bool >
 -}
-solveUnion :: Context s -> Type.Union s -> Type.Union s
-solveUnion context oldAlternatives = newAlternatives
+solveUnion :: [Entry s] -> Type.Union s -> Type.Union s
+solveUnion entries oldAlternatives = newAlternatives
   where
     location =
         error "Grace.Context.solveUnion: Internal error - Missing location field"
 
     -- TODO: Come up with total solution
     Type.Union{ alternatives = newAlternatives } =
-        solveType context Type.Union{ alternatives = oldAlternatives, .. }
+        solveType entries Type.Union{ alternatives = oldAlternatives, .. }
+
+{-| Create an unique `VariableId` out of `Text` given a `Map` of existing variables -}
+uniqueVariableId :: Text -> Int -> State (Map.Map Text Int) VariableId
+uniqueVariableId name atLeast = State.state (\m ->
+    let newId = max atLeast $ maybe 0 (+1) (Map.lookup name m) in
+    (VariableId name newId, Map.insert name newId m))
 
 {-| This function is used at the end of the bidirectional type-checking
     algorithm to complete the inferred type by:
@@ -312,79 +327,54 @@ solveUnion context oldAlternatives = newAlternatives
     >>> pretty @(Type ()) original
     b? -> a?
 
-    >>> pretty @(Type ()) (complete [ UnsolvedType 1, SolvedType 0 (Monotype.Scalar Monotype.Bool) ] original)
-    forall (a : Type) . a -> Bool
+    >>> context = Context [ UnsolvedType 1, SolvedType 0 (Monotype.Scalar Monotype.Bool) ] (Map.fromList [ ("a", 3) ])
+    >>> pretty @(Type ()) (complete context original)
+    forall (a3 : Type) . a3 -> Bool
 -}
 complete :: Context s -> Type s -> Type s
-complete context type0 = do
-    State.evalState (Monad.foldM snoc type0 context) 0
+complete (Context entries variables) =
+    applyUpdates $ State.evalState (traverse updateFor $ reverse entries) (variables, 0)
   where
-    numUnsolved = fromIntegral (length (filter predicate context)) - 1
-      where
-        predicate (UnsolvedType         _) = True
-        predicate (UnsolvedFields       _) = True
-        predicate (UnsolvedAlternatives _) = True
-        predicate  _                       = False
+    applyUpdates :: [Type s -> Type s] -> Type s -> Type s
+    applyUpdates = flip $ foldr ($)
 
-    snoc t (SolvedType         a τ) = do return (Type.solveType         a τ t)
-    snoc t (SolvedFields       a r) = do return (Type.solveFields       a r t)
-    snoc t (SolvedAlternatives a r) = do return (Type.solveAlternatives a r t)
-    snoc t (UnsolvedType a) | a `Type.typeFreeIn` t = do
-        n <- State.get
+    updateFor :: Entry s -> State (Map.Map Text Int, Int) (Type s -> Type s)
+    updateFor (SolvedType         a τ) = return (Type.solveType         a τ)
+    updateFor (SolvedFields       a r) = return (Type.solveFields       a r)
+    updateFor (SolvedAlternatives a r) = return (Type.solveAlternatives a r)
+    updateFor (UnsolvedType a) =
+        newVariable (Type.typeFreeIn a) Domain.Type (Type.solveType a . Monotype.VariableType)
+    updateFor (UnsolvedFields a) =
+        newVariable (Type.fieldsFreeIn a) Domain.Fields (Type.solveFields a . Monotype.Fields [] . Monotype.VariableFields)
+    updateFor (UnsolvedAlternatives a) =
+        newVariable (Type.alternativesFreeIn a) Domain.Alternatives (Type.solveAlternatives a . Monotype.Alternatives [] . Monotype.VariableAlternatives)
+    updateFor _ = return id
 
-        State.put $! n + 1
+    newVariable check domain solve = do
+        n <- zoom _2 (do
+            n <- State.get
+            State.put $! n + 1
+            return n)
 
-        let name = Existential.toVariable (numUnsolved - n)
+        let (internalName, _) = Existential.internalName n
 
-        let domain = Domain.Type
+        name <- zoom _1 $ uniqueVariableId internalName 0
 
-        let type_ = Type.solveType a (Monotype.VariableType name) t
+        return (\t ->
+            if check t
+                then
+                    let
+                        location = Type.location t
+                        nameLocation = location
+                        type_ = solve name t
+                    in Type.Forall {..}
+                else t)
 
-        let location = Type.location t
-
-        let nameLocation = location
-
-        return Type.Forall{..}
-    snoc t (UnsolvedFields p) | p `Type.fieldsFreeIn` t = do
-        n <- State.get
-
-        State.put $! n + 1
-
-        let name = Existential.toVariable (numUnsolved - n)
-
-        let domain = Domain.Fields
-
-        let type_ = Type.solveFields p (Monotype.Fields [] (Monotype.VariableFields name)) t
-
-        let location = Type.location t
-
-        let nameLocation = location
-
-        return Type.Forall{..}
-    snoc t (UnsolvedAlternatives p) | p `Type.alternativesFreeIn` t = do
-        n <- State.get
-
-        State.put $! n + 1
-
-        let name = Existential.toVariable (numUnsolved - n)
-
-        let domain = Domain.Alternatives
-
-        let type_ = Type.solveAlternatives p (Monotype.Alternatives [] (Monotype.VariableAlternatives name)) t
-
-        let location = Type.location t
-
-        let nameLocation = location
-
-        return Type.Forall{..}
-    snoc t _ = do
-        return t
-
-{-| Split a `Context` into two `Context`s before and after the given
-    `UnsolvedType` variable.  Neither `Context` contains the variable
+{-| Split a `[Entry s]` into two `[Entry s]`s before and after the given
+    `UnsolvedType` variable.  Neither `[Entry s]` contains the variable
 
     Returns `Nothing` if no such `UnsolvedType` variable is present within the
-    `Context`
+    `[Entry s]`
 
     >>> splitOnUnsolvedType 1 [ UnsolvedType 1, SolvedType 0 (Monotype.Scalar Monotype.Bool) ]
     Just ([],[SolvedType 0 (Scalar Bool)])
@@ -394,8 +384,8 @@ complete context type0 = do
 splitOnUnsolvedType
     :: Existential Monotype
     -- ^ `UnsolvedType` variable to split on
-    -> Context s
-    -> Maybe (Context s, Context s)
+    -> [Entry s]
+    -> Maybe ([Entry s], [Entry s])
 splitOnUnsolvedType a0 (UnsolvedType a1 : entries)
     | a0 == a1 = return ([], entries)
 splitOnUnsolvedType a (entry : entries) = do
@@ -403,11 +393,10 @@ splitOnUnsolvedType a (entry : entries) = do
     return (entry : prefix, suffix)
 splitOnUnsolvedType _ [] = Nothing
 
-{-| Split a `Context` into two `Context`s before and after the given
-    `UnsolvedFields` variable.  Neither `Context` contains the variable
+{-| Split a `[Entry s]` into two `[Entry s]`s before and after the given
+    `UnsolvedFields` variable.  Neither `[Entry s]` contains the variable
 
-    Returns `Nothing` if no such `UnsolvedFields` variable is present within the
-    `Context`
+    Returns `Nothing` if no such `UnsolvedFields` variable is present within the `[Entry s]`
 
     >>> splitOnUnsolvedFields 1 [ UnsolvedFields 1, SolvedType 0 (Monotype.Scalar Monotype.Bool) ]
     Just ([],[SolvedType 0 (Scalar Bool)])
@@ -417,8 +406,8 @@ splitOnUnsolvedType _ [] = Nothing
 splitOnUnsolvedFields
     :: Existential Monotype.Record
     -- ^ `UnsolvedFields` variable to split on
-    -> Context s
-    -> Maybe (Context s, Context s)
+    -> [Entry s]
+    -> Maybe ([Entry s], [Entry s])
 splitOnUnsolvedFields p0 (UnsolvedFields p1 : entries)
     | p0 == p1 = return ([], entries)
 splitOnUnsolvedFields p (entry : entries) = do
@@ -426,11 +415,11 @@ splitOnUnsolvedFields p (entry : entries) = do
     return (entry : prefix, suffix)
 splitOnUnsolvedFields _ [] = Nothing
 
-{-| Split a `Context` into two `Context`s before and after the given
-    `UnsolvedAlternatives` variable.  Neither `Context` contains the variable
+{-| Split a `[Entry s]` into two `[Entry s]`s before and after the given
+    `UnsolvedAlternatives` variable.  Neither `[Entry s]` contains the variable
 
     Returns `Nothing` if no such `UnsolvedAlternatives` variable is present
-    within the `Context`
+    within the `[Entry s]`
 
     >>> splitOnUnsolvedAlternatives 1 [ UnsolvedAlternatives 1, SolvedType 0 (Monotype.Scalar Monotype.Bool) ]
     Just ([],[SolvedType 0 (Scalar Bool)])
@@ -440,8 +429,8 @@ splitOnUnsolvedFields _ [] = Nothing
 splitOnUnsolvedAlternatives
     :: Existential Monotype.Union
     -- ^ `UnsolvedAlternatives` variable to split on
-    -> Context s
-    -> Maybe (Context s, Context s)
+    -> [Entry s]
+    -> Maybe ([Entry s], [Entry s])
 splitOnUnsolvedAlternatives p0 (UnsolvedAlternatives p1 : entries)
     | p0 == p1 = return ([], entries)
 splitOnUnsolvedAlternatives p (entry : entries) = do
@@ -449,7 +438,7 @@ splitOnUnsolvedAlternatives p (entry : entries) = do
     return (entry : prefix, suffix)
 splitOnUnsolvedAlternatives _ [] = Nothing
 
-{-| Retrieve a variable's annotated type from a `Context`, given the variable's
+{-| Retrieve a variable's annotated type from a `[Entry s]`, given the variable's
     label and index
 
     >>> lookup "x" 0 [ Annotation "x" (Type.Scalar () Monotype.Bool), Annotation "y" (Type.Scalar () Monotype.Natural) ]
@@ -460,7 +449,7 @@ lookup
     -- ^ Variable label
     -> Int
     -- ^ Variable index (See the documentation of `Value.Variable`)
-    -> Context s
+    -> [Entry s]
     -> Maybe (Type s)
 lookup _ _ [] =
     Nothing
@@ -474,12 +463,12 @@ lookup x0 n (Annotation x1 _A : _Γ) =
 lookup x n (_ : _Γ) =
     lookup x n _Γ
 
-{-| Discard all entries from a `Context` up to and including the given `Entry`
+{-| Discard all entries from a `[Entry s]` up to and including the given `Entry`
 
     >>> discardUpTo (MarkerType 1) [ UnsolvedType 1, MarkerType 1, UnsolvedType 0 ]
     [UnsolvedType 0]
 -}
-discardUpTo :: Eq s => Entry s -> Context s -> Context s
+discardUpTo :: Eq s => Entry s -> [Entry s] -> [Entry s]
 discardUpTo entry0 (entry1 : _Γ)
     | entry0 == entry1 = _Γ
     | otherwise = discardUpTo entry0 _Γ

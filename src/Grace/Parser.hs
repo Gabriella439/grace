@@ -510,7 +510,7 @@ grammar = mdo
 
     quantifiedType <- rule do
         let quantify (forallOrExists, location, (typeVariableOffset, typeVariable), domain_) type_ =
-                forallOrExists location typeVariableOffset typeVariable domain_ type_
+                forallOrExists location typeVariableOffset (Monotype.variableId typeVariable) domain_ type_
 
         fss <- many
             (   do  location <- locatedToken Lexer.Forall
@@ -573,7 +573,7 @@ grammar = mdo
         <|> do  location <- locatedToken Lexer.Text
                 return Type.Scalar{ scalar = Monotype.Text, .. }
         <|> do  ~(location, name) <- locatedLabel
-                return Type.VariableType{..}
+                return Type.VariableType{ name = Monotype.variableId name, ..}
         <|> do  let record location fields = Type.Record{..}
 
                 locatedOpenBrace <- locatedToken Lexer.OpenBrace
@@ -584,7 +584,7 @@ grammar = mdo
 
                 toFields <-
                     (   do  text_ <- recordLabel
-                            pure (\fs -> Type.Fields fs (Monotype.VariableFields text_))
+                            pure (\fs -> Type.Fields fs (Monotype.VariableFields $ Monotype.variableId text_))
                     <|> do  pure (\fs -> Type.Fields fs Monotype.EmptyFields)
                     <|> do  f <- fieldType
                             pure (\fs -> Type.Fields (fs <> [ f ]) Monotype.EmptyFields)
@@ -605,7 +605,7 @@ grammar = mdo
 
                 toAlternatives <-
                     (   do  text_ <- label
-                            return (\as -> Type.Alternatives as (Monotype.VariableAlternatives text_))
+                            return (\as -> Type.Alternatives as (Monotype.VariableAlternatives $ Monotype.variableId text_))
                     <|> do  pure (\as -> Type.Alternatives as Monotype.EmptyAlternatives)
                     <|> do  a <- alternativeType
                             return (\as -> Type.Alternatives (as <> [ a ]) Monotype.EmptyAlternatives)

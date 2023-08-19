@@ -1,0 +1,6 @@
+# This test checks that matching variable names do not trick the typechecker
+# into unifying two different type variables.
+let test
+    : exists (a : Type). a
+	= 3
+in test : forall (a : Type). a
