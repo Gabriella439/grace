@@ -40,6 +40,7 @@ import Control.Lens (Plated(..))
 import Data.Bifunctor (Bifunctor(..))
 import Data.Generics.Product (the)
 import Data.Generics.Sum (_As)
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.String (IsString(..))
 import Data.Text (Text)
 import GHC.Generics (Generic)
@@ -54,6 +55,7 @@ import Grace.Monotype
     (Monotype, RemainingAlternatives(..), RemainingFields(..), Scalar(..))
 
 import qualified Control.Lens as Lens
+import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Text as Text
 import qualified Grace.Domain as Domain
 import qualified Grace.Lexer as Lexer
@@ -124,7 +126,7 @@ instance IsString (Type ()) where
     fromString string = VariableType{ name = fromString string, location = () }
 
 instance Pretty (Type s) where
-    pretty = prettyQuantifiedType
+    pretty = pretty . renderType
 
 instance Plated (Type s) where
     plate onType type_ =
@@ -463,170 +465,93 @@ alternativesFreeIn unsolved =
         . Lens.only unsolved
         )
 
-data PreviousQuantifier =
-  NoQuantifier | ForallQuantifier | ExistsQuantifier
-  deriving Eq
+data RenderQuantifier = RForall | RExists
+    deriving Eq
+data RenderType
+    = RQuantified RenderQuantifier (NonEmpty (Domain, Text)) RenderType
+    | RFunction (NonEmpty RenderType) RenderType
+    | RApplication Text (NonEmpty RenderType)
+    | RPrimitive (Doc AnsiStyle)
 
-prettyQuantifiedType :: Type s -> Doc AnsiStyle
-prettyQuantifiedType type0
-    | isQuantified type0 = Pretty.group (Pretty.flatAlt long short)
-    | otherwise          = prettyFunctionType type0
+renderType :: Type s -> RenderType
+renderType VariableType {..} = RPrimitive $ label (pretty name)
+renderType UnsolvedType {..} = RPrimitive $ label (pretty existential <> "?")
+renderType Exists       {..} = RQuantified RExists ((domain, name) :| []) $ renderType type_
+renderType Forall       {..} = RQuantified RForall ((domain, name) :| []) $ renderType type_
+renderType Function     {..} = RFunction (renderType input :| []) $ renderType output
+renderType Optional     {..} = RApplication "Optional" (renderType type_ :| [])
+renderType List         {..} = RApplication "List" (renderType type_ :| [])
+renderType Record       {..} = RPrimitive $ prettyRecordType fields
+renderType Union        {..} = RPrimitive $ prettyUnionType alternatives
+renderType Scalar       {..} = RPrimitive $ pretty scalar
+
+renderPrecedence :: RenderType -> Int
+renderPrecedence (RQuantified  {}) = 4
+renderPrecedence (RFunction    {}) = 3
+renderPrecedence (RApplication {}) = 2
+renderPrecedence (RPrimitive   {}) = 1
+
+prettySub :: RenderType -> RenderType -> Doc AnsiStyle
+prettySub (RQuantified {}) sub@(RQuantified {}) = pretty sub
+prettySub orig sub
+    | renderPrecedence orig > renderPrecedence sub
+        = pretty sub
+    | otherwise =
+        Pretty.group (Pretty.flatAlt (Pretty.align $ prettyAll True) (prettyAll False))
   where
-    isQuantified Forall{} = True
-    isQuantified Exists{} = True
-    isQuantified _        = False
-
-    short = prettyShort NoQuantifier type0
-
-    long = Pretty.align (prettyLong type0)
-
-    prettyShort quantifier Forall{..} =
-            prefix
-        <>  punctuation "("
-        <>  label (pretty name)
-        <>  " "
-        <>  punctuation ":"
-        <>  " "
-        <>  pretty domain
+    prettyAll long =
+            punctuation "("
+        <>  (if long then " " else mempty)
+        <>  pretty sub
+        <>  (if long then Pretty.hardline else mempty)
         <>  punctuation ")"
-        <>  " "
-        <>  prettyShort ForallQuantifier type_
-        where
-          prefix =
-            case quantifier of
-              NoQuantifier -> keyword "forall" <> " "
-              ExistsQuantifier -> punctuation "." <> " " <> keyword "forall" <> " "
-              ForallQuantifier -> ""
 
-    prettyShort quantifier Exists{..} =
-            prefix
-        <>  punctuation "("
-        <>  label (pretty name)
-        <>  " "
-        <>  punctuation ":"
-        <>  " "
-        <>  pretty domain
-        <>  punctuation ")"
-        <>  " "
-        <>  prettyShort ExistsQuantifier type_
-        where
-          prefix =
-            case quantifier of
-              NoQuantifier -> keyword "exists" <> " "
-              ExistsQuantifier -> ""
-              ForallQuantifier -> punctuation "." <> " " <> keyword "exists" <> " "
+instance Pretty RenderType where
+    pretty (RQuantified q1 l1 (RQuantified q2 l2 body))
+        | q1 == q2 = pretty $ RQuantified q1 (l1 <> l2) body
+    pretty (RFunction i1 (RFunction i2 output))
+        = pretty $ RFunction (i1 <> i2) output
 
-    prettyShort _quantifier _A =
-        punctuation "." <> " " <> prettyFunctionType _A
-
-    prettyLong Forall{..} =
-            keyword "forall"
-        <>  " "
-        <>  punctuation "("
-        <>  label (pretty name)
-        <>  " "
-        <>  punctuation ":"
-        <>  " "
-        <>  pretty domain
-        <>  punctuation ")"
-        <>  " "
-        <>  punctuation "."
-        <>  Pretty.hardline
-        <>  prettyLong type_
-    prettyLong Exists{..} =
-            keyword "exists"
-        <>  " "
-        <>  punctuation "("
-        <>  label (pretty name)
-        <>  " "
-        <>  punctuation ":"
-        <>  " "
-        <>  pretty domain
-        <>  punctuation ")"
-        <>  " "
-        <>  punctuation "."
-        <>  Pretty.hardline
-        <>  prettyLong type_
-    prettyLong _A =
-        "  " <> prettyFunctionType _A
-
-prettyFunctionType :: Type s -> Doc AnsiStyle
-prettyFunctionType  type_@Function{} = Pretty.group (Pretty.flatAlt long short)
-  where
-    long = Pretty.align (prettyLong type_)
-
-    short = prettyShort type_
-
-    prettyShort Function{..} =
-            prettyApplicationType input
-        <>  " "
-        <>  punctuation "->"
-        <>  " "
-        <>  prettyShort output
-    prettyShort _A =
-        prettyApplicationType _A
-
-    prettyLong Function{..} =
-            prettyApplicationType input
-        <>  " "
-        <>  punctuation "->"
-        <>  Pretty.hardline
-        <>  prettyLong output
-    prettyLong _A =
-        "  " <> prettyApplicationType _A
-prettyFunctionType other =
-    prettyApplicationType other
-
-prettyApplicationType :: Type s -> Doc AnsiStyle
-prettyApplicationType Optional{..} = Pretty.group (Pretty.flatAlt long short)
-  where
-    short = builtin "Optional" <> " " <> prettyPrimitiveType type_
-
-    long =
-        Pretty.align
-            (   builtin "Optional"
-            <>  Pretty.hardline
-            <>  "  "
-            <>  prettyPrimitiveType type_
-            )
-prettyApplicationType List{..} = Pretty.group (Pretty.flatAlt long short)
-  where
-    short = builtin "List" <> " " <> prettyPrimitiveType type_
-
-    long =
-        Pretty.align
-            (   builtin "List"
-            <>  Pretty.hardline
-            <>  "  "
-            <>  prettyPrimitiveType type_
-            )
-prettyApplicationType other =
-    prettyPrimitiveType other
-
-prettyPrimitiveType :: Type s -> Doc AnsiStyle
-prettyPrimitiveType VariableType{..} =
-    label (pretty name)
-prettyPrimitiveType UnsolvedType{..} =
-    label (pretty existential <> "?")
-prettyPrimitiveType Record{..} =
-    prettyRecordType fields
-prettyPrimitiveType Union{..} =
-    prettyUnionType alternatives
-prettyPrimitiveType Scalar{..} =
-    pretty scalar
-prettyPrimitiveType other =
-    Pretty.group (Pretty.flatAlt long short)
-  where
-    short = punctuation "(" <> prettyQuantifiedType other <> punctuation ")"
-
-    long =
-        Pretty.align
-            (   punctuation "("
+    pretty orig@(RQuantified q l body) =
+        Pretty.group (Pretty.flatAlt (Pretty.align $ prettyAll True) (prettyAll False))
+      where
+        start = keyword (case q of
+            RForall -> "forall"
+            RExists -> "exists") <> " "
+        prettyAll long =
+                    (if long then mempty else start)
+                <>  mconcat (NonEmpty.toList (pretty1 long <$> l))
+                <>  (if long then "  " else punctuation "." <> " ")
+                <>  prettySub orig body
+        pretty1 long (domain, name) = 
+                (if long then start else mempty)
+            <>  punctuation "("
+            <>  label (pretty name)
             <>  " "
-            <>  prettyQuantifiedType other
-            <>  Pretty.hardline
+            <>  punctuation ":"
+            <>  " "
+            <>  pretty domain
             <>  punctuation ")"
-            )
+            <>  " "
+            <>  (if long then punctuation "." <> Pretty.hardline else mempty)
+
+    pretty orig@(RFunction i o) =
+        Pretty.group (Pretty.flatAlt (Pretty.align $ prettyAll True) (prettyAll False))
+      where
+        prettyAll long =
+            let sep = " " <> punctuation "->" <> (if long then Pretty.hardline else " ")
+                subs = (prettySub orig <$> i) <> (((if long then "  " else mempty) <> prettySub orig o) :| [])
+            in mconcat $ NonEmpty.toList (NonEmpty.intersperse sep subs)
+
+    pretty orig@(RApplication name subs)
+        = Pretty.group (Pretty.flatAlt (Pretty.align $ prettyAll True) (prettyAll False))
+      where
+        prettyAll long =
+                builtin (pretty name)
+            <>  (if long then Pretty.hardline <> "  " else " ")
+            <>  mconcat (NonEmpty.toList (NonEmpty.intersperse " " (prettySub orig <$> subs)))
+
+    pretty (RPrimitive x) = x
 
 prettyRecordType :: Record s -> Doc AnsiStyle
 prettyRecordType (Fields [] fields) =
@@ -684,14 +609,14 @@ prettyRecordType (Fields (keyType : keyTypes) fields) =
             prettyRecordLabel False key
         <>  operator ":"
         <>  " "
-        <>  prettyQuantifiedType type_
+        <>  pretty type_
 
     prettyLongFieldType :: (Text, Type s) -> Doc AnsiStyle
     prettyLongFieldType (key, type_) =
             prettyRecordLabel False key
         <>  operator ":"
         <>  Pretty.group (Pretty.flatAlt (Pretty.hardline <> "    ") " ")
-        <>  prettyQuantifiedType type_
+        <>  pretty type_
         <>  Pretty.hardline
 
 prettyUnionType :: Union s -> Doc AnsiStyle
@@ -755,13 +680,13 @@ prettyUnionType (Alternatives (keyType : keyTypes) alternatives) =
             prettyAlternativeLabel key
         <>  operator ":"
         <>  " "
-        <>  prettyQuantifiedType type_
+        <>  pretty type_
 
     prettyLongAlternativeType (key, type_) =
             prettyAlternativeLabel key
         <>  operator ":"
         <>  Pretty.group (Pretty.flatAlt (Pretty.hardline <> "    ") " ")
-        <>  prettyQuantifiedType type_
+        <>  pretty type_
         <>  Pretty.hardline
 
 -- | Pretty-print a @Text@ literal
