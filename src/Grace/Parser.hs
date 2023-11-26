@@ -256,7 +256,7 @@ grammar = mdo
         <|> do  operatorExpression
         )
 
-    operatorExpression <- rule timesExpression
+    operatorExpression <- rule plusExpression
 
     let op token_ operator subExpression = do
             let snoc left (operatorLocation, right) =
@@ -271,9 +271,9 @@ grammar = mdo
 
             return (foldl snoc e0 ses)
 
-    timesExpression <- rule (op Lexer.Times Syntax.Times plusExpression)
+    plusExpression <- rule (op Lexer.Plus Syntax.Plus timesExpression)
 
-    plusExpression <- rule (op Lexer.Plus Syntax.Plus orExpression)
+    timesExpression <- rule (op Lexer.Times Syntax.Times orExpression)
 
     orExpression <- rule (op Lexer.Or Syntax.Or andExpression)
 
