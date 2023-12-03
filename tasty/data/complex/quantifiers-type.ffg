@@ -1,1 +1,1 @@
-forall (a : Type) (b : Type) . exists (c : Type) (d : Type) . { }
+{ }

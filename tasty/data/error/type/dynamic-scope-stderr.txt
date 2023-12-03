@@ -1,0 +1,6 @@
+Unbound variable: y
+
+tasty/data/error/type/dynamic-scope-input.ffg:4:29: 
+  │
+4 │ let x = (let y = 4 in y) in y
+  │                             ↑

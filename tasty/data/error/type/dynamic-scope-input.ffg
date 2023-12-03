@@ -1,0 +1,4 @@
+# This is a regression test for: https://github.com/Gabriella439/grace/issues/67
+#
+# This verifies that `let` bindings are lexically scoped
+let x = (let y = 4 in y) in y

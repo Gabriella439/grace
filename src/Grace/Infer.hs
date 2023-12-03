@@ -1326,18 +1326,26 @@ infer e0 = do
             return annotation
 
         Syntax.Let{..} -> do
-            let process Syntax.Binding{ annotation = Nothing, .. } = do
+            b <- fresh
+
+            push (Context.UnsolvedType b)
+
+            let output = Type.UnsolvedType{ existential = b, .. }
+
+            let cons Syntax.Binding{ annotation = Nothing, .. } action = do
                     _A <- infer assignment
 
-                    push (Context.Annotation name _A)
-                process Syntax.Binding{ annotation = Just _A, .. } = do
+                    scoped (Context.Annotation name _A) do
+                        action
+                cons Syntax.Binding{ annotation = Just _A, .. } action = do
                     check assignment _A
 
-                    push (Context.Annotation name _A)
+                    scoped (Context.Annotation name _A) do
+                        action
 
-            traverse_ process bindings
+            foldr cons (check body output) bindings
 
-            infer body
+            return output
 
         Syntax.List{..} -> do
             case Seq.viewl elements of
