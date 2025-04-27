@@ -273,9 +273,10 @@ solveRecord context oldFields = newFields
     location =
         error "Grace.Context.solveRecord: Internal error - Missing location field"
 
-    -- TODO: Come up with total solution
-    Type.Record{ fields = newFields } =
-        solveType context Type.Record{ fields = oldFields, .. }
+    newFields =
+        case solveType context Type.Record{ fields = oldFields, .. } of
+            Type.Record{ fields } -> fields
+            _ -> error "Grace.Context.solveRecord: Internal Error - solveType changed a record into something else"
 
 {-| Substitute a t`Type.Union` using the solved entries of a `Context`
     `Context`
@@ -297,9 +298,10 @@ solveUnion context oldAlternatives = newAlternatives
     location =
         error "Grace.Context.solveUnion: Internal error - Missing location field"
 
-    -- TODO: Come up with total solution
-    Type.Union{ alternatives = newAlternatives } =
-        solveType context Type.Union{ alternatives = oldAlternatives, .. }
+    newAlternatives =
+        case solveType context Type.Union{ alternatives = oldAlternatives, .. } of
+            Type.Union{ alternatives } -> alternatives
+            _ -> error "Grace.Context.solveUnion: Internal error - solveType changed a union into something else"
 
 {-| This function is used at the end of the bidirectional type-checking
     algorithm to complete the inferred type by:
