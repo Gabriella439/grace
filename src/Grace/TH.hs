@@ -1,3 +1,5 @@
+{-# LANGUAGE BlockArguments #-}
+
 {- | This module provides Template Haskell functions to embed expression and
      their times at compile-time.
 -}
@@ -21,7 +23,7 @@ import Grace.Interpret (Input(..))
 import Grace.Syntax (Syntax)
 import Grace.Type (Type)
 import Language.Haskell.TH.Quote (QuasiQuoter(..))
-import Language.Haskell.TH.Syntax (Lift, Q, TExp(..))
+import Language.Haskell.TH.Syntax (Code(examineCode), Lift, Q, TExp(..))
 
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Monad.Except as Except
@@ -47,7 +49,7 @@ import qualified Language.Haskell.TH.Syntax as TH
 -}
 grace :: QuasiQuoter
 grace = QuasiQuoter
-    { quoteExp = fmap TH.unType . expressionFromCode . Text.pack
+    { quoteExp = fmap TH.unType . examineCode . expressionFromCode . Text.pack
     , quoteDec = error "Declaration quoting not supported"
     , quotePat = error "Pattern quoting not supported"
     , quoteType = error "Type quoting not supported"
@@ -61,15 +63,16 @@ grace = QuasiQuoter
      >>> $$(expressionFromCode "\"hello\"")
      Scalar {location = (), scalar = Text "hello"}
 -}
-expressionFromCode :: Text -> Q (TExp (Syntax () Void))
+expressionFromCode :: Text -> Code Q (Syntax () Void)
 expressionFromCode = expressionFromInput . Code "(input)"
 
 -- | Like `expressionFromCode`, but takes path of a source file as input.
-expressionFromFile :: FilePath -> Q (TExp (Syntax () Void))
+expressionFromFile
+    :: FilePath -> Code Q (Syntax () Void)
 expressionFromFile = expressionFromInput . Path
 
 -- | Like `expressionFromCode`, but expects `Input` as an argument.
-expressionFromInput :: Input -> Q (TExp (Syntax () Void))
+expressionFromInput :: Input -> Code Q (Syntax () Void)
 expressionFromInput = helperFunction snd
 
 {- | Infer the type of an expression at compile time.
@@ -80,26 +83,26 @@ expressionFromInput = helperFunction snd
      >>> $$(typeOfCode "\"hello\"")
      Scalar {location = (), scalar = Text}
 -}
-typeOfCode :: Text -> Q (TExp (Type ()))
+typeOfCode :: Text -> Code Q (Type ())
 typeOfCode = typeOfInput . Code "(input)"
 
 -- | Like `typeOfCode`, but takes path of a source file as input.
-typeOfFile :: FilePath -> Q (TExp (Type ()))
+typeOfFile :: FilePath -> Code Q (Type ())
 typeOfFile = typeOfInput . Path
 
 -- | Like `typeOfCode`, but expects `Input` as an argument.
-typeOfInput :: Input -> Q (TExp (Type ()))
+typeOfInput :: Input -> Code Q (Type ())
 typeOfInput = helperFunction fst
 
 -- Internal functions
 
 helperFunction
-    :: Lift r => ((Type (), Syntax () Void) -> r) -> Input -> Q (TExp r)
-helperFunction f input = do
+    :: Lift r => ((Type (), Syntax () Void) -> r) -> Input -> Code Q r
+helperFunction f input = TH.Code do
     eitherResult <- Except.runExceptT (Interpret.interpret input)
 
     (inferred, value) <- case eitherResult of
-        Left e -> fail (Exception.displayException e)
+        Left e -> Exception.throwIO e
         Right result -> return result
 
     let type_ = void inferred
