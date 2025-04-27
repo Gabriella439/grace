@@ -1,1 +1,1 @@
-List (exists (a : Fields) . { x: Natural, a })
+List { x: Natural, y: Optional Bool, z: Optional Text }

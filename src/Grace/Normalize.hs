@@ -132,9 +132,10 @@ evaluate env syntax =
 
         Syntax.Field{..} ->
             case evaluate env record of
-                Value.Record fieldValues
-                    | Just value <- HashMap.lookup field fieldValues ->
-                        value
+                Value.Record fieldValues ->
+                    case HashMap.lookup field fieldValues of
+                        Just value -> value
+                        Nothing -> Value.Scalar Syntax.Null
                 other ->
                     Value.Field other field
 

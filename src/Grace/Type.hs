@@ -78,11 +78,6 @@ data Type s
     --
     -- >>> pretty @(Type ()) (UnsolvedType () 0)
     -- a?
-    | Exists { location :: s, nameLocation :: s, name :: Text, domain :: Domain, type_ :: Type s }
-    -- ^ Existentially quantified type
-    --
-    -- >>> pretty @(Type ()) (Exists () () "a" Domain.Type "a")
-    -- exists (a : Type) . a
     | Forall { location :: s, nameLocation :: s, name :: Text, domain :: Domain, type_ :: Type s }
     -- ^ Universally quantified type
     --
@@ -133,9 +128,6 @@ instance Plated (Type s) where
                 pure VariableType{..}
             UnsolvedType{..} -> do
                 pure UnsolvedType{..}
-            Exists{ type_ = oldType, .. }-> do
-                newType <- onType oldType
-                return Exists{ type_ = newType, .. }
             Forall{ type_ = oldType, .. } -> do
                 newType <- onType oldType
                 return Forall{ type_ = newType, .. }
@@ -275,13 +267,6 @@ substituteType a n _A type_ =
         UnsolvedType{..} ->
             UnsolvedType{..}
 
-        Exists{ type_ = oldType, .. } -> Exists{ type_ = newType, .. }
-          where
-            newType = substituteType a n' _A oldType
-
-            n'  | a == name && domain == Domain.Type = n + 1
-                | otherwise                          = n
-
         Forall{ type_ = oldType, .. } -> Forall{ type_ = newType, .. }
           where
             newType = substituteType a n' _A oldType
@@ -324,13 +309,6 @@ substituteFields ρ0 n r@(Fields kτs ρ1) type_ =
 
         UnsolvedType{..} ->
             UnsolvedType{..}
-
-        Exists{ type_ = oldType, .. } -> Exists{ type_ = newType, .. }
-          where
-            newType = substituteFields ρ0 n' r oldType
-
-            n'  | ρ0 == name && domain == Domain.Fields = n + 1
-                | otherwise                             = n
 
         Forall{ type_ = oldType, .. } -> Forall{ type_ = newType, .. }
           where
@@ -379,13 +357,6 @@ substituteAlternatives ρ0 n r@(Alternatives kτs ρ1) type_ =
 
         UnsolvedType{..} ->
             UnsolvedType{..}
-
-        Exists{ type_ = oldType, .. } -> Exists{ type_ = newType, .. }
-          where
-            newType = substituteAlternatives ρ0 n' r oldType
-
-            n'  | ρ0 == name && domain == Domain.Alternatives = n + 1
-                | otherwise                                   = n
 
         Forall{ type_ = oldType, .. } -> Forall{ type_ = newType, .. }
           where
@@ -463,24 +434,15 @@ alternativesFreeIn unsolved =
         . Lens.only unsolved
         )
 
-data PreviousQuantifier =
-  NoQuantifier | ForallQuantifier | ExistsQuantifier
-  deriving Eq
-
 prettyQuantifiedType :: Type s -> Doc AnsiStyle
-prettyQuantifiedType type0
-    | isQuantified type0 = Pretty.group (Pretty.flatAlt long short)
-    | otherwise          = prettyFunctionType type0
+prettyQuantifiedType type0@Forall{} =
+    Pretty.group (Pretty.flatAlt long short)
   where
-    isQuantified Forall{} = True
-    isQuantified Exists{} = True
-    isQuantified _        = False
-
-    short = prettyShort NoQuantifier type0
+    short = prettyShort (keyword "forall" <> " ") type0
 
     long = Pretty.align (prettyLong type0)
 
-    prettyShort quantifier Forall{..} =
+    prettyShort prefix Forall{..} =
             prefix
         <>  punctuation "("
         <>  label (pretty name)
@@ -490,33 +452,9 @@ prettyQuantifiedType type0
         <>  pretty domain
         <>  punctuation ")"
         <>  " "
-        <>  prettyShort ForallQuantifier type_
-        where
-          prefix =
-            case quantifier of
-              NoQuantifier -> keyword "forall" <> " "
-              ExistsQuantifier -> punctuation "." <> " " <> keyword "forall" <> " "
-              ForallQuantifier -> ""
+        <>  prettyShort "" type_
 
-    prettyShort quantifier Exists{..} =
-            prefix
-        <>  punctuation "("
-        <>  label (pretty name)
-        <>  " "
-        <>  punctuation ":"
-        <>  " "
-        <>  pretty domain
-        <>  punctuation ")"
-        <>  " "
-        <>  prettyShort ExistsQuantifier type_
-        where
-          prefix =
-            case quantifier of
-              NoQuantifier -> keyword "exists" <> " "
-              ExistsQuantifier -> ""
-              ForallQuantifier -> punctuation "." <> " " <> keyword "exists" <> " "
-
-    prettyShort _quantifier _A =
+    prettyShort _prefix _A =
         punctuation "." <> " " <> prettyFunctionType _A
 
     prettyLong Forall{..} =
@@ -533,22 +471,9 @@ prettyQuantifiedType type0
         <>  punctuation "."
         <>  Pretty.hardline
         <>  prettyLong type_
-    prettyLong Exists{..} =
-            keyword "exists"
-        <>  " "
-        <>  punctuation "("
-        <>  label (pretty name)
-        <>  " "
-        <>  punctuation ":"
-        <>  " "
-        <>  pretty domain
-        <>  punctuation ")"
-        <>  " "
-        <>  punctuation "."
-        <>  Pretty.hardline
-        <>  prettyLong type_
     prettyLong _A =
         "  " <> prettyFunctionType _A
+prettyQuantifiedType other = prettyFunctionType other
 
 prettyFunctionType :: Type s -> Doc AnsiStyle
 prettyFunctionType  type_@Function{} = Pretty.group (Pretty.flatAlt long short)

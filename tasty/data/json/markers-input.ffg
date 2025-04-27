@@ -2,4 +2,4 @@
 #
 # Note that the example from the above page is not valid JSON (due to a trailing
 # comma)
-./markers.json : { markers : List (exists (a : Fields) . { name : Text, a }) }
+./markers.json : { markers : List { name : Text, location: Optional (List Real), position: Optional (List Real) } }

@@ -87,8 +87,7 @@ parseToken =
             ] <?> "operator"
 
         , Combinators.choice
-            [ Exists       <$ symbol "exists"
-            , Forall       <$ symbol "forall"
+            [ Forall       <$ symbol "forall"
             , Let          <$ symbol "let"
             , In           <$ symbol "in"
             , If           <$ symbol "if"
@@ -339,7 +338,6 @@ reserved =
         , "Text/equal"
         , "Type"
         , "else"
-        , "exists"
         , "false"
         , "forall"
         , "if"
@@ -437,7 +435,6 @@ data Token
     | RealShow
     | Else
     | Equals
-    | Exists
     | False_
     | Fields
     | File FilePath

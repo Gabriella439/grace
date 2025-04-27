@@ -1,1 +1,6 @@
-{ markers: List (exists (a : Fields) . { name: Text, a }) }
+{ markers: List
+             { name: Text
+             , location: Optional (List Real)
+             , position: Optional (List Real)
+             }
+}

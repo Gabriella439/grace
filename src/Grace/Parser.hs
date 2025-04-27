@@ -165,7 +165,6 @@ render t = case t of
     Lexer.RealShow         -> "Real/show"
     Lexer.Else             -> "else"
     Lexer.Equals           -> "="
-    Lexer.Exists           -> "exists"
     Lexer.False_           -> "False"
     Lexer.Fields           -> "Fields"
     Lexer.File _           -> "a file"
@@ -509,29 +508,15 @@ grammar = mdo
         )
 
     quantifiedType <- rule do
-        let quantify (forallOrExists, location, (typeVariableOffset, typeVariable), domain_) type_ =
-                forallOrExists location typeVariableOffset typeVariable domain_ type_
-
         fss <- many
             (   do  location <- locatedToken Lexer.Forall
                     fs <- some do
                         token Lexer.OpenParenthesis
-                        locatedTypeVariable <- locatedLabel
+                        ~(typeVariableOffset, typeVariable) <- locatedLabel
                         token Lexer.Colon
                         domain_ <- domain
                         token Lexer.CloseParenthesis
-                        return \location_ -> quantify (Type.Forall, location_, locatedTypeVariable, domain_)
-                    token Lexer.Dot
-                    return (map ($ location) fs)
-            <|> do  location <- locatedToken Lexer.Exists
-                    fs <- some do
-                        token Lexer.OpenParenthesis
-                        locatedTypeVariable <- locatedLabel
-                        token Lexer.Colon
-                        domain_ <- domain
-                        token Lexer.CloseParenthesis
-
-                        return \location_ -> quantify (Type.Exists, location_, locatedTypeVariable, domain_)
+                        return \location_ -> Type.Forall location_ typeVariableOffset typeVariable domain_
                     token Lexer.Dot
                     return (map ($ location) fs)
             )

@@ -138,13 +138,13 @@ referentiallySane parent child
     This is particularly useful when importing JSON.  For example, suppose
     that we had the following JSON expression:
 
-    > [ 1, true ]
+    > [ 1, null ]
 
     We can't interpret that directly because it is a type error, and we also
     can't import that without a type annotation for the same reason.  However,
     we can import the JSON like this:
 
-    > ./example.json : List (exists (a : Type) . a)
+    > ./example.json : List (Optional Natural)
 
     … and the expression will succeed since the type annotation is used when
     type-checking @./example.json@.  We wouldn't be able to add that same type

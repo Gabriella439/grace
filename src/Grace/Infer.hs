@@ -16,9 +16,7 @@
       `Context`s and manipulate them instead of explicit `Context` passing as
       in the original paper
 
-    * This algorithm adds support for existential quantification
-
-    * This algorithm adds support for row polymorphic and polymorphic variants
+    * This algorithm adds support for row polymorphism and polymorphic variants
 -}
 module Grace.Infer
     ( -- * Type inference
@@ -166,10 +164,6 @@ wellFormedType _Γ type0 =
         Type.Forall{..} -> do
             wellFormedType (Context.Variable domain name : _Γ) type_
 
-        -- ForallWF
-        Type.Exists{..} -> do
-            wellFormedType (Context.Variable domain name : _Γ) type_
-
         -- EvarWF / SolvedEvarWF
         _A@Type.UnsolvedType{..}
             | any predicate _Γ -> do
@@ -304,37 +298,10 @@ subtype _A0 _B0 = do
             -- the right places.
             subtype (Context.solveType _Θ _A2) (Context.solveType _Θ _B2)
 
-        -- One of the main extensions that is not present in the original paper
-        -- is the addition of existential quantification.  This was actually
-        -- pretty easy to implement: you just take the rules for universal
-        -- quantification and flip them around and everything works.  Elegant!
-        --
-        -- For example, the <:∃R rule is basically the same as the <:∀L rule,
-        -- except with the arguments flipped.  Similarly, the <:∃L rule is
-        -- basically the same as the <:∀R rule with the arguments flipped.
-
-        -- <:∃L
-        (Type.Exists{..}, _) -> do
-            scoped (Context.Variable domain name) do
-                subtype type_ _B0
-
         -- <:∀R
         (_, Type.Forall{..}) -> do
             scoped (Context.Variable domain name) do
                 subtype _A0 type_
-
-        -- <:∃R
-        (_, Type.Exists{ domain = Domain.Type, .. }) -> do
-            scopedUnsolvedType nameLocation \a ->
-                subtype _A0 (Type.substituteType name 0 a type_)
-
-        (_, Type.Exists{ domain = Domain.Fields, .. }) -> do
-            scopedUnsolvedFields \a -> do
-                subtype _A0 (Type.substituteFields name 0 a type_)
-
-        (_, Type.Exists{ domain = Domain.Alternatives, .. }) -> do
-            scopedUnsolvedAlternatives \a -> do
-                subtype _A0 (Type.substituteAlternatives name 0 a type_)
 
         -- <:∀L
         (Type.Forall{ domain = Domain.Type, .. }, _) -> do
@@ -409,10 +376,13 @@ subtype _A0 _B0 = do
                 flexible (Monotype.VariableFields _   ) = False
                 flexible (Monotype.UnsolvedFields _   ) = True
 
+            let isOptional Optional{} = True
+                isOptional _ = False
+
             let okayA = Map.null extraA
                     || (flexible fields1 && fields0 /= fields1)
 
-            let okayB = Map.null extraB
+            let okayB = all isOptional extraB
                     || (flexible fields0 && fields0 /= fields1)
 
             -- First we check that there are no mismatches in the record types
@@ -453,7 +423,7 @@ subtype _A0 _B0 = do
             -- record types has an unsolved fields variable.
             case (fields0, fields1) of
                 -- The two records are identical, so there's nothing left to do
-                _ | null extraA && null extraB && fields0 == fields1 -> do
+                _ | Map.null extraA && all isOptional extraB && fields0 == fields1 -> do
                         return ()
 
                 -- Both records type have unsolved Fields variables.  Great!
@@ -788,17 +758,6 @@ instantiateTypeL a _A0 = do
         Type.Scalar{..} -> do
             instLSolve (Monotype.Scalar scalar)
 
-        -- InstLExt
-        Type.Exists{ domain = Domain.Type, .. } -> do
-            scopedUnsolvedType nameLocation \b -> do
-                instantiateTypeR (Type.substituteType name 0 b type_) a
-        Type.Exists{ domain = Domain.Fields, .. } -> do
-            scopedUnsolvedFields \b -> do
-                instantiateTypeR (Type.substituteFields name 0 b type_) a
-        Type.Exists{ domain = Domain.Alternatives, .. } -> do
-            scopedUnsolvedAlternatives \b -> do
-                instantiateTypeR (Type.substituteAlternatives name 0 b type_) a
-
         -- InstLArr
         Type.Function{..} -> do
             let _ΓL = _Γ
@@ -957,11 +916,6 @@ instantiateTypeR _A0 a = do
             _Θ <- get
 
             instantiateTypeR (Context.solveType _Θ output) a2
-
-        -- InstRExtL
-        Type.Exists{..} -> do
-            scoped (Context.Variable domain name) do
-                instantiateTypeL a type_
 
         -- InstRAllL
         Type.Forall{ domain = Domain.Type, .. } -> do
@@ -1895,17 +1849,6 @@ check Syntax.Lambda{ location = _, ..} Type.Function{..} = do
     scoped (Context.Annotation name input) do
         check body output
 
--- ∃I
-check e Type.Exists{ domain = Domain.Type, .. } = do
-    scopedUnsolvedType nameLocation \a -> do
-        check e (Type.substituteType name 0 a type_)
-check e Type.Exists{ domain = Domain.Fields, .. } = do
-    scopedUnsolvedFields \a -> do
-        check e (Type.substituteFields name 0 a type_)
-check e Type.Exists{ domain = Domain.Alternatives, .. } = do
-    scopedUnsolvedAlternatives \a -> do
-        check e (Type.substituteAlternatives name 0 a type_)
-
 -- ∀I
 check e Type.Forall{..} = do
     scoped (Context.Variable domain name) do
@@ -2037,11 +1980,6 @@ inferApplication Type.Forall{ domain = Domain.Alternatives, .. } e = do
     let a' = Type.Alternatives [] (Monotype.UnsolvedAlternatives a)
 
     inferApplication (Type.substituteAlternatives name 0 a' type_) e
-
--- ∃App
-inferApplication Type.Exists{..} e = do
-    scoped (Context.Variable domain name) do
-        inferApplication type_ e
 
 -- αApp
 inferApplication Type.UnsolvedType{ existential = a, .. } e = do

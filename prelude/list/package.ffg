@@ -1,7 +1,5 @@
 { all: ./all.ffg
 , any: ./any.ffg
-, concat: ./concat.ffg
-, concatMap: ./concatMap.ffg
 , drop: ./drop.ffg
 , equal: ./equal.ffg
 , fold: ./fold.ffg

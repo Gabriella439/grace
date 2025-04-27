@@ -95,18 +95,6 @@ Grace implements the following features so that you don't have to:
   annotations and the remaining types can be inferred with a single top-level
   type annotation.
 
-* JSON-compatible type system
-
-  JSON permits all sorts of nonsense that would normally be rejected by typed
-  languages, but Grace's type system is sufficiently advanced that most JSON
-  expressions can be made valid with a type signature, like this:
-
-  ```dhall
-  [ 1, [] ] : List (exists (a : Type) . a)
-  ```
-
-  … and this doesn't compromise the soundness of the type system.
-
 * [Dhall](https://dhall-lang.org/)-style imports
 
   You can import subexpressions by referencing their path or URL.  You can also
@@ -170,16 +158,12 @@ Grace implements the following features so that you don't have to:
   open unions (also known as [polymorphic variants](https://2ality.com/2018/01/polymorphic-variants-reasonml.html)).  This lets you easily work with records or
   unions where not all fields or alternatives are known in advance.
 
-* Universal quantification and existential quantification
+* Universal quantification
 
   Universal quantification lets you specify "generic" types (i.e. types
   parameterized on other types).
 
-  Existential quantification lets you specify incomplete / partial types
-  (i.e. types with holes that that the interpreter infers).
-
-  Both universal and existential quantification work with types, open records,
-  and open unions.
+  Universal quantification works with types, open records, and open unions.
 
 Also, the package and the code is extensively commented and documented to help
 you get started making changes.  You can also read the
@@ -728,21 +712,6 @@ in  twice (twice 2)
 `twice` function works `forall` possible `Type`s that we could assign to `a`
 (including both `Natural` and `List Natural`)..
 
-You can also use existential quantification for parts of the type signature
-that you wish to omit:
-
-```dhall
-let numbers : exists (a : Type) . List a
-            = [ 2, 3, 5 ]
-
-in  numbers
-```
-
-The type-checker will accept the above example and infer that the type `a`
-should be `Natural` for each element.  You can read that type as saying that
-there `exists` a `Type` that we could assign to `a` that would make the type
-work, but we don't care which one.
-
 You don't need type annotations when the types of values exactly match, but
 you do require type annotations to unify types when one type is a proper
 subtype of another type.
@@ -783,22 +752,6 @@ $ grace interpret - <<< '[ 3, -2 ] : List Integer'
 [ 3, -2 ]
 ```
 
-There is one type that is a supertype of all types, which is
-`exists (a : Type) . a` (sometimes denoted `⊤` in the literature), so you can
-always unify two disparate types, no matter how different,  by giving them that
-type annotation:
-
-```bash
-$ grace interpret - <<< '[ { }, \x -> x ] : List (exists (a : Type) . a)'
-```
-```dhall
-[ { }, \x -> x ]
-```
-
-Note that if you existentially quantify a value's type then you can't do
-anything meaningful with that value; it is now a black box as far as the
-language is concerned.
-
 ### Open records and unions
 
 The interpreter can infer polymorphic types for open records, too.  For
@@ -817,9 +770,9 @@ indicates that the function works no matter what type of value is present within
 the `foo` field and also works no matter what other fields might be present
 within the record `x`.
 
-You can also use existential quantification to unify records with mismatched
-sets of fields.  For example, the following list won't type-check without a
-type annotation because the fields don't match:
+You can also mark fields `Optional` to unify records with mismatched sets of
+fields.  For example, the following list won't type-check without a type
+annotation because the fields don't match:
 
 ```bash
 $ grace interpret - <<< '[ { x: 1, y: true }, { x: 2, z: "" } ]'
@@ -853,23 +806,11 @@ The former record has the following extra fields:
 ```
 
 … but if we're only interested in the field named `x` then we can use a
-type annotation to tell the type-checker to ignore all of the other fields by
-existentially quantifying them:
+type annotation to tell the type-checker that the other fields are `Optional`:
 
 ```dhall
 [ { x: 1, y: true }, { x: 2, z: "" } ]
-    : List (exists (a : Fields) . { x: Natural, a })
-```
-
-We can still write a function that consumes this list so long as the function
-only accesses the field named `x`:
-
-```dhall
-let values
-      : exists (a : Fields) . List { x: Natural, a }
-      =  [ { x: 1, y: true }, { x: 2, z: "" } ]
-
-in  List/map (\record -> record.x) values
+    : List { x: Natural, y: Optional Bool, z: Optional Text }
 ```
 
 The compiler also infers universally quantified types for union alternatives,

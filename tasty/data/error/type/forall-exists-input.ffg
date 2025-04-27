@@ -1,8 +1,0 @@
-# This test illustrates that existentially quantified field variables (like `a`)
-# will not unify with other variables outside of the scope of the existential
-# quantification.
-let values
-      : List (exists (a : Type) . a)
-      =  [ 2, true ]
-
-in  List/length values

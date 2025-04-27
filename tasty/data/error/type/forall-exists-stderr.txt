@@ -1,6 +1,0 @@
-Unbound type variable: a
-
-tasty/data/error/type/forall-exists-input.ffg:5:35: 
-  │
-5 │       : List (exists (a : Type) . a)
-  │                                   ↑

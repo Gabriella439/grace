@@ -1,5 +1,0 @@
-# This test exercises the ∃App judgment
-let f : exists (a : Type) . Natural -> Natural
-      = \x -> x
-
-in  f 1

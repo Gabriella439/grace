@@ -1,6 +1,0 @@
-Unbound type variable: a
-
-tasty/data/error/type/inner-exists-input.ffg:4:47: 
-  │
-4 │ in wrappedVal : { wrapped: exists (a : Type). a }
-  │                                               ↑

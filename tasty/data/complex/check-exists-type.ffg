@@ -1,4 +1,0 @@
-{ a: exists (a : Type) . a
-, b: exists (a : Fields) . { a }
-, c: exists (a : Alternatives) . < a >
-}
