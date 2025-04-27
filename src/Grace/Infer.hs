@@ -147,8 +147,8 @@ scopedUnsolvedAlternatives k = do
 wellFormedType
     :: MonadError TypeInferenceError m
     => Context Location -> Type Location -> m ()
-wellFormedType _Γ type0 =
-    case type0 of
+wellFormedType _Γ type₀ =
+    case type₀ of
         -- UvarWF
         Type.VariableType{..}
             | Context.Variable Domain.Type name `elem` _Γ -> do
@@ -184,14 +184,14 @@ wellFormedType _Γ type0 =
         Type.Record{ fields = Type.Fields kAs Monotype.EmptyFields } -> do
             traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
 
-        Type.Record{ fields = Type.Fields kAs (Monotype.UnsolvedFields a0), .. }
+        Type.Record{ fields = Type.Fields kAs (Monotype.UnsolvedFields a₀), .. }
             | any predicate _Γ -> do
                 traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
             | otherwise -> do
-                throwError (IllFormedFields location a0 _Γ)
+                throwError (IllFormedFields location a₀ _Γ)
           where
-            predicate (Context.UnsolvedFields a1  ) = a0 == a1
-            predicate (Context.SolvedFields   a1 _) = a0 == a1
+            predicate (Context.UnsolvedFields a₁  ) = a₀ == a₁
+            predicate (Context.SolvedFields   a₁ _) = a₀ == a₁
             predicate  _                            = False
 
         Type.Record{ fields = Type.Fields kAs (Monotype.VariableFields a), .. }
@@ -203,14 +203,14 @@ wellFormedType _Γ type0 =
         Type.Union{ alternatives = Type.Alternatives kAs Monotype.EmptyAlternatives } -> do
             traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
 
-        Type.Union{ alternatives = Type.Alternatives kAs (Monotype.UnsolvedAlternatives a0), .. }
+        Type.Union{ alternatives = Type.Alternatives kAs (Monotype.UnsolvedAlternatives a₀), .. }
             | any predicate _Γ -> do
                 traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
             | otherwise -> do
-                throwError (IllFormedAlternatives location a0 _Γ)
+                throwError (IllFormedAlternatives location a₀ _Γ)
           where
-            predicate (Context.UnsolvedAlternatives a1  ) = a0 == a1
-            predicate (Context.SolvedAlternatives   a1 _) = a0 == a1
+            predicate (Context.UnsolvedAlternatives a₁  ) = a₀ == a₁
+            predicate (Context.SolvedAlternatives   a₁ _) = a₀ == a₁
             predicate  _                                  = False
 
         Type.Union{ alternatives = Type.Alternatives kAs (Monotype.VariableAlternatives a), .. }
@@ -232,18 +232,18 @@ wellFormedType _Γ type0 =
 subtype
     :: (MonadState Status m, MonadError TypeInferenceError m)
     => Type Location -> Type Location -> m ()
-subtype _A0 _B0 = do
+subtype _A₀ _B₀ = do
     _Γ <- get
 
-    case (_A0, _B0) of
+    case (_A₀, _B₀) of
         -- <:Var
-        (Type.VariableType{ name = a0 }, Type.VariableType{ name = a1 })
-            | a0 == a1 -> do
-                wellFormedType _Γ _A0
+        (Type.VariableType{ name = a₀ }, Type.VariableType{ name = a₁ })
+            | a₀ == a₁ -> do
+                wellFormedType _Γ _A₀
 
         -- <:Exvar
-        (Type.UnsolvedType{ existential = a0 }, Type.UnsolvedType{ existential = a1 })
-            | a0 == a1 && Context.UnsolvedType a0 `elem` _Γ -> do
+        (Type.UnsolvedType{ existential = a₀ }, Type.UnsolvedType{ existential = a₁ })
+            | a₀ == a₁ && Context.UnsolvedType a₀ `elem` _Γ -> do
                 return ()
 
         -- InstantiateL
@@ -256,19 +256,19 @@ subtype _A0 _B0 = do
             -- union types so that Fields variables and Alternatives variables
             -- cannot refer to the record or union that they belong to,
             -- respectively.
-            |   not (a `Type.typeFreeIn` _B0)
+            |   not (a `Type.typeFreeIn` _B₀)
             &&  elem (Context.UnsolvedType a) _Γ -> do
-                instantiateTypeL a _B0
+                instantiateTypeL a _B₀
 
         -- InstantiateR
         (_, Type.UnsolvedType{ existential = a})
-            |   not (a `Type.typeFreeIn` _A0)
+            |   not (a `Type.typeFreeIn` _A₀)
             &&  elem (Context.UnsolvedType a) _Γ -> do
-                instantiateTypeR _A0 a
+                instantiateTypeR _A₀ a
 
         -- <:→
-        (Type.Function{ input = _A1, output = _A2 }, Type.Function{ input= _B1, output = _B2 }) -> do
-            subtype _B1 _A1
+        (Type.Function{ input = _A₁, output = _A₂ }, Type.Function{ input= _B₁, output = _B₂ }) -> do
+            subtype _B₁ _A₁
 
             _Θ <- get
 
@@ -284,10 +284,10 @@ subtype _A0 _B0 = do
             -- `subtype` function could begin by doing:
             --
             --     _Γ <- get
-            --     let _A0' = Context.solveType _Γ _A0
-            --     let _B0' = Context.solveType _Γ _B0
+            --     let _A₀' = Context.solveType _Γ _A₀
+            --     let _B₀' = Context.solveType _Γ _B₀
             --
-            -- … and then use _A0' and _B0' for downstream steps.  If we did
+            -- … and then use _A₀' and _B₀' for downstream steps.  If we did
             -- that at the beginning of each function then everything would
             -- "just work".
             --
@@ -296,28 +296,28 @@ subtype _A0 _B0 = do
             -- in many cases.  So, the tradeoff here is that we get improved
             -- performance if we're willing to remember to call `solveType` in
             -- the right places.
-            subtype (Context.solveType _Θ _A2) (Context.solveType _Θ _B2)
+            subtype (Context.solveType _Θ _A₂) (Context.solveType _Θ _B₂)
 
         -- <:∀R
         (_, Type.Forall{..}) -> do
             scoped (Context.Variable domain name) do
-                subtype _A0 type_
+                subtype _A₀ type_
 
         -- <:∀L
         (Type.Forall{ domain = Domain.Type, .. }, _) -> do
             scopedUnsolvedType nameLocation \a -> do
-                subtype (Type.substituteType name 0 a type_) _B0
+                subtype (Type.substituteType name 0 a type_) _B₀
 
         (Type.Forall{ domain = Domain.Fields, .. }, _) -> do
             scopedUnsolvedFields \a -> do
-                subtype (Type.substituteFields name 0 a type_) _B0
+                subtype (Type.substituteFields name 0 a type_) _B₀
 
         (Type.Forall{ domain = Domain.Alternatives, .. }, _) -> do
             scopedUnsolvedAlternatives \a -> do
-                subtype (Type.substituteAlternatives name 0 a type_) _B0
+                subtype (Type.substituteAlternatives name 0 a type_) _B₀
 
-        (Type.Scalar{ scalar = s0 }, Type.Scalar{ scalar = s1 })
-            | s0 == s1 -> do
+        (Type.Scalar{ scalar = s₀ }, Type.Scalar{ scalar = s₁ })
+            | s₀ == s₁ -> do
                 return ()
 
         (Type.Optional{ type_ = _A }, Type.Optional{ type_ = _B }) -> do
@@ -342,20 +342,20 @@ subtype _A0 _B0 = do
         -- `Optional T`.  If that feels unprincipled to you then delete this
         -- rule.
         (_, Type.Optional{..}) -> do
-            subtype _A0 type_
+            subtype _A₀ type_
 
         (Type.Scalar{ }, Type.Scalar{ scalar = Monotype.JSON }) -> do
             return ()
 
         (Type.List{ type_ = _A }, Type.Scalar{ scalar = Monotype.JSON }) -> do
-            subtype _A _B0
+            subtype _A _B₀
             return ()
 
         (Type.Record{ fields = Type.Fields kAs Monotype.EmptyFields }, Type.Scalar{ scalar = Monotype.JSON }) -> do
             let process (_, _A) = do
                     _Γ <- get
 
-                    subtype _A (Context.solveType _Γ _B0)
+                    subtype _A (Context.solveType _Γ _B₀)
 
             traverse_ process kAs
 
@@ -363,9 +363,9 @@ subtype _A0 _B0 = do
         -- implement a non-trivial type that wasn't already covered by the
         -- paper, so we'll go into more detail here to explain the general
         -- type-checking principles of the paper.
-        (_A@Type.Record{ fields = Type.Fields kAs0 fields0 }, _B@Type.Record{ fields = Type.Fields kBs0 fields1 }) -> do
-            let mapA = Map.fromList kAs0
-            let mapB = Map.fromList kBs0
+        (_A@Type.Record{ fields = Type.Fields kAs₀ fields₀ }, _B@Type.Record{ fields = Type.Fields kBs₀ fields₁ }) -> do
+            let mapA = Map.fromList kAs₀
+            let mapB = Map.fromList kBs₀
 
             let extraA = Map.difference mapA mapB
             let extraB = Map.difference mapB mapA
@@ -380,10 +380,10 @@ subtype _A0 _B0 = do
                 isOptional _ = False
 
             let okayA = Map.null extraA
-                    || (flexible fields1 && fields0 /= fields1)
+                    || (flexible fields₁ && fields₀ /= fields₁)
 
             let okayB = all isOptional extraB
-                    || (flexible fields0 && fields0 /= fields1)
+                    || (flexible fields₀ && fields₀ /= fields₁)
 
             -- First we check that there are no mismatches in the record types
             -- that cannot be resolved by just setting an unsolved Fields
@@ -392,25 +392,25 @@ subtype _A0 _B0 = do
             -- For example, `{ x: Bool }` can never be a subtype of
             -- `{ y: Text }`
             if | not okayA && not okayB -> do
-                throwError (RecordTypeMismatch _A0 _B0 extraA extraB)
+                throwError (RecordTypeMismatch _A₀ _B₀ extraA extraB)
 
                | not okayA -> do
-                throwError (RecordTypeMismatch _A0 _B0 extraA mempty)
+                throwError (RecordTypeMismatch _A₀ _B₀ extraA mempty)
 
                | not okayB -> do
-                throwError (RecordTypeMismatch _A0 _B0 mempty extraB)
+                throwError (RecordTypeMismatch _A₀ _B₀ mempty extraB)
 
                | otherwise -> do
                    return ()
 
             -- If record A is a subtype of record B, then all fields in A
             -- must be a subtype of the matching fields in record B
-            let process (_A1, _B1) = do
+            let process (_A₁, _B₁) = do
                     _Θ <- get
 
                     subtype
-                        (Context.solveType _Θ _A1)
-                        (Context.solveType _Θ _B1)
+                        (Context.solveType _Θ _A₁)
+                        (Context.solveType _Θ _B₁)
 
             -- We only check fields are present in `both` records.  For
             -- mismatched fields present only in one record type we have to
@@ -421,9 +421,9 @@ subtype _A0 _B0 = do
             -- Here is where we handle fields that were only present in one
             -- record type.  They still might be okay if one or both of the
             -- record types has an unsolved fields variable.
-            case (fields0, fields1) of
+            case (fields₀, fields₁) of
                 -- The two records are identical, so there's nothing left to do
-                _ | Map.null extraA && all isOptional extraB && fields0 == fields1 -> do
+                _ | Map.null extraA && all isOptional extraB && fields₀ == fields₁ -> do
                         return ()
 
                 -- Both records type have unsolved Fields variables.  Great!
@@ -435,133 +435,133 @@ subtype _A0 _B0 = do
                 -- to the extra fields from the opposing record type.  For
                 -- example, if the two record types we're comparing are:
                 --
-                --     { x: Bool, p0 } <: { y: Text, p1 }
+                --     { x: Bool, p₀ } <: { y: Text, p₁ }
                 --
                 -- … then it's not correct to say:
                 --
-                --     p0 = y: Text
-                --     p1 = x: Bool
+                --     p₀ = y: Text
+                --     p₁ = x: Bool
                 --
-                -- … because that is not the most general solution for `p0` and
-                -- `p1`!  The actual most general solution is:
+                -- … because that is not the most general solution for `p₀` and
+                -- `p₁`!  The actual most general solution is:
                 --
-                --     p0 = { y: Text, p2 }
-                --     p1 = { x: Bool, p2 }
+                --     p₀ = { y: Text, p₂ }
+                --     p₁ = { x: Bool, p₂ }
                 --
-                -- … where `p2` is a fresh Fields type variable representing the
+                -- … where `p₂` is a fresh Fields type variable representing the
                 -- fact that both records could potentially have even more
                 -- fields other than `x` and `y`.
-                (Monotype.UnsolvedFields p0, Monotype.UnsolvedFields p1) -> do
-                    p2 <- fresh
+                (Monotype.UnsolvedFields p₀, Monotype.UnsolvedFields p₁) -> do
+                    p₂ <- fresh
 
-                    _Γ0 <- get
+                    _Γ₀ <- get
 
-                    -- We have to insert p2 before both p0 and p1 within the
+                    -- We have to insert p₂ before both p₀ and p₁ within the
                     -- context because the bidirectional type-checking algorithm
                     -- requires that the context is ordered and all variables
                     -- within the context can only reference prior variables
                     -- within the context.
                     --
-                    -- Since `p0` and `p1` both have to reference `p2`, then we
-                    -- need to insert `p2` right before `p0` or `p1`, whichever
+                    -- Since `p₀` and `p₁` both have to reference `p₂`, then we
+                    -- need to insert `p₂` right before `p₀` or `p₁`, whichever
                     -- one comes first
-                    let p0First = do
-                            (_ΓR, _ΓL) <- Context.splitOnUnsolvedFields p0 _Γ0
+                    let p₀First = do
+                            (_Γ', _Γ) <- Context.splitOnUnsolvedFields p₀ _Γ₀
 
-                            Monad.guard (Context.UnsolvedFields p1 `elem` _ΓR)
+                            Monad.guard (Context.UnsolvedFields p₁ `elem` _Γ')
 
                             let command =
-                                    set (   _ΓR
-                                        <>  ( Context.UnsolvedFields p0
-                                            : Context.UnsolvedFields p2
-                                            : _ΓL
+                                    set (   _Γ'
+                                        <>  ( Context.UnsolvedFields p₀
+                                            : Context.UnsolvedFields p₂
+                                            : _Γ
                                             )
                                         )
 
                             return command
 
-                    let p1First = do
-                            (_ΓR, _ΓL) <- Context.splitOnUnsolvedFields p1 _Γ0
+                    let p₁First = do
+                            (_Γ', _Γ) <- Context.splitOnUnsolvedFields p₁ _Γ₀
 
-                            Monad.guard (Context.UnsolvedFields p0 `elem` _ΓR)
+                            Monad.guard (Context.UnsolvedFields p₀ `elem` _Γ')
 
                             let command =
-                                    set (   _ΓR
-                                        <>  ( Context.UnsolvedFields p1
-                                            : Context.UnsolvedFields p2
-                                            : _ΓL
+                                    set (   _Γ'
+                                        <>  ( Context.UnsolvedFields p₁
+                                            : Context.UnsolvedFields p₂
+                                            : _Γ
                                             )
                                         )
 
                             return command
 
-                    case p0First <|> p1First of
+                    case p₀First <|> p₁First of
                         Nothing -> do
-                            throwError (MissingOneOfFields [Type.location _A0, Type.location _B0] p0 p1 _Γ)
+                            throwError (MissingOneOfFields [Type.location _A₀, Type.location _B₀] p₀ p₁ _Γ)
 
                         Just setContext -> do
                             setContext
 
                     _Θ <- get
 
-                    -- Now we solve for `p0`.  This is basically saying:
+                    -- Now we solve for `p₀`.  This is basically saying:
                     --
-                    -- p0 = { extraFieldsFromRecordB, p2 }
+                    -- p₀ = { extraFieldsFromRecordB, p₂ }
                     instantiateFieldsL
-                        p0
-                        (Type.location _B0)
+                        p₀
+                        (Type.location _B₀)
                         (Context.solveRecord _Θ
                             (Type.Fields (Map.toList extraB)
-                                (Monotype.UnsolvedFields p2)
+                                (Monotype.UnsolvedFields p₂)
                             )
                         )
 
                     _Δ <- get
 
-                    -- Similarly, solve for `p1`.  This is basically saying:
+                    -- Similarly, solve for `p₁`.  This is basically saying:
                     --
-                    -- p1 = { extraFieldsFromRecordA, p2 }
+                    -- p₁ = { extraFieldsFromRecordA, p₂ }
                     instantiateFieldsR
-                        (Type.location _A0)
+                        (Type.location _A₀)
                         (Context.solveRecord _Δ
                             (Type.Fields (Map.toList extraA)
-                                (Monotype.UnsolvedFields p2)
+                                (Monotype.UnsolvedFields p₂)
                             )
                         )
-                        p1
+                        p₁
 
                 -- If only one of the records has a Fields variable then the
                 -- solution is simpler: just set the Fields variable to the
                 -- extra fields from the opposing record
-                (Monotype.UnsolvedFields p0, _) -> do
+                (Monotype.UnsolvedFields p₀, _) -> do
                     _Θ <- get
 
                     instantiateFieldsL
-                        p0
-                        (Type.location _B0)
+                        p₀
+                        (Type.location _B₀)
                         (Context.solveRecord _Θ
-                            (Type.Fields (Map.toList extraB) fields1)
+                            (Type.Fields (Map.toList extraB) fields₁)
                         )
 
-                (_, Monotype.UnsolvedFields p1) -> do
+                (_, Monotype.UnsolvedFields p₁) -> do
                     _Θ <- get
 
                     instantiateFieldsR
-                        (Type.location _A0)
+                        (Type.location _A₀)
                         (Context.solveRecord _Θ
-                            (Type.Fields (Map.toList extraA) fields0)
+                            (Type.Fields (Map.toList extraA) fields₀)
                         )
-                        p1
+                        p₁
 
                 (_, _) -> do
-                    throwError (NotRecordSubtype (Type.location _A0) _A (Type.location _B0) _B)
+                    throwError (NotRecordSubtype (Type.location _A₀) _A (Type.location _B₀) _B)
 
         -- Checking if one union is a subtype of another union is basically the
         -- exact same as the logic for checking if a record is a subtype of
         -- another record.
-        (_A@Type.Union{ alternatives = Type.Alternatives kAs0 alternatives0 }, _B@Type.Union{ alternatives = Type.Alternatives kBs0 alternatives1 }) -> do
-            let mapA = Map.fromList kAs0
-            let mapB = Map.fromList kBs0
+        (_A@Type.Union{ alternatives = Type.Alternatives kAs₀ alternatives₀ }, _B@Type.Union{ alternatives = Type.Alternatives kBs₀ alternatives₁ }) -> do
+            let mapA = Map.fromList kAs₀
+            let mapB = Map.fromList kBs₀
 
             let extraA = Map.difference mapA mapB
             let extraB = Map.difference mapB mapA
@@ -573,73 +573,73 @@ subtype _A0 _B0 = do
                 flexible (Monotype.UnsolvedAlternatives _   ) = True
 
             let okayA = Map.null extraA
-                    ||  (flexible alternatives1 && alternatives0 /= alternatives1)
+                    ||  (flexible alternatives₁ && alternatives₀ /= alternatives₁)
             let okayB = Map.null extraB
-                    ||  (flexible alternatives0 && alternatives0 /= alternatives1)
+                    ||  (flexible alternatives₀ && alternatives₀ /= alternatives₁)
 
             if | not okayA && not okayB -> do
-                throwError (UnionTypeMismatch _A0 _B0 extraA extraB)
+                throwError (UnionTypeMismatch _A₀ _B₀ extraA extraB)
 
                | not okayA && okayB -> do
-                throwError (UnionTypeMismatch _A0 _B0 extraA mempty)
+                throwError (UnionTypeMismatch _A₀ _B₀ extraA mempty)
 
                | okayA && not okayB -> do
-                throwError (UnionTypeMismatch _A0 _B0 mempty extraB)
+                throwError (UnionTypeMismatch _A₀ _B₀ mempty extraB)
 
                | otherwise -> do
                 return ()
 
-            let process (_A1, _B1) = do
+            let process (_A₁, _B₁) = do
                     _Θ <- get
 
                     subtype
-                        (Context.solveType _Θ _A1)
-                        (Context.solveType _Θ _B1)
+                        (Context.solveType _Θ _A₁)
+                        (Context.solveType _Θ _B₁)
 
             traverse_ process both
 
-            case (alternatives0, alternatives1) of
-                _ | null extraA && null extraB && alternatives0 == alternatives1 -> do
+            case (alternatives₀, alternatives₁) of
+                _ | null extraA && null extraB && alternatives₀ == alternatives₁ -> do
                         return ()
 
-                (Monotype.UnsolvedAlternatives p0, Monotype.UnsolvedAlternatives p1) -> do
-                    p2 <- fresh
+                (Monotype.UnsolvedAlternatives p₀, Monotype.UnsolvedAlternatives p₁) -> do
+                    p₂ <- fresh
 
-                    _Γ0 <- get
+                    _Γ₀ <- get
 
-                    let p0First = do
-                            (_ΓR, _ΓL) <- Context.splitOnUnsolvedAlternatives p0 _Γ0
+                    let p₀First = do
+                            (_Γ', _Γ) <- Context.splitOnUnsolvedAlternatives p₀ _Γ₀
 
-                            Monad.guard (Context.UnsolvedAlternatives p1 `elem` _ΓR)
+                            Monad.guard (Context.UnsolvedAlternatives p₁ `elem` _Γ')
 
                             let command =
-                                    set (   _ΓR
-                                        <>  ( Context.UnsolvedAlternatives p0
-                                            : Context.UnsolvedAlternatives p2
-                                            : _ΓL
+                                    set (   _Γ'
+                                        <>  ( Context.UnsolvedAlternatives p₀
+                                            : Context.UnsolvedAlternatives p₂
+                                            : _Γ
                                             )
                                         )
 
                             return command
 
-                    let p1First = do
-                            (_ΓR, _ΓL) <- Context.splitOnUnsolvedAlternatives p1 _Γ0
+                    let p₁First = do
+                            (_Γ', _Γ) <- Context.splitOnUnsolvedAlternatives p₁ _Γ₀
 
-                            Monad.guard (Context.UnsolvedAlternatives p0 `elem` _ΓR)
+                            Monad.guard (Context.UnsolvedAlternatives p₀ `elem` _Γ')
 
                             let command =
-                                    set (   _ΓR
-                                        <>  ( Context.UnsolvedAlternatives p1
-                                            : Context.UnsolvedAlternatives p2
-                                            : _ΓL
+                                    set (   _Γ'
+                                        <>  ( Context.UnsolvedAlternatives p₁
+                                            : Context.UnsolvedAlternatives p₂
+                                            : _Γ
                                             )
                                         )
 
                             return command
 
-                    case p0First <|> p1First of
+                    case p₀First <|> p₁First of
                         Nothing -> do
-                            throwError (MissingOneOfAlternatives [Type.location _A0, Type.location _B0] p0 p1 _Γ)
+                            throwError (MissingOneOfAlternatives [Type.location _A₀, Type.location _B₀] p₀ p₁ _Γ)
 
                         Just setContext -> do
                             setContext
@@ -647,58 +647,58 @@ subtype _A0 _B0 = do
                     _Θ <- get
 
                     instantiateAlternativesL
-                        p0
-                        (Type.location _B0)
+                        p₀
+                        (Type.location _B₀)
                         (Context.solveUnion _Θ
                             (Type.Alternatives (Map.toList extraB)
-                                (Monotype.UnsolvedAlternatives p2)
+                                (Monotype.UnsolvedAlternatives p₂)
                             )
                         )
 
                     _Δ <- get
 
                     instantiateAlternativesR
-                        (Type.location _A0)
+                        (Type.location _A₀)
                         (Context.solveUnion _Δ
                             (Type.Alternatives (Map.toList extraA)
-                                (Monotype.UnsolvedAlternatives p2)
+                                (Monotype.UnsolvedAlternatives p₂)
                             )
                         )
-                        p1
+                        p₁
 
                 (Monotype.EmptyAlternatives, Monotype.EmptyAlternatives) -> do
                     return ()
 
-                (Monotype.UnsolvedAlternatives p0, _) -> do
+                (Monotype.UnsolvedAlternatives p₀, _) -> do
                     _Θ <- get
 
                     instantiateAlternativesL
-                        p0
-                        (Type.location _B0)
+                        p₀
+                        (Type.location _B₀)
                         (Context.solveUnion _Θ
                             (Type.Alternatives (Map.toList extraB)
-                                alternatives1
+                                alternatives₁
                             )
                         )
 
-                (Monotype.VariableAlternatives p0, Monotype.VariableAlternatives p1)
-                    | p0 == p1 -> do
+                (Monotype.VariableAlternatives p₀, Monotype.VariableAlternatives p₁)
+                    | p₀ == p₁ -> do
                         return ()
 
-                (_, Monotype.UnsolvedAlternatives p1) -> do
+                (_, Monotype.UnsolvedAlternatives p₁) -> do
                     _Θ <- get
 
                     instantiateAlternativesR
-                        (Type.location _A0)
+                        (Type.location _A₀)
                         (Context.solveUnion _Θ
                             (Type.Alternatives (Map.toList extraA)
-                                alternatives0
+                                alternatives₀
                             )
                         )
-                        p1
+                        p₁
 
                 (_, _) -> do
-                    throwError (NotUnionSubtype (Type.location _A0) _A (Type.location _B0) _B)
+                    throwError (NotUnionSubtype (Type.location _A₀) _A (Type.location _B₀) _B)
 
         -- Unfortunately, we need to have this wildcard match at the end,
         -- otherwise we'd have to specify a number of cases that is quadratic
@@ -717,7 +717,7 @@ subtype _A0 _B0 = do
         -- `subtype` function and then I'll remember to add a case for my new
         -- complex type here.
         (_A, _B) -> do
-            throwError (NotSubtype (Type.location _A0) _A (Type.location _B0) _B)
+            throwError (NotSubtype (Type.location _A₀) _A (Type.location _B₀) _B)
 
 {-| This corresponds to the judgment:
 
@@ -733,22 +733,21 @@ subtype _A0 _B0 = do
 instantiateTypeL
     :: (MonadState Status m, MonadError TypeInferenceError m)
     => Existential Monotype -> Type Location -> m ()
-instantiateTypeL a _A0 = do
-    _Γ0 <- get
+instantiateTypeL a _A₀ = do
+    _Γ₀ <- get
 
-    (_Γ', _Γ) <- Context.splitOnUnsolvedType a _Γ0 `orDie` MissingVariable a _Γ0
+    (_Γ', _Γ) <- Context.splitOnUnsolvedType a _Γ₀ `orDie` MissingVariable a _Γ₀
 
     let instLSolve τ = do
-            wellFormedType _Γ _A0
+            wellFormedType _Γ _A₀
 
             set (_Γ' <> (Context.SolvedType a τ : _Γ))
 
-    case _A0 of
+    case _A₀ of
         -- InstLReach
         Type.UnsolvedType{..}
-            | let _ΓL = _Γ
-            , Just (_ΓR, _ΓM) <- Context.splitOnUnsolvedType existential _Γ' -> do
-                set (_ΓR <> (Context.SolvedType existential (Monotype.UnsolvedType a) : _ΓM) <> (Context.UnsolvedType a : _ΓL))
+            | Just (_Γ', _ΓM) <- Context.splitOnUnsolvedType existential _Γ' -> do
+                set (_Γ' <> (Context.SolvedType existential (Monotype.UnsolvedType a) : _ΓM) <> (Context.UnsolvedType a : _Γ))
 
         -- InstLSolve
         Type.UnsolvedType{..} -> do
@@ -760,19 +759,16 @@ instantiateTypeL a _A0 = do
 
         -- InstLArr
         Type.Function{..} -> do
-            let _ΓL = _Γ
-            let _ΓR = _Γ'
+            a₁ <- fresh
+            a₂ <- fresh
 
-            a1 <- fresh
-            a2 <- fresh
+            set (_Γ' <> (Context.SolvedType a (Monotype.Function (Monotype.UnsolvedType a₁) (Monotype.UnsolvedType a₂)) : Context.UnsolvedType a₁ : Context.UnsolvedType a₂ : _Γ))
 
-            set (_ΓR <> (Context.SolvedType a (Monotype.Function (Monotype.UnsolvedType a1) (Monotype.UnsolvedType a2)) : Context.UnsolvedType a1 : Context.UnsolvedType a2 : _ΓL))
-
-            instantiateTypeR input a1
+            instantiateTypeR input a₁
 
             _Θ <- get
 
-            instantiateTypeL a2 (Context.solveType _Θ output)
+            instantiateTypeL a₂ (Context.solveType _Θ output)
 
         -- InstLAllR
         Type.Forall{..} -> do
@@ -811,31 +807,25 @@ instantiateTypeL a _A0 = do
         -- didn't really cover how to type-check complex types other than
         -- function types.
         Type.Optional{..} -> do
-            let _ΓL = _Γ
-            let _ΓR = _Γ'
-
             -- To solve `a` against `Optional _A` we create a fresh unsolved
-            -- variable named `a1`, …
-            a1 <- fresh
+            -- variable named `a₁`, …
+            a₁ <- fresh
 
-            -- … solve `a` to `Optional a1`, taking care that `a1` comes before
-            -- `a` within the context, (since `a` refers to `a1`)  …
-            set (_ΓR <> (Context.SolvedType a (Monotype.Optional (Monotype.UnsolvedType a1)) : Context.UnsolvedType a1 : _ΓL))
+            -- … solve `a` to `Optional a₁`, taking care that `a₁` comes before
+            -- `a` within the context, (since `a` refers to `a₁`)  …
+            set (_Γ' <> (Context.SolvedType a (Monotype.Optional (Monotype.UnsolvedType a₁)) : Context.UnsolvedType a₁ : _Γ))
 
-            -- … and then solve `a1` against _A`
-            instantiateTypeL a1 type_
+            -- … and then solve `a₁` against _A`
+            instantiateTypeL a₁ type_
 
         -- We solve an unsolved variable against `List` using the same
         -- principles described above for solving `Optional`
         Type.List{..} -> do
-            let _ΓL = _Γ
-            let _ΓR = _Γ'
+            a₁ <- fresh
 
-            a1 <- fresh
+            set (_Γ' <> (Context.SolvedType a (Monotype.List (Monotype.UnsolvedType a₁)) : Context.UnsolvedType a₁ : _Γ))
 
-            set (_ΓR <> (Context.SolvedType a (Monotype.List (Monotype.UnsolvedType a1)) : Context.UnsolvedType a1 : _ΓL))
-
-            instantiateTypeL a1 type_
+            instantiateTypeL a₁ type_
 
         -- This is still the same one-layer-at-a-time principle, with a small
         -- twist.  In order to solve:
@@ -845,26 +835,20 @@ instantiateTypeL a _A0 = do
         -- We replace `r` with a new unsolved Fields variable and then solve for
         -- that Fields variable.
         Type.Record{..} -> do
-            let _ΓL = _Γ
-            let _ΓR = _Γ'
-
             p <- fresh
 
-            set (_ΓR <> (Context.SolvedType a (Monotype.Record (Monotype.Fields [] (Monotype.UnsolvedFields p))) : Context.UnsolvedFields p : _ΓL))
+            set (_Γ' <> (Context.SolvedType a (Monotype.Record (Monotype.Fields [] (Monotype.UnsolvedFields p))) : Context.UnsolvedFields p : _Γ))
 
-            instantiateFieldsL p (Type.location _A0) fields
+            instantiateFieldsL p (Type.location _A₀) fields
 
         -- Same principle as for `Record`, but replacing the Field variable with
         -- an Alternatives variable
         Type.Union{..} -> do
-            let _ΓL = _Γ
-            let _ΓR = _Γ'
-
             p <- fresh
 
-            set (_ΓR <> (Context.SolvedType a (Monotype.Union (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives p))) : Context.UnsolvedAlternatives p : _ΓL))
+            set (_Γ' <> (Context.SolvedType a (Monotype.Union (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives p))) : Context.UnsolvedAlternatives p : _Γ))
 
-            instantiateAlternativesL p (Type.location _A0) alternatives
+            instantiateAlternativesL p (Type.location _A₀) alternatives
 
 {-| This corresponds to the judgment:
 
@@ -876,22 +860,21 @@ instantiateTypeL a _A0 = do
 instantiateTypeR
     :: (MonadState Status m, MonadError TypeInferenceError m)
     => Type Location -> Existential Monotype -> m ()
-instantiateTypeR _A0 a = do
-    _Γ0 <- get
+instantiateTypeR _A₀ a = do
+    _Γ₀ <- get
 
-    (_Γ', _Γ) <- Context.splitOnUnsolvedType a _Γ0 `orDie` MissingVariable a _Γ0
+    (_Γ', _Γ) <- Context.splitOnUnsolvedType a _Γ₀ `orDie` MissingVariable a _Γ₀
 
     let instRSolve τ = do
-            wellFormedType _Γ _A0
+            wellFormedType _Γ _A₀
 
             set (_Γ' <> (Context.SolvedType a τ : _Γ))
 
-    case _A0 of
+    case _A₀ of
         -- InstRReach
         Type.UnsolvedType{..}
-            | let _ΓL = _Γ
-            , Just (_ΓR, _ΓM) <- Context.splitOnUnsolvedType existential _Γ' -> do
-                set (_ΓR <> (Context.SolvedType existential (Monotype.UnsolvedType a) : _ΓM) <> (Context.UnsolvedType a : _ΓL))
+            | Just (_Γ', _ΓM) <- Context.splitOnUnsolvedType existential _Γ' -> do
+                set (_Γ' <> (Context.SolvedType existential (Monotype.UnsolvedType a) : _ΓM) <> (Context.UnsolvedType a : _Γ))
 
         -- InstRSolve
         Type.UnsolvedType{..} -> do
@@ -903,19 +886,16 @@ instantiateTypeR _A0 a = do
 
         -- InstRArr
         Type.Function{..} -> do
-            let _ΓL = _Γ
-            let _ΓR = _Γ'
+            a₁ <- fresh
+            a₂ <- fresh
 
-            a1 <- fresh
-            a2 <- fresh
+            set (_Γ' <> (Context.SolvedType a (Monotype.Function (Monotype.UnsolvedType a₁) (Monotype.UnsolvedType a₂)) : Context.UnsolvedType a₁ : Context.UnsolvedType a₂ : _Γ))
 
-            set (_ΓR <> (Context.SolvedType a (Monotype.Function (Monotype.UnsolvedType a1) (Monotype.UnsolvedType a2)) : Context.UnsolvedType a1 : Context.UnsolvedType a2 : _ΓL))
-
-            instantiateTypeL a1 input
+            instantiateTypeL a₁ input
 
             _Θ <- get
 
-            instantiateTypeR (Context.solveType _Θ output) a2
+            instantiateTypeR (Context.solveType _Θ output) a₂
 
         -- InstRAllL
         Type.Forall{ domain = Domain.Type, .. } -> do
@@ -929,44 +909,32 @@ instantiateTypeR _A0 a = do
                 instantiateTypeR (Type.substituteAlternatives name 0 b type_) a
 
         Type.Optional{..} -> do
-            let _ΓL = _Γ
-            let _ΓR = _Γ'
+            a₁ <- fresh
 
-            a1 <- fresh
+            set (_Γ' <> (Context.SolvedType a (Monotype.Optional (Monotype.UnsolvedType a₁)) : Context.UnsolvedType a₁ : _Γ))
 
-            set (_ΓR <> (Context.SolvedType a (Monotype.Optional (Monotype.UnsolvedType a1)) : Context.UnsolvedType a1 : _ΓL))
-
-            instantiateTypeR type_ a1
+            instantiateTypeR type_ a₁
 
         Type.List{..} -> do
-            let _ΓL = _Γ
-            let _ΓR = _Γ'
+            a₁ <- fresh
 
-            a1 <- fresh
+            set (_Γ' <> (Context.SolvedType a (Monotype.List (Monotype.UnsolvedType a₁)) : Context.UnsolvedType a₁ : _Γ))
 
-            set (_ΓR <> (Context.SolvedType a (Monotype.List (Monotype.UnsolvedType a1)) : Context.UnsolvedType a1 : _ΓL))
-
-            instantiateTypeR type_ a1
+            instantiateTypeR type_ a₁
 
         Type.Record{..}  -> do
-            let _ΓL = _Γ
-            let _ΓR = _Γ'
-
             p <- fresh
 
-            set (_ΓR <> (Context.SolvedType a (Monotype.Record (Monotype.Fields [] (Monotype.UnsolvedFields p))) : Context.UnsolvedFields p : _ΓL))
+            set (_Γ' <> (Context.SolvedType a (Monotype.Record (Monotype.Fields [] (Monotype.UnsolvedFields p))) : Context.UnsolvedFields p : _Γ))
 
-            instantiateFieldsR (Type.location _A0) fields p
+            instantiateFieldsR (Type.location _A₀) fields p
 
         Type.Union{..} -> do
-            let _ΓL = _Γ
-            let _ΓR = _Γ'
-
             p <- fresh
 
-            set (_ΓR <> (Context.SolvedType a (Monotype.Union (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives p))) : Context.UnsolvedAlternatives p : _ΓL))
+            set (_Γ' <> (Context.SolvedType a (Monotype.Union (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives p))) : Context.UnsolvedAlternatives p : _Γ))
 
-            instantiateAlternativesR (Type.location _A0) alternatives p
+            instantiateAlternativesR (Type.location _A₀) alternatives p
 
 {- The following `equateFields` / `instantiateFieldsL` / `instantiateFieldsR`,
    `equateAlternatives` / `instantiateAlternativesL` /
@@ -991,26 +959,26 @@ instantiateTypeR _A0 a = do
 equateFields
     :: (MonadState Status m, MonadError TypeInferenceError m)
     => Existential Monotype.Record -> Existential Monotype.Record -> m ()
-equateFields p0 p1 = do
-    _Γ0 <- get
+equateFields p₀ p₁ = do
+    _Γ₀ <- get
 
-    let p0First = do
-            (_ΓR, _ΓL) <- Context.splitOnUnsolvedFields p1 _Γ0
+    let p₀First = do
+            (_Γ', _Γ) <- Context.splitOnUnsolvedFields p₁ _Γ₀
 
-            Monad.guard (Context.UnsolvedFields p0 `elem` _ΓL)
+            Monad.guard (Context.UnsolvedFields p₀ `elem` _Γ)
 
-            return (set (_ΓR <> (Context.SolvedFields p1 (Monotype.Fields [] (Monotype.UnsolvedFields p0)) : _ΓL)))
+            return (set (_Γ' <> (Context.SolvedFields p₁ (Monotype.Fields [] (Monotype.UnsolvedFields p₀)) : _Γ)))
 
-    let p1First = do
-            (_ΓR, _ΓL) <- Context.splitOnUnsolvedFields p0 _Γ0
+    let p₁First = do
+            (_Γ', _Γ) <- Context.splitOnUnsolvedFields p₀ _Γ₀
 
-            Monad.guard (Context.UnsolvedFields p1 `elem` _ΓL)
+            Monad.guard (Context.UnsolvedFields p₁ `elem` _Γ)
 
-            return (set (_ΓR <> (Context.SolvedFields p0 (Monotype.Fields [] (Monotype.UnsolvedFields p1)) : _ΓL)))
+            return (set (_Γ' <> (Context.SolvedFields p₀ (Monotype.Fields [] (Monotype.UnsolvedFields p₁)) : _Γ)))
 
-    case p0First <|> p1First of
+    case p₀First <|> p₁First of
         Nothing -> do
-            throwError (MissingOneOfFields [] p0 p1 _Γ0)
+            throwError (MissingOneOfFields [] p₀ p₁ _Γ₀)
 
         Just setContext -> do
             setContext
@@ -1021,9 +989,9 @@ instantiateFieldsL
     -> Location
     -> Type.Record Location
     -> m ()
-instantiateFieldsL p0 location fields@(Type.Fields kAs rest) = do
-    when (p0 `Type.fieldsFreeIn` Type.Record{..}) do
-        throwError (NotFieldsSubtype location p0 fields)
+instantiateFieldsL p₀ location fields@(Type.Fields kAs rest) = do
+    when (p₀ `Type.fieldsFreeIn` Type.Record{..}) do
+        throwError (NotFieldsSubtype location p₀ fields)
 
     let process (k, _A) = do
             b <- fresh
@@ -1035,23 +1003,23 @@ instantiateFieldsL p0 location fields@(Type.Fields kAs rest) = do
     let bs  = map (\(_, _, b) -> Context.UnsolvedType b      ) kAbs
     let kbs = map (\(k, _, b) -> (k, Monotype.UnsolvedType b)) kAbs
 
-    _Γ <- get
+    _Γ₀ <- get
 
-    (_ΓR, _ΓL) <- Context.splitOnUnsolvedFields p0 _Γ `orDie` MissingAllFields p0 _Γ
+    (_Γ', _Γ) <- Context.splitOnUnsolvedFields p₀ _Γ₀ `orDie` MissingAllFields p₀ _Γ₀
 
     case rest of
-        Monotype.UnsolvedFields p1 -> do
-            p2 <- fresh
+        Monotype.UnsolvedFields p₁ -> do
+            p₂ <- fresh
 
-            set (_ΓR <> (Context.SolvedFields p0 (Monotype.Fields kbs (Monotype.UnsolvedFields p2)) : Context.UnsolvedFields p2 : bs <> _ΓL))
+            set (_Γ' <> (Context.SolvedFields p₀ (Monotype.Fields kbs (Monotype.UnsolvedFields p₂)) : Context.UnsolvedFields p₂ : bs <> _Γ))
 
-            equateFields p1 p2
+            equateFields p₁ p₂
 
         _ -> do
-            wellFormedType (bs <> _ΓL)
+            wellFormedType (bs <> _Γ)
                 Type.Record{ fields = Type.Fields [] rest, .. }
 
-            set (_ΓR <> (Context.SolvedFields p0 (Monotype.Fields kbs rest) : bs <> _ΓL))
+            set (_Γ' <> (Context.SolvedFields p₀ (Monotype.Fields kbs rest) : bs <> _Γ))
 
     let instantiate (_, _A, b) = do
             _Θ <- get
@@ -1066,9 +1034,9 @@ instantiateFieldsR
     -> Type.Record Location
     -> Existential Monotype.Record
     -> m ()
-instantiateFieldsR location fields@(Type.Fields kAs rest) p0 = do
-    when (p0 `Type.fieldsFreeIn` Type.Record{..}) do
-        throwError (NotFieldsSubtype location p0 fields)
+instantiateFieldsR location fields@(Type.Fields kAs rest) p₀ = do
+    when (p₀ `Type.fieldsFreeIn` Type.Record{..}) do
+        throwError (NotFieldsSubtype location p₀ fields)
 
     let process (k, _A) = do
             b <- fresh
@@ -1080,23 +1048,23 @@ instantiateFieldsR location fields@(Type.Fields kAs rest) p0 = do
     let bs  = map (\(_, _, b) -> Context.UnsolvedType b      ) kAbs
     let kbs = map (\(k, _, b) -> (k, Monotype.UnsolvedType b)) kAbs
 
-    _Γ <- get
+    _Γ₀ <- get
 
-    (_ΓR, _ΓL) <- Context.splitOnUnsolvedFields p0 _Γ `orDie` MissingAllFields p0 _Γ
+    (_Γ', _Γ) <- Context.splitOnUnsolvedFields p₀ _Γ₀ `orDie` MissingAllFields p₀ _Γ₀
 
     case rest of
-        Monotype.UnsolvedFields p1 -> do
-            p2 <- fresh
+        Monotype.UnsolvedFields p₁ -> do
+            p₂ <- fresh
 
-            set (_ΓR <> (Context.SolvedFields p0 (Monotype.Fields kbs (Monotype.UnsolvedFields p2)) : Context.UnsolvedFields p2 : bs <> _ΓL))
+            set (_Γ' <> (Context.SolvedFields p₀ (Monotype.Fields kbs (Monotype.UnsolvedFields p₂)) : Context.UnsolvedFields p₂ : bs <> _Γ))
 
-            equateFields p1 p2
+            equateFields p₁ p₂
 
         _ -> do
-            wellFormedType (bs <> _ΓL)
+            wellFormedType (bs <> _Γ)
                 Type.Record{ fields = Type.Fields [] rest, .. }
 
-            set (_ΓR <> (Context.SolvedFields p0 (Monotype.Fields kbs rest) : bs <> _ΓL))
+            set (_Γ' <> (Context.SolvedFields p₀ (Monotype.Fields kbs rest) : bs <> _Γ))
 
     let instantiate (_, _A, b) = do
             _Θ <- get
@@ -1108,26 +1076,26 @@ instantiateFieldsR location fields@(Type.Fields kAs rest) p0 = do
 equateAlternatives
     :: (MonadState Status m, MonadError TypeInferenceError m)
     => Existential Monotype.Union-> Existential Monotype.Union -> m ()
-equateAlternatives p0 p1 = do
-    _Γ0 <- get
+equateAlternatives p₀ p₁ = do
+    _Γ₀ <- get
 
-    let p0First = do
-            (_ΓR, _ΓL) <- Context.splitOnUnsolvedAlternatives p1 _Γ0
+    let p₀First = do
+            (_Γ', _Γ) <- Context.splitOnUnsolvedAlternatives p₁ _Γ₀
 
-            Monad.guard (Context.UnsolvedAlternatives p0 `elem` _ΓL)
+            Monad.guard (Context.UnsolvedAlternatives p₀ `elem` _Γ)
 
-            return (set (_ΓR <> (Context.SolvedAlternatives p1 (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives p0)) : _ΓL)))
+            return (set (_Γ' <> (Context.SolvedAlternatives p₁ (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives p₀)) : _Γ)))
 
-    let p1First = do
-            (_ΓR, _ΓL) <- Context.splitOnUnsolvedAlternatives p0 _Γ0
+    let p₁First = do
+            (_Γ', _Γ) <- Context.splitOnUnsolvedAlternatives p₀ _Γ₀
 
-            Monad.guard (Context.UnsolvedAlternatives p1 `elem` _ΓL)
+            Monad.guard (Context.UnsolvedAlternatives p₁ `elem` _Γ)
 
-            return (set (_ΓR <> (Context.SolvedAlternatives p0 (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives p1)) : _ΓL)))
+            return (set (_Γ' <> (Context.SolvedAlternatives p₀ (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives p₁)) : _Γ)))
 
-    case p0First <|> p1First of
+    case p₀First <|> p₁First of
         Nothing -> do
-            throwError (MissingOneOfAlternatives [] p0 p1 _Γ0)
+            throwError (MissingOneOfAlternatives [] p₀ p₁ _Γ₀)
 
         Just setContext -> do
             setContext
@@ -1138,9 +1106,9 @@ instantiateAlternativesL
     -> Location
     -> Type.Union Location
     -> m ()
-instantiateAlternativesL p0 location alternatives@(Type.Alternatives kAs rest) = do
-    when (p0 `Type.alternativesFreeIn` Type.Union{..}) do
-        throwError (NotAlternativesSubtype location p0 alternatives)
+instantiateAlternativesL p₀ location alternatives@(Type.Alternatives kAs rest) = do
+    when (p₀ `Type.alternativesFreeIn` Type.Union{..}) do
+        throwError (NotAlternativesSubtype location p₀ alternatives)
 
     let process (k, _A) = do
             b <- fresh
@@ -1152,23 +1120,23 @@ instantiateAlternativesL p0 location alternatives@(Type.Alternatives kAs rest) =
     let bs  = map (\(_, _, b) -> Context.UnsolvedType b      ) kAbs
     let kbs = map (\(k, _, b) -> (k, Monotype.UnsolvedType b)) kAbs
 
-    _Γ <- get
+    _Γ₀ <- get
 
-    (_ΓR, _ΓL) <- Context.splitOnUnsolvedAlternatives p0 _Γ `orDie` MissingAllAlternatives p0 _Γ
+    (_Γ', _Γ) <- Context.splitOnUnsolvedAlternatives p₀ _Γ₀ `orDie` MissingAllAlternatives p₀ _Γ₀
 
     case rest of
-        Monotype.UnsolvedAlternatives p1 -> do
-            p2 <- fresh
+        Monotype.UnsolvedAlternatives p₁ -> do
+            p₂ <- fresh
 
-            set (_ΓR <> (Context.SolvedAlternatives p0 (Monotype.Alternatives kbs (Monotype.UnsolvedAlternatives p2)) : Context.UnsolvedAlternatives p2 : bs <> _ΓL))
+            set (_Γ' <> (Context.SolvedAlternatives p₀ (Monotype.Alternatives kbs (Monotype.UnsolvedAlternatives p₂)) : Context.UnsolvedAlternatives p₂ : bs <> _Γ))
 
-            equateAlternatives p1 p2
+            equateAlternatives p₁ p₂
 
         _ -> do
-            wellFormedType (bs <> _ΓL)
+            wellFormedType (bs <> _Γ)
                 Type.Union{ alternatives = Type.Alternatives [] rest, .. }
 
-            set (_ΓR <> (Context.SolvedAlternatives p0 (Monotype.Alternatives kbs rest) : bs <> _ΓL))
+            set (_Γ' <> (Context.SolvedAlternatives p₀ (Monotype.Alternatives kbs rest) : bs <> _Γ))
 
     let instantiate (_, _A, b) = do
             _Θ <- get
@@ -1183,9 +1151,9 @@ instantiateAlternativesR
     -> Type.Union Location
     -> Existential Monotype.Union
     -> m ()
-instantiateAlternativesR location alternatives@(Type.Alternatives kAs rest) p0 = do
-    when (p0 `Type.alternativesFreeIn` Type.Union{..}) do
-        throwError (NotAlternativesSubtype location p0 alternatives)
+instantiateAlternativesR location alternatives@(Type.Alternatives kAs rest) p₀ = do
+    when (p₀ `Type.alternativesFreeIn` Type.Union{..}) do
+        throwError (NotAlternativesSubtype location p₀ alternatives)
 
     let process (k, _A) = do
             b <- fresh
@@ -1197,23 +1165,23 @@ instantiateAlternativesR location alternatives@(Type.Alternatives kAs rest) p0 =
     let bs  = map (\(_, _, b) -> Context.UnsolvedType b      ) kAbs
     let kbs = map (\(k, _, b) -> (k, Monotype.UnsolvedType b)) kAbs
 
-    _Γ <- get
+    _Γ₀ <- get
 
-    (_ΓR, _ΓL) <- Context.splitOnUnsolvedAlternatives p0 _Γ `orDie` MissingAllAlternatives p0 _Γ
+    (_Γ', _Γ) <- Context.splitOnUnsolvedAlternatives p₀ _Γ₀ `orDie` MissingAllAlternatives p₀ _Γ₀
 
     case rest of
-        Monotype.UnsolvedAlternatives p1 -> do
-            p2 <- fresh
+        Monotype.UnsolvedAlternatives p₁ -> do
+            p₂ <- fresh
 
-            set (_ΓR <> (Context.SolvedAlternatives p0 (Monotype.Alternatives kbs (Monotype.UnsolvedAlternatives p2)) : Context.UnsolvedAlternatives p2 : bs <> _ΓL))
+            set (_Γ' <> (Context.SolvedAlternatives p₀ (Monotype.Alternatives kbs (Monotype.UnsolvedAlternatives p₂)) : Context.UnsolvedAlternatives p₂ : bs <> _Γ))
 
-            equateAlternatives p1 p2
+            equateAlternatives p₁ p₂
 
         _ -> do
-            wellFormedType (bs <> _ΓL)
+            wellFormedType (bs <> _Γ)
                 Type.Union{ alternatives = Type.Alternatives [] rest, .. }
 
-            set (_ΓR <> (Context.SolvedAlternatives p0 (Monotype.Alternatives kbs rest) : bs <> _ΓL))
+            set (_Γ' <> (Context.SolvedAlternatives p₀ (Monotype.Alternatives kbs rest) : bs <> _Γ))
 
     let instantiate (_, _A, b) = do
             _Θ <- get
@@ -1232,12 +1200,12 @@ instantiateAlternativesR location alternatives@(Type.Alternatives kAs rest) p0 =
 infer
     :: (MonadState Status m, MonadError TypeInferenceError m)
     => Syntax Location (Type Location, Value) -> m (Type Location)
-infer e0 = do
-    let input ~> output = Type.Function{ location = Syntax.location e0, ..}
+infer e₀ = do
+    let input ~> output = Type.Function{ location = Syntax.location e₀, ..}
 
-    let var name = Type.VariableType{ location = Syntax.location e0, name, .. }
+    let var name = Type.VariableType{ location = Syntax.location e₀, name, .. }
 
-    case e0 of
+    case e₀ of
         -- Var
         Syntax.Variable{..} -> do
             _Γ <- get
@@ -1417,15 +1385,15 @@ infer e0 = do
         Syntax.If{..} -> do
             check predicate Type.Scalar{ scalar = Monotype.Bool, .. }
 
-            _L0 <- infer ifTrue
+            _L₀ <- infer ifTrue
 
             _Γ  <- get
 
-            let _L1 = Context.solveType _Γ _L0
+            let _L₁ = Context.solveType _Γ _L₀
 
-            check ifFalse _L1
+            check ifFalse _L₁
 
-            return _L1
+            return _L₁
 
         -- All the type inference rules for scalars go here.  This part is
         -- pretty self-explanatory: a scalar literal returns the matching
@@ -1537,7 +1505,7 @@ infer e0 = do
 
         Syntax.Builtin{ builtin = Syntax.ListDrop, .. } -> do
             return Type.Forall
-                { nameLocation = Syntax.location e0
+                { nameLocation = Syntax.location e₀
                 , name = "a"
                 , domain = Domain.Type
                 , type_ =
@@ -1550,12 +1518,12 @@ infer e0 = do
 
         Syntax.Builtin{ builtin = Syntax.ListHead, .. } -> do
             return Type.Forall
-                { nameLocation = Syntax.location e0
+                { nameLocation = Syntax.location e₀
                 , name = "a"
                 , domain = Domain.Type
                 , type_ =
                     Type.Forall
-                        { nameLocation = Syntax.location e0
+                        { nameLocation = Syntax.location e₀
                         , name = "b"
                         , domain = Domain.Alternatives
                         , type_ =
@@ -1576,7 +1544,7 @@ infer e0 = do
 
         Syntax.Builtin{ builtin = Syntax.ListEqual, .. } -> do
             return Type.Forall
-                { nameLocation = Syntax.location e0
+                { nameLocation = Syntax.location e₀
                 , name = "a"
                 , domain = Domain.Type
                 , type_ =
@@ -1593,11 +1561,11 @@ infer e0 = do
 
         Syntax.Builtin{ builtin = Syntax.ListFold, .. } -> do
             return Type.Forall
-                { nameLocation = Syntax.location e0
+                { nameLocation = Syntax.location e₀
                 , name = "a"
                 , domain = Domain.Type
                 , type_ = Type.Forall
-                    { nameLocation = Syntax.location e0
+                    { nameLocation = Syntax.location e₀
                     , name = "b"
                     , domain = Domain.Type
                     , type_ =
@@ -1619,7 +1587,7 @@ infer e0 = do
 
         Syntax.Builtin{ builtin = Syntax.ListIndexed, .. } -> do
             return Type.Forall
-                { nameLocation = Syntax.location e0
+                { nameLocation = Syntax.location e₀
                 , name = "a"
                 , domain = Domain.Type
                 , type_ =
@@ -1642,11 +1610,11 @@ infer e0 = do
 
         Syntax.Builtin{ builtin = Syntax.ListLast, .. } -> do
             return Type.Forall
-                { nameLocation = Syntax.location e0
+                { nameLocation = Syntax.location e₀
                 , name = "a"
                 , domain = Domain.Type
                 , type_ = Type.Forall
-                    { nameLocation = Syntax.location e0
+                    { nameLocation = Syntax.location e₀
                     , name = "b"
                     , domain  = Domain.Alternatives
                     , type_ =
@@ -1667,7 +1635,7 @@ infer e0 = do
 
         Syntax.Builtin{ builtin = Syntax.ListLength, .. } -> do
             return Type.Forall
-                { nameLocation = Syntax.location e0
+                { nameLocation = Syntax.location e₀
                 , name = "a"
                 , domain = Domain.Type
                 , type_ =
@@ -1678,11 +1646,11 @@ infer e0 = do
 
         Syntax.Builtin{ builtin = Syntax.ListMap, .. } -> do
             return Type.Forall
-                { nameLocation = Syntax.location e0
+                { nameLocation = Syntax.location e₀
                 , name = "a"
                 , domain = Domain.Type
                 , type_ = Type.Forall
-                    { nameLocation = Syntax.location e0
+                    { nameLocation = Syntax.location e₀
                     , name = "b"
                     , domain = Domain.Type
                     , type_ =
@@ -1721,7 +1689,7 @@ infer e0 = do
 
         Syntax.Builtin{ builtin = Syntax.ListReverse, .. } -> do
             return Type.Forall
-                { nameLocation = Syntax.location e0
+                { nameLocation = Syntax.location e₀
                 , name = "a"
                 , domain = Domain.Type
                 , type_ = Type.List{ type_ = var "a", .. } ~> Type.List{ type_ = var "a", .. }
@@ -1730,7 +1698,7 @@ infer e0 = do
 
         Syntax.Builtin{ builtin = Syntax.ListTake, .. } -> do
             return Type.Forall
-                { nameLocation = Syntax.location e0
+                { nameLocation = Syntax.location e₀
                 , name = "a"
                 , domain = Domain.Type
                 , type_ =
@@ -1743,7 +1711,7 @@ infer e0 = do
 
         Syntax.Builtin{ builtin = Syntax.JSONFold, .. } -> do
             return Type.Forall
-                { nameLocation = Syntax.location e0
+                { nameLocation = Syntax.location e₀
                 , name = "a"
                 , domain = Domain.Type
                 , type_ =
@@ -1783,7 +1751,7 @@ infer e0 = do
 
         Syntax.Builtin{ builtin = Syntax.NaturalFold, .. } -> do
             return Type.Forall
-                { nameLocation = Syntax.location e0
+                { nameLocation = Syntax.location e₀
                 , name = "a"
                 , domain = Domain.Type
                 , type_ =
@@ -1985,16 +1953,16 @@ inferApplication Type.Forall{ domain = Domain.Alternatives, .. } e = do
 inferApplication Type.UnsolvedType{ existential = a, .. } e = do
     _Γ <- get
 
-    (_ΓR, _ΓL) <- Context.splitOnUnsolvedType a _Γ `orDie` MissingVariable a _Γ
+    (_Γ', _Γ) <- Context.splitOnUnsolvedType a _Γ `orDie` MissingVariable a _Γ
 
-    a1 <- fresh
-    a2 <- fresh
+    a₁ <- fresh
+    a₂ <- fresh
 
-    set (_ΓR <> (Context.SolvedType a (Monotype.Function (Monotype.UnsolvedType a1) (Monotype.UnsolvedType a2)) : Context.UnsolvedType a1 : Context.UnsolvedType a2 : _ΓL))
+    set (_Γ' <> (Context.SolvedType a (Monotype.Function (Monotype.UnsolvedType a₁) (Monotype.UnsolvedType a₂)) : Context.UnsolvedType a₁ : Context.UnsolvedType a₂ : _Γ))
 
-    check e Type.UnsolvedType{ existential = a1, .. }
+    check e Type.UnsolvedType{ existential = a₁, .. }
 
-    return Type.UnsolvedType{ existential = a2, .. }
+    return Type.UnsolvedType{ existential = a₂, .. }
 inferApplication Type.Function{..} e = do
     check e input
 
@@ -2059,12 +2027,12 @@ data TypeInferenceError
     deriving (Eq, Show)
 
 instance Exception TypeInferenceError where
-    displayException (IllFormedAlternatives location a0 _Γ) =
+    displayException (IllFormedAlternatives location a₀ _Γ) =
         "Internal error: Invalid context\n\
         \\n\
         \The following unsolved alternatives variable:\n\
         \\n\
-        \" <> insert (Context.UnsolvedAlternatives a0) <> "\n\
+        \" <> insert (Context.UnsolvedAlternatives a₀) <> "\n\
         \\n\
         \… is not well-formed within the following context:\n\
         \\n\
@@ -2072,12 +2040,12 @@ instance Exception TypeInferenceError where
         \\n\
         \" <> Text.unpack (Location.renderError "" location)
 
-    displayException (IllFormedFields location a0 _Γ) =
+    displayException (IllFormedFields location a₀ _Γ) =
         "Internal error: Invalid context\n\
         \\n\
         \The following unsolved fields variable:\n\
         \\n\
-        \" <> insert (Context.UnsolvedFields a0) <> "\n\
+        \" <> insert (Context.UnsolvedFields a₀) <> "\n\
         \\n\
         \… is not well-formed within the following context:\n\
         \\n\
@@ -2143,36 +2111,36 @@ instance Exception TypeInferenceError where
         \\n\
         \… which is not a record type."
 
-    displayException (MissingAllAlternatives p0 _Γ) =
+    displayException (MissingAllAlternatives p₀ _Γ) =
         "Internal error: Invalid context\n\
         \\n\
         \The following unsolved alternatives variable:\n\
         \\n\
-        \" <> insert (Context.UnsolvedAlternatives p0) <> "\n\
+        \" <> insert (Context.UnsolvedAlternatives p₀) <> "\n\
         \\n\
         \… cannot be instantiated because the alternatives variable is missing from the\n\
         \context:\n\
         \\n\
         \" <> listToText _Γ
 
-    displayException (MissingAllFields p0 _Γ) =
+    displayException (MissingAllFields p₀ _Γ) =
         "Internal error: Invalid context\n\
         \\n\
         \The following unsolved fields variable:\n\
         \\n\
-        \" <> insert (Context.UnsolvedFields p0) <> "\n\
+        \" <> insert (Context.UnsolvedFields p₀) <> "\n\
         \\n\
         \… cannot be instantiated because the fields variable is missing from the\n\
         \context:\n\
         \\n\
         \" <> listToText _Γ
 
-    displayException (MissingOneOfAlternatives locations p0 p1 _Γ) =
+    displayException (MissingOneOfAlternatives locations p₀ p₁ _Γ) =
         "Internal error: Invalid context\n\
         \\n\
         \One of the following alternatives variables:\n\
         \\n\
-        \" <> listToText [Context.UnsolvedAlternatives p0, Context.UnsolvedAlternatives p1 ] <> "\n\
+        \" <> listToText [Context.UnsolvedAlternatives p₀, Context.UnsolvedAlternatives p₁ ] <> "\n\
         \\n\
         \… is missing from the following context:\n\
         \\n\
@@ -2183,12 +2151,12 @@ instance Exception TypeInferenceError where
             locations' =
                 Text.unpack (Text.unlines (map (Location.renderError "") locations))
 
-    displayException (MissingOneOfFields locations p0 p1 _Γ) =
+    displayException (MissingOneOfFields locations p₀ p₁ _Γ) =
         "Internal error: Invalid context\n\
         \\n\
         \One of the following fields variables:\\n\
         \\n\
-        \" <> listToText [Context.UnsolvedFields p0, Context.UnsolvedFields p1 ] <> "\n\
+        \" <> listToText [Context.UnsolvedFields p₀, Context.UnsolvedFields p₁ ] <> "\n\
         \\n\
         \… is missing from the following context:\n\
         \\n\
@@ -2233,12 +2201,12 @@ instance Exception TypeInferenceError where
         \\n\
         \" <> Text.unpack (Location.renderError "" location)
 
-    displayException (NotAlternativesSubtype location p0 alternatives) =
+    displayException (NotAlternativesSubtype location p₀ alternatives) =
         "Not an alternatives subtype\n\
         \\n\
         \The following alternatives variable:\n\
         \\n\
-        \" <> insert p0 <> "\n\
+        \" <> insert p₀ <> "\n\
         \\n\
         \… cannot be instantiated to the following union type:\n\
         \\n\
@@ -2248,12 +2216,12 @@ instance Exception TypeInferenceError where
         \\n\
         \… because the same alternatives variable appears within that union type."
 
-    displayException (NotFieldsSubtype location p0 fields) =
+    displayException (NotFieldsSubtype location p₀ fields) =
         "Not a fields subtype\n\
         \\n\
         \The following fields variable:\n\
         \\n\
-        \" <> insert p0 <> "\n\
+        \" <> insert p₀ <> "\n\
         \\n\
         \… cannot be instantiated to the following record type:\n\
         \\n\
@@ -2263,50 +2231,50 @@ instance Exception TypeInferenceError where
         \\n\
         \… because the same fields variable appears within that record type."
 
-    displayException (NotRecordSubtype locA0 _A locB0 _B) =
+    displayException (NotRecordSubtype locA₀ _A locB₀ _B) =
         "Not a record subtype\n\
         \\n\
         \The following type:\n\
         \\n\
         \" <> insert _A <> "\n\
         \\n\
-        \" <> Text.unpack (Location.renderError "" locA0) <> "\n\
+        \" <> Text.unpack (Location.renderError "" locA₀) <> "\n\
         \\n\
         \… cannot be a subtype of:\n\
         \\n\
         \" <> insert _B <> "\n\
         \\n\
-        \" <> Text.unpack (Location.renderError "" locB0)
+        \" <> Text.unpack (Location.renderError "" locB₀)
 
-    displayException (NotUnionSubtype locA0 _A locB0 _B) =
+    displayException (NotUnionSubtype locA₀ _A locB₀ _B) =
         "Not a union subtype\n\
         \\n\
         \The following type:\n\
         \\n\
         \" <> insert _A <> "\n\
         \\n\
-        \" <> Text.unpack (Location.renderError "" locA0) <> "\n\
+        \" <> Text.unpack (Location.renderError "" locA₀) <> "\n\
         \\n\
         \… cannot be a subtype of:\n\
         \\n\
         \" <> insert _B <> "\n\
         \\n\
-        \" <> Text.unpack (Location.renderError "" locB0)
+        \" <> Text.unpack (Location.renderError "" locB₀)
 
-    displayException (NotSubtype locA0 _A locB0 _B) =
+    displayException (NotSubtype locA₀ _A locB₀ _B) =
         "Not a subtype\n\
         \\n\
         \The following type:\n\
         \\n\
         \" <> insert _A <> "\n\
         \\n\
-        \" <> Text.unpack (Location.renderError "" locA0) <> "\n\
+        \" <> Text.unpack (Location.renderError "" locA₀) <> "\n\
         \\n\
         \… cannot be a subtype of:\n\
         \\n\
         \" <> insert _B <> "\n\
         \\n\
-        \" <> Text.unpack (Location.renderError "" locB0)
+        \" <> Text.unpack (Location.renderError "" locB₀)
 
     displayException (UnboundAlternatives location a) =
         "Unbound alternatives variable: " <> Text.unpack a <> "\n\
@@ -2330,58 +2298,58 @@ instance Exception TypeInferenceError where
         where
             var = prettyToText @(Syntax.Syntax () Void) Syntax.Variable{ location = (), .. }
 
-    displayException (RecordTypeMismatch _A0 _B0 extraA extraB) | extraB == mempty =
+    displayException (RecordTypeMismatch _A₀ _B₀ extraA extraB) | extraB == mempty =
         "Record type mismatch\n\
         \\n\
         \The following record type:\n\
         \\n\
-        \" <> insert _A0 <> "\n\
+        \" <> insert _A₀ <> "\n\
         \\n\
-        \" <> Text.unpack (Location.renderError "" (Type.location _A0)) <> "\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _A₀)) <> "\n\
         \\n\
         \… is not a subtype of the following record type:\n\
         \\n\
-        \" <> insert _B0 <> "\n\
+        \" <> insert _B₀ <> "\n\
         \\n\
-        \" <> Text.unpack (Location.renderError "" (Type.location _B0)) <> "\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _B₀)) <> "\n\
         \\n\
         \The former record has the following extra fields:\n\
         \\n\
         \" <> listToText (Map.keys extraA)
 
-    displayException (RecordTypeMismatch _A0 _B0 extraA extraB) | extraA == mempty =
+    displayException (RecordTypeMismatch _A₀ _B₀ extraA extraB) | extraA == mempty =
         "Record type mismatch\n\
         \\n\
         \The following record type:\n\
         \\n\
-        \" <> insert _A0 <> "\n\
+        \" <> insert _A₀ <> "\n\
         \\n\
-        \" <> Text.unpack (Location.renderError "" (Type.location _A0)) <> "\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _A₀)) <> "\n\
         \\n\
         \… is not a subtype of the following record type:\n\
         \\n\
-        \" <> insert _B0 <> "\n\
+        \" <> insert _B₀ <> "\n\
         \\n\
-        \" <> Text.unpack (Location.renderError "" (Type.location _B0)) <> "\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _B₀)) <> "\n\
         \\n\
         \The latter record has the following extra fields:\n\
         \\n\
         \" <> listToText (Map.keys extraB)
 
-    displayException (RecordTypeMismatch _A0 _B0 extraA extraB) =
+    displayException (RecordTypeMismatch _A₀ _B₀ extraA extraB) =
         "Record type mismatch\n\
         \\n\
         \The following record type:\n\
         \\n\
-        \" <> insert _A0 <> "\n\
+        \" <> insert _A₀ <> "\n\
         \\n\
-        \" <> Text.unpack (Location.renderError "" (Type.location _A0)) <> "\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _A₀)) <> "\n\
         \\n\
         \… is not a subtype of the following record type:\n\
         \\n\
-        \" <> insert _B0 <> "\n\
+        \" <> insert _B₀ <> "\n\
         \\n\
-        \" <> Text.unpack (Location.renderError "" (Type.location _B0)) <> "\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _B₀)) <> "\n\
         \\n\
         \The former record has the following extra fields:\n\
         \\n\
@@ -2391,58 +2359,58 @@ instance Exception TypeInferenceError where
         \\n\
         \" <> listToText (Map.keys extraB)
 
-    displayException (UnionTypeMismatch _A0 _B0 extraA extraB) | extraB == mempty =
+    displayException (UnionTypeMismatch _A₀ _B₀ extraA extraB) | extraB == mempty =
         "Union type mismatch\n\
         \\n\
         \The following union type:\n\
         \\n\
-        \" <> insert _A0 <> "\n\
+        \" <> insert _A₀ <> "\n\
         \\n\
-        \" <> Text.unpack (Location.renderError "" (Type.location _A0)) <> "\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _A₀)) <> "\n\
         \\n\
         \… is not a subtype of the following union type:\n\
         \\n\
-        \" <> insert _B0 <> "\n\
+        \" <> insert _B₀ <> "\n\
         \\n\
-        \" <> Text.unpack (Location.renderError "" (Type.location _B0)) <> "\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _B₀)) <> "\n\
         \\n\
         \The former union has the following extra alternatives:\n\
         \\n\
         \" <> listToText (Map.keys extraA)
 
-    displayException (UnionTypeMismatch _A0 _B0 extraA extraB) | extraA == mempty =
+    displayException (UnionTypeMismatch _A₀ _B₀ extraA extraB) | extraA == mempty =
         "Union type mismatch\n\
         \\n\
         \The following union type:\n\
         \\n\
-        \" <> insert _A0 <> "\n\
+        \" <> insert _A₀ <> "\n\
         \\n\
-        \" <> Text.unpack (Location.renderError "" (Type.location _A0)) <> "\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _A₀)) <> "\n\
         \\n\
         \… is not a subtype of the following union type:\n\
         \\n\
-        \" <> insert _B0 <> "\n\
+        \" <> insert _B₀ <> "\n\
         \\n\
-        \" <> Text.unpack (Location.renderError "" (Type.location _B0)) <> "\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _B₀)) <> "\n\
         \\n\
         \The latter union has the following extra alternatives:\n\
         \\n\
         \" <> listToText (Map.keys extraB)
 
-    displayException (UnionTypeMismatch _A0 _B0 extraA extraB) =
+    displayException (UnionTypeMismatch _A₀ _B₀ extraA extraB) =
         "Union type mismatch\n\
         \\n\
         \The following union type:\n\
         \\n\
-        \" <> insert _A0 <> "\n\
+        \" <> insert _A₀ <> "\n\
         \\n\
-        \" <> Text.unpack (Location.renderError "" (Type.location _A0)) <> "\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _A₀)) <> "\n\
         \\n\
         \… is not a subtype of the following union type:\n\
         \\n\
-        \" <> insert _B0 <> "\n\
+        \" <> insert _B₀ <> "\n\
         \\n\
-        \" <> Text.unpack (Location.renderError "" (Type.location _B0)) <> "\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _B₀)) <> "\n\
         \\n\
         \The former union has the following extra alternatives:\n\
         \\n\
