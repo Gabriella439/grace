@@ -102,13 +102,13 @@ interpretWith bindings maybeAnnotation manager input = do
         Left message -> do
             Except.throwError (TypeInferenceError message)
 
-        Right inferred -> do
+        Right (inferred, elaboratedExpression) -> do
             let evaluationContext = do
                     (variable, _, value) <- bindings
 
                     return (variable, value)
 
-            return (inferred, Normalize.evaluate evaluationContext resolvedExpression)
+            return (inferred, Normalize.evaluate evaluationContext elaboratedExpression)
 
 remote :: Input -> Bool
 remote (URI uri _) = any (`elem` schemes) (URI.uriScheme uri)

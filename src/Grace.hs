@@ -282,7 +282,7 @@ main = do
                                 , ..
                                 }
 
-                    type_ <- throws (Infer.typeOf expression)
+                    (type_, _) <- throws (Infer.typeOf expression)
 
                     let annotated :: Syntax Location Void
                         annotated =
