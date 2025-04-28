@@ -18,6 +18,7 @@ module Grace.Syntax
     ( -- * Syntax
       Syntax(..)
     , Chunks(..)
+    , types
     , Scalar(..)
     , Operator(..)
     , Builtin(..)
@@ -25,7 +26,7 @@ module Grace.Syntax
     , Binding(..)
     ) where
 
-import Control.Lens (Plated(..))
+import Control.Lens (Plated(..), Traversal')
 import Data.Bifunctor (Bifunctor(..))
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Scientific (Scientific)
@@ -318,6 +319,20 @@ instance Pretty a => Pretty (Chunks s a) where
                 Pretty.scalar "${"
             <>  pretty syntax
             <>  Pretty.scalar ("}" <> Type.prettyTextBody text)
+
+-- | `Traversal'` from a `Syntax` to its immediate `Type` annotations
+types :: Traversal' (Syntax s a) (Type s)
+types k Lambda{ nameBinding = NameBinding{ annotation = Just t, .. }, .. } =
+    fmap (\t' -> Lambda{ nameBinding = NameBinding{ annotation = Just t', .. }, .. }) (k t)
+types k Annotation{ annotation = t, .. } =
+    fmap (\t' -> Annotation{ annotation = t', .. }) (k t)
+types k Let{ bindings = bs, .. } =
+    fmap (\bs' -> Let{ bindings = bs', .. }) (traverse onBinding bs)
+  where
+    onBinding Binding{ annotation = Just t, .. } =
+        fmap (\t' -> Binding{ annotation = Just t', .. }) (k t)
+    onBinding binding = pure binding
+types _ e = pure e
 
 -- | A scalar value
 data Scalar

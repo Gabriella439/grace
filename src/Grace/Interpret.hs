@@ -103,13 +103,13 @@ interpretWith bindings maybeAnnotation manager input = do
         Left message -> do
             Except.throwError (TypeInferenceError message)
 
-        Right inferred -> liftIO do
+        Right (inferred, elaboratedExpression) -> liftIO do
             let evaluationContext = do
                     (variable, _, value) <- bindings
 
                     return (variable, value)
 
-            value <- Normalize.evaluate evaluationContext resolvedExpression
+            value <- Normalize.evaluate evaluationContext elaboratedExpression
 
             return (inferred, value)
 

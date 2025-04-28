@@ -33,7 +33,7 @@ import Control.Monad (when)
 import Control.Monad.Except (MonadError(..))
 import Control.Monad.State.Strict (MonadState)
 import Data.Foldable (traverse_)
-import Data.Sequence (ViewL(..))
+import Data.Sequence (ViewL(..), (<|))
 import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Context (Context, Entry)
@@ -45,9 +45,11 @@ import Grace.Syntax (Syntax)
 import Grace.Type (Type(..))
 import Grace.Value (Value)
 
+import qualified Control.Lens as Lens
 import qualified Control.Monad as Monad
 import qualified Control.Monad.State as State
 import qualified Data.List as List
+import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Map as Map
 import qualified Data.Ord as Ord
 import qualified Data.Sequence as Seq
@@ -1202,7 +1204,8 @@ instantiateAlternativesR location alternatives@(Type.Alternatives kAs rest) p₀
 -}
 infer
     :: (MonadState Status m, MonadError TypeInferenceError m)
-    => Syntax Location (Type Location, Value) -> m (Type Location)
+    => Syntax Location (Type Location, Value)
+    -> m (Type Location, Syntax Location (Type Location, Value))
 infer e₀ = do
     let input ~> output = Type.Function{ location = Syntax.location e₀, ..}
 
@@ -1213,7 +1216,8 @@ infer e₀ = do
         Syntax.Variable{..} -> do
             _Γ <- get
 
-            Context.lookup name index _Γ `orDie` UnboundVariable location name index
+            type_ <- Context.lookup name index _Γ `orDie` UnboundVariable location name index
+            return (type_, e₀)
 
         -- →I⇒
         Syntax.Lambda{ nameBinding = Syntax.NameBinding{ annotation = Nothing, .. }, ..} -> do
@@ -1228,9 +1232,11 @@ infer e₀ = do
             push (Context.UnsolvedType b)
 
             scoped (Context.Annotation name input) do
-                check body output
+                newBody <- check body output
 
-            return Type.Function{..}
+                _Γ <- get
+
+                return (Type.Function{..}, Syntax.Lambda{ nameBinding = Syntax.NameBinding{ annotation = Nothing, .. }, body = solveSyntax _Γ newBody, .. })
         Syntax.Lambda{ nameBinding = Syntax.NameBinding{ annotation = Just input, .. }, ..} -> do
             b <- fresh
 
@@ -1239,17 +1245,23 @@ infer e₀ = do
             push (Context.UnsolvedType b)
 
             scoped (Context.Annotation name input) do
-                check body output
+                newBody <- check body output
 
-                return Type.Function{..}
+                _Γ <- get
+
+                return (Type.Function{..}, Syntax.Lambda{ nameBinding = Syntax.NameBinding{ annotation = Just input, .. }, body = solveSyntax _Γ newBody, .. })
 
         -- →E
         Syntax.Application{..} -> do
-            _A <- infer function
+            (_A, newFunction) <- infer function
 
             _Θ <- get
 
-            inferApplication (Context.solveType _Θ _A) argument
+            (type_, newArgument) <- inferApplication (Context.solveType _Θ _A) argument
+
+            _Γ <- get
+
+            return (type_, Syntax.Application{ function = solveSyntax _Γ newFunction, argument = solveSyntax _Γ newArgument, .. })
 
         -- Anno
         Syntax.Annotation{..} -> do
@@ -1257,16 +1269,18 @@ infer e₀ = do
 
             wellFormedType _Γ annotation
 
-            check annotated annotation
+            newAnnotated <- check annotated annotation
 
-            return annotation
+            _Θ <- get
+
+            return (annotation, Syntax.Annotation{ annotated = solveSyntax _Θ newAnnotated, .. })
 
         Syntax.Let{..} -> do
             b <- fresh
 
             push (Context.UnsolvedType b)
 
-            let cons Syntax.Binding{ nameLocation = nameLocation₀, nameBindings = nameBindings₀, ..} action = do
+            let cons Syntax.Binding{ nameLocation = nameLocation₀, nameBindings = nameBindings₀, ..} action newBindings = do
                     let annotatedAssignment = case annotation of
                             Nothing -> assignment
                             Just _A₀ -> Syntax.Annotation
@@ -1280,19 +1294,29 @@ infer e₀ = do
                         toLambda [] =
                             annotatedAssignment
 
-                    _A <- infer (toLambda nameBindings₀)
+                    (_A, newAssignment) <- infer (toLambda nameBindings₀)
+
+                    let newBinding = Syntax.Binding
+                            { annotation = Nothing
+                            , nameBindings = []
+                            , assignment = newAssignment
+                            , nameLocation = nameLocation₀
+                            , ..
+                            }
 
                     scoped (Context.Annotation name _A) do
-                        action
+                        action (newBinding : newBindings)
 
-            let nil = do
+            let nil newBindings = do
                     let output = Type.UnsolvedType{ location = Syntax.location body, existential = b }
 
-                    check body output
+                    newBody <- check body output
 
-                    return output
+                    _Γ <- get
 
-            foldr cons nil bindings
+                    return (output, solveSyntax _Γ Syntax.Let{ bindings = NonEmpty.fromList (reverse newBindings), body = newBody, .. })
+
+            foldr cons nil bindings []
 
         Syntax.List{..} -> do
             case Seq.viewl elements of
@@ -1301,28 +1325,42 @@ infer e₀ = do
 
                     push (Context.UnsolvedType existential)
 
-                    return Type.List{ type_ = Type.UnsolvedType{..}, .. }
+                    return (Type.List{ type_ = Type.UnsolvedType{..}, .. }, e₀)
                 y :< ys -> do
-                    type_ <- infer y
+                    (type_, newY) <- infer y
 
                     let process element = do
                             _Γ <- get
 
                             check element (Context.solveType _Γ type_)
 
-                    traverse_ process ys
+                    newYs <- traverse process ys
 
-                    return Type.List{..}
+                    _Γ <- get
+
+                    return (Type.List{..}, Syntax.List{ elements = fmap (solveSyntax _Γ) (newY <| newYs), .. })
 
         Syntax.Record{..} -> do
             let process (field, value) = do
-                    type_ <- infer value
+                    (type_, newValue) <- infer value
+
+                    return (field, type_, newValue)
+
+            fieldTypeValues <- traverse process fieldValues
+
+            let fieldTypes = do
+                    (field, type_, _) <- fieldTypeValues
 
                     return (field, type_)
 
-            fieldTypes <- traverse process fieldValues
+            _Γ <- get
 
-            return Type.Record{ fields = Type.Fields fieldTypes Monotype.EmptyFields, .. }
+            let newFieldValues = do
+                    (field, _, newValue) <- fieldTypeValues
+
+                    return (field, solveSyntax _Γ newValue)
+
+            return (Type.Record{ fields = Type.Fields fieldTypes Monotype.EmptyFields, .. }, Syntax.Record{ fieldValues = newFieldValues, .. })
 
         Syntax.Alternative{..} -> do
             existential <- fresh
@@ -1339,6 +1377,7 @@ infer e₀ = do
                             (Monotype.UnsolvedAlternatives p)
                         , ..
                         }
+                , e₀
                 )
 
         Syntax.Merge{..} -> do
@@ -1348,7 +1387,7 @@ infer e₀ = do
 
             let _R = Type.Record{ location = Syntax.location handlers , fields = Type.Fields [] (Monotype.UnsolvedFields p) }
 
-            check handlers _R
+            newHandlers <- check handlers _R
 
             _Γ <- get
 
@@ -1371,6 +1410,7 @@ infer e₀ = do
                                 , ..
                                 }
                         ~>  Type.UnsolvedType{  existential = b, .. }
+                        , Syntax.Merge{ handlers = solveSyntax _Γ newHandlers, .. }
                         )
 
 
@@ -1392,6 +1432,8 @@ infer e₀ = do
 
                     keyTypes' <- traverse process keyTypes
 
+                    _Γ <- get
+
                     return
                         (   Type.Union
                                 { alternatives =
@@ -1401,6 +1443,7 @@ infer e₀ = do
                                 , ..
                                 }
                         ~>      Type.UnsolvedType{..}
+                        , Syntax.Merge{ handlers = solveSyntax _Γ newHandlers, .. }
                         )
 
                 Type.Record{} -> do
@@ -1416,7 +1459,7 @@ infer e₀ = do
             push (Context.UnsolvedType existential)
             push (Context.UnsolvedFields p)
 
-            check record Type.Record
+            newRecord <- check record Type.Record
                 { fields =
                     Type.Fields
                         [(field, Type.UnsolvedType{..})]
@@ -1424,43 +1467,49 @@ infer e₀ = do
                 , location = fieldLocation
                 }
 
-            return Type.UnsolvedType{ location = fieldLocation, ..}
+            _Γ <- get
+
+            return (Type.UnsolvedType{ location = fieldLocation, ..}, Syntax.Field{ record = solveSyntax _Γ newRecord, ..})
 
         Syntax.If{..} -> do
-            check predicate Type.Scalar{ scalar = Monotype.Bool, .. }
+            newPredicate <- check predicate Type.Scalar{ scalar = Monotype.Bool, .. }
 
-            _L₀ <- infer ifTrue
+            (_L₀, newIfTrue) <- infer ifTrue
 
             _Γ  <- get
 
             let _L₁ = Context.solveType _Γ _L₀
 
-            check ifFalse _L₁
+            newIfFalse <- check ifFalse _L₁
 
-            return _L₁
+            _Γ <- get
 
-        Syntax.Text{ chunks = Syntax.Chunks _ rest, .. } -> do
-            let process (interpolation, _) = do
-                    check interpolation Type.Scalar{ scalar = Monotype.Text, .. }
+            return (_L₁, Syntax.If{ predicate = solveSyntax _Γ newPredicate, ifTrue = solveSyntax _Γ newIfTrue, ifFalse = solveSyntax _Γ newIfFalse, .. })
 
-            traverse_ process rest
+        Syntax.Text{ chunks = Syntax.Chunks text₀ rest, .. } -> do
+            let process (interpolation, text) = do
+                    newInterpolation <- check interpolation Type.Scalar{ scalar = Monotype.Text, .. }
 
-            return Type.Scalar{ scalar = Monotype.Text, .. }
+                    return (newInterpolation, text)
+
+            newRest <- traverse process rest
+
+            return (Type.Scalar{ scalar = Monotype.Text, .. }, Syntax.Text{ chunks = Syntax.Chunks text₀ newRest, .. })
 
         -- All the type inference rules for scalars go here.  This part is
         -- pretty self-explanatory: a scalar literal returns the matching
         -- scalar type.
         Syntax.Scalar{ scalar = Syntax.Bool _, .. } -> do
-            return Type.Scalar{ scalar = Monotype.Bool, .. }
+            return (Type.Scalar{ scalar = Monotype.Bool, .. }, e₀)
 
         Syntax.Scalar{ scalar = Syntax.Real _, .. } -> do
-            return Type.Scalar{ scalar = Monotype.Real, .. }
+            return (Type.Scalar{ scalar = Monotype.Real, .. }, e₀)
 
         Syntax.Scalar{ scalar = Syntax.Integer _, .. } -> do
-            return Type.Scalar{ scalar = Monotype.Integer, .. }
+            return (Type.Scalar{ scalar = Monotype.Integer, .. }, e₀)
 
         Syntax.Scalar{ scalar = Syntax.Natural _, .. } -> do
-            return Type.Scalar{ scalar = Monotype.Natural, .. }
+            return (Type.Scalar{ scalar = Monotype.Natural, .. }, e₀)
 
         Syntax.Scalar{ scalar = Syntax.Null, .. } -> do
             -- NOTE: You might think that you could just infer that `null`
@@ -1471,67 +1520,78 @@ infer e₀ = do
 
             push (Context.UnsolvedType existential)
 
-            return Type.Optional{ type_ = Type.UnsolvedType{..}, .. }
+            return (Type.Optional{ type_ = Type.UnsolvedType{..}, .. }, e₀)
 
         Syntax.Operator{ operator = Syntax.And, .. } -> do
-            check left  Type.Scalar{ scalar = Monotype.Bool, location = operatorLocation }
-            check right Type.Scalar{ scalar = Monotype.Bool, location = operatorLocation }
+            newLeft <- check left  Type.Scalar{ scalar = Monotype.Bool, location = operatorLocation }
+            newRight <- check right Type.Scalar{ scalar = Monotype.Bool, location = operatorLocation }
 
-            return Type.Scalar{ scalar = Monotype.Bool, location = operatorLocation }
+            _Γ <- get
+
+            return (Type.Scalar{ scalar = Monotype.Bool, location = operatorLocation }, Syntax.Operator{ operator = Syntax.And, left = solveSyntax _Γ newLeft, right = solveSyntax _Γ newRight, .. })
 
         Syntax.Operator{ operator = Syntax.Or, .. } -> do
-            check left  Type.Scalar{ scalar = Monotype.Bool, location = operatorLocation }
-            check right Type.Scalar{ scalar = Monotype.Bool, location = operatorLocation }
+            newLeft <- check left  Type.Scalar{ scalar = Monotype.Bool, location = operatorLocation }
+            newRight <- check right Type.Scalar{ scalar = Monotype.Bool, location = operatorLocation }
 
-            return Type.Scalar{ scalar = Monotype.Bool, location = operatorLocation }
+            _Γ <- get
+
+            return (Type.Scalar{ scalar = Monotype.Bool, location = operatorLocation }, Syntax.Operator{ operator = Syntax.Or, left = solveSyntax _Γ newLeft, right = solveSyntax _Γ newRight, .. })
 
         Syntax.Operator{ operator = Syntax.Times, .. } -> do
-            _L <- infer left
-            _R <- infer right
+            (_L, newLeft) <- infer left
+            (_R, newRight) <- infer right
 
-            check left  _R
-            check right _L
+            _ <- check left  _R
+            _ <- check right _L
 
             _Γ <- get
 
             let _L' = Context.solveType _Γ _L
 
+            let newTimes = Syntax.Operator{ operator = Syntax.Times, left = solveSyntax _Γ newLeft, right = solveSyntax _Γ newRight, .. }
+
             case _L' of
-                Type.Scalar{ scalar = Monotype.Natural } -> return _L
-                Type.Scalar{ scalar = Monotype.Integer } -> return _L
-                Type.Scalar{ scalar = Monotype.Real    } -> return _L
+                Type.Scalar{ scalar = Monotype.Natural } -> return (_L, newTimes)
+                Type.Scalar{ scalar = Monotype.Integer } -> return (_L, newTimes)
+                Type.Scalar{ scalar = Monotype.Real    } -> return (_L, newTimes)
                 _ -> do
                     throwError (InvalidOperands (Syntax.location left) _L')
 
         Syntax.Operator{ operator = Syntax.Plus, .. } -> do
-            _L <- infer left
-            _R <- infer right
+            (_L, newLeft) <- infer left
+            (_R, newRight)  <- infer right
 
-            check left  _R
-            check right _L
+            _ <- check left  _R
+            _ <- check right _L
 
             _Γ <- get
 
             let _L' = Context.solveType _Γ _L
 
+            let newPlus = Syntax.Operator{ operator = Syntax.Plus, left = solveSyntax _Γ newLeft, right = solveSyntax _Γ newRight, .. }
+
             case _L' of
-                Type.Scalar{ scalar = Monotype.Natural } -> return _L
-                Type.Scalar{ scalar = Monotype.Integer } -> return _L
-                Type.Scalar{ scalar = Monotype.Real    } -> return _L
-                Type.Scalar{ scalar = Monotype.Text    } -> return _L
-                Type.List{}                              -> return _L
+                Type.Scalar{ scalar = Monotype.Natural } -> return (_L, newPlus)
+                Type.Scalar{ scalar = Monotype.Integer } -> return (_L, newPlus)
+                Type.Scalar{ scalar = Monotype.Real    } -> return (_L, newPlus)
+                Type.Scalar{ scalar = Monotype.Text    } -> return (_L, newPlus)
+                Type.List{}                              -> return (_L, newPlus)
 
                 _ -> do
                     throwError (InvalidOperands (Syntax.location left) _L')
 
         Syntax.Builtin{ builtin = Syntax.Some, .. }-> do
-            return Type.Forall
-                { nameLocation = Syntax.location e₀
-                , name = "a"
-                , domain = Domain.Type
-                , type_ = var "a" ~> Type.Optional{ type_ = var "a", .. }
-                , ..
-                }
+            return
+                (   Type.Forall
+                        { nameLocation = Syntax.location e₀
+                        , name = "a"
+                        , domain = Domain.Type
+                        , type_ = var "a" ~> Type.Optional{ type_ = var "a", .. }
+                        , ..
+                        }
+                , e₀
+                )
 
         Syntax.Builtin{ builtin = Syntax.RealEqual, .. }-> do
             return
@@ -1539,6 +1599,7 @@ infer e₀ = do
                 ~>  (   Type.Scalar{ scalar = Monotype.Real, .. }
                     ~>  Type.Scalar{ scalar = Monotype.Bool, .. }
                     )
+                , e₀
                 )
 
         Syntax.Builtin{ builtin = Syntax.RealLessThan, .. } -> do
@@ -1547,260 +1608,303 @@ infer e₀ = do
                 ~>  (   Type.Scalar{ scalar = Monotype.Real, .. }
                     ~>  Type.Scalar{ scalar = Monotype.Bool, .. }
                     )
+                , e₀
                 )
 
         Syntax.Builtin{ builtin = Syntax.RealNegate, .. } -> do
             return
                 (   Type.Scalar{ scalar = Monotype.Real, .. }
                 ~>  Type.Scalar{ scalar = Monotype.Real, .. }
+                , e₀
                 )
 
         Syntax.Builtin{ builtin = Syntax.RealShow, .. } -> do
             return
                 (   Type.Scalar{ scalar = Monotype.Real, .. }
                 ~>  Type.Scalar{ scalar = Monotype.Text, .. }
+                , e₀
                 )
 
         Syntax.Builtin{ builtin = Syntax.ListDrop, .. } -> do
-            return Type.Forall
-                { nameLocation = Syntax.location e₀
-                , name = "a"
-                , domain = Domain.Type
-                , type_ =
-                       Type.Scalar{ scalar = Monotype.Natural, .. }
-                    ~>  (   Type.List{ type_ = var "a", .. }
-                        ~>  Type.List{ type_ = var "a", .. }
-                        )
-                , ..
-                }
-
-        Syntax.Builtin{ builtin = Syntax.ListHead, .. } -> do
-            return Type.Forall
-                { nameLocation = Syntax.location e₀
-                , name = "a"
-                , domain = Domain.Type
-                , type_ =
-                    Type.Forall
-                        { nameLocation = Syntax.location e₀
-                        , name = "b"
-                        , domain = Domain.Alternatives
-                        , type_ =
-                                Type.List { type_ = var "a", .. }
-                            ~>  Type.Optional{ type_ = var "a", .. }
-                        , ..
-                        }
-                , ..
-                }
-
-        Syntax.Builtin{ builtin = Syntax.ListEqual, .. } -> do
-            return Type.Forall
-                { nameLocation = Syntax.location e₀
-                , name = "a"
-                , domain = Domain.Type
-                , type_ =
-                        (   var "a"
-                        ~>  (var "a" ~> Type.Scalar{ scalar = Monotype.Bool, .. })
-                        )
-                    ~>  (   Type.List{ type_ = var "a", .. }
-                        ~>  (   Type.List{ type_ = var "a", .. }
-                            ~>  Type.Scalar{ scalar = Monotype.Bool, .. }
-                            )
-                        )
-                , ..
-                }
-
-        Syntax.Builtin{ builtin = Syntax.ListFold, .. } -> do
-            return Type.Forall
-                { nameLocation = Syntax.location e₀
-                , name = "a"
-                , domain = Domain.Type
-                , type_ = Type.Forall
+            return
+                ( Type.Forall
                     { nameLocation = Syntax.location e₀
-                    , name = "b"
+                    , name = "a"
                     , domain = Domain.Type
                     , type_ =
-                            Type.Record
-                                { fields =
-                                    Type.Fields
-                                        [ ("cons", var "a" ~> (var "b" ~> var "b"))
-                                        , ("nil", var "b")
-                                        ]
-                                        Monotype.EmptyFields
-                                , ..
-                                }
-                        ~>  (Type.List{ type_= var "a", .. } ~> var "b")
+                           Type.Scalar{ scalar = Monotype.Natural, .. }
+                        ~>  (   Type.List{ type_ = var "a", .. }
+                            ~>  Type.List{ type_ = var "a", .. }
+                            )
                     , ..
                     }
-                , ..
-                }
+                , e₀
+                )
 
+        Syntax.Builtin{ builtin = Syntax.ListHead, .. } -> do
+            return
+                ( Type.Forall
+                    { nameLocation = Syntax.location e₀
+                    , name = "a"
+                    , domain = Domain.Type
+                    , type_ =
+                        Type.Forall
+                            { nameLocation = Syntax.location e₀
+                            , name = "b"
+                            , domain = Domain.Alternatives
+                            , type_ =
+                                    Type.List { type_ = var "a", .. }
+                                ~>  Type.Optional{ type_ = var "a", .. }
+                            , ..
+                            }
+                    , ..
+                    }
+                , e₀
+                )
 
-        Syntax.Builtin{ builtin = Syntax.ListIndexed, .. } -> do
-            return Type.Forall
-                { nameLocation = Syntax.location e₀
-                , name = "a"
-                , domain = Domain.Type
-                , type_ =
-                        Type.List{ type_ = var "a", .. }
-                    ~>  Type.List
-                            { type_ =
+        Syntax.Builtin{ builtin = Syntax.ListEqual, .. } -> do
+            return
+                ( Type.Forall
+                    { nameLocation = Syntax.location e₀
+                    , name = "a"
+                    , domain = Domain.Type
+                    , type_ =
+                            (   var "a"
+                            ~>  (var "a" ~> Type.Scalar{ scalar = Monotype.Bool, .. })
+                            )
+                        ~>  (   Type.List{ type_ = var "a", .. }
+                            ~>  (   Type.List{ type_ = var "a", .. }
+                                ~>  Type.Scalar{ scalar = Monotype.Bool, .. }
+                                )
+                            )
+                    , ..
+                    }
+                , e₀
+                )
+
+        Syntax.Builtin{ builtin = Syntax.ListFold, .. } -> do
+            return
+                ( Type.Forall
+                    { nameLocation = Syntax.location e₀
+                    , name = "a"
+                    , domain = Domain.Type
+                    , type_ = Type.Forall
+                        { nameLocation = Syntax.location e₀
+                        , name = "b"
+                        , domain = Domain.Type
+                        , type_ =
                                 Type.Record
                                     { fields =
                                         Type.Fields
-                                            [ ("index", Type.Scalar{ scalar = Monotype.Natural, .. })
-                                            , ("value", var "a")
+                                            [ ("cons", var "a" ~> (var "b" ~> var "b"))
+                                            , ("nil", var "b")
                                             ]
                                             Monotype.EmptyFields
                                     , ..
                                     }
-                            , ..
-                            }
-                , ..
-                }
-
-        Syntax.Builtin{ builtin = Syntax.ListLast, .. } -> do
-            return Type.Forall
-                { nameLocation = Syntax.location e₀
-                , name = "a"
-                , domain = Domain.Type
-                , type_ = Type.Forall
-                    { nameLocation = Syntax.location e₀
-                    , name = "b"
-                    , domain  = Domain.Alternatives
-                    , type_ =
-                            Type.List{ type_ = var "a", .. }
-                        ~>  Type.Optional{ type_ = var "a", .. }
+                            ~>  (Type.List{ type_= var "a", .. } ~> var "b")
+                        , ..
+                        }
                     , ..
                     }
-                , ..
-                }
+                , e₀
+                )
 
-        Syntax.Builtin{ builtin = Syntax.ListLength, .. } -> do
-            return Type.Forall
-                { nameLocation = Syntax.location e₀
-                , name = "a"
-                , domain = Domain.Type
-                , type_ =
-                        Type.List{ type_ = var "a", .. }
-                    ~>  Type.Scalar{ scalar = Monotype.Natural, .. }
-                , ..
-                }
 
-        Syntax.Builtin{ builtin = Syntax.ListMap, .. } -> do
-            return Type.Forall
-                { nameLocation = Syntax.location e₀
-                , name = "a"
-                , domain = Domain.Type
-                , type_ = Type.Forall
+        Syntax.Builtin{ builtin = Syntax.ListIndexed, .. } -> do
+            return
+                ( Type.Forall
                     { nameLocation = Syntax.location e₀
-                    , name = "b"
+                    , name = "a"
                     , domain = Domain.Type
                     , type_ =
-                            (var "a" ~> var "b")
-                        ~>  (   Type.List{ type_ = var "a", .. }
-                            ~>  Type.List{ type_ = var "b", .. }
-                            )
+                            Type.List{ type_ = var "a", .. }
+                        ~>  Type.List
+                                { type_ =
+                                    Type.Record
+                                        { fields =
+                                            Type.Fields
+                                                [ ("index", Type.Scalar{ scalar = Monotype.Natural, .. })
+                                                , ("value", var "a")
+                                                ]
+                                                Monotype.EmptyFields
+                                        , ..
+                                        }
+                                , ..
+                                }
                     , ..
                     }
-                , ..
-                }
+                , e₀
+                )
+
+        Syntax.Builtin{ builtin = Syntax.ListLast, .. } -> do
+            return
+                ( Type.Forall
+                    { nameLocation = Syntax.location e₀
+                    , name = "a"
+                    , domain = Domain.Type
+                    , type_ = Type.Forall
+                        { nameLocation = Syntax.location e₀
+                        , name = "b"
+                        , domain  = Domain.Alternatives
+                        , type_ =
+                                Type.List{ type_ = var "a", .. }
+                            ~>  Type.Optional{ type_ = var "a", .. }
+                        , ..
+                        }
+                    , ..
+                    }
+                , e₀
+                )
+
+        Syntax.Builtin{ builtin = Syntax.ListLength, .. } -> do
+            return
+                ( Type.Forall
+                    { nameLocation = Syntax.location e₀
+                    , name = "a"
+                    , domain = Domain.Type
+                    , type_ =
+                            Type.List{ type_ = var "a", .. }
+                        ~>  Type.Scalar{ scalar = Monotype.Natural, .. }
+                    , ..
+                    }
+                , e₀
+                )
+
+        Syntax.Builtin{ builtin = Syntax.ListMap, .. } -> do
+            return
+                ( Type.Forall
+                    { nameLocation = Syntax.location e₀
+                    , name = "a"
+                    , domain = Domain.Type
+                    , type_ = Type.Forall
+                        { nameLocation = Syntax.location e₀
+                        , name = "b"
+                        , domain = Domain.Type
+                        , type_ =
+                                (var "a" ~> var "b")
+                            ~>  (   Type.List{ type_ = var "a", .. }
+                                ~>  Type.List{ type_ = var "b", .. }
+                                )
+                        , ..
+                        }
+                    , ..
+                    }
+                , e₀
+                )
 
         Syntax.Builtin{ builtin = Syntax.IntegerAbs, .. } -> do
             return
                 (   Type.Scalar{ scalar = Monotype.Integer, .. }
                 ~>  Type.Scalar{ scalar = Monotype.Natural, .. }
+                , e₀
                 )
 
         Syntax.Builtin{ builtin = Syntax.IntegerEven, .. } -> do
             return
                 (   Type.Scalar{ scalar = Monotype.Integer, .. }
                 ~>  Type.Scalar{ scalar = Monotype.Bool, .. }
+                , e₀
                 )
 
         Syntax.Builtin{ builtin = Syntax.IntegerNegate, .. } -> do
             return
                 (   Type.Scalar{ scalar = Monotype.Integer, .. }
                 ~>  Type.Scalar{ scalar = Monotype.Integer, .. }
+                , e₀
                 )
 
         Syntax.Builtin{ builtin = Syntax.IntegerOdd, .. } -> do
             return
                 (   Type.Scalar{ scalar = Monotype.Integer, .. }
                 ~>  Type.Scalar{ scalar = Monotype.Bool, .. }
+                , e₀
                 )
 
         Syntax.Builtin{ builtin = Syntax.ListReverse, .. } -> do
-            return Type.Forall
-                { nameLocation = Syntax.location e₀
-                , name = "a"
-                , domain = Domain.Type
-                , type_ = Type.List{ type_ = var "a", .. } ~> Type.List{ type_ = var "a", .. }
-                , ..
-                }
+            return
+                ( Type.Forall
+                    { nameLocation = Syntax.location e₀
+                    , name = "a"
+                    , domain = Domain.Type
+                    , type_ = Type.List{ type_ = var "a", .. } ~> Type.List{ type_ = var "a", .. }
+                    , ..
+                    }
+                , e₀
+                )
 
         Syntax.Builtin{ builtin = Syntax.ListTake, .. } -> do
-            return Type.Forall
-                { nameLocation = Syntax.location e₀
-                , name = "a"
-                , domain = Domain.Type
-                , type_ =
-                        Type.Scalar{ scalar = Monotype.Natural, .. }
-                    ~>  (   Type.List{ type_ = var "a", .. }
-                        ~>  Type.List{ type_ = var "a", .. }
-                        )
-                , ..
-                }
+            return
+                ( Type.Forall
+                    { nameLocation = Syntax.location e₀
+                    , name = "a"
+                    , domain = Domain.Type
+                    , type_ =
+                            Type.Scalar{ scalar = Monotype.Natural, .. }
+                        ~>  (   Type.List{ type_ = var "a", .. }
+                            ~>  Type.List{ type_ = var "a", .. }
+                            )
+                    , ..
+                    }
+                , e₀
+                )
 
         Syntax.Builtin{ builtin = Syntax.JSONFold, .. } -> do
-            return Type.Forall
-                { nameLocation = Syntax.location e₀
-                , name = "a"
-                , domain = Domain.Type
-                , type_ =
-                        Type.Record
-                            { fields = Type.Fields
-                                [ ( "array", Type.List{ type_ = var "a", .. } ~> var "a")
-                                , ("bool", Type.Scalar{ scalar = Monotype.Bool, .. } ~> var "a")
-                                , ("real", Type.Scalar{ scalar = Monotype.Real, ..  } ~> var "a")
-                                , ("integer", Type.Scalar{ scalar = Monotype.Integer, .. } ~> var "a")
-                                , ("natural", Type.Scalar{ scalar = Monotype.Natural, .. } ~> var "a")
-                                , ("null", var "a")
-                                , ( "object"
-                                  ,     Type.List
-                                            { type_ = Type.Record
-                                                { fields =
-                                                    Type.Fields
-                                                        [ ("key", Type.Scalar{ scalar = Monotype.Text, .. })
-                                                        , ("value", var "a")
-                                                        ]
-                                                        Monotype.EmptyFields
+            return
+                ( Type.Forall
+                    { nameLocation = Syntax.location e₀
+                    , name = "a"
+                    , domain = Domain.Type
+                    , type_ =
+                            Type.Record
+                                { fields = Type.Fields
+                                    [ ( "array", Type.List{ type_ = var "a", .. } ~> var "a")
+                                    , ("bool", Type.Scalar{ scalar = Monotype.Bool, .. } ~> var "a")
+                                    , ("real", Type.Scalar{ scalar = Monotype.Real, ..  } ~> var "a")
+                                    , ("integer", Type.Scalar{ scalar = Monotype.Integer, .. } ~> var "a")
+                                    , ("natural", Type.Scalar{ scalar = Monotype.Natural, .. } ~> var "a")
+                                    , ("null", var "a")
+                                    , ( "object"
+                                      ,     Type.List
+                                                { type_ = Type.Record
+                                                    { fields =
+                                                        Type.Fields
+                                                            [ ("key", Type.Scalar{ scalar = Monotype.Text, .. })
+                                                            , ("value", var "a")
+                                                            ]
+                                                            Monotype.EmptyFields
+                                                    , ..
+                                                    }
                                                 , ..
                                                 }
-                                            , ..
-                                            }
-                                    ~>  var "a"
-                                  )
-                                , ("string", Type.Scalar{ scalar = Monotype.Text, .. } ~> var "a")
-                                ]
-                                Monotype.EmptyFields
-                            , ..
-                            }
-                    ~>  (   Type.Scalar{ scalar = Monotype.JSON, .. }
-                        ~>  var "a"
-                        )
-                , ..
-                }
+                                        ~>  var "a"
+                                      )
+                                    , ("string", Type.Scalar{ scalar = Monotype.Text, .. } ~> var "a")
+                                    ]
+                                    Monotype.EmptyFields
+                                , ..
+                                }
+                        ~>  (   Type.Scalar{ scalar = Monotype.JSON, .. }
+                            ~>  var "a"
+                            )
+                    , ..
+                    }
+                , e₀
+                )
 
         Syntax.Builtin{ builtin = Syntax.NaturalFold, .. } -> do
-            return Type.Forall
-                { nameLocation = Syntax.location e₀
-                , name = "a"
-                , domain = Domain.Type
-                , type_ =
-                        Type.Scalar{ scalar = Monotype.Natural, .. }
-                    ~>  ((var "a" ~> var "a") ~> (var "a" ~> var "a"))
-                , ..
-                }
+            return
+                ( Type.Forall
+                    { nameLocation = Syntax.location e₀
+                    , name = "a"
+                    , domain = Domain.Type
+                    , type_ =
+                            Type.Scalar{ scalar = Monotype.Natural, .. }
+                        ~>  ((var "a" ~> var "a") ~> (var "a" ~> var "a"))
+                    , ..
+                    }
+                , e₀
+                )
 
         Syntax.Builtin{ builtin = Syntax.TextEqual, .. } -> do
             return
@@ -1808,10 +1912,11 @@ infer e₀ = do
                 ~>  (   Type.Scalar{ scalar = Monotype.Text, .. }
                     ~>  Type.Scalar{ scalar = Monotype.Bool, .. }
                     )
+                , e₀
                 )
 
         Syntax.Embed{ embedded = (type_, _) } -> do
-            return type_
+            return (type_, e₀)
 
 {-| This corresponds to the judgment:
 
@@ -1822,7 +1927,9 @@ infer e₀ = do
 -}
 check
     :: (MonadState Status m, MonadError TypeInferenceError m)
-    => Syntax Location (Type Location, Value) -> Type Location -> m ()
+    => Syntax Location (Type Location, Value)
+    -> Type Location
+    -> m (Syntax Location (Type Location, Value))
 -- The check function is the most important function to understand for the
 -- bidirectional type-checking algorithm.
 --
@@ -1855,9 +1962,11 @@ check
 -- a desirable property!
 
 -- →I
-check Syntax.Lambda{ location = _, nameBinding = Syntax.NameBinding{..}, ..} Type.Function{..} = do
+check Syntax.Lambda{ nameBinding = nameBinding@Syntax.NameBinding{..}, ..} Type.Function{ location = _, ..} = do
     scoped (Context.Annotation name input) do
-        check body output
+        newBody <- check body output
+
+        return Syntax.Lambda{ body = newBody, .. }
 
 -- ∀I
 check e Type.Forall{..} = do
@@ -1866,32 +1975,42 @@ check e Type.Forall{..} = do
 
 check Syntax.Operator{ operator = Syntax.Times, .. } _B@Type.Scalar{ scalar }
     | scalar `elem` ([ Monotype.Natural, Monotype.Integer, Monotype.Real ] :: [Monotype.Scalar])= do
-    check left _B
+    newLeft <- check left _B
 
     _Γ <- get
 
-    check right (Context.solveType _Γ _B)
+    newRight <- check right (Context.solveType _Γ _B)
+
+    return Syntax.Operator{ operator = Syntax.Times, left = newLeft, right = newRight, .. }
+
 check Syntax.Operator{ operator = Syntax.Plus, .. } _B@Type.Scalar{ scalar }
     | scalar `elem` ([ Monotype.Natural, Monotype.Integer, Monotype.Real, Monotype.Text ] :: [Monotype.Scalar]) = do
-    check left _B
+    newLeft <- check left _B
 
     _Γ <- get
 
-    check right (Context.solveType _Γ _B)
+    newRight <- check right (Context.solveType _Γ _B)
+
+    return Syntax.Operator{ operator = Syntax.Plus, left = newLeft, right = newRight, .. }
+
 check Syntax.Operator{ operator = Syntax.Plus, .. } _B@Type.List{} = do
-    check left _B
+    newLeft <- check left _B
 
     _Γ <- get
 
-    check right (Context.solveType _Γ _B)
+    newRight <- check right (Context.solveType _Γ _B)
 
-check Syntax.List{ location = _, ..} Type.List{..} = do
+    return Syntax.Operator{ operator = Syntax.Plus, left = newLeft, right = newRight, .. }
+
+check Syntax.List{..} Type.List{ location = _, .. } = do
     let process element = do
             _Γ <- get
 
             check element (Context.solveType _Γ type_)
 
-    traverse_ process elements
+    newElements <- traverse process elements
+
+    return Syntax.List{ elements = newElements, .. }
 
 check e@Syntax.Record{ fieldValues } _B@Type.Record{ fields = Type.Fields fieldTypes fields }
     | let mapValues = Map.fromList fieldValues
@@ -1902,12 +2021,14 @@ check e@Syntax.Record{ fieldValues } _B@Type.Record{ fields = Type.Fields fieldT
 
     , let both = Map.intersectionWith (,) mapValues mapTypes
     , not (Map.null both) = do
-        let process (value, type_) = do
+        let process (field, (value, type_)) = do
                 _Γ <- get
 
-                check value (Context.solveType _Γ type_)
+                newValue <- check value (Context.solveType _Γ type_)
 
-        traverse_ process both
+                return (field, newValue)
+
+        newFieldValues₀ <- traverse process (Map.toList both)
 
         let e' = Syntax.Record
                 { fieldValues = Map.toList extraValues
@@ -1921,40 +2042,58 @@ check e@Syntax.Record{ fieldValues } _B@Type.Record{ fields = Type.Fields fieldT
 
         _Γ <- get
 
-        check e' (Context.solveType _Γ _B')
+        result <- check e' (Context.solveType _Γ _B')
+
+        case result of
+            Syntax.Record{ fieldValues = newFieldValues₁, .. } ->
+                return Syntax.Record{ fieldValues = newFieldValues₀ <> newFieldValues₁, .. }
+            other ->
+                return other
 
 check Syntax.Record{..} _B@Type.Scalar{ scalar = Monotype.JSON } = do
-    let process (_, value) = do
+    let process (field, value) = do
             _Γ <- get
 
-            check value (Context.solveType _Γ _B)
+            newValue <- check value (Context.solveType _Γ _B)
 
-    traverse_ process fieldValues
+            return (field, newValue)
+
+    newFieldValues <- traverse process fieldValues
+
+    return Syntax.Record{ fieldValues = newFieldValues, .. }
 check Syntax.List{..} _B@Type.Scalar{ scalar = Monotype.JSON } = do
-    traverse_ (`check` _B) elements
-check Syntax.Text{ chunks = Syntax.Chunks _ rest, .. } Type.Scalar{ scalar = Monotype.JSON } = do
-    let process (interpolation, _) = do
-            check interpolation Type.Scalar{ scalar = Monotype.Text, .. }
+    newElements <- traverse (`check` _B) elements
 
-    traverse_ process rest
-check Syntax.Scalar{ scalar = Syntax.Natural _ } Type.Scalar{ scalar = Monotype.JSON } = do
-    return ()
-check Syntax.Scalar{ scalar = Syntax.Integer _ } Type.Scalar{ scalar = Monotype.JSON } = do
-    return ()
-check Syntax.Scalar{ scalar = Syntax.Real _ } Type.Scalar{ scalar = Monotype.JSON } = do
-    return ()
-check Syntax.Scalar{ scalar = Syntax.Bool _ } Type.Scalar{ scalar = Monotype.JSON } = do
-    return ()
-check Syntax.Scalar{ scalar = Syntax.Null } Type.Scalar{ scalar = Monotype.JSON } = do
-    return ()
+    return Syntax.List{ elements = newElements, .. }
+check Syntax.Text{ chunks = Syntax.Chunks text₀ rest, .. } Type.Scalar{ scalar = Monotype.JSON } = do
+    let process (interpolation, text) = do
+            newInterpolation <- check interpolation Type.Scalar{ scalar = Monotype.Text, .. }
+
+            return (newInterpolation, text)
+
+    newRest <- traverse process rest
+
+    return Syntax.Text{ chunks = Syntax.Chunks text₀ newRest, .. }
+check e@Syntax.Scalar{ scalar = Syntax.Natural _ } Type.Scalar{ scalar = Monotype.JSON } = do
+    return e
+check e@Syntax.Scalar{ scalar = Syntax.Integer _ } Type.Scalar{ scalar = Monotype.JSON } = do
+    return e
+check e@Syntax.Scalar{ scalar = Syntax.Real _ } Type.Scalar{ scalar = Monotype.JSON } = do
+    return e
+check e@Syntax.Scalar{ scalar = Syntax.Bool _ } Type.Scalar{ scalar = Monotype.JSON } = do
+    return e
+check e@Syntax.Scalar{ scalar = Syntax.Null } Type.Scalar{ scalar = Monotype.JSON } = do
+    return e
 
 -- Sub
 check e _B = do
-    _A <- infer e
+    (_A, newE) <- infer e
 
     _Θ <- get
 
     subtype (Context.solveType _Θ _A) (Context.solveType _Θ _B)
+
+    return newE
 
 {-| This corresponds to the judgment:
 
@@ -1967,7 +2106,7 @@ inferApplication
     :: (MonadState Status m, MonadError TypeInferenceError m)
     => Type Location
     -> Syntax Location (Type Location, Value)
-    -> m (Type Location)
+    -> m (Type Location, Syntax Location (Type Location, Value))
 -- ∀App
 inferApplication Type.Forall{ domain = Domain.Type, .. } e = do
     a <- fresh
@@ -2005,13 +2144,13 @@ inferApplication Type.UnsolvedType{ existential = a, .. } e = do
 
     set (_Γ' <> (Context.SolvedType a (Monotype.Function (Monotype.UnsolvedType a₁) (Monotype.UnsolvedType a₂)) : Context.UnsolvedType a₁ : Context.UnsolvedType a₂ : _Γ))
 
-    check e Type.UnsolvedType{ existential = a₁, .. }
+    newE <- check e Type.UnsolvedType{ existential = a₁, .. }
 
-    return Type.UnsolvedType{ existential = a₂, .. }
+    return (Type.UnsolvedType{ existential = a₂, .. }, newE)
 inferApplication Type.Function{..} e = do
-    check e input
+    newE <- check e input
 
-    return output
+    return (output, newE)
 inferApplication Type.VariableType{..} _ = do
     throwError (NotNecessarilyFunctionType location name)
 inferApplication _A _ = do
@@ -2020,20 +2159,23 @@ inferApplication _A _ = do
 -- | Infer the `Type` of the given `Syntax` tree
 typeOf
     :: Syntax Location (Type Location, Value)
-    -> Either TypeInferenceError (Type Location)
+    -> Either TypeInferenceError (Type Location, Syntax Location (Type Location, Value))
 typeOf = typeWith []
 
 -- | Like `typeOf`, but accepts a custom type-checking `Context`
 typeWith
     :: Context Location
     -> Syntax Location (Type Location, Value)
-    -> Either TypeInferenceError (Type Location)
+    -> Either TypeInferenceError (Type Location, Syntax Location (Type Location, Value))
 typeWith context syntax = do
     let initialStatus = Status{ count = 0, context }
 
-    (_A, Status{ context = _Δ }) <- State.runStateT (infer syntax) initialStatus
+    ((_A, elaborated), Status{ context = _Δ }) <- State.runStateT (infer syntax) initialStatus
 
-    return (Context.complete _Δ _A)
+    return (Context.complete _Δ _A, Lens.transform (Lens.over Syntax.types (Context.complete _Δ)) elaborated)
+
+solveSyntax :: Context s -> Syntax s a -> Syntax s a
+solveSyntax _Γ = Lens.transform (Lens.over Syntax.types (Context.solveType _Γ))
 
 -- | A data type holding all errors related to type inference
 data TypeInferenceError

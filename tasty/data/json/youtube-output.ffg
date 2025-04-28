@@ -1,28 +1,28 @@
-{ "kind": "youtube#searchListResponse"
-, "etag": "\"m2yskBQFythfE4irbTIeOgYYfBU/PaiEDiVxOyCWelLPuuwa9LKz3Gk\""
-, "nextPageToken": "CAUQAA"
-, "regionCode": "KE"
-, "pageInfo": { "totalResults": 4249, "resultsPerPage": 5 }
-, "items": [ { "kind": "youtube#searchResult"
-             , "etag":
+{ "etag": "\"m2yskBQFythfE4irbTIeOgYYfBU/PaiEDiVxOyCWelLPuuwa9LKz3Gk\""
+, "items": [ { "etag":
                  "\"m2yskBQFythfE4irbTIeOgYYfBU/QpOIr3QKlV5EUlzfFcVvDiJT0hw\""
-             , "id": { "kind": "youtube#channel"
-                     , "channelId": some ("UCJowOS1R0FnhipXVqEnYU1A")
+             , "id": { "channelId": some ("UCJowOS1R0FnhipXVqEnYU1A")
+                     , "kind": "youtube#channel"
                      }
+             , "kind": "youtube#searchResult"
              }
-           , { "kind": "youtube#searchResult"
-             , "etag":
+           , { "etag":
                  "\"m2yskBQFythfE4irbTIeOgYYfBU/AWutzVOt_5p1iLVifyBdfoSTf9E\""
              , "id": { "kind": "youtube#video"
                      , "videoId": some ("Eqa2nAAhHN0")
                      }
+             , "kind": "youtube#searchResult"
              }
-           , { "kind": "youtube#searchResult"
-             , "etag":
+           , { "etag":
                  "\"m2yskBQFythfE4irbTIeOgYYfBU/2dIR9BTfr7QphpBuY3hPU-h5u-4\""
              , "id": { "kind": "youtube#video"
                      , "videoId": some ("IirngItQuVs")
                      }
+             , "kind": "youtube#searchResult"
              }
            ]
+, "kind": "youtube#searchListResponse"
+, "nextPageToken": "CAUQAA"
+, "pageInfo": { "resultsPerPage": 5, "totalResults": 4249 }
+, "regionCode": "KE"
 }
