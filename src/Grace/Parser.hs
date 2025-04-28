@@ -216,14 +216,29 @@ render t = case t of
 grammar :: Grammar r (Parser r (Syntax Offset Input))
 grammar = mdo
     expression <- rule
-        (   do  location <- locatedToken Lexer.Lambda
-                locatedNames <- some1 locatedLabel
+        (   do  let nameBinding = annotated <|> unannotated
+                      where
+                        annotated = do
+                            token Lexer.OpenParenthesis
+                            locatedName <- locatedLabel
+                            token Lexer.Colon
+                            annotation <- quantifiedType
+                            token Lexer.CloseParenthesis
+                            pure (locatedName, Just annotation)
+
+                        unannotated = do
+                            locatedName <- locatedLabel
+                            pure (locatedName, Nothing)
+
+                location <- locatedToken Lexer.Lambda
+                nameBindings <- some1 nameBinding
                 token Lexer.Arrow
                 body0 <- expression
 
                 return do
-                    let cons (nameLocation, name) body = Syntax.Lambda{..}
-                    foldr cons body0 locatedNames
+                    let cons ((nameLocation, name), nameAnnotation) body =
+                            Syntax.Lambda{..}
+                    foldr cons body0 nameBindings
 
         <|> do  bindings <- some1 binding
                 token Lexer.In

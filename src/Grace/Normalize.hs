@@ -447,7 +447,7 @@ quote names value =
             Syntax.Variable{ index = countNames name names - index - 1, .. }
 
         Value.Lambda closure@(Closure name _ _) ->
-            Syntax.Lambda{ nameLocation = (), .. }
+            Syntax.Lambda{ nameLocation = (), nameAnnotation = Nothing, .. }
           where
             variable = fresh name names
 

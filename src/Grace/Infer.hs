@@ -1213,7 +1213,7 @@ infer e₀ = do
             Context.lookup name index _Γ `orDie` UnboundVariable location name index
 
         -- →I⇒
-        Syntax.Lambda{..} -> do
+        Syntax.Lambda{ nameAnnotation = Nothing, ..} -> do
             a <- fresh
             b <- fresh
 
@@ -1228,6 +1228,11 @@ infer e₀ = do
                 check body output
 
             return Type.Function{..}
+        Syntax.Lambda{ nameAnnotation = Just input, ..} -> do
+            scoped (Context.Annotation name input) do
+                output <- infer body
+
+                return Type.Function{..}
 
         -- →E
         Syntax.Application{..} -> do

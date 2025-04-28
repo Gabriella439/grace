@@ -60,10 +60,12 @@ data Syntax s a
     --   x
     --   >>> pretty @(Syntax () Void) (Variable () "x" 1)
     --   x@1
-    | Lambda { location :: s, nameLocation :: s, name :: Text, body :: Syntax s a }
+    | Lambda { location :: s, nameLocation :: s, name :: Text, nameAnnotation :: Maybe (Type s), body :: Syntax s a }
     -- ^
-    --   >>> pretty @(Syntax () Void) (Lambda () () "x" "x")
+    --   >>> pretty @(Syntax () Void) (Lambda () () "x" Nothing "x")
     --   \x -> x
+    --   >>> pretty @(Syntax () Void) (Lambda () () "x" (Just "A") "x")
+    --   \(x : A) -> x
     | Application { location :: s, function :: Syntax s a, argument :: Syntax s a }
     -- ^
     --   >>> pretty @(Syntax () Void) (Application () "f" "x")
@@ -175,7 +177,7 @@ instance Bifunctor Syntax where
     first f Variable{..} =
         Variable{ location = f location, ..}
     first f Lambda{..} =
-        Lambda{ location = f location, nameLocation = f nameLocation, body = first f body, .. }
+        Lambda{ location = f location, nameLocation = f nameLocation, nameAnnotation = fmap (fmap f) nameAnnotation, body = first f body, .. }
     first f Application{..} =
         Application{ location = f location, function = first f function, argument = first f argument, .. }
     first f Annotation{..} =
@@ -403,8 +405,18 @@ prettyExpression expression@Lambda{} =
 
     long = Pretty.align (prettyLong expression)
 
-    prettyShort Lambda{..} =
+    prettyShort Lambda{ nameAnnotation = Nothing, ..} =
             label (pretty name)
+        <>  " "
+        <>  prettyShort body
+    prettyShort Lambda{ nameAnnotation = Just annotation, ..} =
+            punctuation "("
+        <>  label (pretty name)
+        <>  " "
+        <>  punctuation ":"
+        <>  " "
+        <>  pretty annotation
+        <>  punctuation ")"
         <>  " "
         <>  prettyShort body
     prettyShort body =
