@@ -95,6 +95,7 @@ data Value
     | Merge Value
     | If Value Value Value
     | Text Chunks
+    | Prompt Value
     | Builtin Builtin
     | Scalar Scalar
     | Operator Value Operator Value

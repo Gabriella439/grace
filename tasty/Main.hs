@@ -42,7 +42,7 @@ pretty_ x =
 
 interpret
     :: Input -> IO (Either InterpretError (Type Location, Value.Value))
-interpret input = Except.runExceptT (Interpret.interpret input)
+interpret input = Except.runExceptT (Interpret.interpret Nothing input)
 
 throws :: Exception e => IO (Either e a) -> IO a
 throws io = do
@@ -77,7 +77,10 @@ fileToTestTree prefix = do
         Right (inferred, value) -> do
             let generateTypeFile = return (pretty_ inferred)
 
-            let generateOutputFile = return (pretty_ (Normalize.quote [] value))
+            let generateOutputFile = do
+                    let syntax = Normalize.quote [] value
+
+                    return (pretty_ syntax)
 
             return
                 (Tasty.testGroup name

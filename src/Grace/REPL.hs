@@ -18,6 +18,7 @@ import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
 import Grace.Interpret (Input(..))
 import Grace.Parser (reserved)
+import OpenAI.V1 (Methods)
 import System.Console.Haskeline (Interrupt(..))
 import System.Console.Repline (CompleterStyle(..), MultiLine(..), ReplOpts(..))
 
@@ -38,8 +39,8 @@ import qualified System.Console.Repline as Repline
 import qualified System.IO as IO
 
 -- | Entrypoint for the @grace repl@ subcommand
-repl :: IO ()
-repl = do
+repl :: Maybe Methods -> IO ()
+repl maybeMethods = do
     manager <- HTTP.newManager
 
     let err e =
@@ -48,7 +49,7 @@ repl = do
     let interpret input = do
             context <- get
 
-            result <- Exception.try (Except.runExceptT (Interpret.interpretWith context Nothing manager input))
+            result <- Exception.try (Except.runExceptT (Interpret.interpretWith maybeMethods context Nothing manager input))
 
             case result of
                 Left e -> return (Left e)

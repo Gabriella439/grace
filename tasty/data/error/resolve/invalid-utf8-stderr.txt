@@ -2,4 +2,4 @@ Import resolution failed: https://raw.githubusercontent.com/dhall-lang/dhall-lan
 
 Not UTF8
 
-Cannot decode byte '\x85': Data.Text.Internal.Encoding.streamDecodeUtf8With: Invalid UTF-8 stream
+Cannot decode byte '\x85': Data.Text.Internal.Encoding: Invalid UTF-8 stream

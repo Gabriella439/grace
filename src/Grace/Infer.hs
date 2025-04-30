@@ -58,7 +58,6 @@ import qualified Grace.Monotype as Monotype
 import qualified Grace.Pretty
 import qualified Grace.Syntax as Syntax
 import qualified Grace.Type as Type
-import qualified Grace.Width as Width
 import qualified Prettyprinter as Pretty
 
 -- | Type-checking state
@@ -1473,6 +1472,31 @@ infer e₀ = do
 
             return (Type.Scalar{ scalar = Monotype.Text, .. }, Syntax.Text{ chunks = Syntax.Chunks text₀ newRest, .. })
 
+        Syntax.Prompt{ arguments, .. } -> do
+            newArguments <- check arguments Type.Record
+                { fields =
+                    Type.Fields
+                        [ ("text", Type.Scalar{ scalar = Monotype.Text, .. })
+                        , ("model", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Text, .. }, .. })
+                        ]
+                        Monotype.EmptyFields
+                , ..
+                }
+
+            type_ <- case schema of
+                Just t -> do
+                    return t
+                Nothing -> do
+                    existential <- fresh
+
+                    push (Context.UnsolvedType existential)
+
+                    return Type.UnsolvedType{..}
+
+            _Γ <- get
+
+            return (type_, Syntax.Prompt{ arguments = solveSyntax _Γ newArguments, schema = Just type_, .. })
+
         -- All the type inference rules for scalars go here.  This part is
         -- pretty self-explanatory: a scalar literal returns the matching
         -- scalar type.
@@ -2055,6 +2079,18 @@ check Syntax.Text{ chunks = Syntax.Chunks text₀ rest, .. } Type.Scalar{ scalar
     newRest <- traverse process rest
 
     return Syntax.Text{ chunks = Syntax.Chunks text₀ newRest, .. }
+check Syntax.Prompt{..} _B = do
+    newArguments <- check arguments Type.Record
+        { fields =
+            Type.Fields
+                [ ("text", Type.Scalar{ scalar = Monotype.Text, .. })
+                , ("model", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Text, .. }, .. })
+                ]
+                Monotype.EmptyFields
+        , ..
+        }
+
+    return Syntax.Prompt{ arguments = newArguments, schema = Just _B, .. }
 check e@Syntax.Scalar{ scalar = Syntax.Natural _ } Type.Scalar{ scalar = Monotype.JSON } = do
     return e
 check e@Syntax.Scalar{ scalar = Syntax.Integer _ } Type.Scalar{ scalar = Monotype.JSON } = do
@@ -2464,7 +2500,7 @@ instance Exception TypeInferenceError where
         \\n\
         \" <> Text.unpack (Location.renderError "" location)
         where
-            var = prettyToText @(Syntax.Syntax () Void) Syntax.Variable{ location = (), .. }
+            var = Grace.Pretty.toSmart @(Syntax.Syntax () Void) Syntax.Variable{ location = (), .. }
 
     displayException (RecordTypeMismatch _A₀ _B₀ extraA extraB) | extraB == mempty =
         "Record type mismatch\n\
@@ -2591,13 +2627,11 @@ instance Exception TypeInferenceError where
 -- Helper functions for displaying errors
 
 insert :: Pretty a => a -> String
-insert a = Text.unpack (prettyToText ("  " <> Pretty.align (pretty a)))
+insert a = Text.unpack (Grace.Pretty.toSmart ("  " <> Pretty.align (pretty a)))
 
 listToText :: Pretty a => [a] -> String
 listToText elements =
     Text.unpack (Text.intercalate "\n" (map prettyEntry elements))
   where
-    prettyEntry entry = prettyToText ("• " <> Pretty.align (pretty entry))
-
-prettyToText :: Pretty a => a -> Text
-prettyToText = Grace.Pretty.renderStrict False Width.defaultWidth
+    prettyEntry entry =
+        Grace.Pretty.toSmart ("• " <> Pretty.align (pretty entry))

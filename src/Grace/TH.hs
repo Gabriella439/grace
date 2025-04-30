@@ -98,13 +98,14 @@ typeOfInput = helperFunction fst
 helperFunction
     :: Lift r => ((Type (), Syntax () Void) -> r) -> Input -> Code Q r
 helperFunction f input = TH.Code do
-    eitherResult <- Except.runExceptT (Interpret.interpret input)
+    eitherResult <- Except.runExceptT (Interpret.interpret Nothing input)
 
     (inferred, value) <- case eitherResult of
         Left e -> Exception.throwIO e
         Right result -> return result
 
     let type_ = void inferred
-        syntax = Normalize.quote [] value
+
+    let syntax = Normalize.quote [] value
 
     TExp <$> TH.lift (f (type_, syntax))

@@ -1,0 +1,3 @@
+let numbers = prompt{ text: "Give me two numbers" }
+
+in  { x: numbers.x, y: numbers.y, sum: numbers.x + numbers.y : Integer }
