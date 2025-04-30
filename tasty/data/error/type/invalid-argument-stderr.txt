@@ -13,7 +13,7 @@ tasty/data/error/type/invalid-argument-input.ffg:3:7:
 
   Natural
 
-tasty/data/error/type/invalid-argument-input.ffg:1:10: 
+tasty/data/error/type/invalid-argument-input.ffg:1:12: 
   │
-1 │ let f = \x -> (x : Natural)
-  │          ↑
+1 │ let f (x : Natural) = x
+  │            ↑

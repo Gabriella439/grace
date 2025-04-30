@@ -1,0 +1,9 @@
+let f0 succ zero = succ (succ zero)
+
+let f1 (succ : Natural -> Natural) (zero : Natural) : Natural = succ (succ zero)
+
+let succ0 x = x + 1 : Natural
+
+let succ1 (x : Natural) : Natural = x + 1
+
+in  f0 succ0 0 + f1 succ1 0

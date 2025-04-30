@@ -1,6 +1,6 @@
 Unbound type variable: a
 
-tasty/data/error/type/unbound-type-input.ffg:1:9: 
+tasty/data/error/type/unbound-type-input.ffg:1:17: 
   │
-1 │ let f : a -> a = \x -> x
-  │         ↑
+1 │ let f (x : a) : a = x
+  │                 ↑

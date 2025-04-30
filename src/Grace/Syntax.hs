@@ -20,6 +20,7 @@ module Grace.Syntax
     , Scalar(..)
     , Operator(..)
     , Builtin(..)
+    , NameBinding(..)
     , Binding(..)
     ) where
 
@@ -60,11 +61,11 @@ data Syntax s a
     --   x
     --   >>> pretty @(Syntax () Void) (Variable () "x" 1)
     --   x@1
-    | Lambda { location :: s, nameLocation :: s, name :: Text, nameAnnotation :: Maybe (Type s), body :: Syntax s a }
+    | Lambda { location :: s, nameBinding :: NameBinding s, body :: Syntax s a }
     -- ^
-    --   >>> pretty @(Syntax () Void) (Lambda () () "x" Nothing "x")
+    --   >>> pretty @(Syntax () Void) (Lambda () "x" "x")
     --   \x -> x
-    --   >>> pretty @(Syntax () Void) (Lambda () () "x" (Just "A") "x")
+    --   >>> pretty @(Syntax () Void) (Lambda () (NameBinding () "x" (Just "A")) "x")
     --   \(x : A) -> x
     | Application { location :: s, function :: Syntax s a, argument :: Syntax s a }
     -- ^
@@ -76,11 +77,11 @@ data Syntax s a
     --   x : A
     | Let { location :: s, bindings :: NonEmpty (Binding s a), body :: Syntax s a }
     -- ^
-    --   >>> pretty @(Syntax () Void) (Let () (Binding () "x" Nothing "y" :| []) "z")
+    --   >>> pretty @(Syntax () Void) (Let () (Binding () "x" [] Nothing "y" :| []) "z")
     --   let x = y in z
-    --   >>> pretty @(Syntax () Void) (Let () (Binding () "x" (Just "X") "y" :| []) "z")
-    --   let x : X = y in z
-    --   >>> pretty @(Syntax () Void) (Let () (Binding () "a" Nothing "b" :| [ Binding () "c" Nothing "d" ]) "e")
+    --   >>> pretty @(Syntax () Void) (Let () (Binding () "x" [NameBinding () "a" (Just "A")] (Just "X") "y" :| []) "z")
+    --   let x (a : A) : X = y in z
+    --   >>> pretty @(Syntax () Void) (Let () (Binding () "a" [] Nothing "b" :| [ Binding () "c" [] Nothing "d" ]) "e")
     --   let a = b let c = d in e
     | List { location :: s, elements :: Seq (Syntax s a) }
     -- ^
@@ -177,7 +178,7 @@ instance Bifunctor Syntax where
     first f Variable{..} =
         Variable{ location = f location, ..}
     first f Lambda{..} =
-        Lambda{ location = f location, nameLocation = f nameLocation, nameAnnotation = fmap (fmap f) nameAnnotation, body = first f body, .. }
+        Lambda{ location = f location, nameBinding = fmap f nameBinding, body = first f body, .. }
     first f Application{..} =
         Application{ location = f location, function = first f function, argument = first f argument, .. }
     first f Annotation{..} =
@@ -405,18 +406,8 @@ prettyExpression expression@Lambda{} =
 
     long = Pretty.align (prettyLong expression)
 
-    prettyShort Lambda{ nameAnnotation = Nothing, ..} =
-            label (pretty name)
-        <>  " "
-        <>  prettyShort body
-    prettyShort Lambda{ nameAnnotation = Just annotation, ..} =
-            punctuation "("
-        <>  label (pretty name)
-        <>  " "
-        <>  punctuation ":"
-        <>  " "
-        <>  pretty annotation
-        <>  punctuation ")"
+    prettyShort Lambda{..} =
+            pretty nameBinding
         <>  " "
         <>  prettyShort body
     prettyShort body =
@@ -425,7 +416,7 @@ prettyExpression expression@Lambda{} =
 
     prettyLong Lambda{..} =
             punctuation "\\"
-        <>  label (pretty name)
+        <>  pretty nameBinding
         <>  " "
         <>  punctuation "->"
         <>  Pretty.hardline
@@ -699,16 +690,52 @@ prettyPrimitiveExpression other = Pretty.group (Pretty.flatAlt long short)
             <>  punctuation ")"
             )
 
+{-| A bound variable, possibly with a type annotation
+
+    >>> pretty (NameBinding () "x" Nothing)
+    x
+    >>> pretty (NameBinding () "x" (Just "X"))
+    (x : X)
+-}
+data NameBinding s = NameBinding
+    { nameLocation :: s
+    , name :: Text
+    , annotation :: Maybe (Type s)
+    } deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
+
+instance IsString (NameBinding ()) where
+    fromString string =
+        NameBinding
+            { nameLocation = ()
+            , name = fromString string
+            , annotation = Nothing
+            }
+
+instance Pretty (NameBinding s) where
+    pretty NameBinding{ annotation = Nothing, .. } =
+        label (pretty name)
+    pretty NameBinding{ annotation = Just type_, .. } =
+            punctuation "("
+        <>  label (pretty name)
+        <>  " "
+        <>  Pretty.operator ":"
+        <>  " "
+        <>  pretty type_
+        <>  punctuation ")"
+
 {-| The assignment part of a @let@ binding
 
-    >>> pretty @(Binding () Void) (Binding () "x" Nothing "y")
+    >>> pretty @(Binding () Void) (Binding () "x" [] Nothing "y")
     let x = y
-    >>> pretty @(Binding () Void) (Binding () "x" (Just "X") "y")
+    >>> pretty @(Binding () Void) (Binding () "x" [] (Just "X") "y")
     let x : X = y
+    >>> pretty @(Binding () Void) (Binding () "x" [NameBinding () "a" (Just "A")] (Just "X") "y")
+    let x (a : A) : X = y
 -}
 data Binding s a = Binding
     { nameLocation :: s
     , name :: Text
+    , nameBindings :: [NameBinding s]
     , annotation :: Maybe (Type s)
     , assignment :: Syntax s a
     } deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
@@ -717,6 +744,7 @@ instance Bifunctor Binding where
     first f Binding{ nameLocation, annotation, assignment, .. } =
         Binding
             { nameLocation = f nameLocation
+            , nameBindings = fmap (fmap f) nameBindings
             , annotation = fmap (fmap f) annotation
             , assignment = first f assignment
             , ..
@@ -733,6 +761,7 @@ instance Pretty a => Pretty (Binding s a) where
                 <>  " "
                 <>  label (pretty name)
                 <>  Pretty.hardline
+                <>  foldMap (\nameBinding -> "      " <> pretty nameBinding <> Pretty.hardline) nameBindings
                 <>  "      "
                 <>  punctuation "="
                 <>  " "
@@ -743,6 +772,7 @@ instance Pretty a => Pretty (Binding s a) where
             <>  " "
             <>  label (pretty name)
             <>  " "
+            <>  foldMap (\nameBinding -> pretty nameBinding <> " ") nameBindings
             <>  punctuation "="
             <>  " "
             <>  pretty assignment
@@ -755,6 +785,7 @@ instance Pretty a => Pretty (Binding s a) where
                 <>  " "
                 <>  label (pretty name)
                 <>  Pretty.hardline
+                <>  foldMap (\nameBinding -> "      " <> pretty nameBinding <> Pretty.hardline) nameBindings
                 <>  "      "
                 <>  Pretty.operator ":"
                 <>  " "
@@ -770,6 +801,7 @@ instance Pretty a => Pretty (Binding s a) where
             <>  " "
             <>  label (pretty name)
             <>  " "
+            <>  foldMap (\nameBinding -> pretty nameBinding <> " ") nameBindings
             <>  Pretty.operator ":"
             <>  " "
             <>  pretty type_

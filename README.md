@@ -325,7 +325,7 @@ You can use the `interpret` subcommand for interpreting a single file:
 
 ```dhall
 # ./example.ffg
-let greet = \name -> "Hello, " + name + "!"
+let greet name = "Hello, " + name + "!"
 
 in  greet "world"
 ```

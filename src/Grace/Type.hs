@@ -113,7 +113,7 @@ data Type s
     -- >>> pretty @(Type ()) (Union () (Alternatives [("X", "X"), ("Y", "Y")] (Monotype.UnsolvedAlternatives 0)))
     -- < X: X | Y: Y | a? >
     | Scalar { location :: s, scalar :: Scalar }
-    deriving stock (Eq, Functor, Generic, Lift, Show)
+    deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
 
 instance IsString (Type ()) where
     fromString string = VariableType{ name = fromString string, location = () }
@@ -158,14 +158,14 @@ instance Plated (Type s) where
 
 -- | A potentially polymorphic record type
 data Record s = Fields [(Text, Type s)] RemainingFields
-    deriving stock (Eq, Functor, Generic, Lift, Show)
+    deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
 
 instance Pretty (Record s) where
     pretty = prettyRecordType
 
 -- | A potentially polymorphic union type
 data Union s = Alternatives [(Text, Type s)] RemainingAlternatives
-    deriving stock (Eq, Functor, Generic, Lift, Show)
+    deriving stock (Eq, Functor, Foldable, Generic, Lift, Show, Traversable)
 
 instance Pretty (Union s) where
     pretty = prettyUnionType

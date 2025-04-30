@@ -1213,7 +1213,7 @@ infer e₀ = do
             Context.lookup name index _Γ `orDie` UnboundVariable location name index
 
         -- →I⇒
-        Syntax.Lambda{ nameAnnotation = Nothing, ..} -> do
+        Syntax.Lambda{ nameBinding = Syntax.NameBinding{ annotation = Nothing, .. }, ..} -> do
             a <- fresh
             b <- fresh
 
@@ -1228,7 +1228,7 @@ infer e₀ = do
                 check body output
 
             return Type.Function{..}
-        Syntax.Lambda{ nameAnnotation = Just input, ..} -> do
+        Syntax.Lambda{ nameBinding = Syntax.NameBinding{ annotation = Just input, .. }, ..} -> do
             scoped (Context.Annotation name input) do
                 output <- infer body
 
@@ -1259,15 +1259,26 @@ infer e₀ = do
 
             let output = Type.UnsolvedType{ existential = b, .. }
 
+            let toLambda (nameBinding : nameBindings) assignment =
+                    Syntax.Lambda{ body = toLambda nameBindings assignment, .. }
+                toLambda [] assignment =
+                    assignment
+
             let cons Syntax.Binding{ annotation = Nothing, .. } action = do
-                    _A <- infer assignment
+                    _A <- infer (toLambda nameBindings assignment)
 
                     scoped (Context.Annotation name _A) do
                         action
-                cons Syntax.Binding{ annotation = Just _A, .. } action = do
-                    check assignment _A
+                cons Syntax.Binding{ annotation = Just _A₀, .. } action = do
+                    let annotatedAssignment = Syntax.Annotation
+                            { annotated = assignment
+                            , annotation = _A₀
+                            , ..
+                            }
 
-                    scoped (Context.Annotation name _A) do
+                    _A₁ <- infer (toLambda nameBindings annotatedAssignment)
+
+                    scoped (Context.Annotation name _A₁) do
                         action
 
             foldr cons (check body output) bindings
@@ -1818,7 +1829,7 @@ check
 -- a desirable property!
 
 -- →I
-check Syntax.Lambda{ location = _, ..} Type.Function{..} = do
+check Syntax.Lambda{ location = _, nameBinding = Syntax.NameBinding{..}, ..} Type.Function{..} = do
     scoped (Context.Annotation name input) do
         check body output
 

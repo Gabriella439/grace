@@ -110,17 +110,22 @@ evaluate env syntax =
             function' = evaluate env function
             argument' = evaluate env argument
 
-        Syntax.Lambda{..} ->
+        Syntax.Lambda{ nameBinding = Syntax.NameBinding{ name }, ..} ->
             Value.Lambda (Closure name env body)
 
         Syntax.Annotation{..} ->
             evaluate env annotated
 
-        Syntax.Let{..} ->
-            evaluate (foldl snoc env bindings) body
+        Syntax.Let{ body = body₀, ..} ->
+            evaluate (foldl snoc env bindings) body₀
           where
-            snoc environment Syntax.Binding{ name, assignment} =
-                (name, evaluate environment assignment) : environment
+            snoc environment Syntax.Binding{ nameLocation, name, nameBindings, assignment } =
+                (name, evaluate environment newAssignment) : environment
+              where
+                newAssignment = foldr cons assignment nameBindings
+                  where
+                    cons nameBinding body =
+                      Syntax.Lambda{ location = nameLocation, ..}
 
         Syntax.List{..} ->
             Value.List (fmap (evaluate env) elements)
@@ -447,7 +452,7 @@ quote names value =
             Syntax.Variable{ index = countNames name names - index - 1, .. }
 
         Value.Lambda closure@(Closure name _ _) ->
-            Syntax.Lambda{ nameLocation = (), nameAnnotation = Nothing, .. }
+            Syntax.Lambda{ nameBinding = Syntax.NameBinding{ nameLocation = (), annotation = Nothing, .. }, .. }
           where
             variable = fresh name names
 

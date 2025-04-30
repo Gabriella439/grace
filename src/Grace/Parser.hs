@@ -34,7 +34,7 @@ import Data.Text (Text)
 import Grace.Input (Input(..))
 import Grace.Lexer (LocatedToken(LocatedToken), ParseError(..), Token)
 import Grace.Location (Location(..), Offset(..))
-import Grace.Syntax (Binding(..), Syntax(..))
+import Grace.Syntax (Binding(..), NameBinding(..), Syntax(..))
 import Grace.Type (Type(..))
 import Text.Earley (Grammar, Prod, Report(..), rule, (<?>))
 
@@ -215,29 +215,29 @@ render t = case t of
 
 grammar :: Grammar r (Parser r (Syntax Offset Input))
 grammar = mdo
+    nameBinding <- rule do
+        let annotated = do
+                token Lexer.OpenParenthesis
+                ~(nameLocation, name) <- locatedLabel
+                token Lexer.Colon
+                annotation <- quantifiedType
+                token Lexer.CloseParenthesis
+                pure NameBinding{ annotation = Just annotation, .. }
+
+        let unannotated = do
+                ~(nameLocation, name) <- locatedLabel
+                pure NameBinding{ annotation = Nothing, .. }
+
+        annotated <|> unannotated
+
     expression <- rule
-        (   do  let nameBinding = annotated <|> unannotated
-                      where
-                        annotated = do
-                            token Lexer.OpenParenthesis
-                            locatedName <- locatedLabel
-                            token Lexer.Colon
-                            annotation <- quantifiedType
-                            token Lexer.CloseParenthesis
-                            pure (locatedName, Just annotation)
-
-                        unannotated = do
-                            locatedName <- locatedLabel
-                            pure (locatedName, Nothing)
-
-                location <- locatedToken Lexer.Lambda
+        (   do  location <- locatedToken Lexer.Lambda
                 nameBindings <- some1 nameBinding
                 token Lexer.Arrow
                 body0 <- expression
 
                 return do
-                    let cons ((nameLocation, name), nameAnnotation) body =
-                            Syntax.Lambda{..}
+                    let cons nameBinding_ body = Syntax.Lambda{ nameBinding = nameBinding_, ..}
                     foldr cons body0 nameBindings
 
         <|> do  bindings <- some1 binding
@@ -486,15 +486,18 @@ grammar = mdo
     binding <- rule
         (   do  nameLocation <- locatedToken Lexer.Let
                 name <- label
+                nameBindings <- many nameBinding
                 token Lexer.Equals
                 assignment <- expression
 
                 return do
                     let annotation = Nothing
+
                     Syntax.Binding{..}
 
         <|> do  nameLocation <- locatedToken Lexer.Let
                 name <- label
+                nameBindings <- many nameBinding
                 token Lexer.Colon
                 annotation <- fmap Just quantifiedType
                 token Lexer.Equals
