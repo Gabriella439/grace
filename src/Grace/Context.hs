@@ -4,6 +4,8 @@
 {-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE RecordWildCards    #-}
 
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
+
 {-| A `Context` is an ordered list of `Entry`s used as the state for the
     bidirectional type-checking algorithm
 -}
