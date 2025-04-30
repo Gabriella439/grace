@@ -21,6 +21,7 @@ import Grace.Lexer (reserved)
 import System.Console.Haskeline (Interrupt(..))
 import System.Console.Repline (CompleterStyle(..), MultiLine(..), ReplOpts(..))
 
+import qualified Control.Exception.Safe as Exception
 import qualified Control.Monad as Monad
 import qualified Control.Monad.Except as Except
 import qualified Control.Monad.State as State
@@ -41,13 +42,18 @@ repl :: IO ()
 repl = do
     manager <- HTTP.newManager
 
+    let err e =
+            liftIO (Text.IO.hPutStrLn IO.stderr (Text.pack (displayException e)))
+
     let interpret input = do
             context <- get
 
-            Except.runExceptT (Interpret.interpretWith context Nothing manager input)
+            result <- Exception.try (Except.runExceptT (Interpret.interpretWith context Nothing manager input))
 
-    let err e =
-            liftIO (Text.IO.hPutStrLn IO.stderr (Text.pack (displayException e)))
+            case result of
+                Left e -> return (Left e)
+                Right (Left e) -> return (Left (Exception.toException e))
+                Right (Right r) -> return (Right r)
 
     let command string = do
             let input = Code "(input)" (Text.pack string)
