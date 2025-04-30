@@ -93,6 +93,7 @@ data Value
     | Alternative Text
     | Merge Value
     | If Value Value Value
+    | Prompt Value
     | Builtin Builtin
     | Scalar Scalar
     | Operator Value Operator Value

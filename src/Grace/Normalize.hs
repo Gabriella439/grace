@@ -1,18 +1,24 @@
-{-# LANGUAGE BangPatterns      #-}
-{-# LANGUAGE NamedFieldPuns    #-}
-{-# LANGUAGE OverloadedLists   #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
-{-# LANGUAGE ViewPatterns      #-}
+{-# LANGUAGE BangPatterns          #-}
+{-# LANGUAGE BlockArguments        #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE OverloadedLists       #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE ViewPatterns          #-}
 
 -- | This module contains the logic for efficiently evaluating an expression
 module Grace.Normalize
     ( -- * Normalization
       evaluate
     , quote
-    , apply
     ) where
 
+import Control.Applicative (empty)
+import Control.Exception (Exception)
+import Data.Foldable (toList)
+import Data.Functor (void)
 import Data.Scientific (Scientific)
 import Data.Sequence (Seq(..), ViewL(..))
 import Data.Text (Text)
@@ -21,15 +27,39 @@ import Grace.Location (Location)
 import Grace.Syntax (Builtin(..), Scalar(..), Syntax)
 import Grace.Type (Type)
 import Grace.Value (Closure(..), Value)
+import OpenAI.V1 (Methods(..))
+import OpenAI.V1.Models (Model(..))
+import OpenAI.V1.ResponseFormat(JSONSchema(..))
 import Prelude hiding (succ)
 
+import OpenAI.V1.Chat.Completions
+    ( ChatCompletionObject(..)
+    , CreateChatCompletion(..)
+    , _CreateChatCompletion
+    , ResponseFormat(..)
+    )
+
+import qualified Control.Exception as Exception
+import qualified Control.Monad as Monad
+import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Key as Key
+import qualified Data.Aeson.KeyMap as KeyMap
+import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.HashMap.Strict.InsOrd as HashMap
 import qualified Data.List as List
+import qualified Data.Map as Map
 import qualified Data.Ord as Ord
+import qualified Data.Scientific as Scientific
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Encoding
+import qualified Grace.Monotype as Monotype
+import qualified Grace.Pretty as Pretty
 import qualified Grace.Syntax as Syntax
+import qualified Grace.Type as Type
 import qualified Grace.Value as Value
+import qualified OpenAI.V1.Chat.Completions as OpenAI
+import qualified System.IO.Unsafe as Unsafe
 
 {- $setup
 
@@ -66,15 +96,6 @@ lookupVariable name index environment =
             -- converting back to the `Syntax` type.
             Value.Variable name (negate index - 1)
 
-{-| Substitute an expression into a `Closure`
-
-    > instantiate (Closure name env expression) value =
-    >    evaluate ((name, value) : env) expression
--}
-instantiate :: Closure -> Value -> Value
-instantiate (Closure name env syntax) value =
-    evaluate ((name, value) : env) syntax
-
 asInteger :: Scalar -> Maybe Integer
 asInteger (Natural n) = Just (fromIntegral n)
 asInteger (Integer n) = Just n
@@ -86,6 +107,109 @@ asReal (Integer n) = Just (fromInteger  n)
 asReal (Real    n) = Just n
 asReal  _          = Nothing
 
+toJSONSchema :: Type () -> Either UnsupportedModelOutput Aeson.Value
+toJSONSchema Type.Forall{..} = toJSONSchema type_
+toJSONSchema Type.Optional{..} = toJSONSchema type_
+toJSONSchema Type.List{..} = do
+    items <- toJSONSchema type_
+
+    return (Aeson.object [ ("type", "array"), ("items", items) ])
+toJSONSchema Type.Record{ fields = Type.Fields fieldTypes _ } = do
+    let toProperty (field, type_) = do
+            property <- toJSONSchema type_
+
+            return (field, property)
+
+    properties <- traverse toProperty fieldTypes
+
+    return
+        (Aeson.object
+            [ ("type", "object")
+            , ("properties", Aeson.toJSON (Map.fromList properties))
+            , ("additionalProperties", Aeson.toJSON False)
+            , ("required", Aeson.toJSON required)
+            ]
+        )
+  where
+    required = do
+        (field, type_) <- fieldTypes
+
+        case type_ of
+            Type.Optional{ } -> empty
+            _ -> return field
+toJSONSchema Type.Union{ alternatives = Type.Alternatives alternativeTypes _ } = do
+    let toAnyOf (alternative, type_) = do
+            contents <- toJSONSchema type_
+
+            return
+                (Aeson.object
+                    [ ("type", "object")
+                    , ( "properties"
+                      , Aeson.object
+                          [ ( "tag"
+                            , Aeson.object
+                                [ ("type", "string")
+                                , ("const", Aeson.toJSON alternative)
+                                ]
+                            )
+                          , ("contents", contents)
+                          ]
+                      )
+                    , ("required", Aeson.toJSON ([ "tag", "contents" ] :: [Text]))
+                    , ("additionalProperties", Aeson.toJSON False)
+                    ]
+                )
+
+    -- "oneOf" is not supported by OpenAI, so we use "anyOf" as the closest
+    -- equivalent
+    anyOfs <- traverse toAnyOf alternativeTypes
+
+    return (Aeson.object [ ("type", "object"), ("anyOf", Aeson.toJSON anyOfs) ])
+  where
+toJSONSchema Type.Scalar{ scalar = Monotype.Bool } =
+    return (Aeson.object [ ("type", "boolean") ])
+toJSONSchema Type.Scalar{ scalar = Monotype.Real } =
+    return (Aeson.object [ ("type", "number") ])
+toJSONSchema Type.Scalar{ scalar = Monotype.Integer } =
+    return (Aeson.object [ ("type", "integer") ])
+toJSONSchema Type.Scalar{ scalar = Monotype.JSON } =
+    return (Aeson.object [ ])
+toJSONSchema Type.Scalar{ scalar = Monotype.Natural } =
+    return
+        (Aeson.object
+            [ ("type", "number")
+            -- , ("minimum", Aeson.toJSON (0 :: Int))
+            -- ^ Not supported by OpenAI
+            ]
+        )
+toJSONSchema Type.Scalar{ scalar = Monotype.Text } =
+    return (Aeson.object [ ("type", "string") ])
+toJSONSchema type_ = Left UnsupportedModelOutput{..}
+
+fromJSON :: Aeson.Value -> Value
+fromJSON (Aeson.Object [("contents", contents), ("tag", Aeson.String tag)]) =
+    Value.Application (Value.Alternative tag) (fromJSON contents)
+fromJSON (Aeson.Object object) = Value.Record (HashMap.fromList textValues)
+  where
+    textValues = do
+        (key, value) <- KeyMap.toList object
+        return (Key.toText key, fromJSON value)
+fromJSON (Aeson.Array vector) =
+    Value.List (Seq.fromList (toList elements))
+  where
+    elements = fmap fromJSON vector
+fromJSON (Aeson.String text) = Value.Scalar (Text text)
+fromJSON (Aeson.Number scientific) =
+    case Scientific.floatingOrInteger scientific of
+        Left (_ :: Double) -> Value.Scalar (Real scientific)
+        Right (integer :: Integer)
+            | 0 <= integer -> Value.Scalar (Natural (fromInteger integer))
+            | otherwise    -> Value.Scalar (Integer integer)
+fromJSON (Aeson.Bool bool) =
+    Value.Scalar (Bool bool)
+fromJSON Aeson.Null =
+    Value.Scalar Null
+
 {-| Evaluate an expression, leaving behind a `Value` free of reducible
     sub-expressions
 
@@ -94,329 +218,431 @@ asReal  _          = Nothing
     sub-expression multiple times.
 -}
 evaluate
-    :: [(Text, Value)]
+    :: Maybe Methods
+    -- ^ OpenAI methods
+    -> [(Text, Value)]
     -- ^ Evaluation environment (starting at @[]@ for a top-level expression)
     -> Syntax Location (Type Location, Value)
     -- ^ Surface syntax
-    -> Value
+    -> IO Value
     -- ^ Result, free of reducible sub-expressions
-evaluate env syntax =
-    case syntax of
-        Syntax.Variable{..} ->
-            lookupVariable name index env
+evaluate maybeMethods = loop
+  where
+    loop
+      :: [(Text, Value)] -> Syntax Location (Type Location, Value) -> IO Value
+    loop env syntax =
+        case syntax of
+            Syntax.Variable{..} ->
+                return (lookupVariable name index env)
 
-        Syntax.Application{..} -> apply function' argument'
-          where
-            function' = evaluate env function
-            argument' = evaluate env argument
+            Syntax.Application{..} -> do
+                function' <- loop env function
+                argument' <- loop env argument
 
-        Syntax.Lambda{ nameBinding = Syntax.NameBinding{ name }, ..} ->
-            Value.Lambda (Closure name env body)
+                apply function' argument'
 
-        Syntax.Annotation{..} ->
-            evaluate env annotated
+            Syntax.Lambda{ nameBinding = Syntax.NameBinding{ name }, ..} ->
+                return (Value.Lambda (Closure name env body))
 
-        Syntax.Let{ body = body₀, ..} ->
-            evaluate (foldl snoc env bindings) body₀
-          where
-            snoc environment Syntax.Binding{ nameLocation, name, nameBindings, assignment } =
-                (name, evaluate environment newAssignment) : environment
+            Syntax.Annotation{..} ->
+                loop env annotated
+
+            Syntax.Let{ body = body₀, ..} -> do
+                newEnv <- Monad.foldM snoc env bindings
+
+                loop newEnv body₀
               where
-                newAssignment = foldr cons assignment nameBindings
-                  where
-                    cons nameBinding body =
-                      Syntax.Lambda{ location = nameLocation, ..}
+                snoc environment Syntax.Binding{ nameLocation, name, nameBindings, assignment } = do
+                    let cons nameBinding body =
+                            Syntax.Lambda{ location = nameLocation, ..}
 
-        Syntax.List{..} ->
-            Value.List (fmap (evaluate env) elements)
+                    let newAssignment = foldr cons assignment nameBindings
 
-        Syntax.Record{..} ->
-            Value.Record (HashMap.fromList (map adapt fieldValues))
-          where
-            adapt (key, value) = (key, evaluate env value)
+                    value <- loop environment newAssignment
 
-        Syntax.Field{..} ->
-            case evaluate env record of
-                Value.Record fieldValues ->
-                    case HashMap.lookup field fieldValues of
-                        Just value -> value
-                        Nothing -> Value.Scalar Syntax.Null
-                other ->
-                    Value.Field other field
+                    return ((name, value) : environment)
 
-        Syntax.Alternative{..} ->
-            Value.Alternative name
+            Syntax.List{..} -> do
+                values <- traverse (loop env) elements
+                return (Value.List values)
 
-        Syntax.Merge{..} ->
-            Value.Merge (evaluate env handlers)
+            Syntax.Record{..} -> do
+                let process (key, field) = do
+                        newField <- loop env field
+                        return (key, newField)
 
-        Syntax.If{..} ->
-            case predicate' of
-                Value.Scalar (Bool True) -> ifTrue'
-                Value.Scalar (Bool False) -> ifFalse'
-                _ -> Value.If predicate' ifTrue' ifFalse'
-          where
-            predicate' = evaluate env predicate
-            ifTrue'    = evaluate env ifTrue
-            ifFalse'   = evaluate env ifFalse
+                newFieldValues <- traverse process fieldValues
 
-        Syntax.Scalar{..} ->
-            Value.Scalar scalar
+                return (Value.Record (HashMap.fromList newFieldValues))
 
-        Syntax.Operator{ operator = Syntax.And, .. } ->
-            case left' of
-                Value.Scalar (Bool True) -> right'
-                Value.Scalar (Bool False) -> Value.Scalar (Bool False)
-                _ -> case right' of
-                    Value.Scalar (Bool True) -> left'
-                    Value.Scalar (Bool False) -> Value.Scalar (Bool False)
-                    _ -> Value.Operator left' Syntax.And right'
-          where
-            left'  = evaluate env left
-            right' = evaluate env right
+            Syntax.Field{..} -> do
+                value <- loop env record
 
-        Syntax.Operator{ operator = Syntax.Or, .. } ->
-            case left' of
-                Value.Scalar (Bool True) -> Value.Scalar (Bool True)
-                Value.Scalar (Bool False) -> right'
-                _ -> case right' of
-                    Value.Scalar (Bool True) -> Value.Scalar (Bool True)
-                    Value.Scalar (Bool False) -> left'
-                    _ -> Value.Operator left' Syntax.Or right'
-          where
-            left'  = evaluate env left
-            right' = evaluate env right
+                case value of
+                    Value.Record fieldValues ->
+                        case HashMap.lookup field fieldValues of
+                            Just v -> return v
+                            Nothing -> return (Value.Scalar Syntax.Null)
+                    other ->
+                        return (Value.Field other field)
 
-        Syntax.Operator{ operator = Syntax.Times, .. } ->
-            case (left', right') of
-                (Value.Scalar (Natural 1), _) ->
-                    right'
-                (Value.Scalar (Natural 0), _) ->
-                    Value.Scalar (Natural 0)
-                (_, Value.Scalar (Natural 1)) ->
-                    left'
-                (_, Value.Scalar (Natural 0)) ->
-                    Value.Scalar (Natural 0)
-                (Value.Scalar l, Value.Scalar r)
-                    | Natural m <- l
-                    , Natural n <- r ->
-                        Value.Scalar (Natural (m * n))
-                    | Just m <- asInteger l
-                    , Just n <- asInteger r ->
-                        Value.Scalar (Integer (m * n))
-                    | Just m <- asReal l
-                    , Just n <- asReal r ->
-                        Value.Scalar (Real (m * n))
-                _ ->
-                    Value.Operator left' Syntax.Times right'
-          where
-            left'  = evaluate env left
-            right' = evaluate env right
+            Syntax.Alternative{..} ->
+                return (Value.Alternative name)
 
-        Syntax.Operator{ operator = Syntax.Plus, .. } ->
-            case (left', right') of
-                (Value.Scalar (Natural 0), _) ->
-                    right'
-                (_, Value.Scalar (Natural 0)) ->
-                    left'
-                (Value.Scalar (Text ""), _) ->
-                    right'
-                (_, Value.Scalar (Text "")) ->
-                    left'
-                (Value.List [], _) ->
-                    right'
-                (_, Value.List []) ->
-                    left'
-                (Value.Scalar l, Value.Scalar r)
-                    | Natural m <- l
-                    , Natural n <- r ->
-                        Value.Scalar (Natural (m + n))
-                    | Just m <- asInteger l
-                    , Just n <- asInteger r ->
-                        Value.Scalar (Integer (m + n))
-                    | Just m <- asReal l
-                    , Just n <- asReal r ->
-                        Value.Scalar (Real (m + n))
-                    | Text m <- l
-                    , Text n <- r ->
-                        Value.Scalar (Text (m <> n))
-                (Value.List l, Value.List r) ->
-                    Value.List (l <> r)
-                _ ->
-                    Value.Operator left' Syntax.Plus right'
-          where
-            left'  = evaluate env left
-            right' = evaluate env right
+            Syntax.Merge{..} -> do
+                newHandlers <- loop env handlers
 
-        Syntax.Builtin{..} ->
-            Value.Builtin builtin
+                return (Value.Merge newHandlers)
 
-        Syntax.Embed{ embedded = (_, value) } ->
-            value
+            Syntax.If{..} -> do
+                predicate' <- loop env predicate
 
-{-| This is the function that implements function application, including
-    evaluating anonymous functions and evaluating all built-in functions.
--}
-apply :: Value -> Value -> Value
-apply (Value.Lambda (Closure name capturedEnv body)) argument =
-    evaluate ((name, argument) : capturedEnv) body
-apply
-    (Value.Merge (Value.Record alternativeHandlers))
-    (Value.Application (Value.Alternative alternative) x)
-    | Just f <- HashMap.lookup alternative alternativeHandlers =
-        apply f x
-apply
-    (Value.Application (Value.Builtin ListDrop) (Value.Scalar (Natural n)))
-    (Value.List elements) =
-        Value.List (Seq.drop (fromIntegral n) elements)
-apply
-    (Value.Application (Value.Builtin ListTake) (Value.Scalar (Natural n)))
-    (Value.List elements) =
-        Value.List (Seq.take (fromIntegral n) elements)
-apply (Value.Builtin ListHead) (Value.List []) =
-    Value.Application (Value.Alternative "None") (Value.Record [])
-apply (Value.Builtin ListHead) (Value.List (x :<| _)) =
-    Value.Application (Value.Alternative "Some") x
-apply (Value.Builtin ListLast) (Value.List []) =
-    Value.Application (Value.Alternative "None") (Value.Record [])
-apply (Value.Builtin ListLast) (Value.List (_ :|> x)) =
-    Value.Application (Value.Alternative "Some") x
-apply (Value.Builtin ListReverse) (Value.List xs) =
-    Value.List (Seq.reverse xs)
-apply
-    (Value.Application
-        (Value.Application (Value.Builtin ListEqual) f)
-        (Value.List rs)
-    )
-    (Value.List ls)
-        | length ls /= length rs =
-            Value.Scalar (Bool False)
-        | Just bools <- traverse toBool (Seq.zipWith equal ls rs) =
-        Value.Scalar (Bool (and bools))
-      where
-        toBool (Value.Scalar (Bool b)) = Just b
-        toBool  _                      = Nothing
+                ifTrue'  <- loop env ifTrue
+                ifFalse' <- loop env ifFalse
 
-        equal l r = apply (apply f l) r
-apply
-    (Value.Application
-        (Value.Builtin ListFold)
-        (Value.Record
-            (List.sortBy (Ord.comparing fst) . HashMap.toList ->
-                [ ("cons"  , cons)
-                , ("nil"   , nil)
-                ]
-            )
-        )
-    )
-    (Value.List elements) = loop (Seq.reverse elements) nil
-  where
-    loop xs !result =
-        case Seq.viewl xs of
-            EmptyL  -> result
-            y :< ys -> loop ys (apply (apply cons y) result)
-apply (Value.Builtin ListIndexed) (Value.List elements) =
-    Value.List (Seq.mapWithIndex adapt elements)
-  where
-    adapt index value =
-        Value.Record
-            [ ("index", Value.Scalar (Natural (fromIntegral index)))
-            , ("value", value)
-            ]
-apply (Value.Builtin ListLength) (Value.List elements) =
-    Value.Scalar (Natural (fromIntegral (length elements)))
-apply
-    (Value.Application (Value.Builtin ListMap) f)
-    (Value.List elements) =
-        Value.List (fmap (apply f) elements)
-apply
-    (Value.Application
+                case predicate' of
+                    Value.Scalar (Bool True) -> return ifTrue'
+                    Value.Scalar (Bool False) -> return ifFalse'
+                    _ -> return (Value.If predicate' ifTrue' ifFalse')
+
+            Syntax.Prompt{ schema = Nothing } -> do
+                Exception.throwIO MissingSchema
+            Syntax.Prompt{ schema = Just schema, ..} -> do
+                value <- loop env arguments
+
+                let extractResponse (Value.Record [("response", response)]) = do
+                        return response
+                    extractResponse other = do
+                        return other
+
+                let (recordSchema, extract) = case void schema of
+                        t@Type.Record{ } -> (t, return)
+                        t -> (Type.Record () (Type.Fields [("response", t)] Monotype.EmptyFields), extractResponse)
+
+                jsonSchema <- case toJSONSchema recordSchema of
+                    Left exception -> Exception.throwIO exception
+                    Right jsonSchema -> return jsonSchema
+
+                case value of
+                    Value.Record fieldValues
+                        | Just (Value.Scalar (Syntax.Text prompt)) <- HashMap.lookup "text" fieldValues
+                        , Just Methods{..} <- maybeMethods -> do
+                            let model = case HashMap.lookup "model" fieldValues of
+                                    Just (Value.Scalar (Syntax.Text m)) -> m
+                                    _ -> "gpt-4o-mini"
+
+                            let text =
+                                    prompt <> "\n\nGenerate JSON output matching the following type:\n\n" <> Pretty.toSmart recordSchema
+
+                            ChatCompletionObject{ choices = [ OpenAI.Choice{ message } ] } <- createChatCompletion _CreateChatCompletion
+                                { messages = [ OpenAI.User{ content = [ OpenAI.Text{ text } ], name = Nothing } ]
+                                , model = Model model
+                                , response_format = Just JSON_Schema
+                                    { json_schema = JSONSchema
+                                        { description = Nothing
+                                        , name = "result"
+                                        , schema = Just jsonSchema
+                                        , strict = Just True
+                                        }
+                                    }
+                                }
+
+                            let text_ = OpenAI.messageToContent message
+                            let bytes = Encoding.encodeUtf8 text_
+                            let lazyBytes =
+                                    ByteString.Lazy.fromStrict bytes
+
+                            v <- case Aeson.eitherDecode lazyBytes of
+                                Left message_ -> Exception.throwIO JSONDecodingFailed{ message = message_, text = text_ }
+                                Right v -> return v
+
+                            extract (fromJSON v)
+                    other ->
+                        return (Value.Prompt other)
+
+            Syntax.Scalar{..} ->
+                return (Value.Scalar scalar)
+
+            Syntax.Operator{ operator = Syntax.And, .. } -> do
+                left'  <- loop env left
+                right' <- loop env right
+
+                case left' of
+                    Value.Scalar (Bool True) ->
+                        return right'
+                    Value.Scalar (Bool False) ->
+                        return (Value.Scalar (Bool False))
+                    _ -> case right' of
+                        Value.Scalar (Bool True) ->
+                            return left'
+                        Value.Scalar (Bool False) ->
+                            return (Value.Scalar (Bool False))
+                        _ -> do
+                            return (Value.Operator left' Syntax.And right')
+
+            Syntax.Operator{ operator = Syntax.Or, .. } -> do
+                left'  <- loop env left
+                right' <- loop env right
+
+                case left' of
+                    Value.Scalar (Bool True) ->
+                        return (Value.Scalar (Bool True))
+                    Value.Scalar (Bool False) ->
+                        return right'
+                    _ -> case right' of
+                        Value.Scalar (Bool True) ->
+                            return (Value.Scalar (Bool True))
+                        Value.Scalar (Bool False) ->
+                            return left'
+                        _ ->
+                            return (Value.Operator left' Syntax.Or right')
+
+            Syntax.Operator{ operator = Syntax.Times, .. } -> do
+                left'  <- loop env left
+                right' <- loop env right
+
+                case (left', right') of
+                    (Value.Scalar (Natural 1), _) ->
+                        return right'
+                    (Value.Scalar (Natural 0), _) ->
+                        return (Value.Scalar (Natural 0))
+                    (_, Value.Scalar (Natural 1)) ->
+                        return left'
+                    (_, Value.Scalar (Natural 0)) ->
+                        return (Value.Scalar (Natural 0))
+                    (Value.Scalar l, Value.Scalar r)
+                        | Natural m <- l
+                        , Natural n <- r ->
+                            return (Value.Scalar (Natural (m * n)))
+                        | Just m <- asInteger l
+                        , Just n <- asInteger r ->
+                            return (Value.Scalar (Integer (m * n)))
+                        | Just m <- asReal l
+                        , Just n <- asReal r ->
+                            return (Value.Scalar (Real (m * n)))
+                    _ ->
+                        return (Value.Operator left' Syntax.Times right')
+
+            Syntax.Operator{ operator = Syntax.Plus, .. } -> do
+                left'  <- loop env left
+                right' <- loop env right
+
+                case (left', right') of
+                    (Value.Scalar (Natural 0), _) ->
+                        return right'
+                    (_, Value.Scalar (Natural 0)) ->
+                        return left'
+                    (Value.Scalar (Text ""), _) ->
+                        return right'
+                    (_, Value.Scalar (Text "")) ->
+                        return left'
+                    (Value.List [], _) ->
+                        return right'
+                    (_, Value.List []) ->
+                        return left'
+                    (Value.Scalar l, Value.Scalar r)
+                        | Natural m <- l
+                        , Natural n <- r ->
+                            return (Value.Scalar (Natural (m + n)))
+                        | Just m <- asInteger l
+                        , Just n <- asInteger r ->
+                            return (Value.Scalar (Integer (m + n)))
+                        | Just m <- asReal l
+                        , Just n <- asReal r ->
+                            return (Value.Scalar (Real (m + n)))
+                        | Text m <- l
+                        , Text n <- r ->
+                            return (Value.Scalar (Text (m <> n)))
+                    (Value.List l, Value.List r) ->
+                        return (Value.List (l <> r))
+                    _ ->
+                        return (Value.Operator left' Syntax.Plus right')
+
+            Syntax.Builtin{..} ->
+                return (Value.Builtin builtin)
+
+            Syntax.Embed{ embedded = (_, value) } ->
+                return value
+
+    {-| This is the function that implements function application, including
+        evaluating anonymous functions and evaluating all built-in functions.
+    -}
+    apply :: Value -> Value -> IO Value
+    apply (Value.Lambda (Closure name capturedEnv body)) argument =
+        loop ((name, argument) : capturedEnv) body
+    apply
+        (Value.Merge (Value.Record alternativeHandlers))
+        (Value.Application (Value.Alternative alternative) x)
+        | Just f <- HashMap.lookup alternative alternativeHandlers =
+            apply f x
+    apply
+        (Value.Application (Value.Builtin ListDrop) (Value.Scalar (Natural n)))
+        (Value.List elements) =
+            return (Value.List (Seq.drop (fromIntegral n) elements))
+    apply
+        (Value.Application (Value.Builtin ListTake) (Value.Scalar (Natural n)))
+        (Value.List elements) =
+            return (Value.List (Seq.take (fromIntegral n) elements))
+    apply (Value.Builtin ListHead) (Value.List []) =
+        return (Value.Application (Value.Alternative "None") (Value.Record []))
+    apply (Value.Builtin ListHead) (Value.List (x :<| _)) =
+        return (Value.Application (Value.Alternative "Some") x)
+    apply (Value.Builtin ListLast) (Value.List []) =
+        return (Value.Application (Value.Alternative "None") (Value.Record []))
+    apply (Value.Builtin ListLast) (Value.List (_ :|> x)) =
+        return (Value.Application (Value.Alternative "Some") x)
+    apply (Value.Builtin ListReverse) (Value.List xs) =
+        return (Value.List (Seq.reverse xs))
+    apply
         (Value.Application
-            (Value.Builtin NaturalFold)
-            (Value.Scalar (Natural n))
+            (Value.Application (Value.Builtin ListEqual) f)
+            (Value.List rs)
         )
-        succ
-    )
-    zero =
-        go n zero
-  where
-    go 0 !result = result
-    go m !result = go (m - 1) (apply succ result)
-apply (Value.Builtin IntegerEven) (Value.Scalar x)
-    | Just n <- asInteger x = Value.Scalar (Bool (even n))
-apply (Value.Builtin IntegerOdd) (Value.Scalar x)
-    | Just n <- asInteger x = Value.Scalar (Bool (odd n))
-apply
-    (Value.Application (Value.Builtin RealEqual) (Value.Scalar l))
-    (Value.Scalar r)
-    | Just m <- asReal l
-    , Just n <- asReal r =
-        Value.Scalar (Bool (m == n))
-apply
-    (Value.Application (Value.Builtin RealLessThan) (Value.Scalar l))
-    (Value.Scalar r)
-    | Just m <- asReal l
-    , Just n <- asReal r =
-        Value.Scalar (Bool (m < n))
-apply (Value.Builtin IntegerAbs) (Value.Scalar x)
-    | Just n <- asInteger x = Value.Scalar (Natural (fromInteger (abs n)))
-apply (Value.Builtin RealNegate) (Value.Scalar x)
-    | Just n <- asReal x = Value.Scalar (Real (negate n))
-apply (Value.Builtin IntegerNegate) (Value.Scalar x)
-    | Just n <- asInteger x = Value.Scalar (Integer (negate n))
-apply (Value.Builtin RealShow) (Value.Scalar (Natural n)) =
-    Value.Scalar (Text (Text.pack (show n)))
-apply (Value.Builtin RealShow) (Value.Scalar (Integer n)) =
-    Value.Scalar (Text (Text.pack (show n)))
-apply (Value.Builtin RealShow) (Value.Scalar (Real n)) =
-    Value.Scalar (Text (Text.pack (show n)))
-apply
-    (Value.Application (Value.Builtin TextEqual) (Value.Scalar (Text l)))
-    (Value.Scalar (Text r)) =
-        Value.Scalar (Bool (l == r))
-apply
-    (Value.Application
-        (Value.Builtin JSONFold)
-        (Value.Record
-            (List.sortBy (Ord.comparing fst) . HashMap.toList ->
-                [ ("array"  , arrayHandler )
-                , ("bool"   , boolHandler  )
-                , ("integer", integerHandler)
-                , ("natural", naturalHandler)
-                , ("null"   , nullHandler   )
-                , ("object" , objectHandler )
-                , ("real"   , realHandler  )
-                , ("string" , stringHandler )
-                ]
+        (Value.List ls)
+            | length ls /= length rs =
+                return (Value.Scalar (Bool False))
+            | Just bools <- traverse toBool (Seq.zipWith equal ls rs) =
+                return (Value.Scalar (Bool (and bools)))
+          where
+            toBool (Value.Scalar (Bool b)) = Just b
+            toBool  _                      = Nothing
+
+            equal :: Value -> Value -> Value
+            equal l r = Unsafe.unsafePerformIO do
+                x <- apply f l
+                apply x r
+    apply
+        (Value.Application
+            (Value.Builtin ListFold)
+            (Value.Record
+                (List.sortBy (Ord.comparing fst) . HashMap.toList ->
+                    [ ("cons"  , cons)
+                    , ("nil"   , nil)
+                    ]
+                )
             )
         )
-    )
-    v0 = loop v0
-  where
-    loop (Value.Scalar (Bool b)) =
-        apply boolHandler (Value.Scalar (Bool b))
-    loop (Value.Scalar (Natural n)) =
-        apply naturalHandler (Value.Scalar (Natural n))
-    loop (Value.Scalar (Integer n)) =
-        apply integerHandler (Value.Scalar (Integer n))
-    loop (Value.Scalar (Real n)) =
-        apply realHandler (Value.Scalar (Real n))
-    loop (Value.Scalar (Text t)) =
-        apply stringHandler (Value.Scalar (Text t))
-    loop (Value.Scalar Null) =
-        nullHandler
-    loop (Value.List elements) =
-        apply arrayHandler (Value.List (fmap loop elements))
-    loop (Value.Record keyValues) =
-        apply objectHandler (Value.List (Seq.fromList (map adapt (HashMap.toList keyValues))))
+        (Value.List elements) = inner (Seq.reverse elements) nil
       where
-        adapt (key, value) =
+        inner xs !result =
+            case Seq.viewl xs of
+                EmptyL -> do
+                    return result
+                y :< ys -> do
+                    a <- apply cons y
+                    b <- apply a result
+                    inner ys b
+    apply (Value.Builtin ListIndexed) (Value.List elements) =
+        return (Value.List (Seq.mapWithIndex adapt elements))
+      where
+        adapt index value =
             Value.Record
-                [("key", Value.Scalar (Text key)), ("value", loop value)]
-    loop v =
-        v
-apply function argument =
-    Value.Application function argument
+                [ ("index", Value.Scalar (Natural (fromIntegral index)))
+                , ("value", value)
+                ]
+    apply (Value.Builtin ListLength) (Value.List elements) =
+        return (Value.Scalar (Natural (fromIntegral (length elements))))
+    apply
+        (Value.Application (Value.Builtin ListMap) f)
+        (Value.List elements) = do
+            newElements <- traverse (apply f) elements
+            return (Value.List newElements)
+    apply
+        (Value.Application
+            (Value.Application
+                (Value.Builtin NaturalFold)
+                (Value.Scalar (Natural n))
+            )
+            succ
+        )
+        zero =
+            go n zero
+      where
+        go 0 !result = do
+            return result
+        go m !result = do
+            x <- apply succ result
+            go (m - 1) x
+    apply (Value.Builtin IntegerEven) (Value.Scalar x)
+        | Just n <- asInteger x = return (Value.Scalar (Bool (even n)))
+    apply (Value.Builtin IntegerOdd) (Value.Scalar x)
+        | Just n <- asInteger x = return (Value.Scalar (Bool (odd n)))
+    apply
+        (Value.Application (Value.Builtin RealEqual) (Value.Scalar l))
+        (Value.Scalar r)
+        | Just m <- asReal l
+        , Just n <- asReal r =
+            return (Value.Scalar (Bool (m == n)))
+    apply
+        (Value.Application (Value.Builtin RealLessThan) (Value.Scalar l))
+        (Value.Scalar r)
+        | Just m <- asReal l
+        , Just n <- asReal r =
+            return (Value.Scalar (Bool (m < n)))
+    apply (Value.Builtin IntegerAbs) (Value.Scalar x)
+        | Just n <- asInteger x =
+            return (Value.Scalar (Natural (fromInteger (abs n))))
+    apply (Value.Builtin RealNegate) (Value.Scalar x)
+        | Just n <- asReal x =
+            return (Value.Scalar (Real (negate n)))
+    apply (Value.Builtin IntegerNegate) (Value.Scalar x)
+        | Just n <- asInteger x =
+            return (Value.Scalar (Integer (negate n)))
+    apply (Value.Builtin RealShow) (Value.Scalar (Natural n)) =
+        return (Value.Scalar (Text (Text.pack (show n))))
+    apply (Value.Builtin RealShow) (Value.Scalar (Integer n)) =
+        return (Value.Scalar (Text (Text.pack (show n))))
+    apply (Value.Builtin RealShow) (Value.Scalar (Real n)) =
+        return (Value.Scalar (Text (Text.pack (show n))))
+    apply
+        (Value.Application (Value.Builtin TextEqual) (Value.Scalar (Text l)))
+        (Value.Scalar (Text r)) =
+            return (Value.Scalar (Bool (l == r)))
+    apply
+        (Value.Application
+            (Value.Builtin JSONFold)
+            (Value.Record
+                (List.sortBy (Ord.comparing fst) . HashMap.toList ->
+                    [ ("array"  , arrayHandler )
+                    , ("bool"   , boolHandler  )
+                    , ("integer", integerHandler)
+                    , ("natural", naturalHandler)
+                    , ("null"   , nullHandler   )
+                    , ("object" , objectHandler )
+                    , ("real"   , realHandler  )
+                    , ("string" , stringHandler )
+                    ]
+                )
+            )
+        )
+        v0 = inner v0
+      where
+        inner (Value.Scalar (Bool b)) =
+            apply boolHandler (Value.Scalar (Bool b))
+        inner (Value.Scalar (Natural n)) =
+            apply naturalHandler (Value.Scalar (Natural n))
+        inner (Value.Scalar (Integer n)) =
+            apply integerHandler (Value.Scalar (Integer n))
+        inner (Value.Scalar (Real n)) =
+            apply realHandler (Value.Scalar (Real n))
+        inner (Value.Scalar (Text t)) =
+            apply stringHandler (Value.Scalar (Text t))
+        inner (Value.Scalar Null) =
+            return nullHandler
+        inner (Value.List elements) = do
+            newElements <- traverse inner elements
+            apply arrayHandler (Value.List newElements)
+        inner (Value.Record keyValues) = do
+            elements <- traverse adapt (HashMap.toList keyValues)
+            apply objectHandler (Value.List (Seq.fromList elements))
+          where
+            adapt (key, value) = do
+                newValue <- inner value
+                return (Value.Record [("key", Value.Scalar (Text key)), ("value", newValue)])
+        inner v =
+            return v
+    apply function argument =
+        return (Value.Application function argument)
 
 countNames :: Text -> [Text] -> Int
 countNames name = length . filter (== name)
@@ -441,70 +667,134 @@ fresh name names = Value.Variable name (countNames name names)
 
 -- | Convert a `Value` back into the surface `Syntax`
 quote
-    :: [Text]
+    :: Maybe Methods
+    -- ^ OpenAI methods
+    -> [Text]
     -- ^ Variable names currently in scope (starting at @[]@ for a top-level
     --   expression)
     -> Value
-    -> Syntax () Void
-quote names value =
-    case value of
-        Value.Variable name index ->
-            Syntax.Variable{ index = countNames name names - index - 1, .. }
-
-        Value.Lambda closure@(Closure name _ _) ->
-            Syntax.Lambda{ nameBinding = Syntax.NameBinding{ nameLocation = (), annotation = Nothing, .. }, .. }
-          where
-            variable = fresh name names
-
-            body = quote (name : names) (instantiate closure variable)
-
-        Value.Application function argument ->
-            Syntax.Application
-                { function = quote names function
-                , argument = quote names argument
-                , ..
-                }
-
-        Value.List elements ->
-            Syntax.List{ elements = fmap (quote names) elements, .. }
-
-        Value.Record fieldValues ->
-            Syntax.Record
-                { fieldValues = map adapt (HashMap.toList fieldValues)
-                , ..
-                }
-          where
-            adapt (field, value_) = (field, quote names value_)
-
-        Value.Field record field ->
-            Syntax.Field{ record = quote names record, fieldLocation = (), .. }
-
-        Value.Alternative name ->
-            Syntax.Alternative{..}
-
-        Value.Merge handlers ->
-            Syntax.Merge{ handlers = quote names handlers, .. }
-
-        Value.If predicate ifTrue ifFalse ->
-            Syntax.If
-                { predicate = quote names predicate
-                , ifTrue = quote names ifTrue
-                , ifFalse = quote names ifFalse
-                , ..
-                }
-
-        Value.Scalar scalar ->
-            Syntax.Scalar{..}
-
-        Value.Operator left operator right ->
-            Syntax.Operator
-                { left = quote names left
-                , operatorLocation = ()
-                , right = quote names right
-                , ..
-                }
-
-        Value.Builtin builtin ->
-            Syntax.Builtin{..}
+    -> IO (Syntax () Void)
+quote maybeMethods = loop
   where
+    loop :: [Text] -> Value -> IO (Syntax () Void)
+    loop names value =
+        case value of
+            Value.Variable name index ->
+                return Syntax.Variable{ index = countNames name names - index - 1, .. }
+
+            Value.Lambda closure@(Closure name _ _) -> do
+                instantiated <- instantiate closure variable
+                body <- loop (name : names) instantiated
+                return Syntax.Lambda{ nameBinding = Syntax.NameBinding{ nameLocation = (), annotation = Nothing, .. }, .. }
+              where
+                variable = fresh name names
+
+            Value.Application function argument -> do
+                newFunction <- loop names function
+                newArgument <- loop names argument
+                return Syntax.Application
+                    { function = newFunction
+                    , argument = newArgument
+                    , ..
+                    }
+
+            Value.List elements -> do
+                newElements <- traverse (loop names) elements
+                return Syntax.List{ elements = newElements, .. }
+
+            Value.Record fieldValues -> do
+                newFieldValues <- traverse adapt (HashMap.toList fieldValues)
+                return Syntax.Record
+                    { fieldValues = newFieldValues
+                    , ..
+                    }
+              where
+                adapt (field, value_) = do
+                    newValue <- loop names value_
+                    return (field, newValue)
+
+            Value.Field record field -> do
+                newRecord <- loop names record
+                return Syntax.Field{ record = newRecord, fieldLocation = (), .. }
+
+            Value.Alternative name ->
+                return Syntax.Alternative{..}
+
+            Value.Merge handlers -> do
+                newHandlers <- loop names handlers
+                return Syntax.Merge{ handlers = newHandlers, .. }
+
+            Value.If predicate ifTrue ifFalse -> do
+                newPredicate <- loop names predicate
+                newIfTrue <- loop names ifTrue
+                newIfFalse <- loop names ifFalse
+                return Syntax.If
+                    { predicate = newPredicate
+                    , ifTrue = newIfTrue
+                    , ifFalse = newIfFalse
+                    , ..
+                    }
+
+            Value.Prompt arguments -> do
+                newArguments <- loop names arguments
+                return Syntax.Prompt{ arguments = newArguments, schema = Nothing, .. }
+
+            Value.Scalar scalar ->
+                return Syntax.Scalar{..}
+
+            Value.Operator left operator right -> do
+                newLeft <- loop names left
+                newRight <- loop names right
+                return Syntax.Operator
+                    { left = newLeft
+                    , operatorLocation = ()
+                    , right = newRight
+                    , ..
+                    }
+
+            Value.Builtin builtin ->
+                return Syntax.Builtin{..}
+
     location = ()
+
+    instantiate (Closure name env syntax) value =
+        evaluate maybeMethods ((name, value) : env) syntax
+
+newtype UnsupportedModelOutput = UnsupportedModelOutput{ type_ :: Type () }
+    deriving (Show)
+
+instance Exception UnsupportedModelOutput where
+    displayException UnsupportedModelOutput{..} =
+        "Unsupported model output type\n\
+        \\n\
+        \The expected type for the model output is:\n\
+        \\n\
+        \" <> Text.unpack (Pretty.toSmart type_) <> "\n\
+        \\n\
+        \… but that type cannot be encoded as JSON"
+
+data JSONDecodingFailed = JSONDecodingFailed
+    { message :: String
+    , text :: Text
+    } deriving (Show)
+
+instance Exception JSONDecodingFailed where
+    displayException JSONDecodingFailed{..} =
+        "Failed to decode model output as JSON\n\
+        \\n\
+        \The model produced the following output:\n\
+        \\n\
+        \" <> Text.unpack text <> "\n\
+        \\n\
+        \… which failed to decode as JSON.\n\
+        \\n\
+        \Decoding error message:\n\
+        \\n\
+        \" <> message
+
+data MissingSchema = MissingSchema
+    deriving (Show)
+
+instance Exception MissingSchema where
+    displayException MissingSchema =
+        "Internal error - Elaboration failed to infer schema for prompt"

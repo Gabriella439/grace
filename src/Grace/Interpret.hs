@@ -1,3 +1,4 @@
+{-# LANGUAGE BlockArguments     #-}
 {-# LANGUAGE DataKinds          #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts   #-}
@@ -26,6 +27,7 @@ import Grace.Location (Location(..))
 import Grace.Syntax (Syntax(..))
 import Grace.Type (Type)
 import Grace.Value (Value)
+import OpenAI.V1 (Methods)
 
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
@@ -46,23 +48,25 @@ import qualified Text.URI as URI
 -}
 interpret
     :: (MonadError InterpretError m, MonadIO m)
-    => Input -> m (Type Location, Value)
-interpret input = do
+    => Maybe Methods -> Input -> m (Type Location, Value)
+interpret maybeMethods input = do
     manager <- liftIO HTTP.newManager
 
-    interpretWith [] Nothing manager input
+    interpretWith maybeMethods [] Nothing manager input
 
 -- | Like `interpret`, but accepts a custom list of bindings
 interpretWith
     :: (MonadError InterpretError m, MonadIO m)
-    => [(Text, Type Location, Value)]
+    => Maybe Methods
+    -- ^ OpenAI methods
+    -> [(Text, Type Location, Value)]
     -- ^ @(name, type, value)@ for each custom binding
     -> Maybe (Type Location)
     -- ^ Optional expected type for the input
     -> Manager
     -> Input
     -> m (Type Location, Value)
-interpretWith bindings maybeAnnotation manager input = do
+interpretWith maybeMethods bindings maybeAnnotation manager input = do
     eitherPartiallyResolved <- do
         liftIO
             (Exception.catches
@@ -79,7 +83,7 @@ interpretWith bindings maybeAnnotation manager input = do
     let process (maybeAnnotation', child) = do
             referentiallySane input (input <> child)
 
-            interpretWith bindings maybeAnnotation' manager (input <> child)
+            interpretWith maybeMethods bindings maybeAnnotation' manager (input <> child)
 
     resolvedExpression <- traverse process (annotate partiallyResolved)
 
@@ -102,13 +106,15 @@ interpretWith bindings maybeAnnotation manager input = do
         Left message -> do
             Except.throwError (TypeInferenceError message)
 
-        Right (inferred, elaboratedExpression) -> do
+        Right (inferred, elaboratedExpression) -> liftIO do
             let evaluationContext = do
                     (variable, _, value) <- bindings
 
                     return (variable, value)
 
-            return (inferred, Normalize.evaluate evaluationContext elaboratedExpression)
+            value <- Normalize.evaluate maybeMethods evaluationContext elaboratedExpression
+
+            return (inferred, value)
 
 remote :: Input -> Bool
 remote (URI uri _) = any (`elem` schemes) (URI.uriScheme uri)

@@ -204,6 +204,7 @@ render t = case t of
     Lexer.Optional         -> "List"
     Lexer.Or               -> "||"
     Lexer.Plus             -> "+"
+    Lexer.Prompt           -> "prompt"
     Lexer.Text             -> "Text"
     Lexer.TextEqual        -> "Text/equal"
     Lexer.TextLiteral _    -> "a text literal"
@@ -297,7 +298,14 @@ grammar = mdo
             Syntax.Application{ location = Syntax.location function, .. }
 
     applicationExpression <- rule
-        (   do  es <- some1 fieldExpression
+        (   do  location <- locatedToken Lexer.Prompt
+
+                ~(arguments :| es) <- some1 fieldExpression
+
+                return do
+                    let nil = Syntax.Prompt{ schema = Nothing, ..  }
+                    foldl application nil es
+        <|> do  es <- some1 fieldExpression
                 return (foldl application (NonEmpty.head es) (NonEmpty.tail es))
         <|> do  location <- locatedToken Lexer.Merge
                 ~(handlers :| es) <- some1 fieldExpression

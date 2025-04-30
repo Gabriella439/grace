@@ -11,6 +11,7 @@ library
 
   build-depends:       base
                      , aeson
+                     , bytestring
                      , Earley
                      , containers
                      , filepath
@@ -20,6 +21,7 @@ library
                      , megaparsec
                      , modern-uri
                      , mtl
+                     , openai
                      , parser-combinators
                      , prettyprinter
                      , prettyprinter-ansi-terminal

@@ -94,6 +94,7 @@ parseToken =
             , Then         <$ symbol "then"
             , Else         <$ symbol "else"
             , Merge        <$ symbol "merge"
+            , Prompt       <$ symbol "prompt"
             , Type         <$ symbol "Type"
             , Fields       <$ symbol "Fields"
             , Alternatives <$ symbol "Alternatives"
@@ -345,6 +346,7 @@ reserved =
         , "let"
         , "merge"
         , "null"
+        , "prompt"
         , "then"
         , "true"
         ]
@@ -474,6 +476,7 @@ data Token
     | Optional
     | Or
     | Plus
+    | Prompt
     | Text
     | TextEqual
     | TextLiteral Text
