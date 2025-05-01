@@ -17,7 +17,7 @@ import Control.Monad.State (MonadState(..))
 import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
 import Grace.Interpret (Input(..))
-import Grace.Lexer (reserved)
+import Grace.Parser (reserved)
 import System.Console.Haskeline (Interrupt(..))
 import System.Console.Repline (CompleterStyle(..), MultiLine(..), ReplOpts(..))
 

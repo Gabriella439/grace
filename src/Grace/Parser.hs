@@ -1,20 +1,27 @@
-{-# LANGUAGE ApplicativeDo     #-}
-{-# LANGUAGE BlockArguments    #-}
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE NamedFieldPuns    #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
-{-# LANGUAGE RecursiveDo       #-}
+{-# LANGUAGE ApplicativeDo      #-}
+{-# LANGUAGE BlockArguments     #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleContexts   #-}
+{-# LANGUAGE NamedFieldPuns     #-}
+{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE RecordWildCards    #-}
+{-# LANGUAGE RecursiveDo        #-}
 
-{-| This module contains the logic for parsing Grace files using @Earley@.
+{-| This module contains the logic for lexing and parsing Grace files
 
-    The main reason for not using @attoparsec@ or @megaparsec@ is because
-    LR parsers are easier to maintain due to not needing to left-factor the
-    grammar.
+    The main reason for a separate lexing step using is because we would like
+    to use @Earley@ for LR parsing, but @Earley@ is not fast enough to handle
+    character-by-character parsing.  Instead, we delegate lexing to a
+    lower-level parsing library that supports efficient bulk parsing
+    (@megaparsec@ in this case).
 
-    The main reason for not using @happy@ is because it uses a separate code
-    generation step, which leads to worse type errors and poor support for
-    interactive type-checking.
+    The main reason for not using @alex@ (for lexing) or @happy@ (for parsing)
+    is because they use a separate code generation step, which leads to worse
+    type errors and poor support for interactive type-checking.
+
+    The main reason for not using @attoparsec@ or @megaparsec@ for everything
+    is because LR parsers are easier to maintain due to not needing to
+    left-factor the grammar.
 -}
 
 module Grace.Parser
@@ -22,67 +29,533 @@ module Grace.Parser
       parse
       -- * Errors related to parsing
     , ParseError(..)
+      -- * Utilities
+    , reserved
+    , validRecordLabel
+    , validAlternativeLabel
     ) where
 
-import Control.Applicative (many, optional, some, (<|>))
+import Control.Applicative (empty, many, optional, some, (<|>))
 import Control.Applicative.Combinators (endBy, sepBy)
 import Control.Applicative.Combinators.NonEmpty (sepBy1)
+import Control.Exception.Safe (Exception(..))
+import Control.Monad.Combinators (manyTill)
 import Data.Functor (void, ($>))
+import Data.Foldable (toList)
+import Data.HashSet (HashSet)
 import Data.List.NonEmpty (NonEmpty(..), some1)
+import Data.Maybe (fromJust)
 import Data.Scientific (Scientific)
 import Data.Text (Text)
+import Data.Void (Void)
 import Grace.Input (Input(..), Mode(..))
-import Grace.Lexer (LocatedToken(LocatedToken), ParseError(..), Token)
 import Grace.Location (Location(..), Offset(..))
 import Grace.Syntax (Binding(..), NameBinding(..), Syntax(..))
 import Grace.Type (Type(..))
+import Prelude hiding (lex)
 import Text.Earley (Grammar, Prod, Report(..), rule, (<?>))
+import Text.Megaparsec (ParseErrorBundle(..), try)
 
+import qualified Control.Monad as Monad
+import qualified Control.Monad.Combinators as Combinators
+import qualified Data.Char as Char
+import qualified Data.HashSet as HashSet
+import qualified Data.List as List
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
+import qualified Data.Text.Read as Read
 import qualified Grace.Domain as Domain
-import qualified Grace.Lexer as Lexer
+import qualified Grace.Location as Location
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Syntax as Syntax
 import qualified Grace.Type as Type
 import qualified Text.Earley as Earley
+import qualified Text.Megaparsec as Megaparsec
+import qualified Text.Megaparsec.Char as Megaparsec.Char
+import qualified Text.Megaparsec.Char.Lexer as Lexer
+import qualified Text.Megaparsec.Error as Error
 import qualified Text.URI as URI
+
+-- | Short-hand type synonym used by lexing utilities
+type Lexer = Megaparsec.Parsec Void Text
+
+space :: Lexer ()
+space = Lexer.space Megaparsec.Char.space1 (Lexer.skipLineComment "#") empty
+
+symbol :: Text -> Lexer Text
+symbol = Lexer.symbol space
+
+lexeme :: Lexer a -> Lexer a
+lexeme = Lexer.lexeme space
+
+lexToken :: Lexer Token
+lexToken =
+    Combinators.choice
+        [ -- `file` has to come before the lexer for `.` so that a file
+          -- prefix of `.` or `..` is not lexed as a field access
+          lexFile
+        , lexUri
+        , lexLabel
+
+        , Combinators.choice
+            [ Grace.Parser.Or     <$ symbol "||"
+            , Grace.Parser.And    <$ symbol "&&"
+            , Grace.Parser.Plus   <$ symbol "+"
+            , Grace.Parser.Times  <$ symbol "*"
+            ] Megaparsec.<?> "operator"
+
+        , Combinators.choice
+            [ Grace.Parser.Forall       <$ symbol "forall"
+            , Grace.Parser.Let          <$ symbol "let"
+            , Grace.Parser.In           <$ symbol "in"
+            , Grace.Parser.If           <$ symbol "if"
+            , Grace.Parser.Then         <$ symbol "then"
+            , Grace.Parser.Else         <$ symbol "else"
+            , Grace.Parser.Merge        <$ symbol "merge"
+            , Grace.Parser.Type         <$ symbol "Type"
+            , Grace.Parser.Fields       <$ symbol "Fields"
+            , Grace.Parser.Alternatives <$ symbol "Alternatives"
+            ] Megaparsec.<?> "keyword"
+
+        , Combinators.choice
+            [ Grace.Parser.RealEqual      <$ symbol "Real/equal"
+            , Grace.Parser.RealLessThan   <$ symbol "Real/lessThan"
+            , Grace.Parser.RealNegate     <$ symbol "Real/negate"
+            , Grace.Parser.RealShow       <$ symbol "Real/show"
+            , Grace.Parser.ListDrop       <$ symbol "List/drop"
+            , Grace.Parser.ListEqual      <$ symbol "List/equal"
+            , Grace.Parser.ListFold       <$ symbol "List/fold"
+            , Grace.Parser.ListHead       <$ symbol "List/head"
+            , Grace.Parser.ListIndexed    <$ symbol "List/indexed"
+            , Grace.Parser.ListLast       <$ symbol "List/last"
+            , Grace.Parser.ListLength     <$ symbol "List/length"
+            , Grace.Parser.ListMap        <$ symbol "List/map"
+            , Grace.Parser.ListReverse    <$ symbol "List/reverse"
+            , Grace.Parser.ListTake       <$ symbol "List/take"
+            , Grace.Parser.IntegerAbs     <$ symbol "Integer/abs"
+            , Grace.Parser.IntegerEven    <$ symbol "Integer/even"
+            , Grace.Parser.IntegerNegate  <$ symbol "Integer/negate"
+            , Grace.Parser.IntegerOdd     <$ symbol "Integer/odd"
+            , Grace.Parser.JSONFold       <$ symbol "JSON/fold"
+            , Grace.Parser.NaturalFold    <$ symbol "Natural/fold"
+            , Grace.Parser.TextEqual      <$ symbol "Text/equal"
+            , Grace.Parser.False_         <$ symbol "false"
+            , Grace.Parser.True_          <$ symbol "true"
+            , Grace.Parser.Null           <$ symbol "null"
+            ] Megaparsec.<?> "built-in value"
+
+        , Combinators.choice
+            [ Grace.Parser.List     <$ symbol "List"
+            , Grace.Parser.Optional <$ symbol "Optional"
+            , Grace.Parser.Real     <$ symbol "Real"
+            , Grace.Parser.Integer  <$ symbol "Integer"
+            , Grace.Parser.JSON     <$ symbol "JSON"
+            , Grace.Parser.Natural  <$ symbol "Natural"
+            , Grace.Parser.Bool     <$ symbol "Bool"
+            , Grace.Parser.Text     <$ symbol "Text"
+            ] Megaparsec.<?> "built-in type"
+
+        , Grace.Parser.OpenAngle        <$ symbol "<"
+        , Grace.Parser.CloseAngle       <$ symbol ">"
+        , Grace.Parser.OpenBrace        <$ symbol "{"
+        , Grace.Parser.CloseBrace       <$ symbol "}"
+        , Grace.Parser.OpenBracket      <$ symbol "["
+        , Grace.Parser.CloseBracket     <$ symbol "]"
+        , Grace.Parser.OpenParenthesis  <$ symbol "("
+        , Grace.Parser.CloseParenthesis <$ symbol ")"
+
+        , Grace.Parser.Arrow            <$ symbol "->"
+        , Grace.Parser.At               <$ symbol "@"
+        , Grace.Parser.Bar              <$ symbol "|"
+        , Grace.Parser.Colon            <$ symbol ":"
+        , Grace.Parser.Comma            <$ symbol ","
+        , Grace.Parser.Dash             <$ symbol "-"
+        , Grace.Parser.Dot              <$ symbol "."
+        , Grace.Parser.Equals           <$ symbol "="
+        , Grace.Parser.Lambda           <$ symbol "\\"
+
+        , lexNumber
+        , lexText
+        , lexAlternative
+        , lexQuotedAlternative
+        ]
+
+lexLocatedToken :: Lexer LocatedToken
+lexLocatedToken = do
+    start <- fmap Offset Megaparsec.getOffset
+    token <- lexToken
+    return LocatedToken{..}
+
+lexLocatedTokens :: Lexer [LocatedToken]
+lexLocatedTokens = do
+    space
+    manyTill lexLocatedToken Megaparsec.eof
+
+-- | Lex a complete expression
+lex :: String
+    -- ^ Name of the input (used for error messages)
+    -> Text
+    -- ^ Source code
+    -> Either ParseError [LocatedToken]
+lex name code =
+    case Megaparsec.parse lexLocatedTokens name code of
+        Left ParseErrorBundle{..} -> do
+            let bundleError :| _ = bundleErrors
+
+            let offset = Offset (Error.errorOffset bundleError)
+
+            Left (LexingFailed (Location{..}))
+        Right tokens -> do
+            return tokens
+
+lexNumber :: Lexer Token
+lexNumber =
+  try lexInteger <|> lexScientific
+  where
+    lexInteger = Int
+      <$> lexeme Lexer.decimal
+      <* Megaparsec.notFollowedBy (Megaparsec.Char.char '.')
+
+    lexScientific = do
+        scientific <- lexeme Lexer.scientific
+        return (RealLiteral scientific)
+
+lexFile :: Lexer Token
+lexFile = lexeme do
+    prefix <- ("../" <|> ("" <$ "./") <|> "/") Megaparsec.<?> "path character"
+
+    let isPath c =
+                 '\x21' == c
+            ||  ('\x24' <= c && c <= '\x27')
+            ||  ('\x2A' <= c && c <= '\x2B')
+            ||  ('\x2D' <= c && c <= '\x2E')
+            ||  ('\x30' <= c && c <= '\x3B')
+            ||   '\x3D' == c
+            ||  ('\x40' <= c && c <= '\x5A')
+            ||  ('\x5E' <= c && c <= '\x7A')
+            ||  ('\x7C' == c)
+            ||   '\x7E' == c
+
+    let pathComponent = Megaparsec.takeWhile1P (Just "path character") isPath
+
+    suffix <- pathComponent `sepBy1` "/"
+
+    return (File (concatMap Text.unpack (prefix : List.intersperse "/" (toList suffix))))
+
+lexUri :: Lexer Token
+lexUri = (lexeme . try) do
+    u <- URI.parser
+
+    let schemes =
+            map (fromJust . URI.mkScheme) [ "https", "http", "env", "file" ]
+
+    if any (`elem` schemes) (URI.uriScheme u)
+        then return (Grace.Parser.URI u)
+        else fail "Unsupported Grace URI"
+
+lexText :: Lexer Token
+lexText = lexeme do
+    "\""
+
+    let isText c =
+                ('\x20' <= c && c <=     '\x21')
+            ||  ('\x23' <= c && c <=     '\x5b')
+            ||  ('\x5d' <= c && c <= '\x10FFFF')
+
+    let unescaped = Megaparsec.takeWhile1P (Just "text character") isText
+
+    let unicodeEscape = do
+            "\\u"
+
+            codepoint <- Combinators.count 4 Megaparsec.Char.hexDigitChar
+
+            case Read.hexadecimal (Text.pack codepoint) of
+                Right (n, "") -> do
+                    return (Text.singleton (Char.chr n))
+                _             -> do
+                    fail "Internal error - invalid unicode escape sequence"
+
+    let escaped =
+            Combinators.choice
+                [ "\"" <$ "\\\""
+                , "\\" <$ "\\\\"
+                , "/"  <$ "\\/"
+                , "\b" <$ "\\b"
+                , "\f" <$ "\\f"
+                , "\n" <$ "\\n"
+                , "\r" <$ "\\r"
+                , "\t" <$ "\\t"
+                , unicodeEscape
+                ] Megaparsec.<?> "escape sequence"
+
+    texts <- many (unescaped <|> escaped)
+
+    "\""
+
+    return (TextLiteral (Text.concat texts))
+
+isLabel0 :: Char -> Bool
+isLabel0 c = Char.isLower c || c == '_'
+
+isLabel :: Char -> Bool
+isLabel c = Char.isAlphaNum c || c == '_' || c == '-' || c == '/'
+
+-- | Returns `True` if the given record label is valid when unquoted
+validRecordLabel :: Text -> Bool
+validRecordLabel text_ =
+    case Text.uncons text_ of
+        Nothing ->
+            False
+        Just (h, t) ->
+                isLabel0 h
+            &&  Text.all isLabel t
+            &&  not (HashSet.member text_ reserved)
+
+-- | Returns `True` if the given alternative label is a valid when unquoted
+validAlternativeLabel :: Text -> Bool
+validAlternativeLabel text_ =
+    case Text.uncons text_ of
+        Nothing ->
+            False
+        Just (h, t) ->
+                Char.isUpper h
+            &&  Text.all isLabel t
+            &&  not (HashSet.member text_ reserved)
+
+-- | Reserved tokens, which can't be used for labels unless they are quoted
+reserved :: HashSet Text
+reserved =
+    HashSet.fromList
+        [ "Alternatives"
+        , "Bool"
+        , "Real"
+        , "Real/equal"
+        , "Real/lessThan"
+        , "Real/negate"
+        , "Real/show"
+        , "Fields"
+        , "Integer"
+        , "Integer/abs"
+        , "Integer/even"
+        , "Integer/negate"
+        , "Integer/odd"
+        , "JSON/fold"
+        , "List"
+        , "List/drop"
+        , "List/equal"
+        , "List/fold"
+        , "List/indexed"
+        , "List/last"
+        , "List/length"
+        , "List/map"
+        , "List/reverse"
+        , "List/take"
+        , "Natural"
+        , "Natural/fold"
+        , "Optional"
+        , "Text"
+        , "Text/equal"
+        , "Type"
+        , "else"
+        , "false"
+        , "forall"
+        , "if"
+        , "in"
+        , "let"
+        , "merge"
+        , "null"
+        , "then"
+        , "true"
+        ]
+
+lexLabel :: Lexer Token
+lexLabel = (lexeme . try) do
+    c0 <- Megaparsec.satisfy isLabel0 Megaparsec.<?> "label character"
+
+    cs <- Megaparsec.takeWhileP (Just "label character") isLabel
+
+    let result = Text.cons c0 cs
+
+    Monad.guard (not (HashSet.member result reserved))
+
+    return (Label result)
+
+lexAlternative :: Lexer Token
+lexAlternative = lexeme do
+    c0 <- Megaparsec.satisfy Char.isUpper Megaparsec.<?> "alternative character"
+
+    cs <- Megaparsec.takeWhileP (Just "alternative character") isLabel
+
+    return (Grace.Parser.Alternative (Text.cons c0 cs))
+
+lexQuotedAlternative :: Lexer Token
+lexQuotedAlternative = lexeme do
+    "'"
+
+    let isText c =
+                ('\x20' <= c && c <=     '\x26')
+            ||  ('\x28' <= c && c <=     '\x5b')
+            ||  ('\x5d' <= c && c <= '\x10FFFF')
+
+    let unescaped = Megaparsec.takeWhile1P (Just "alternative character") isText
+
+    let unicodeEscape = do
+            "\\u"
+
+            codepoint <- Combinators.count 4 Megaparsec.Char.hexDigitChar
+
+            case Read.hexadecimal (Text.pack codepoint) of
+                Right (n, "") -> do
+                    return (Text.singleton (Char.chr n))
+                _             -> do
+                    fail "Internal error - invalid unicode escape sequence"
+
+    let escaped =
+            Combinators.choice
+                [ "'"  <$ "\\\'"
+                , "\\" <$ "\\\\"
+                , "/"  <$ "\\/"
+                , "\b" <$ "\\b"
+                , "\f" <$ "\\f"
+                , "\n" <$ "\\n"
+                , "\r" <$ "\\r"
+                , "\t" <$ "\\t"
+                , unicodeEscape
+                ] Megaparsec.<?> "escape sequence"
+
+    texts <- many (unescaped <|> escaped)
+
+    "'"
+
+    return (Grace.Parser.Alternative (Text.concat texts))
+
+-- | Tokens produced by lexing
+data Token
+    = Alternative Text
+    | Alternatives
+    | And
+    | Arrow
+    | At
+    | Bar
+    | Bool
+    | CloseAngle
+    | CloseBrace
+    | CloseBracket
+    | CloseParenthesis
+    | Colon
+    | Comma
+    | Dash
+    | Dot
+    | Real
+    | RealEqual
+    | RealLessThan
+    | RealLiteral Scientific
+    | RealNegate
+    | RealShow
+    | Else
+    | Equals
+    | False_
+    | Fields
+    | File FilePath
+    | Forall
+    | If
+    | In
+    | Int Int
+    | Integer
+    | IntegerAbs
+    | IntegerEven
+    | IntegerNegate
+    | IntegerOdd
+    | JSON
+    | JSONFold
+    | Label Text
+    | Lambda
+    | Let
+    | List
+    | ListDrop
+    | ListEqual
+    | ListFold
+    | ListHead
+    | ListIndexed
+    | ListLast
+    | ListLength
+    | ListMap
+    | ListReverse
+    | ListTake
+    | Merge
+    | Natural
+    | NaturalFold
+    | Null
+    | OpenAngle
+    | OpenBrace
+    | OpenBracket
+    | OpenParenthesis
+    | Optional
+    | Or
+    | Plus
+    | Text
+    | TextEqual
+    | TextLiteral Text
+    | Then
+    | Times
+    | True_
+    | Type
+    | URI URI.URI
+    deriving stock (Eq, Show)
+
+{-| A token with offset information attached, used for reporting line and
+    column numbers in error messages
+-}
+data LocatedToken = LocatedToken { token :: Token, start :: Offset }
+    deriving (Show)
+
+-- | Errors related to lexing and parsing
+data ParseError
+    = LexingFailed Location
+    | ParsingFailed Location
+    deriving (Eq, Show)
+
+instance Exception ParseError where
+    displayException (LexingFailed location) = Text.unpack
+        (Location.renderError "Invalid input - Lexing failed" location)
+    displayException (ParsingFailed location) = Text.unpack
+        (Location.renderError "Invalid input - Parsing failed" location)
 
 type Parser r = Prod r Text LocatedToken
 
 matchLabel :: Token -> Maybe Text
-matchLabel (Lexer.Label l) = Just l
-matchLabel  _              = Nothing
+matchLabel (Grace.Parser.Label l) = Just l
+matchLabel  _                     = Nothing
 
 matchAlternative :: Token -> Maybe Text
-matchAlternative (Lexer.Alternative a) = Just a
-matchAlternative  _                    = Nothing
+matchAlternative (Grace.Parser.Alternative a) = Just a
+matchAlternative  _                           = Nothing
 
 matchReal :: Token -> Maybe Scientific
-matchReal (Lexer.RealLiteral n) = Just n
-matchReal  _                    = Nothing
+matchReal (Grace.Parser.RealLiteral n) = Just n
+matchReal  _                           = Nothing
 
 matchInt :: Token -> Maybe Int
-matchInt (Lexer.Int n) = Just n
-matchInt  _            = Nothing
+matchInt (Grace.Parser.Int n) = Just n
+matchInt  _                   = Nothing
 
 matchText :: Token -> Maybe Text
-matchText (Lexer.TextLiteral t) = Just t
-matchText  _                    = Nothing
+matchText (Grace.Parser.TextLiteral t) = Just t
+matchText  _                           = Nothing
 
 matchFile :: Token -> Maybe FilePath
-matchFile (Lexer.File f) = Just f
-matchFile  _             = Nothing
+matchFile (Grace.Parser.File f) = Just f
+matchFile  _                    = Nothing
 
 matchURI :: Token -> Maybe URI.URI
-matchURI (Lexer.URI t) = Just t
-matchURI  _            = Nothing
+matchURI (Grace.Parser.URI t) = Just t
+matchURI  _                   = Nothing
 
 terminal :: (Token -> Maybe a) -> Parser r a
 terminal match = Earley.terminal match'
   where
-    match' locatedToken_ = match (Lexer.token locatedToken_)
+    match' locatedToken_ = match (Grace.Parser.token locatedToken_)
 
 label :: Parser r Text
 label = terminal matchLabel
@@ -96,16 +569,16 @@ int = terminal matchInt
 text :: Parser r Text
 text = terminal matchText
 
-token :: Token -> Parser r ()
-token t = void (Earley.satisfy predicate <?> render t)
+parseToken :: Token -> Parser r ()
+parseToken t = void (Earley.satisfy predicate <?> render t)
   where
-    predicate locatedToken_ = Lexer.token locatedToken_ == t
+    predicate locatedToken_ = token locatedToken_ == t
 
 locatedTerminal :: (Token -> Maybe a) -> Parser r (Offset, a)
 locatedTerminal match = Earley.terminal match'
   where
     match' locatedToken_@LocatedToken{ start }  = do
-      a <- match (Lexer.token locatedToken_)
+      a <- match (token locatedToken_)
       return (start, a)
 
 locatedLabel :: Parser r (Offset, Text)
@@ -133,7 +606,7 @@ locatedToken :: Token -> Parser r Offset
 locatedToken expectedToken =
     Earley.terminal capture <?> render expectedToken
   where
-    capture LocatedToken{ Lexer.token = actualToken, .. }
+    capture LocatedToken{ token = actualToken, .. }
         | expectedToken == actualToken = Just start
         | otherwise                    = Nothing
 
@@ -142,86 +615,86 @@ locatedToken expectedToken =
 --   case someone wants to modify the code to display them.
 render :: Token -> Text
 render t = case t of
-    Lexer.Alternative _    -> "an alternative"
-    Lexer.Alternatives     -> "Alternatives"
-    Lexer.And              -> "&&"
-    Lexer.Arrow            -> "->"
-    Lexer.At               -> "@"
-    Lexer.Bar              -> "|"
-    Lexer.Bool             -> "Bool"
-    Lexer.CloseAngle       -> ">"
-    Lexer.CloseBrace       -> "}"
-    Lexer.CloseBracket     -> "]"
-    Lexer.CloseParenthesis -> ")"
-    Lexer.Colon            -> ":"
-    Lexer.Comma            -> ","
-    Lexer.Dash             -> "-"
-    Lexer.Dot              -> "."
-    Lexer.Real             -> "Real"
-    Lexer.RealLiteral _    -> "a real number literal"
-    Lexer.RealEqual        -> "Real/equal"
-    Lexer.RealLessThan     -> "Real/lessThan"
-    Lexer.RealNegate       -> "Real/negate"
-    Lexer.RealShow         -> "Real/show"
-    Lexer.Else             -> "else"
-    Lexer.Equals           -> "="
-    Lexer.False_           -> "False"
-    Lexer.Fields           -> "Fields"
-    Lexer.File _           -> "a file"
-    Lexer.Forall           -> "forall"
-    Lexer.If               -> "if"
-    Lexer.In               -> "in"
-    Lexer.Int _            -> "an integer literal"
-    Lexer.Integer          -> "Integer"
-    Lexer.IntegerAbs       -> "Integer/clamp"
-    Lexer.IntegerEven      -> "Integer/even"
-    Lexer.IntegerNegate    -> "Integer/negate"
-    Lexer.IntegerOdd       -> "Integer/odd"
-    Lexer.JSON             -> "JSON"
-    Lexer.JSONFold         -> "JSON/fold"
-    Lexer.Label _          -> "a label"
-    Lexer.Lambda           -> "\\"
-    Lexer.Let              -> "let"
-    Lexer.List             -> "list"
-    Lexer.ListDrop         -> "List/drop"
-    Lexer.ListEqual        -> "List/equal"
-    Lexer.ListFold         -> "List/fold"
-    Lexer.ListHead         -> "List/head"
-    Lexer.ListIndexed      -> "List/indexed"
-    Lexer.ListLast         -> "List/last"
-    Lexer.ListLength       -> "List/length"
-    Lexer.ListMap          -> "List/map"
-    Lexer.ListReverse      -> "List/reverse"
-    Lexer.ListTake         -> "List/take"
-    Lexer.Merge            -> "merge"
-    Lexer.Natural          -> "Natural"
-    Lexer.NaturalFold      -> "Natural/fold"
-    Lexer.Null             -> "null"
-    Lexer.OpenAngle        -> "<"
-    Lexer.OpenBrace        -> "{"
-    Lexer.OpenBracket      -> "<"
-    Lexer.OpenParenthesis  -> "("
-    Lexer.Optional         -> "List"
-    Lexer.Or               -> "||"
-    Lexer.Plus             -> "+"
-    Lexer.Text             -> "Text"
-    Lexer.TextEqual        -> "Text/equal"
-    Lexer.TextLiteral _    -> "a text literal"
-    Lexer.Then             -> "then"
-    Lexer.Type             -> "Type"
-    Lexer.Times            -> "*"
-    Lexer.True_            -> "True"
-    Lexer.URI _            -> "a URI"
+    Grace.Parser.Alternative _    -> "an alternative"
+    Grace.Parser.Alternatives     -> "Alternatives"
+    Grace.Parser.And              -> "&&"
+    Grace.Parser.Arrow            -> "->"
+    Grace.Parser.At               -> "@"
+    Grace.Parser.Bar              -> "|"
+    Grace.Parser.Bool             -> "Bool"
+    Grace.Parser.CloseAngle       -> ">"
+    Grace.Parser.CloseBrace       -> "}"
+    Grace.Parser.CloseBracket     -> "]"
+    Grace.Parser.CloseParenthesis -> ")"
+    Grace.Parser.Colon            -> ":"
+    Grace.Parser.Comma            -> ","
+    Grace.Parser.Dash             -> "-"
+    Grace.Parser.Dot              -> "."
+    Grace.Parser.Real             -> "Real"
+    Grace.Parser.RealLiteral _    -> "a real number literal"
+    Grace.Parser.RealEqual        -> "Real/equal"
+    Grace.Parser.RealLessThan     -> "Real/lessThan"
+    Grace.Parser.RealNegate       -> "Real/negate"
+    Grace.Parser.RealShow         -> "Real/show"
+    Grace.Parser.Else             -> "else"
+    Grace.Parser.Equals           -> "="
+    Grace.Parser.False_           -> "False"
+    Grace.Parser.Fields           -> "Fields"
+    Grace.Parser.File _           -> "a file"
+    Grace.Parser.Forall           -> "forall"
+    Grace.Parser.If               -> "if"
+    Grace.Parser.In               -> "in"
+    Grace.Parser.Int _            -> "an integer literal"
+    Grace.Parser.Integer          -> "Integer"
+    Grace.Parser.IntegerAbs       -> "Integer/clamp"
+    Grace.Parser.IntegerEven      -> "Integer/even"
+    Grace.Parser.IntegerNegate    -> "Integer/negate"
+    Grace.Parser.IntegerOdd       -> "Integer/odd"
+    Grace.Parser.JSON             -> "JSON"
+    Grace.Parser.JSONFold         -> "JSON/fold"
+    Grace.Parser.Label _          -> "a label"
+    Grace.Parser.Lambda           -> "\\"
+    Grace.Parser.Let              -> "let"
+    Grace.Parser.List             -> "list"
+    Grace.Parser.ListDrop         -> "List/drop"
+    Grace.Parser.ListEqual        -> "List/equal"
+    Grace.Parser.ListFold         -> "List/fold"
+    Grace.Parser.ListHead         -> "List/head"
+    Grace.Parser.ListIndexed      -> "List/indexed"
+    Grace.Parser.ListLast         -> "List/last"
+    Grace.Parser.ListLength       -> "List/length"
+    Grace.Parser.ListMap          -> "List/map"
+    Grace.Parser.ListReverse      -> "List/reverse"
+    Grace.Parser.ListTake         -> "List/take"
+    Grace.Parser.Merge            -> "merge"
+    Grace.Parser.Natural          -> "Natural"
+    Grace.Parser.NaturalFold      -> "Natural/fold"
+    Grace.Parser.Null             -> "null"
+    Grace.Parser.OpenAngle        -> "<"
+    Grace.Parser.OpenBrace        -> "{"
+    Grace.Parser.OpenBracket      -> "<"
+    Grace.Parser.OpenParenthesis  -> "("
+    Grace.Parser.Optional         -> "List"
+    Grace.Parser.Or               -> "||"
+    Grace.Parser.Plus             -> "+"
+    Grace.Parser.Text             -> "Text"
+    Grace.Parser.TextEqual        -> "Text/equal"
+    Grace.Parser.TextLiteral _    -> "a text literal"
+    Grace.Parser.Then             -> "then"
+    Grace.Parser.Type             -> "Type"
+    Grace.Parser.Times            -> "*"
+    Grace.Parser.True_            -> "True"
+    Grace.Parser.URI _            -> "a URI"
 
 grammar :: Grammar r (Parser r (Syntax Offset Input))
 grammar = mdo
     nameBinding <- rule do
         let annotated = do
-                token Lexer.OpenParenthesis
+                parseToken Grace.Parser.OpenParenthesis
                 ~(nameLocation, name) <- locatedLabel
-                token Lexer.Colon
+                parseToken Grace.Parser.Colon
                 annotation <- quantifiedType
-                token Lexer.CloseParenthesis
+                parseToken Grace.Parser.CloseParenthesis
                 pure NameBinding{ annotation = Just annotation, .. }
 
         let unannotated = do
@@ -231,9 +704,9 @@ grammar = mdo
         annotated <|> unannotated
 
     expression <- rule
-        (   do  location <- locatedToken Lexer.Lambda
+        (   do  location <- locatedToken Grace.Parser.Lambda
                 nameBindings <- some1 nameBinding
-                token Lexer.Arrow
+                parseToken Grace.Parser.Arrow
                 body0 <- expression
 
                 return do
@@ -241,7 +714,7 @@ grammar = mdo
                     foldr cons body0 nameBindings
 
         <|> do  bindings <- some1 binding
-                token Lexer.In
+                parseToken Grace.Parser.In
                 body <- expression
 
                 return do
@@ -249,17 +722,17 @@ grammar = mdo
                             NonEmpty.head bindings
                     Syntax.Let{..}
 
-        <|> do  location <- locatedToken Lexer.If
+        <|> do  location <- locatedToken Grace.Parser.If
                 predicate <- expression
-                token Lexer.Then
+                parseToken Grace.Parser.Then
                 ifTrue <- expression
-                token Lexer.Else
+                parseToken Grace.Parser.Else
                 ifFalse <- expression
 
                 return Syntax.If{..}
 
         <|> do  annotated <- operatorExpression
-                token Lexer.Colon
+                parseToken Grace.Parser.Colon
                 annotation <- quantifiedType
 
                 return Syntax.Annotation
@@ -285,13 +758,13 @@ grammar = mdo
 
             return (foldl snoc e0 ses)
 
-    plusExpression <- rule (op Lexer.Plus Syntax.Plus timesExpression)
+    plusExpression <- rule (op Grace.Parser.Plus Syntax.Plus timesExpression)
 
-    timesExpression <- rule (op Lexer.Times Syntax.Times orExpression)
+    timesExpression <- rule (op Grace.Parser.Times Syntax.Times orExpression)
 
-    orExpression <- rule (op Lexer.Or Syntax.Or andExpression)
+    orExpression <- rule (op Grace.Parser.Or Syntax.Or andExpression)
 
-    andExpression <- rule (op Lexer.And Syntax.And applicationExpression)
+    andExpression <- rule (op Grace.Parser.And Syntax.And applicationExpression)
 
     let application function argument =
             Syntax.Application{ location = Syntax.location function, .. }
@@ -299,7 +772,7 @@ grammar = mdo
     applicationExpression <- rule
         (   do  es <- some1 fieldExpression
                 return (foldl application (NonEmpty.head es) (NonEmpty.tail es))
-        <|> do  location <- locatedToken Lexer.Merge
+        <|> do  location <- locatedToken Grace.Parser.Merge
                 ~(handlers :| es) <- some1 fieldExpression
 
                 return do
@@ -312,14 +785,14 @@ grammar = mdo
                 Syntax.Field{ location = Syntax.location record0, .. }
 
         record <- primitiveExpression
-        fields <- many (do token Lexer.Dot; l <- locatedRecordLabel; return l)
+        fields <- many (do parseToken Grace.Parser.Dot; l <- locatedRecordLabel; return l)
 
         return (foldl (snoc record) record fields)
 
     modeAnnotation <- rule do
         let textMode = do
-                token Lexer.Colon
-                token Lexer.Text
+                parseToken Grace.Parser.Colon
+                parseToken Grace.Parser.Text
                 pure AsText
 
         let codeMode = pure AsCode
@@ -332,7 +805,7 @@ grammar = mdo
                 return Syntax.Variable{ index = 0, .. }
 
         <|> do  ~(location, name) <- locatedLabel
-                token Lexer.At
+                parseToken Grace.Parser.At
                 index <- int
 
                 return Syntax.Variable{..}
@@ -341,41 +814,41 @@ grammar = mdo
 
                 return Syntax.Alternative{..}
 
-        <|> do  location <- locatedToken Lexer.OpenBracket
-                optional (token Lexer.Comma)
-                elements <- expression `sepBy` token Lexer.Comma
-                optional (token Lexer.Comma)
-                token Lexer.CloseBracket
+        <|> do  location <- locatedToken Grace.Parser.OpenBracket
+                optional (parseToken Grace.Parser.Comma)
+                elements <- expression `sepBy` parseToken Grace.Parser.Comma
+                optional (parseToken Grace.Parser.Comma)
+                parseToken Grace.Parser.CloseBracket
 
                 return Syntax.List{ elements = Seq.fromList elements, .. }
 
-        <|> do  location <- locatedToken Lexer.OpenBrace
-                optional (token Lexer.Comma)
-                fieldValues <- fieldValue `sepBy` token Lexer.Comma
-                optional (token Lexer.Comma)
-                token Lexer.CloseBrace
+        <|> do  location <- locatedToken Grace.Parser.OpenBrace
+                optional (parseToken Grace.Parser.Comma)
+                fieldValues <- fieldValue `sepBy` parseToken Grace.Parser.Comma
+                optional (parseToken Grace.Parser.Comma)
+                parseToken Grace.Parser.CloseBrace
 
                 return Syntax.Record{..}
 
-        <|> do  location <- locatedToken Lexer.True_
+        <|> do  location <- locatedToken Grace.Parser.True_
 
                 return Syntax.Scalar{ scalar = Syntax.Bool True, .. }
 
-        <|> do  location <- locatedToken Lexer.False_
+        <|> do  location <- locatedToken Grace.Parser.False_
 
                 return Syntax.Scalar{ scalar = Syntax.Bool False, .. }
 
-        <|> do  location <- locatedToken Lexer.Null
+        <|> do  location <- locatedToken Grace.Parser.Null
 
                 return Syntax.Scalar{ scalar = Syntax.Null, .. }
 
-        <|> do  sign <- (token Lexer.Dash $> negate) <|> pure id
+        <|> do  sign <- (parseToken Grace.Parser.Dash $> negate) <|> pure id
 
                 ~(location, n) <- locatedReal
 
                 return Syntax.Scalar{ scalar = Syntax.Real (sign n), .. }
 
-        <|> do  token Lexer.Dash
+        <|> do  parseToken Grace.Parser.Dash
 
                 ~(location, n) <- locatedInt
 
@@ -391,87 +864,87 @@ grammar = mdo
                     , ..
                     }
 
-        <|> do  location <- locatedToken Lexer.RealEqual
+        <|> do  location <- locatedToken Grace.Parser.RealEqual
 
                 return Syntax.Builtin{ builtin = Syntax.RealEqual, .. }
 
-        <|> do  location <- locatedToken Lexer.RealLessThan
+        <|> do  location <- locatedToken Grace.Parser.RealLessThan
 
                 return Syntax.Builtin{ builtin = Syntax.RealLessThan, .. }
 
-        <|> do  location <- locatedToken Lexer.RealNegate
+        <|> do  location <- locatedToken Grace.Parser.RealNegate
 
                 return Syntax.Builtin{ builtin = Syntax.RealNegate, .. }
 
-        <|> do  location <- locatedToken Lexer.RealShow
+        <|> do  location <- locatedToken Grace.Parser.RealShow
 
                 return Syntax.Builtin{ builtin = Syntax.RealShow, .. }
 
-        <|> do  location <- locatedToken Lexer.ListDrop
+        <|> do  location <- locatedToken Grace.Parser.ListDrop
 
                 return Syntax.Builtin{ builtin = Syntax.ListDrop, .. }
 
-        <|> do  location <- locatedToken Lexer.ListEqual
+        <|> do  location <- locatedToken Grace.Parser.ListEqual
 
                 return Syntax.Builtin{ builtin = Syntax.ListEqual, .. }
 
-        <|> do  location <- locatedToken Lexer.ListFold
+        <|> do  location <- locatedToken Grace.Parser.ListFold
 
                 return Syntax.Builtin{ builtin = Syntax.ListFold, .. }
 
-        <|> do  location <- locatedToken Lexer.ListHead
+        <|> do  location <- locatedToken Grace.Parser.ListHead
 
                 return Syntax.Builtin{ builtin = Syntax.ListHead, .. }
 
-        <|> do  location <- locatedToken Lexer.ListIndexed
+        <|> do  location <- locatedToken Grace.Parser.ListIndexed
 
                 return Syntax.Builtin{ builtin = Syntax.ListIndexed, .. }
 
-        <|> do  location <- locatedToken Lexer.ListLast
+        <|> do  location <- locatedToken Grace.Parser.ListLast
 
                 return Syntax.Builtin{ builtin = Syntax.ListLast, .. }
 
-        <|> do  location <- locatedToken Lexer.ListLength
+        <|> do  location <- locatedToken Grace.Parser.ListLength
 
                 return Syntax.Builtin{ builtin = Syntax.ListLength, .. }
 
-        <|> do  location <- locatedToken Lexer.ListMap
+        <|> do  location <- locatedToken Grace.Parser.ListMap
 
                 return Syntax.Builtin{ builtin = Syntax.ListMap, .. }
 
-        <|> do  location <- locatedToken Lexer.ListReverse
+        <|> do  location <- locatedToken Grace.Parser.ListReverse
 
                 return Syntax.Builtin{ builtin = Syntax.ListReverse, .. }
 
-        <|> do  location <- locatedToken Lexer.ListTake
+        <|> do  location <- locatedToken Grace.Parser.ListTake
 
                 return Syntax.Builtin{ builtin = Syntax.ListTake, .. }
 
-        <|> do  location <- locatedToken Lexer.IntegerAbs
+        <|> do  location <- locatedToken Grace.Parser.IntegerAbs
 
                 return Syntax.Builtin{ builtin = Syntax.IntegerAbs, .. }
 
-        <|> do  location <- locatedToken Lexer.IntegerEven
+        <|> do  location <- locatedToken Grace.Parser.IntegerEven
 
                 return Syntax.Builtin{ builtin = Syntax.IntegerEven, .. }
 
-        <|> do  location <- locatedToken Lexer.IntegerNegate
+        <|> do  location <- locatedToken Grace.Parser.IntegerNegate
 
                 return Syntax.Builtin{ builtin = Syntax.IntegerNegate, .. }
 
-        <|> do  location <- locatedToken Lexer.IntegerOdd
+        <|> do  location <- locatedToken Grace.Parser.IntegerOdd
 
                 return Syntax.Builtin{ builtin = Syntax.IntegerOdd, .. }
 
-        <|> do  location <- locatedToken Lexer.JSONFold
+        <|> do  location <- locatedToken Grace.Parser.JSONFold
 
                 return Syntax.Builtin{ builtin = Syntax.JSONFold, .. }
 
-        <|> do  location <- locatedToken Lexer.NaturalFold
+        <|> do  location <- locatedToken Grace.Parser.NaturalFold
 
                 return Syntax.Builtin{ builtin = Syntax.NaturalFold, .. }
 
-        <|> do  location <- locatedToken Lexer.TextEqual
+        <|> do  location <- locatedToken Grace.Parser.TextEqual
 
                 return Syntax.Builtin{ builtin = Syntax.TextEqual, .. }
 
@@ -489,19 +962,19 @@ grammar = mdo
 
                 mode <- modeAnnotation
 
-                return Syntax.Embed{ embedded = URI uri mode, .. }
+                return Syntax.Embed{ embedded = Grace.Input.URI uri mode, .. }
 
-        <|> do  token Lexer.OpenParenthesis
+        <|> do  parseToken Grace.Parser.OpenParenthesis
                 e <- expression
-                token Lexer.CloseParenthesis
+                parseToken Grace.Parser.CloseParenthesis
                 return e
         )
 
     binding <- rule
-        (   do  nameLocation <- locatedToken Lexer.Let
+        (   do  nameLocation <- locatedToken Grace.Parser.Let
                 name <- label
                 nameBindings <- many nameBinding
-                token Lexer.Equals
+                parseToken Grace.Parser.Equals
                 assignment <- expression
 
                 return do
@@ -509,12 +982,12 @@ grammar = mdo
 
                     Syntax.Binding{..}
 
-        <|> do  nameLocation <- locatedToken Lexer.Let
+        <|> do  nameLocation <- locatedToken Grace.Parser.Let
                 name <- label
                 nameBindings <- many nameBinding
-                token Lexer.Colon
+                parseToken Grace.Parser.Colon
                 annotation <- fmap Just quantifiedType
-                token Lexer.Equals
+                parseToken Grace.Parser.Equals
                 assignment <- expression
 
                 return Syntax.Binding{..}
@@ -527,7 +1000,7 @@ grammar = mdo
     fieldValue <- rule do
         let setting = do
                 name <- recordLabel
-                token Lexer.Colon
+                parseToken Grace.Parser.Colon
                 value <- expression
                 return (name, value)
 
@@ -538,25 +1011,25 @@ grammar = mdo
         setting <|> pun
 
     domain <- rule
-        (   do  token Lexer.Type
+        (   do  parseToken Grace.Parser.Type
                 return Domain.Type
-        <|> do  token Lexer.Fields
+        <|> do  parseToken Grace.Parser.Fields
                 return Domain.Fields
-        <|> do  token Lexer.Alternatives
+        <|> do  parseToken Grace.Parser.Alternatives
                 return Domain.Alternatives
         )
 
     quantifiedType <- rule do
         fss <- many
-            (   do  location <- locatedToken Lexer.Forall
+            (   do  location <- locatedToken Grace.Parser.Forall
                     fs <- some do
-                        token Lexer.OpenParenthesis
+                        parseToken Grace.Parser.OpenParenthesis
                         ~(typeVariableOffset, typeVariable) <- locatedLabel
-                        token Lexer.Colon
+                        parseToken Grace.Parser.Colon
                         domain_ <- domain
-                        token Lexer.CloseParenthesis
+                        parseToken Grace.Parser.CloseParenthesis
                         return \location_ -> Type.Forall location_ typeVariableOffset typeVariable domain_
-                    token Lexer.Dot
+                    parseToken Grace.Parser.Dot
                     return (map ($ location) fs)
             )
         t <- functionType
@@ -566,16 +1039,16 @@ grammar = mdo
         let function input output =
                 Type.Function{ location = Type.location input, ..}
 
-        ts <- applicationType `sepBy1` token Lexer.Arrow
+        ts <- applicationType `sepBy1` parseToken Grace.Parser.Arrow
         return (foldr function (NonEmpty.last ts) (NonEmpty.init ts))
 
     applicationType <- rule
-        (   do  location <- locatedToken Lexer.List
+        (   do  location <- locatedToken Grace.Parser.List
                 type_ <- primitiveType
 
                 return Type.List{..}
 
-        <|> do  location <- locatedToken Lexer.Optional
+        <|> do  location <- locatedToken Grace.Parser.Optional
                 type_ <- primitiveType
 
                 return Type.Optional{..}
@@ -584,27 +1057,27 @@ grammar = mdo
         )
 
     primitiveType <- rule
-        (   do  location <- locatedToken Lexer.Bool
+        (   do  location <- locatedToken Grace.Parser.Bool
                 return Type.Scalar{ scalar = Monotype.Bool, .. }
-        <|> do  location <- locatedToken Lexer.Real
+        <|> do  location <- locatedToken Grace.Parser.Real
                 return Type.Scalar{ scalar = Monotype.Real, .. }
-        <|> do  location <- locatedToken Lexer.Integer
+        <|> do  location <- locatedToken Grace.Parser.Integer
                 return Type.Scalar{ scalar = Monotype.Integer, .. }
-        <|> do  location <- locatedToken Lexer.JSON
+        <|> do  location <- locatedToken Grace.Parser.JSON
                 return Type.Scalar{ scalar = Monotype.JSON, .. }
-        <|> do  location <- locatedToken Lexer.Natural
+        <|> do  location <- locatedToken Grace.Parser.Natural
                 return Type.Scalar{ scalar = Monotype.Natural, .. }
-        <|> do  location <- locatedToken Lexer.Text
+        <|> do  location <- locatedToken Grace.Parser.Text
                 return Type.Scalar{ scalar = Monotype.Text, .. }
         <|> do  ~(location, name) <- locatedLabel
                 return Type.VariableType{..}
         <|> do  let record location fields = Type.Record{..}
 
-                locatedOpenBrace <- locatedToken Lexer.OpenBrace
+                locatedOpenBrace <- locatedToken Grace.Parser.OpenBrace
 
-                optional (token Lexer.Comma)
+                optional (parseToken Grace.Parser.Comma)
 
-                fieldTypes <- fieldType `endBy` token Lexer.Comma
+                fieldTypes <- fieldType `endBy` parseToken Grace.Parser.Comma
 
                 toFields <-
                     (   do  text_ <- recordLabel
@@ -614,18 +1087,18 @@ grammar = mdo
                             pure (\fs -> Type.Fields (fs <> [ f ]) Monotype.EmptyFields)
                     )
 
-                optional (token Lexer.Comma)
+                optional (parseToken Grace.Parser.Comma)
 
-                token Lexer.CloseBrace
+                parseToken Grace.Parser.CloseBrace
 
                 return (record locatedOpenBrace (toFields fieldTypes))
         <|> do  let union location alternatives = Type.Union{..}
 
-                locatedOpenAngle <- locatedToken Lexer.OpenAngle
+                locatedOpenAngle <- locatedToken Grace.Parser.OpenAngle
 
-                optional (token Lexer.Bar)
+                optional (parseToken Grace.Parser.Bar)
 
-                alternativeTypes <- alternativeType `endBy` token Lexer.Bar
+                alternativeTypes <- alternativeType `endBy` parseToken Grace.Parser.Bar
 
                 toAlternatives <-
                     (   do  text_ <- label
@@ -635,25 +1108,25 @@ grammar = mdo
                             return (\as -> Type.Alternatives (as <> [ a ]) Monotype.EmptyAlternatives)
                     )
 
-                optional (token Lexer.Bar)
+                optional (parseToken Grace.Parser.Bar)
 
-                token Lexer.CloseAngle
+                parseToken Grace.Parser.CloseAngle
                 return (union locatedOpenAngle (toAlternatives alternativeTypes))
-        <|> do  token Lexer.OpenParenthesis
+        <|> do  parseToken Grace.Parser.OpenParenthesis
                 t <- quantifiedType
-                token Lexer.CloseParenthesis
+                parseToken Grace.Parser.CloseParenthesis
                 return t
         )
 
     fieldType <- rule do
         field <- recordLabel
-        token Lexer.Colon
+        parseToken Grace.Parser.Colon
         t <- quantifiedType
         return (field, t)
 
     alternativeType <- rule do
         a <- alternative
-        token Lexer.Colon
+        parseToken Grace.Parser.Colon
         t <- quantifiedType
         return (a, t)
 
@@ -667,14 +1140,14 @@ parse
     -- ^ Source code
     -> Either ParseError (Syntax Offset Input)
 parse name code = do
-    tokens <- Lexer.lex name code
+    tokens <- lex name code
 
     case Earley.fullParses (Earley.parser grammar) tokens of
         ([], Report{..}) -> do
             let offset =
                     case unconsumed of
                         []                -> Offset (Text.length code)
-                        locatedToken_ : _ -> Lexer.start locatedToken_
+                        locatedToken_ : _ -> start locatedToken_
 
             Left (ParsingFailed (Location{..}))
 
