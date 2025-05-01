@@ -1219,7 +1219,7 @@ infer e₀ = do
 
             let input = Type.UnsolvedType{ location = nameLocation, existential = a }
 
-            let output = Type.UnsolvedType{ existential = b, .. }
+            let output = Type.UnsolvedType{ location = Syntax.location body, existential = b, .. }
 
             push (Context.UnsolvedType a)
             push (Context.UnsolvedType b)
@@ -1229,8 +1229,14 @@ infer e₀ = do
 
             return Type.Function{..}
         Syntax.Lambda{ nameBinding = Syntax.NameBinding{ annotation = Just input, .. }, ..} -> do
+            b <- fresh
+
+            let output = Type.UnsolvedType{ location = Syntax.location body, existential = b, .. }
+
+            push (Context.UnsolvedType b)
+
             scoped (Context.Annotation name input) do
-                output <- infer body
+                check body output
 
                 return Type.Function{..}
 
@@ -1257,33 +1263,33 @@ infer e₀ = do
 
             push (Context.UnsolvedType b)
 
-            let output = Type.UnsolvedType{ existential = b, .. }
+            let cons Syntax.Binding{ nameLocation = nameLocation₀, nameBindings = nameBindings₀, ..} action = do
+                    let annotatedAssignment = case annotation of
+                            Nothing -> assignment
+                            Just _A₀ -> Syntax.Annotation
+                                { annotated = assignment
+                                , annotation = _A₀
+                                , location = nameLocation₀
+                                }
 
-            let toLambda (nameBinding : nameBindings) assignment =
-                    Syntax.Lambda{ body = toLambda nameBindings assignment, .. }
-                toLambda [] assignment =
-                    assignment
+                    let toLambda (nameBinding@Syntax.NameBinding{ nameLocation } : nameBindings) =
+                            Syntax.Lambda{ location = nameLocation, body = toLambda nameBindings, .. }
+                        toLambda [] =
+                            annotatedAssignment
 
-            let cons Syntax.Binding{ annotation = Nothing, .. } action = do
-                    _A <- infer (toLambda nameBindings assignment)
+                    _A <- infer (toLambda nameBindings₀)
 
                     scoped (Context.Annotation name _A) do
                         action
-                cons Syntax.Binding{ annotation = Just _A₀, .. } action = do
-                    let annotatedAssignment = Syntax.Annotation
-                            { annotated = assignment
-                            , annotation = _A₀
-                            , ..
-                            }
 
-                    _A₁ <- infer (toLambda nameBindings annotatedAssignment)
+            let nil = do
+                    let output = Type.UnsolvedType{ location = Syntax.location body, existential = b }
 
-                    scoped (Context.Annotation name _A₁) do
-                        action
+                    check body output
 
-            foldr cons (check body output) bindings
+                    return output
 
-            return output
+            foldr cons nil bindings
 
         Syntax.List{..} -> do
             case Seq.viewl elements of

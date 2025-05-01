@@ -1,0 +1,6 @@
+let f (x: Text) =
+        let y = x
+
+        in  y
+
+in  f ""
