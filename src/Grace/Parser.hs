@@ -511,10 +511,17 @@ grammar = mdo
     locatedRecordLabel <- rule (locatedLabel <|> locatedText)
 
     fieldValue <- rule do
-        field <- recordLabel
-        token Lexer.Colon
-        value <- expression
-        return (field, value)
+        let setting = do
+                name <- recordLabel
+                token Lexer.Colon
+                value <- expression
+                return (name, value)
+
+        let pun = do
+                ~(location, name) <- locatedRecordLabel
+                pure (name, Syntax.Variable{ index = 0, ..})
+
+        setting <|> pun
 
     domain <- rule
         (   do  token Lexer.Type
