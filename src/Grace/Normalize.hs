@@ -99,88 +99,91 @@ asReal (Real    n) = Just n
 asReal  _          = Nothing
 
 toJSONSchema :: Type () -> Either UnsupportedModelOutput Aeson.Value
-toJSONSchema Type.Forall{..} = toJSONSchema type_
-toJSONSchema Type.Optional{..} = do
-    present <- toJSONSchema type_
-
-    let absent = Aeson.object [ ("type", "null") ]
-
-    return (Aeson.object [ ("type", "object"), ("anyOf", Aeson.toJSON ([ present, absent ] :: [ Aeson.Value ]))])
-toJSONSchema Type.List{..} = do
-    items <- toJSONSchema type_
-
-    return (Aeson.object [ ("type", "array"), ("items", items) ])
-toJSONSchema Type.Record{ fields = Type.Fields fieldTypes _ } = do
-    let toProperty (field, type_) = do
-            property <- toJSONSchema type_
-
-            return (field, property)
-
-    properties <- traverse toProperty fieldTypes
-
-    return
-        (Aeson.object
-            [ ("type", "object")
-            , ("properties", Aeson.toJSON (Map.fromList properties))
-            , ("additionalProperties", Aeson.toJSON False)
-            , ("required", Aeson.toJSON required)
-            ]
-        )
+toJSONSchema original = loop original
   where
-    required = do
-        (field, type_) <- fieldTypes
+    loop Type.Forall{..} = loop type_
+    loop Type.Optional{..} = do
+        present <- loop type_
 
-        case type_ of
-            Type.Optional{ } -> empty
-            _ -> return field
-toJSONSchema Type.Union{ alternatives = Type.Alternatives alternativeTypes _ } = do
-    let toAnyOf (alternative, type_) = do
-            contents <- toJSONSchema type_
+        let absent = Aeson.object [ ("type", "null") ]
 
-            return
-                (Aeson.object
-                    [ ("type", "object")
-                    , ( "properties"
-                      , Aeson.object
-                          [ ( "tag"
-                            , Aeson.object
-                                [ ("type", "string")
-                                , ("const", Aeson.toJSON alternative)
-                                ]
-                            )
-                          , ("contents", contents)
-                          ]
-                      )
-                    , ("required", Aeson.toJSON ([ "tag", "contents" ] :: [Text]))
-                    , ("additionalProperties", Aeson.toJSON False)
-                    ]
-                )
+        return (Aeson.object [ ("type", "object"), ("anyOf", Aeson.toJSON ([ present, absent ] :: [ Aeson.Value ]))])
 
-    -- "oneOf" is not supported by OpenAI, so we use "anyOf" as the closest
-    -- equivalent
-    anyOfs <- traverse toAnyOf alternativeTypes
+    loop Type.List{..} = do
+        items <- loop type_
 
-    return (Aeson.object [ ("type", "object"), ("anyOf", Aeson.toJSON anyOfs) ])
-  where
-toJSONSchema Type.Scalar{ scalar = Monotype.Bool } =
-    return (Aeson.object [ ("type", "boolean") ])
-toJSONSchema Type.Scalar{ scalar = Monotype.Real } =
-    return (Aeson.object [ ("type", "number") ])
-toJSONSchema Type.Scalar{ scalar = Monotype.Integer } =
-    return (Aeson.object [ ("type", "integer") ])
-toJSONSchema Type.Scalar{ scalar = Monotype.JSON } =
-    return (Aeson.object [ ])
-toJSONSchema Type.Scalar{ scalar = Monotype.Natural } =
-    return
-        (Aeson.object
-            [ ("type", "number")
-            -- , ("minimum", Aeson.toJSON (0 :: Int))
-            -- ^ Not supported by OpenAI
-            ]
-        )
-toJSONSchema Type.Scalar{ scalar = Monotype.Text } =
-    return (Aeson.object [ ("type", "string") ])
-toJSONSchema type_ = Left UnsupportedModelOutput{..}
+        return (Aeson.object [ ("type", "array"), ("items", items) ])
+    loop Type.Record{ fields = Type.Fields fieldTypes _ } = do
+        let toProperty (field, type_) = do
+                property <- loop type_
+
+                return (field, property)
+
+        properties <- traverse toProperty fieldTypes
+
+        return
+            (Aeson.object
+                [ ("type", "object")
+                , ("properties", Aeson.toJSON (Map.fromList properties))
+                , ("additionalProperties", Aeson.toJSON False)
+                , ("required", Aeson.toJSON required)
+                ]
+            )
+      where
+        required = do
+            (field, type_) <- fieldTypes
+
+            case type_ of
+                Type.Optional{ } -> empty
+                _ -> return field
+    loop Type.Union{ alternatives = Type.Alternatives alternativeTypes _ } = do
+        let toAnyOf (alternative, type_) = do
+                contents <- loop type_
+
+                return
+                    (Aeson.object
+                        [ ("type", "object")
+                        , ( "properties"
+                          , Aeson.object
+                              [ ( "tag"
+                                , Aeson.object
+                                    [ ("type", "string")
+                                    , ("const", Aeson.toJSON alternative)
+                                    ]
+                                )
+                              , ("contents", contents)
+                              ]
+                          )
+                        , ("required", Aeson.toJSON ([ "tag", "contents" ] :: [Text]))
+                        , ("additionalProperties", Aeson.toJSON False)
+                        ]
+                    )
+
+        -- "oneOf" is not supported by OpenAI, so we use "anyOf" as the closest
+        -- equivalent
+        anyOfs <- traverse toAnyOf alternativeTypes
+
+        return (Aeson.object [ ("type", "object"), ("anyOf", Aeson.toJSON anyOfs) ])
+      where
+    loop Type.Scalar{ scalar = Monotype.Bool } =
+        return (Aeson.object [ ("type", "boolean") ])
+    loop Type.Scalar{ scalar = Monotype.Real } =
+        return (Aeson.object [ ("type", "number") ])
+    loop Type.Scalar{ scalar = Monotype.Integer } =
+        return (Aeson.object [ ("type", "integer") ])
+    loop Type.Scalar{ scalar = Monotype.JSON } =
+        return (Aeson.object [ ])
+    loop Type.Scalar{ scalar = Monotype.Natural } =
+        return
+            (Aeson.object
+                [ ("type", "number")
+                -- , ("minimum", Aeson.toJSON (0 :: Int))
+                -- ^ Not supported by OpenAI
+                ]
+            )
+    loop Type.Scalar{ scalar = Monotype.Text } =
+        return (Aeson.object [ ("type", "string") ])
+    loop _ = Left UnsupportedModelOutput{..}
 
 fromJSON :: Aeson.Value -> Value
 fromJSON (Aeson.Object [("contents", contents), ("tag", Aeson.String tag)]) =
@@ -705,7 +708,7 @@ instance Exception MissingCredentials where
         \prompt keyword"
 
 -- | The expected type for the model output can't be encoded as JSON
-newtype UnsupportedModelOutput = UnsupportedModelOutput{ type_ :: Type () }
+newtype UnsupportedModelOutput = UnsupportedModelOutput{ original :: Type () }
     deriving (Show)
 
 instance Exception UnsupportedModelOutput where
@@ -714,7 +717,7 @@ instance Exception UnsupportedModelOutput where
         \\n\
         \The expected type for the model output is:\n\
         \\n\
-        \" <> Text.unpack (Pretty.toSmart type_) <> "\n\
+        \" <> Text.unpack (Pretty.toSmart original) <> "\n\
         \\n\
         \… but that type cannot be encoded as JSON"
 
