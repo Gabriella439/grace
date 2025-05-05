@@ -1,6 +1,6 @@
 let question = prompt{ text: "Give me a question that I can ask another model" }
 
-let answer : Text = prompt
+let answer = prompt
         { text: "
             ${question}
 

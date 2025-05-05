@@ -39,7 +39,7 @@ let generatePoem idea =
                 - Literary Devices: ${concatSep ", " style.literaryDevices}
                 "
 
-        let poem : Text = prompt
+        let poem = prompt
                 { model: "gpt-4o"
                 , text: "
                     Write a complete poem based on this idea:
