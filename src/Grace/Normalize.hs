@@ -98,36 +98,54 @@ asReal (Integer n) = Just (fromInteger  n)
 asReal (Real    n) = Just n
 asReal  _          = Nothing
 
-toJSONSchema :: Type () -> Either UnsupportedModelOutput Aeson.Value
+toJSONSchema :: Type () -> Either UnsupportedModelOutput (Aeson.Value, Type ())
 toJSONSchema original = loop original
   where
-    loop Type.Forall{..} = loop type_
+    loop Type.Forall{..} = do
+        loop
+            ( Type.substituteType name 0 Type.Scalar{ location = ()
+            , scalar = Monotype.Text } type_
+            )
     loop Type.Optional{..} = do
-        present <- loop type_
+        (present, newType) <- loop type_
 
         let absent = Aeson.object [ ("type", "null") ]
 
-        return (Aeson.object [ ("type", "object"), ("anyOf", Aeson.toJSON ([ present, absent ] :: [ Aeson.Value ]))])
+        return (Aeson.object [ ("type", "object"), ("anyOf", Aeson.toJSON ([ present, absent ] :: [ Aeson.Value ]))], Type.Optional{ type_ = newType, .. })
 
     loop Type.List{..} = do
-        items <- loop type_
+        (items, newType) <- loop type_
 
-        return (Aeson.object [ ("type", "array"), ("items", items) ])
-    loop Type.Record{ fields = Type.Fields fieldTypes _ } = do
+        return
+            ( Aeson.object [ ("type", "array"), ("items", items) ]
+            , Type.List{ type_ = newType, .. }
+            )
+    loop Type.Record{ fields = Type.Fields fieldTypes remaining, .. } = do
         let toProperty (field, type_) = do
-                property <- loop type_
+                (property, newType) <- loop type_
+
+                return (field, property, newType)
+
+        triples <- traverse toProperty fieldTypes
+
+        let properties = do
+                (field, property, _) <- triples
 
                 return (field, property)
 
-        properties <- traverse toProperty fieldTypes
+        let newFieldTypes = do
+                (field, _, newType) <- triples
+
+                return (field, newType)
 
         return
-            (Aeson.object
+            ( Aeson.object
                 [ ("type", "object")
                 , ("properties", Aeson.toJSON (Map.fromList properties))
                 , ("additionalProperties", Aeson.toJSON False)
                 , ("required", Aeson.toJSON required)
                 ]
+            , Type.Record{ fields = Type.Fields newFieldTypes remaining, .. }
             )
       where
         required = do
@@ -136,9 +154,9 @@ toJSONSchema original = loop original
             case type_ of
                 Type.Optional{ } -> empty
                 _ -> return field
-    loop Type.Union{ alternatives = Type.Alternatives alternativeTypes _ } = do
+    loop Type.Union{ alternatives = Type.Alternatives alternativeTypes remaining, .. } = do
         let toAnyOf (alternative, type_) = do
-                contents <- loop type_
+                (contents, newType) <- loop type_
 
                 return
                     (Aeson.object
@@ -157,32 +175,43 @@ toJSONSchema original = loop original
                         , ("required", Aeson.toJSON ([ "tag", "contents" ] :: [Text]))
                         , ("additionalProperties", Aeson.toJSON False)
                         ]
+                    , (alternative, newType)
                     )
 
-        -- "oneOf" is not supported by OpenAI, so we use "anyOf" as the closest
-        -- equivalent
-        anyOfs <- traverse toAnyOf alternativeTypes
+        results <- traverse toAnyOf alternativeTypes
 
-        return (Aeson.object [ ("type", "object"), ("anyOf", Aeson.toJSON anyOfs) ])
-      where
-    loop Type.Scalar{ scalar = Monotype.Bool } =
-        return (Aeson.object [ ("type", "boolean") ])
-    loop Type.Scalar{ scalar = Monotype.Real } =
-        return (Aeson.object [ ("type", "number") ])
-    loop Type.Scalar{ scalar = Monotype.Integer } =
-        return (Aeson.object [ ("type", "integer") ])
-    loop Type.Scalar{ scalar = Monotype.JSON } =
-        return (Aeson.object [ ])
-    loop Type.Scalar{ scalar = Monotype.Natural } =
+        let anyOfs = fmap fst results
+
+        let newAlternativeTypes = fmap snd results
+
+        return
+            ( Aeson.object
+                [ ("type", "object"), ("anyOf", Aeson.toJSON anyOfs) ]
+            , Type.Union
+                { alternatives =
+                    Type.Alternatives newAlternativeTypes remaining
+                , ..
+                }
+            )
+    loop oldType@Type.Scalar{ scalar = Monotype.Bool } =
+        return (Aeson.object [ ("type", "boolean") ], oldType)
+    loop oldType@Type.Scalar{ scalar = Monotype.Real } =
+        return (Aeson.object [ ("type", "number") ], oldType)
+    loop oldType@Type.Scalar{ scalar = Monotype.Integer } =
+        return (Aeson.object [ ("type", "integer") ], oldType)
+    loop oldType@Type.Scalar{ scalar = Monotype.JSON } =
+        return (Aeson.object [ ], oldType)
+    loop oldType@Type.Scalar{ scalar = Monotype.Natural } =
         return
             (Aeson.object
                 [ ("type", "number")
                 -- , ("minimum", Aeson.toJSON (0 :: Int))
                 -- ^ Not supported by OpenAI
                 ]
+            , oldType
             )
-    loop Type.Scalar{ scalar = Monotype.Text } =
-        return (Aeson.object [ ("type", "string") ])
+    loop oldType@Type.Scalar{ scalar = Monotype.Text } =
+        return (Aeson.object [ ("type", "string") ], oldType)
     loop _ = Left UnsupportedModelOutput{..}
 
 fromJSON :: Aeson.Value -> Value
@@ -330,9 +359,9 @@ evaluate maybeMethods = loop
                         t@Type.Record{ } -> (t, return)
                         t -> (Type.Record () (Type.Fields [("response", t)] Monotype.EmptyFields), extractResponse)
 
-                jsonSchema <- case toJSONSchema recordSchema of
+                (jsonSchema, newRecordSchema) <- case toJSONSchema recordSchema of
                     Left exception -> Exception.throwIO exception
-                    Right jsonSchema -> return jsonSchema
+                    Right result -> return result
 
                 case value of
                     Value.Record fieldValues
@@ -345,7 +374,7 @@ evaluate maybeMethods = loop
                                         _ -> "gpt-4o-mini"
 
                                 let text =
-                                        prompt <> "\n\nGenerate JSON output matching the following type:\n\n" <> Pretty.toSmart recordSchema
+                                        prompt <> "\n\nGenerate JSON output matching the following type:\n\n" <> Pretty.toSmart newRecordSchema
 
                                 text_ <- HTTP.prompt methods text model (Just jsonSchema)
 
