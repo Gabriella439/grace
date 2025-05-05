@@ -13,6 +13,12 @@ module Grace.Normalize
     ( -- * Normalization
       evaluate
     , quote
+
+      -- * Errors related to normalization
+    , MissingCredentials(..)
+    , UnsupportedModelOutput(..)
+    , JSONDecodingFailed(..)
+    , MissingSchema(..)
     ) where
 
 import Control.Applicative (empty)
@@ -337,38 +343,40 @@ evaluate maybeMethods = loop
 
                 case value of
                     Value.Record fieldValues
-                        | Just (Value.Text prompt) <- HashMap.lookup "text" fieldValues
-                        , Just Methods{..} <- maybeMethods -> do
-                            let model = case HashMap.lookup "model" fieldValues of
-                                    Just (Value.Application (Value.Builtin Some) (Value.Text m)) -> m
-                                    _ -> "gpt-4o-mini"
+                        | Just (Value.Text prompt) <- HashMap.lookup "text" fieldValues -> case maybeMethods of
+                            Nothing -> do
+                                Exception.throwIO MissingCredentials
+                            Just Methods{..} -> do
+                                let model = case HashMap.lookup "model" fieldValues of
+                                        Just (Value.Application (Value.Builtin Some) (Value.Text m)) -> m
+                                        _ -> "gpt-4o-mini"
 
-                            let text =
-                                    prompt <> "\n\nGenerate JSON output matching the following type:\n\n" <> Pretty.toSmart recordSchema
+                                let text =
+                                        prompt <> "\n\nGenerate JSON output matching the following type:\n\n" <> Pretty.toSmart recordSchema
 
-                            ChatCompletionObject{ choices = [ OpenAI.Choice{ message } ] } <- createChatCompletion _CreateChatCompletion
-                                { messages = [ OpenAI.User{ content = [ OpenAI.Text{ text } ], name = Nothing } ]
-                                , model = Model model
-                                , response_format = Just JSON_Schema
-                                    { json_schema = JSONSchema
-                                        { description = Nothing
-                                        , name = "result"
-                                        , schema = Just jsonSchema
-                                        , strict = Just True
+                                ChatCompletionObject{ choices = [ OpenAI.Choice{ message } ] } <- createChatCompletion _CreateChatCompletion
+                                    { messages = [ OpenAI.User{ content = [ OpenAI.Text{ text } ], name = Nothing } ]
+                                    , model = Model model
+                                    , response_format = Just JSON_Schema
+                                        { json_schema = JSONSchema
+                                            { description = Nothing
+                                            , name = "result"
+                                            , schema = Just jsonSchema
+                                            , strict = Just True
+                                            }
                                         }
                                     }
-                                }
 
-                            let text_ = OpenAI.messageToContent message
-                            let bytes = Encoding.encodeUtf8 text_
-                            let lazyBytes =
-                                    ByteString.Lazy.fromStrict bytes
+                                let text_ = OpenAI.messageToContent message
+                                let bytes = Encoding.encodeUtf8 text_
+                                let lazyBytes =
+                                        ByteString.Lazy.fromStrict bytes
 
-                            v <- case Aeson.eitherDecode lazyBytes of
-                                Left message_ -> Exception.throwIO JSONDecodingFailed{ message = message_, text = text_ }
-                                Right v -> return v
+                                v <- case Aeson.eitherDecode lazyBytes of
+                                    Left message_ -> Exception.throwIO JSONDecodingFailed{ message = message_, text = text_ }
+                                    Right v -> return v
 
-                            extract (fromJSON v)
+                                extract (fromJSON v)
                     other ->
                         return (Value.Prompt other)
 
@@ -707,6 +715,18 @@ quote names value =
   where
     location = ()
 
+-- | Missing API credentials
+data MissingCredentials = MissingCredentials
+    deriving (Show)
+
+instance Exception MissingCredentials where
+    displayException MissingCredentials =
+        "Missing credentials\n\
+        \\n\
+        \You need to provide API credentials on the command line in order to use the\n\
+        \prompt keyword"
+
+-- | The expected type for the model output can't be encoded as JSON
 newtype UnsupportedModelOutput = UnsupportedModelOutput{ type_ :: Type () }
     deriving (Show)
 
@@ -720,6 +740,7 @@ instance Exception UnsupportedModelOutput where
         \\n\
         \… but that type cannot be encoded as JSON"
 
+-- | JSON decoding failed
 data JSONDecodingFailed = JSONDecodingFailed
     { message :: String
     , text :: Text
@@ -739,6 +760,7 @@ instance Exception JSONDecodingFailed where
         \\n\
         \" <> message
 
+-- | Elaboration didn't infer a schema for the @prompt@ keyword
 data MissingSchema = MissingSchema
     deriving (Show)
 
