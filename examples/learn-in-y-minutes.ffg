@@ -1,0 +1,224 @@
+# Single-line comment
+
+# "Multi-line" comment
+#
+# Grace doesn't have special syntax for multi-line comments.  Instead, Grace
+# encodes multi-line comments as multiple single-line comments.
+
+let greeting = "Hello, world!"
+
+let fruits = "🍋🍓🍍🍉🍌"  # Unicode is permitted in string literals
+
+# String concatenation uses `+`
+#
+# Note: Grace does **NOT** support string interpolation, so you need to use
+# string concatenation instead
+let concatenation = "Enjoy some delicious fruit: " + fruits
+
+let bool = true
+
+# Type annotations on bindings are optional, but sometimes helpful
+let annotation : Bool = true
+
+let renderedBool : Text = if bool then "true" else "false"
+
+# Non-negative integers are parsed as the `Natural` number type by default
+let naturalNumber : Natural = 42
+
+# Negative integer literals are parsed as the `Integer` number type by default
+let integer : Integer = -12
+
+# A `Natural` number is a subtype of `Integer`, meaning that any `Natural`
+# number can be automatically case to an `Integer` (this conversion is
+# automatic)
+#
+# This means that non-negative literals can also be treated as `Integer`s
+let positiveInteger : Integer = 1
+
+let pi : Real = 3.14159265359
+
+# `Natural` and `Integer` are both subtypes of `Real`
+#
+# In other words, the numeric hierarchy is:
+#
+# Natural <: Integer <: Real
+let integerAsReal : Real = -4
+let naturalNumberAsReal : Real = 7
+
+# Grace supports anonymous records (no datatype declaration necessary)
+let origin = { x: 0.0, y: 0.0 }
+
+let somePrimes = [ 2, 3, 5, 7, 11 ]
+
+let john =
+        { person:
+            { name: "John Doe"
+            , age: 67
+            }
+        , address:
+            { country: "United States"
+            , state: "Pennsylvania"
+            , city: "Philadelphia"
+            }
+        }
+
+let philadelphia = john.address.city
+
+# Grace also supports "anonymous tagged unions" (also no datatype declaration
+# necessary)
+let dna = [ Thymine { }, Guanine { }, Guanine{ } ]
+
+# However, if you're curious, the inferred type for `dna` is:
+#
+# dna : forall (other : Alternatives) . List < Thymine: { } | Guanine: { } | other >
+#
+# You can read that as saying: "`dna` is a `List` of unions, each of which can
+# be one of at least two alternatives (`Thymine` and `Guanine`) wrapping an
+# empty record.  There may be `other` alternatives (meaning that this anonymous
+# union is still "open")
+
+# This is an example of a nested `let` binding
+let compactDNA =
+      let a = Adenine  { }
+      let c = Cytosine { }
+      let g = Guanine  { }
+      let t = Thymine  { }
+      in  [ c, t, t, a, t, c, g, g, c ]
+
+# You can pattern match on a union by providing a record with one field per
+# alternative.  Once you pattern match on a union it is "closed" (meaning that
+# there may not be any other alternatives besides the ones being matched).
+let renderDNA =
+        merge
+            { Adenine:  \_ -> "A"
+            , Cytosine: \_ -> "C"
+            , Guanine:  \_ -> "G"
+            , Thymine:  \_ -> "T"
+            }
+
+# Our first built-in function: `List/map` (which transforms each element of a
+# list
+let nucleotideElements : List Text = List/map renderDNA compactDNA
+
+# You can import a naked Grace expression by URL
+let concat =
+        https://raw.githubusercontent.com/Gabriella439/grace/refs/heads/main/prelude/text/concat.ffg
+
+let nucleotideString : Text = concat nucleotideElements
+
+let points =
+        [ { x: 1.1, y: -4.2 }
+        , { x: 4.4, y: -3.0 }
+        , { x: 8.2, y: -5.5 }
+        ]
+
+# `Natural -> List Natural` is the type of a function whose input type is a
+# `Natural` and whose output type is a `List Natural`
+#
+# One way to define a function in Grace is an anonymous function (a.k.a.
+# "lambda").  For example, the following anonymous function is equivalent to
+# this Python code:
+#
+#     lambda n : [ n, n + 1 ]
+#
+# ... and this JavaScript code:
+#
+#     function (n) { return [ n, n + 1 ]; }
+let exampleFunction : Natural -> List Natural =
+        \n -> [ n, n + 1 ]
+
+# However, you can also define the same function this way:
+let equivalentFunction (n : Natural) : List Natural = [ n, n + 1 ]
+
+# You don't need to parenthesize function arguments
+let exampleFunctionApplication : List Natural = exampleFunction 2
+
+let functionOfMultipleArguments (x : Natural) (y : Natural) = [ x, y ]
+
+let functionAppliedToMultipleArguments : List Natural =
+        functionOfMultipleArguments 2 3
+
+# If a function works for any type of value, you can use the `forall` keyword
+# to specify that a type variable can be any type
+let duplicate : forall (a : Type) . a -> List a = \x -> [ x, x ]
+
+let duplicatedNumber : List Natural = duplicate 2
+
+let duplicatedBool : List Bool = duplicate false
+
+# The language also has some polymorphic built-in functions.  We already saw
+# one such function, which was `List/map`:
+#
+#     List/map : forall (a b : Type) . (a -> b) -> List a -> List b
+#
+# … and another polymorphic built-in function is `List/head`:
+#
+#     List/head : forall (a : Type) (b : Alternatives) . List a -> < Some: a | None: { } | b >
+let firstPrime = List/head somePrimes
+
+# `null` is an absent `Optional` value of any type
+let absentOptionalValue : Optional Natural = null
+
+# All types `T` are subtypes of `Optional T`, meaning that you can case any
+# type to the equivalent `Optional` type
+let presentOptionalValue : Optional Natural = 1
+
+# However, there is no way to pattern match an `Optional` value (`merge` does
+# not work on them.  If you want an `Optional` type that you can pattern match
+# on then use a union type like `< Some: T | None: { } >` (like the type of
+# `List/head` above).
+
+let makeUser user =
+      let home = "/home/" + user
+
+      let privateKey = home + "/.ssh/id_ed25519"
+
+      let publicKey  = privateKey + ".pub"
+
+      in  # Grace supports record "punning"
+          { home, privateKey, publicKey}
+
+# Generate configurations for 2 build users
+let users =
+        [ makeUser "bill"
+        , makeUser "jane"
+        ]
+
+# Present all of the results in a final record
+in  { greeting
+    , fruits
+    , concatenation
+    , bool
+    , annotation
+    , renderedBool
+    , naturalNumber
+    , integer
+    , positiveInteger
+    , pi
+    , integerAsReal
+    , naturalNumberAsReal
+    , origin
+    , somePrimes
+    , john
+    , philadelphia
+    , dna
+    , compactDNA
+    , renderDNA
+    , nucleotideElements
+    , concat
+    , nucleotideString
+    , points
+    , exampleFunction
+    , equivalentFunction
+    , exampleFunctionApplication
+    , functionOfMultipleArguments
+    , functionAppliedToMultipleArguments
+    , duplicate
+    , duplicatedNumber
+    , duplicatedBool
+    , firstPrime
+    , absentOptionalValue
+    , presentOptionalValue
+    , makeUser
+    , users
+    }
