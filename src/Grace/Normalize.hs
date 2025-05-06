@@ -116,20 +116,20 @@ asReal  _          = Nothing
 toJSONSchema :: Type () -> Either UnsupportedModelOutput (Aeson.Value, Type ())
 toJSONSchema original = loop original
   where
-    loop Type.Forall{..} = do
+    loop Type.Forall{ name, type_ } = do
         loop
             ( Type.substituteType name 0 Type.Scalar{ location = ()
             , scalar = Monotype.Text } type_
             )
-    loop Type.Optional{..} = do
+    loop Type.Optional{ location, type_ } = do
         (value, newType) <- loop type_
-        return (value, Type.Optional{ type_ = newType, .. })
-    loop Type.List{..} = do
+        return (value, Type.Optional{ location, type_ = newType })
+    loop Type.List{ location, type_ } = do
         (items, newType) <- loop type_
 
         return
             ( Aeson.object [ ("type", "array"), ("items", items) ]
-            , Type.List{ type_ = newType, .. }
+            , Type.List{ location, type_ = newType }
             )
     loop Type.Record{ fields = Type.Fields fieldTypes remaining, .. } = do
         let toProperty (field, type_) = do
@@ -225,29 +225,52 @@ toJSONSchema original = loop original
         return (Aeson.object [ ("type", "string") ], oldType)
     loop _ = Left UnsupportedModelOutput{..}
 
-fromJSON :: Aeson.Value -> Value
-fromJSON (Aeson.Object [("contents", contents), ("tag", Aeson.String tag)]) =
-    Value.Application (Value.Alternative tag) (fromJSON contents)
-fromJSON (Aeson.Object object) = Value.Record (HashMap.fromList textValues)
-  where
-    textValues = do
-        (key, value) <- KeyMap.toList object
-        return (Key.toText key, fromJSON value)
-fromJSON (Aeson.Array vector) =
-    Value.List (Seq.fromList (toList elements))
-  where
-    elements = fmap fromJSON vector
-fromJSON (Aeson.String text) = Value.Scalar (Text text)
-fromJSON (Aeson.Number scientific) =
+fromJSON :: Type () -> Aeson.Value -> Either InvalidJSON Value
+fromJSON Type.Union{ alternatives = Type.Alternatives alternativeTypes _ } (Aeson.Object [("contents", contents), ("tag", Aeson.String tag)])
+    | Just alternativeType <- lookup tag alternativeTypes = do
+        value <- fromJSON alternativeType contents
+
+        return (Value.Application (Value.Alternative tag) value)
+fromJSON type_@Type.Record{ fields = Type.Fields fieldTypes _ } value@(Aeson.Object object) = do
+    let process (key, v) = do
+            let text = Key.toText key
+
+            case lookup text fieldTypes of
+                Just fieldType -> do
+                    expression <- fromJSON  fieldType v
+
+                    return (text, expression)
+
+                Nothing -> do
+                    Left InvalidJSON{..}
+
+    textValues <- traverse process (KeyMap.toList object)
+
+    return (Value.Record (HashMap.fromList textValues))
+fromJSON Type.List{ type_ } (Aeson.Array vector) = do
+    elements <- traverse (fromJSON type_) vector
+    return (Value.List (Seq.fromList (toList elements)))
+fromJSON Type.Scalar{ scalar = Monotype.Text } (Aeson.String text) = do
+    return (Value.Scalar (Text text))
+fromJSON type_@Type.Scalar{ scalar } value@(Aeson.Number scientific) =
     case Scientific.floatingOrInteger scientific of
-        Left (_ :: Double) -> Value.Scalar (Real scientific)
+        Left (_ :: Double)
+            | scalar == Monotype.Real -> do
+                return (Value.Scalar (Real scientific))
         Right (integer :: Integer)
-            | 0 <= integer -> Value.Scalar (Natural (fromInteger integer))
-            | otherwise    -> Value.Scalar (Integer integer)
-fromJSON (Aeson.Bool bool) =
-    Value.Scalar (Bool bool)
-fromJSON Aeson.Null =
-    Value.Scalar Null
+            | 0 <= integer
+            , scalar `elem` ([ Monotype.Natural, Monotype.Integer, Monotype.Real ] :: [Monotype.Scalar]) -> do
+                return (Value.Scalar (Natural (fromInteger integer)))
+            | scalar `elem` ([ Monotype.Integer, Monotype.Real ] :: [Monotype.Scalar]) -> do
+                return (Value.Scalar (Integer integer))
+        _ -> do
+            Left InvalidJSON{..}
+fromJSON Type.Scalar{ scalar = Monotype.Bool } (Aeson.Bool bool) =
+    return (Value.Scalar (Bool bool))
+fromJSON Type.Optional{ } Aeson.Null =
+    return (Value.Scalar Null)
+fromJSON type_ value = do
+    Left InvalidJSON{..}
 
 {-| Evaluate an expression, leaving behind a `Value` free of reducible
     sub-expressions
@@ -397,7 +420,11 @@ evaluate maybeMethods = loop
                                     Left message_ -> Exception.throwIO JSONDecodingFailed{ message = message_, text = text_ }
                                     Right v -> return v
 
-                                extract (fromJSON v)
+                                case fromJSON newRecordSchema v of
+                                    Left invalidJSON ->
+                                        Exception.throwIO invalidJSON
+                                    Right e ->
+                                        extract e
                     other ->
                         return (Value.Prompt other)
 
@@ -853,3 +880,19 @@ data MissingSchema = MissingSchema
 instance Exception MissingSchema where
     displayException MissingSchema =
         "Internal error - Elaboration failed to infer schema for prompt"
+
+-- | Invalid JSON output which didn't match the expected type
+data InvalidJSON = InvalidJSON
+    { value :: Aeson.Value
+    , type_ :: Type ()
+    } deriving (Show)
+
+instance Exception InvalidJSON where
+    displayException InvalidJSON{..} =
+        "Invalid JSON\n\
+        \\n\
+        \The model produced the following JSON value:\n\
+        \\n\
+        \… which does not match the following expected type:\n\
+        \\n\
+        \" <> Text.unpack (Pretty.toSmart type_)
