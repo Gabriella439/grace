@@ -22,23 +22,28 @@ module Grace.Normalize
     ) where
 
 import Control.Applicative (empty)
-import Control.Exception (Exception)
+import Control.Exception (Exception(..), SomeException)
 import Data.Bifunctor (first)
 import Data.Foldable (toList)
-import Data.Functor (void)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Scientific (Scientific)
 import Data.Sequence (Seq(..), ViewL(..))
 import Data.Text (Text)
+import Data.Typeable (Typeable)
 import Data.Void (Void)
+import Grace.Input (Input(..))
 import Grace.Location (Location)
 import Grace.Syntax (Builtin(..), Scalar(..), Syntax)
 import Grace.Type (Type)
 import Grace.Value (Closure(..), Value)
+import Numeric.Natural (Natural)
 import OpenAI.V1 (Methods(..))
 import OpenAI.V1.Models (Model(..))
 import OpenAI.V1.ResponseFormat(JSONSchema(..))
 import Prelude hiding (succ)
+import System.FilePath ((</>))
+
+import {-# SOURCE #-} qualified Grace.Interpret as Interpret
 
 import OpenAI.V1.Chat.Completions
     ( ChatCompletionObject(..)
@@ -49,6 +54,7 @@ import OpenAI.V1.Chat.Completions
 
 import qualified Control.Exception as Exception
 import qualified Control.Monad as Monad
+import qualified Control.Monad.Except as Except
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KeyMap
@@ -61,13 +67,16 @@ import qualified Data.Scientific as Scientific
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
+import qualified Data.Text.IO as Text.IO
 import qualified Data.Void as Void
+import qualified Grace.HTTP as HTTP
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Pretty as Pretty
 import qualified Grace.Syntax as Syntax
 import qualified Grace.Type as Type
 import qualified Grace.Value as Value
 import qualified OpenAI.V1.Chat.Completions as OpenAI
+import qualified Paths_grace as Paths
 import qualified System.IO.Unsafe as Unsafe
 
 {- $setup
@@ -108,14 +117,12 @@ asReal (Integer n) = Just (fromInteger  n)
 asReal (Real    n) = Just n
 asReal  _          = Nothing
 
-toJSONSchema :: Type () -> Either UnsupportedModelOutput (Aeson.Value, Type ())
+toJSONSchema :: Type a -> Either (UnsupportedModelOutput a) (Aeson.Value, Type a)
 toJSONSchema original = loop original
   where
-    loop Type.Forall{ name, type_ } = do
+    loop Type.Forall{ location, name, type_ } = do
         loop
-            ( Type.substituteType name 0 Type.Scalar{ location = ()
-            , scalar = Monotype.Text } type_
-            )
+            (Type.substituteType name 0 Type.Scalar{ location, scalar = Monotype.Text } type_)
     loop Type.Optional{ location, type_ } = do
         (present, newType) <- loop type_
 
@@ -224,7 +231,7 @@ toJSONSchema original = loop original
         return (Aeson.object [ ("type", "string") ], oldType)
     loop _ = Left UnsupportedModelOutput{..}
 
-fromJSON :: Type () -> Aeson.Value -> Either InvalidJSON Value
+fromJSON :: Type a -> Aeson.Value -> Either (InvalidJSON a) Value
 fromJSON Type.Union{ alternatives = Type.Alternatives alternativeTypes _ } (Aeson.Object [("contents", contents), ("tag", Aeson.String tag)])
     | Just alternativeType <- lookup tag alternativeTypes = do
         value <- fromJSON alternativeType contents
@@ -388,14 +395,6 @@ evaluate maybeMethods = loop
                     extractResponse other = do
                         return other
 
-                let (recordSchema, extract) = case void schema of
-                        t@Type.Record{ } -> (t, return)
-                        t -> (Type.Record () (Type.Fields [("response", t)] Monotype.EmptyFields), extractResponse)
-
-                (jsonSchema, newRecordSchema) <- case toJSONSchema recordSchema of
-                    Left exception -> Exception.throwIO exception
-                    Right result -> return result
-
                 case value of
                     Value.Record fieldValues
                         | Just (Value.Text prompt) <- HashMap.lookup "text" fieldValues -> case maybeMethods of
@@ -404,38 +403,155 @@ evaluate maybeMethods = loop
                             Just Methods{..} -> do
                                 let model = case HashMap.lookup "model" fieldValues of
                                         Just (Value.Application (Value.Builtin Some) (Value.Text m)) -> m
-                                        _ -> "gpt-4o-mini"
+                                        _ -> "o4-mini"
 
-                                let text =
-                                        prompt <> "\n\nGenerate JSON output matching the following type:\n\n" <> Pretty.toSmart newRecordSchema
+                                let code = case HashMap.lookup "code" fieldValues of
+                                        Just (Value.Application (Value.Builtin Some) (Value.Scalar (Syntax.Bool c))) -> c
+                                        _ -> False
 
-                                ChatCompletionObject{ choices = [ OpenAI.Choice{ message } ] } <- createChatCompletion _CreateChatCompletion
-                                    { messages = [ OpenAI.User{ content = [ OpenAI.Text{ text } ], name = Nothing } ]
-                                    , model = Model model
-                                    , response_format = Just JSON_Schema
-                                        { json_schema = JSONSchema
-                                            { description = Nothing
-                                            , name = "result"
-                                            , schema = Just jsonSchema
-                                            , strict = Just True
+                                if code
+                                    then do
+                                        let retry :: [(Text, SomeException)] -> IO Value
+                                            retry errors
+                                                | (_, interpretError) : rest <- errors
+                                                , length rest == 3 = do
+                                                    Exception.throwIO interpretError
+                                                | otherwise = do
+                                                    examples <- do
+                                                        examplesDirectory <- Paths.getDataFileName "examples"
+
+                                                        let files :: [FilePath]
+                                                            files =
+                                                                [ "learn-in-y-minutes.ffg"
+                                                                , "chaining.ffg"
+                                                                , "prompt.ffg"
+                                                                , "tools.ffg"
+                                                                ]
+
+                                                        let process file = do
+                                                                content <- Text.IO.readFile (examplesDirectory </> file)
+
+                                                                return
+                                                                    ( "Example: " <> Text.pack file <> "\n\
+                                                                      \\n\
+                                                                      \" <> content <> "\n\
+                                                                      \\n"
+                                                                    )
+
+                                                        traverse process files
+
+                                                    prompts <- do
+                                                        promptsDirectory <- Paths.getDataFileName "prompts"
+
+                                                        let files :: [FilePath]
+                                                            files =
+                                                                [ "inference.md"
+                                                                , "abnf.md"
+                                                                ]
+
+                                                        let process file = do
+                                                                content <- Text.IO.readFile (promptsDirectory </> file)
+
+                                                                return
+                                                                    ( "Post: " <> Text.pack file <> "\n\
+                                                                      \\n\
+                                                                      \" <> content <> "\n\
+                                                                      \\n"
+                                                                    )
+
+                                                        traverse process files
+
+                                                    let failedAttempts = do
+                                                            (index, (program, interpretError)) <- zip [ 0 .. ] (reverse errors)
+                                                            return
+                                                                ( "Your failed attempt " <> Text.pack (show (index :: Natural)) <> ":\n\
+                                                                  \\n\
+                                                                  \" <> program <> "\n\
+                                                                  \\n\
+                                                                  \Error:\n\
+                                                                  \" <> Text.pack (displayException interpretError) <> "\n\
+                                                                  \\n"
+                                                                )
+
+                                                    let input =
+                                                            Text.concat prompts <> "\n\
+                                                            \\n\
+                                                            \" <> Text.concat examples <> "\n\
+                                                            \\n\
+                                                            \Now generate a standalone Grace expression matching the following type:\n\
+                                                            \\n\
+                                                            \" <> Pretty.toSmart schema <> "\n\
+                                                            \\n\
+                                                            \… according to these instructions:\n\
+                                                            \\n\
+                                                            \" <> prompt <> "\n\
+                                                            \\n\
+                                                            \Output a naked Grace expression without any code fence or explanation.\n\
+                                                            \Your response in its entirety should be a valid input to the Grace interpreter.\n\
+                                                            \\n\
+                                                            \" <> Text.concat failedAttempts
+
+                                                    ChatCompletionObject{ choices = [ OpenAI.Choice{ message } ] } <- createChatCompletion _CreateChatCompletion
+                                                        { messages = [ OpenAI.User{ content = [ OpenAI.Text{ text = input } ], name = Nothing } ]
+                                                        , model = Model model
+                                                        }
+
+                                                    let output = OpenAI.messageToContent message
+
+                                                    manager <- HTTP.newManager
+
+                                                    result <- Except.runExceptT (Interpret.interpretWith maybeMethods [] (Just schema) manager (Code "(generated)" output))
+
+                                                    case result of
+                                                        Left interpretError ->
+                                                            retry ((output, interpretError) : errors)
+                                                        Right (_, e) ->
+                                                            return e
+
+                                        retry []
+                                    else do
+                                        let (recordSchema, extract) = case schema of
+                                                t@Type.Record{ } -> (t, return)
+                                                t -> (Type.Record location(Type.Fields [("response", t)] Monotype.EmptyFields), extractResponse)
+
+                                        (jsonSchema, newRecordSchema) <- case toJSONSchema recordSchema of
+                                            Left exception -> Exception.throwIO exception
+                                            Right result -> return result
+
+                                        let input =
+                                                prompt <> "\n\
+                                                \\n\
+                                                \Generate JSON output matching the following type:\n\
+                                                \\n\
+                                                \" <> Pretty.toSmart newRecordSchema
+
+                                        ChatCompletionObject{ choices = [ OpenAI.Choice{ message } ] } <- createChatCompletion _CreateChatCompletion
+                                            { messages = [ OpenAI.User{ content = [ OpenAI.Text{ text = input } ], name = Nothing } ]
+                                            , model = Model model
+                                            , response_format = Just JSON_Schema
+                                                { json_schema = JSONSchema
+                                                    { description = Nothing
+                                                    , name = "result"
+                                                    , schema = Just jsonSchema
+                                                    , strict = Just True
+                                                    }
+                                                }
                                             }
-                                        }
-                                    }
 
-                                let text_ = OpenAI.messageToContent message
-                                let bytes = Encoding.encodeUtf8 text_
-                                let lazyBytes =
-                                        ByteString.Lazy.fromStrict bytes
+                                        let output = OpenAI.messageToContent message
+                                        let bytes = Encoding.encodeUtf8 output
+                                        let lazyBytes =
+                                                ByteString.Lazy.fromStrict bytes
 
-                                v <- case Aeson.eitherDecode lazyBytes of
-                                    Left message_ -> Exception.throwIO JSONDecodingFailed{ message = message_, text = text_ }
-                                    Right v -> return v
+                                        v <- case Aeson.eitherDecode lazyBytes of
+                                            Left message_ -> Exception.throwIO JSONDecodingFailed{ message = message_, text = output }
+                                            Right v -> return v
 
-                                case fromJSON newRecordSchema v of
-                                    Left invalidJSON ->
-                                        Exception.throwIO invalidJSON
-                                    Right e ->
-                                        extract e
+                                        case fromJSON newRecordSchema v of
+                                            Left invalidJSON ->
+                                                Exception.throwIO invalidJSON
+                                            Right e ->
+                                                extract e
                     other ->
                         return (Value.Prompt other)
 
@@ -786,10 +902,10 @@ instance Exception MissingCredentials where
         \prompt keyword"
 
 -- | The expected type for the model output can't be encoded as JSON
-newtype UnsupportedModelOutput = UnsupportedModelOutput{ original :: Type () }
+newtype UnsupportedModelOutput a = UnsupportedModelOutput{ original :: Type a }
     deriving (Show)
 
-instance Exception UnsupportedModelOutput where
+instance (Show a, Typeable a) => Exception (UnsupportedModelOutput a) where
     displayException UnsupportedModelOutput{..} =
         "Unsupported model output type\n\
         \\n\
@@ -828,12 +944,12 @@ instance Exception MissingSchema where
         "Internal error - Elaboration failed to infer schema for prompt"
 
 -- | Invalid JSON output which didn't match the expected type
-data InvalidJSON = InvalidJSON
+data InvalidJSON a = InvalidJSON
     { value :: Aeson.Value
-    , type_ :: Type ()
+    , type_ :: Type a
     } deriving (Show)
 
-instance Exception InvalidJSON where
+instance (Show a, Typeable a) => Exception (InvalidJSON a) where
     displayException InvalidJSON{..} =
         "Invalid JSON\n\
         \\n\

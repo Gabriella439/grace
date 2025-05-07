@@ -166,6 +166,13 @@ let presentOptionalValue : Optional Natural = some 1
 # automatically inserted wherever it's missing.
 let anotherOptionalValue : Optional Natural = 1
 
+# You can consume `Optional` values using `merge`
+let zero : Natural = merge { null: 0, some: \x -> x } absentOptionalValue
+
+let one : Natural = merge { null: 0, some: \x -> x } presentOptionalValue
+
+let stillOne : Natural = merge { null: 0, some: \x -> x } anotherOptionalValue
+
 let makeUser user =
       let home = "/home/${user}"
 
@@ -218,6 +225,10 @@ in  { greeting
     , firstPrime
     , absentOptionalValue
     , presentOptionalValue
+    , anotherOptionalValue
+    , zero
+    , one
+    , stillOne
     , makeUser
     , users
     }
