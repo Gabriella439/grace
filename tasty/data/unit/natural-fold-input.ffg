@@ -1,1 +1,1 @@
-\y -> Natural/fold 0 (\x -> x) y
+Natural/fold 3 (\x -> x + "a") ""

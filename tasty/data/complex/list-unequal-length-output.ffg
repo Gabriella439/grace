@@ -1,1 +1,1 @@
-\f x -> false
+\f x -> List/equal f [ x ] [ ]

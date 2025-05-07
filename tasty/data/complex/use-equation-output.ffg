@@ -1,1 +1,5 @@
-\a r b u -> { "field1": [ r, a ], "field2": [ L 1, b ] }
+\a ->
+\r ->
+\b ->
+\u ->
+  let field0 = [ true, r.x ] in { "field1": [ r, a ], "field2": [ L 1, b ] }

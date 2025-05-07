@@ -1,1 +1,1 @@
-\x -> x
+\x -> let y = x.a && x.b in x
