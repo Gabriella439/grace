@@ -94,8 +94,7 @@ let lines = concatSep "\n"
 
 let generatePoem idea =
         let structure = prompt
-                { model: "gpt-4o"
-                , text: lines
+                { text: lines
                     [ "Plan the structure of a new poem based on this idea:"
                     , ""
                     , idea
@@ -112,8 +111,7 @@ let generatePoem idea =
                 ]
 
         let style = prompt
-                { model: "gpt-4o"
-                , text: lines
+                { text: lines
                     [ "Given this poem structure:"
                     , renderedStructure
                     , ""
@@ -128,8 +126,7 @@ let generatePoem idea =
                 ]
 
         let poem : Text = prompt
-                { model: "gpt-4o"
-                , text: lines
+                { text: lines
                     [ "Write a complete poem based on this idea:"
                     , ""
                     , idea
@@ -284,8 +281,7 @@ However in our original example we don't need to specify intermediate types beca
 
 ```haskell
 let structure = prompt
-        { model: "gpt-4o"
-        , text: lines
+        { text: lines
             [ "Plan the structure of a new poem based on this idea:"
             , ""
             , idea
@@ -377,7 +373,7 @@ What's particularly neat about this example is that the prompt is so incredibly 
 We can explore this idea of using the schema to drive the prompt instead of prose using an example like this:
 
 ```haskell
-prompt{ text: "Generate some characters for a story", model: "gpt-4o" }
+prompt{ text: "Generate some characters for a story" }
   : List
     { "The character's name": Text
     , "The most memorable thing about the character": Text
