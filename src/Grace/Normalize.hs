@@ -13,6 +13,8 @@ module Grace.Normalize
     , apply
     ) where
 
+import Data.Bifunctor (first)
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Scientific (Scientific)
 import Data.Sequence (Seq(..), ViewL(..))
 import Data.Text (Text)
@@ -23,6 +25,7 @@ import Grace.Type (Type)
 import Grace.Value (Closure(..), Value)
 import Prelude hiding (succ)
 
+import qualified Control.Monad as Monad
 import qualified Data.HashMap.Strict.InsOrd as HashMap
 import qualified Data.List as List
 import qualified Data.Ord as Ord
@@ -65,15 +68,6 @@ lookupVariable name index environment =
             -- This has the nice property that `quote` does the right thing when
             -- converting back to the `Syntax` type.
             Value.Variable name (negate index - 1)
-
-{-| Substitute an expression into a `Closure`
-
-    > instantiate (Closure name env expression) value =
-    >    evaluate ((name, value) : env) expression
--}
-instantiate :: Closure -> Value -> Value
-instantiate (Closure name env syntax) value =
-    evaluate ((name, value) : env) syntax
 
 asInteger :: Scalar -> Maybe Integer
 asInteger (Natural n) = Just (fromIntegral n)
@@ -173,39 +167,27 @@ evaluate env syntax =
             Value.Scalar scalar
 
         Syntax.Operator{ operator = Syntax.And, .. } ->
-            case left' of
-                Value.Scalar (Bool True) -> right'
-                Value.Scalar (Bool False) -> Value.Scalar (Bool False)
-                _ -> case right' of
-                    Value.Scalar (Bool True) -> left'
-                    Value.Scalar (Bool False) -> Value.Scalar (Bool False)
-                    _ -> Value.Operator left' Syntax.And right'
+            case (left', right') of
+                (Value.Scalar (Bool l), Value.Scalar (Bool r)) ->
+                    Value.Scalar (Bool (l && r))
+                _ ->
+                    Value.Operator left' Syntax.And right'
           where
             left'  = evaluate env left
             right' = evaluate env right
 
         Syntax.Operator{ operator = Syntax.Or, .. } ->
-            case left' of
-                Value.Scalar (Bool True) -> Value.Scalar (Bool True)
-                Value.Scalar (Bool False) -> right'
-                _ -> case right' of
-                    Value.Scalar (Bool True) -> Value.Scalar (Bool True)
-                    Value.Scalar (Bool False) -> left'
-                    _ -> Value.Operator left' Syntax.Or right'
+            case (left', right') of
+                (Value.Scalar (Bool l), Value.Scalar (Bool r)) ->
+                    Value.Scalar (Bool (l || r))
+                _ ->
+                    Value.Operator left' Syntax.Or right'
           where
             left'  = evaluate env left
             right' = evaluate env right
 
         Syntax.Operator{ operator = Syntax.Times, .. } ->
             case (left', right') of
-                (Value.Scalar (Natural 1), _) ->
-                    right'
-                (Value.Scalar (Natural 0), _) ->
-                    Value.Scalar (Natural 0)
-                (_, Value.Scalar (Natural 1)) ->
-                    left'
-                (_, Value.Scalar (Natural 0)) ->
-                    Value.Scalar (Natural 0)
                 (Value.Scalar l, Value.Scalar r)
                     | Natural m <- l
                     , Natural n <- r ->
@@ -224,18 +206,6 @@ evaluate env syntax =
 
         Syntax.Operator{ operator = Syntax.Plus, .. } ->
             case (left', right') of
-                (Value.Scalar (Natural 0), _) ->
-                    right'
-                (_, Value.Scalar (Natural 0)) ->
-                    left'
-                (Value.Text (Value.Chunks "" []), _) ->
-                    right'
-                (_, Value.Text (Value.Chunks "" [])) ->
-                    left'
-                (Value.List [], _) ->
-                    right'
-                (_, Value.List []) ->
-                    left'
                 (Value.Scalar l, Value.Scalar r)
                     | Natural m <- l
                     , Natural n <- r ->
@@ -429,24 +399,6 @@ apply function argument =
 countNames :: Text -> [Text] -> Int
 countNames name = length . filter (== name)
 
-{-| Obtain a unique variable, given a list of variable names currently in scope
-
-    >>> fresh "x" [ "x", "y", "x" ]
-    Variable "x" 2
-    >>> fresh "y" [ "x", "y", "x" ]
-    Variable "y" 1
-    >>> fresh "z" [ "x", "y", "x" ]
-    Variable "z" 0
--}
-fresh
-    :: Text
-    -- ^ Variable base name (without the index)
-    -> [Text]
-    -- ^ Variables currently in scope
-    -> Value
-    -- ^ Unique variable (including the index)
-fresh name names = Value.Variable name (countNames name names)
-
 -- | Convert a `Value` back into the surface `Syntax`
 quote
     :: [Text]
@@ -459,12 +411,34 @@ quote names value =
         Value.Variable name index ->
             Syntax.Variable{ index = countNames name names - index - 1, .. }
 
-        Value.Lambda closure@(Closure name _ _) ->
-            Syntax.Lambda{ nameBinding = Syntax.NameBinding{ nameLocation = (), annotation = Nothing, .. }, .. }
+        Value.Lambda (Closure name env body) ->
+            Syntax.Lambda
+                { nameBinding = Syntax.NameBinding
+                    { nameLocation = location
+                    , annotation = Nothing
+                    , ..
+                    }
+                , body = withEnv
+                , ..
+                }
           where
-            variable = fresh name names
+            quoted = fmap (quote [] . snd) body
 
-            body = quote (name : names) (instantiate closure variable)
+            newBody = Monad.join (first (\_ -> location) quoted)
+
+            toBinding (n, v) = Syntax.Binding
+                { name = n
+                , nameLocation = location
+                , nameBindings = []
+                , annotation = Nothing
+                , assignment = quote names v
+                }
+
+            withEnv = case env of
+                [] -> newBody
+                e : es -> Syntax.Let{ body = newBody, .. }
+                  where
+                    bindings = fmap toBinding (e :| es)
 
         Value.Application function argument ->
             Syntax.Application
@@ -485,7 +459,7 @@ quote names value =
             adapt (field, value_) = (field, quote names value_)
 
         Value.Field record field ->
-            Syntax.Field{ record = quote names record, fieldLocation = (), .. }
+            Syntax.Field{ record = quote names record, fieldLocation = location, .. }
 
         Value.Alternative name ->
             Syntax.Alternative{..}
@@ -512,7 +486,7 @@ quote names value =
         Value.Operator left operator right ->
             Syntax.Operator
                 { left = quote names left
-                , operatorLocation = ()
+                , operatorLocation = location
                 , right = quote names right
                 , ..
                 }

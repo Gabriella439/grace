@@ -1,8 +1,8 @@
 { "and": List/fold { "cons": \x y -> x && y, "nil": true }
 , "equal": \l ->
-           \r ->
-                 l && r
-             ||  (if l then false else true) && (if r then false else true)
+             let not = \b -> if b then false else true
+
+             in  \r -> l && r || not l && not r
 , "not": \b -> if b then false else true
 , "or": List/fold { "cons": \x y -> x || y, "nil": false }
 , "show": \b -> if b then "true" else "false"
