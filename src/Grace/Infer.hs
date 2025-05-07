@@ -1232,7 +1232,7 @@ infer e₀ = do
 
                 _Γ <- get
 
-                return (Type.Function{..}, Syntax.Lambda{ nameBinding = Syntax.NameBinding{ annotation = Just input, .. }, body = solveSyntax _Γ newBody, .. })
+                return (Type.Function{..}, Syntax.Lambda{ nameBinding = Syntax.NameBinding{ annotation = Nothing, .. }, body = solveSyntax _Γ newBody, .. })
         Syntax.Lambda{ nameBinding = Syntax.NameBinding{ annotation = Just input, .. }, ..} -> do
             b <- fresh
 
@@ -1293,7 +1293,7 @@ infer e₀ = do
                     (_A, newAssignment) <- infer (toLambda nameBindings₀)
 
                     let newBinding = Syntax.Binding
-                            { annotation = Just _A
+                            { annotation = Nothing
                             , nameBindings = []
                             , assignment = newAssignment
                             , nameLocation = nameLocation₀
