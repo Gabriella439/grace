@@ -219,7 +219,7 @@ main = do
 
             (inferred, value) <- throws eitherResult
 
-            syntax <- Normalize.quote maybeMethods [] value
+            let syntax = Normalize.quote [] value
 
             let annotatedExpression
                     | annotate =

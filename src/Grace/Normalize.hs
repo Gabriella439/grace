@@ -800,112 +800,99 @@ countNames name = length . filter (== name)
 
 -- | Convert a `Value` back into the surface `Syntax`
 quote
-    :: Maybe Methods
-    -- ^ OpenAI methods
-    -> [Text]
+    :: [Text]
     -- ^ Variable names currently in scope (starting at @[]@ for a top-level
     --   expression)
     -> Value
-    -> IO (Syntax () Void)
-quote maybeMethods = loop
+    -> Syntax () Void
+quote names value =
+    case value of
+        Value.Variable name index ->
+            Syntax.Variable{ index = countNames name names - index - 1, .. }
+
+        Value.Lambda (Closure name env body) ->
+            Syntax.Lambda
+                { nameBinding = Syntax.NameBinding
+                    { nameLocation = ()
+                    , annotation = Nothing
+                    , ..
+                    }
+                , body = withEnv
+                , ..
+                }
+          where
+            quoted = fmap (quote [] . snd) body
+
+            newBody = Monad.join (first (\_ -> location) quoted)
+
+            toBinding (n, v) =
+                Syntax.Binding
+                    { name = n
+                    , nameLocation = location
+                    , nameBindings = []
+                    , annotation = Nothing
+                    , assignment = quote names v
+                    , ..
+                    }
+
+            withEnv = case reverse env of
+                [] -> newBody
+                e : es -> Syntax.Let{ body = newBody, .. }
+                  where
+                    bindings = fmap toBinding (e :| es)
+
+        Value.Application function argument ->
+            Syntax.Application
+                { function = quote names function
+                , argument = quote names argument
+                , ..
+                }
+
+        Value.List elements ->
+            Syntax.List{ elements = fmap (quote names) elements, .. }
+
+        Value.Record fieldValues ->
+            Syntax.Record
+                { fieldValues = map adapt (HashMap.toList fieldValues)
+                , ..
+                }
+          where
+            adapt (field, value_) = (field, quote names value_)
+
+        Value.Field record field ->
+            Syntax.Field{ record = quote names record, fieldLocation = (), .. }
+
+        Value.Alternative name ->
+            Syntax.Alternative{..}
+
+        Value.Merge handlers ->
+            Syntax.Merge{ handlers = quote names handlers, .. }
+
+        Value.If predicate ifTrue ifFalse ->
+            Syntax.If
+                { predicate = quote names predicate
+                , ifTrue = quote names ifTrue
+                , ifFalse = quote names ifFalse
+                , ..
+                }
+
+        Value.Prompt arguments ->
+            Syntax.Prompt{ arguments = quote names arguments, schema = Nothing, .. }
+
+        Value.Scalar scalar ->
+            Syntax.Scalar{..}
+
+        Value.Operator left operator right ->
+            Syntax.Operator
+                { left = quote names left
+                , operatorLocation = ()
+                , right = quote names right
+                , ..
+                }
+
+        Value.Builtin builtin ->
+            Syntax.Builtin{..}
   where
-    loop :: [Text] -> Value -> IO (Syntax () Void)
-    loop names value =
-        case value of
-            Value.Variable name index ->
-                return Syntax.Variable{ index = countNames name names - index - 1, .. }
-
-            Value.Lambda (Closure name env body) -> do
-                quoted <- traverse (quote maybeMethods [] . snd) body
-
-                let newBody = Monad.join (first (\_ -> location) quoted)
-
-                let toBinding (n, v) = do
-                        assignment <- loop names v
-
-                        return Syntax.Binding
-                            { name = n
-                            , nameLocation = location
-                            , nameBindings = []
-                            , annotation = Nothing
-                            , ..
-                            }
-
-                withEnv <- case env of
-                    [] -> do
-                        return newBody
-                    e : es -> do
-                        bindings <- traverse toBinding (e :| es)
-                        return Syntax.Let{ body = newBody, .. }
-
-                return Syntax.Lambda{ nameBinding = Syntax.NameBinding{ nameLocation = location, annotation = Nothing, .. }, body = withEnv, .. }
-
-            Value.Application function argument -> do
-                newFunction <- loop names function
-                newArgument <- loop names argument
-                return Syntax.Application
-                    { function = newFunction
-                    , argument = newArgument
-                    , ..
-                    }
-
-            Value.List elements -> do
-                newElements <- traverse (loop names) elements
-                return Syntax.List{ elements = newElements, .. }
-
-            Value.Record fieldValues -> do
-                newFieldValues <- traverse adapt (HashMap.toList fieldValues)
-                return Syntax.Record
-                    { fieldValues = newFieldValues
-                    , ..
-                    }
-              where
-                adapt (field, value_) = do
-                    newValue <- loop names value_
-                    return (field, newValue)
-
-            Value.Field record field -> do
-                newRecord <- loop names record
-                return Syntax.Field{ record = newRecord, fieldLocation = location, .. }
-
-            Value.Alternative name ->
-                return Syntax.Alternative{..}
-
-            Value.Merge handlers -> do
-                newHandlers <- loop names handlers
-                return Syntax.Merge{ handlers = newHandlers, .. }
-
-            Value.If predicate ifTrue ifFalse -> do
-                newPredicate <- loop names predicate
-                newIfTrue <- loop names ifTrue
-                newIfFalse <- loop names ifFalse
-                return Syntax.If
-                    { predicate = newPredicate
-                    , ifTrue = newIfTrue
-                    , ifFalse = newIfFalse
-                    , ..
-                    }
-
-            Value.Prompt arguments -> do
-                newArguments <- loop names arguments
-                return Syntax.Prompt{ arguments = newArguments, schema = Nothing, .. }
-
-            Value.Scalar scalar ->
-                return Syntax.Scalar{..}
-
-            Value.Operator left operator right -> do
-                newLeft <- loop names left
-                newRight <- loop names right
-                return Syntax.Operator
-                    { left = newLeft
-                    , operatorLocation = location
-                    , right = newRight
-                    , ..
-                    }
-
-            Value.Builtin builtin ->
-                return Syntax.Builtin{..}
-
     location = ()
 
 -- | Missing API credentials

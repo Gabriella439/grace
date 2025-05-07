@@ -66,7 +66,7 @@ repl maybeMethods = do
                     err e
 
                 Right (_inferred, value) -> do
-                    syntax <- liftIO (Normalize.quote maybeMethods [] value)
+                    let syntax = Normalize.quote [] value
 
                     width <- liftIO Width.getWidth
 

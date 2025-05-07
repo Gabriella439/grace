@@ -16,7 +16,6 @@ module Grace.TH
     , typeOfInput
     ) where
 
-import Control.Monad.IO.Class (liftIO)
 import Data.Functor (void)
 import Data.Text (Text)
 import Data.Void (Void)
@@ -107,6 +106,6 @@ helperFunction f input = TH.Code do
 
     let type_ = void inferred
 
-    syntax <- liftIO (Normalize.quote Nothing [] value)
+    let syntax = Normalize.quote [] value
 
     TExp <$> TH.lift (f (type_, syntax))
