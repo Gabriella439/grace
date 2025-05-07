@@ -197,9 +197,11 @@
                   };
 
                   website = pkgsNew.runCommand "try-grace" { } ''
-                    mkdir -p $out/prelude
+                    mkdir -p $out/{prelude,prompts,examples}
                     ${pkgsNew.rsync}/bin/rsync --archive ${./website}/ $out
                     ${pkgsNew.rsync}/bin/rsync --archive ${./prelude}/ $out/prelude
+                    ${pkgsNew.rsync}/bin/rsync --archive ${./prompts}/ $out/prompts
+                    ${pkgsNew.rsync}/bin/rsync --archive ${./examples}/ $out/examples
                     chmod -R u+w $out
                     cp ${pkgsNew.haskell.packages."${compiler}".grace}/bin/try-grace.jsexe/all.js $out/js
                   '';

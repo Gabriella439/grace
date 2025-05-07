@@ -5,14 +5,17 @@ license-file:        LICENSE
 author:              Gabriella Gonzalez
 maintainer:          Gabriel439@gmail.com
 build-type:          Simple
+extra-source-files:  examples/**.ffg
+                   , prompts/**.md
+                   , prelude/**.ffg
 
 library
   hs-source-dirs:      src
 
   build-depends:       base
+                     , Earley
                      , aeson
                      , bytestring
-                     , Earley
                      , containers
                      , filepath
                      , generic-lens
@@ -33,6 +36,7 @@ library
                      , unordered-containers
 
   exposed-modules:     Grace.Context
+                     , Grace.DataFile
                      , Grace.Domain
                      , Grace.Existential
                      , Grace.Input
@@ -51,6 +55,7 @@ library
                      , Grace.Width
 
   other-modules:       Grace.Compat
+                     , Paths_grace
 
   default-language:    Haskell2010
 

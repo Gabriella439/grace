@@ -174,17 +174,22 @@ prompt
     -- ^ JSON schema
     -> IO Text
 prompt Methods{ createChatCompletion } text model schema = do
+    let response_format = do
+            s <- schema
+
+            return JSON_Schema
+                { json_schema = JSONSchema
+                    { description = Nothing
+                    , name = "result"
+                    , schema = Just s
+                    , strict = Just True
+                    }
+                }
+
     ChatCompletionObject{ choices = [ Choice{ message } ] } <- createChatCompletion _CreateChatCompletion
         { messages = [ User{ content = [ Text{ text } ], name = Nothing } ]
         , model = Model model
-        , response_format = Just JSON_Schema
-            { json_schema = JSONSchema
-                { description = Nothing
-                , name = "result"
-                , schema
-                , strict = Just True
-                }
-            }
+        , response_format
         }
 
     return (Completions.messageToContent message)
