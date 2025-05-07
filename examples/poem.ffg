@@ -5,8 +5,7 @@ let lines = concatSep "\n"
 
 let generatePoem idea =
         let structure = prompt
-                { model: "gpt-4o"
-                , text: lines
+                { text: lines
                     [ "Plan the structure of a new poem based on this idea:"
                     , ""
                     , idea
@@ -23,8 +22,7 @@ let generatePoem idea =
                     ]
 
         let style = prompt
-                { model: "gpt-4o"
-                , text: lines
+                { text: lines
                     [ "Given this poem structure:"
                     , renderedStructure
                     , ""
@@ -39,8 +37,7 @@ let generatePoem idea =
                     ]
 
         let poem = prompt
-                { model: "gpt-4o"
-                , text: lines
+                { text: lines
                     [ "Write a complete poem based on this idea:"
                     , ""
                     , idea

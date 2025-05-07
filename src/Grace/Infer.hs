@@ -1468,6 +1468,7 @@ infer e₀ = do
                     Type.Fields
                         [ ("text", Type.Scalar{ scalar = Monotype.Text, .. })
                         , ("model", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Text, .. }, .. })
+                        , ("code", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Bool, .. }, .. })
                         ]
                         Monotype.EmptyFields
                 , ..
@@ -2069,6 +2070,7 @@ check Syntax.Prompt{..} _B = do
             Type.Fields
                 [ ("text", Type.Scalar{ scalar = Monotype.Text, .. })
                 , ("model", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Text, .. }, .. })
+                , ("code", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Bool, .. }, .. })
                 ]
                 Monotype.EmptyFields
         , ..
