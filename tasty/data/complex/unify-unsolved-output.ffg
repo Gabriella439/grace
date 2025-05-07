@@ -1,1 +1,11 @@
-\r s -> { "example0": [ r, s ], "example1": [ R true, L 1 ] }
+\r ->
+\s ->
+  let a = r.x
+
+  let b = s.y
+
+  let c = L 1
+
+  let d = R true
+
+  in  { "example0": [ r, s ], "example1": [ d, c ] }

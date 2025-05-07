@@ -1,1 +1,1 @@
-\id -> [ id, \x -> x ]
+\id -> [ id : forall (a : Type) . a -> a, \x -> x ]

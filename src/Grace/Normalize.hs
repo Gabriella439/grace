@@ -23,7 +23,9 @@ module Grace.Normalize
 
 import Control.Applicative (empty)
 import Control.Exception (Exception(..))
+import Data.Bifunctor (first)
 import Data.Foldable (toList)
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Scientific (Scientific)
 import Data.Sequence (Seq(..), ViewL(..))
 import Data.Text (Text)
@@ -550,49 +552,27 @@ evaluate maybeMethods = loop
                 left'  <- loop env left
                 right' <- loop env right
 
-                case left' of
-                    Value.Scalar (Bool True) ->
-                        return right'
-                    Value.Scalar (Bool False) ->
-                        return (Value.Scalar (Bool False))
-                    _ -> case right' of
-                        Value.Scalar (Bool True) ->
-                            return left'
-                        Value.Scalar (Bool False) ->
-                            return (Value.Scalar (Bool False))
-                        _ -> do
-                            return (Value.Operator left' Syntax.And right')
+                case (left', right') of
+                    (Value.Scalar (Bool l), Value.Scalar (Bool r)) ->
+                        return (Value.Scalar (Bool (l && r)))
+                    _ ->
+                        return (Value.Operator left' Syntax.Or right')
 
             Syntax.Operator{ operator = Syntax.Or, .. } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
-                case left' of
-                    Value.Scalar (Bool True) ->
-                        return (Value.Scalar (Bool True))
-                    Value.Scalar (Bool False) ->
-                        return right'
-                    _ -> case right' of
-                        Value.Scalar (Bool True) ->
-                            return (Value.Scalar (Bool True))
-                        Value.Scalar (Bool False) ->
-                            return left'
-                        _ ->
-                            return (Value.Operator left' Syntax.Or right')
+                case (left', right') of
+                    (Value.Scalar (Bool l), Value.Scalar (Bool r)) ->
+                        return (Value.Scalar (Bool (l || r)))
+                    _ ->
+                        return (Value.Operator left' Syntax.Or right')
 
             Syntax.Operator{ operator = Syntax.Times, .. } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
                 case (left', right') of
-                    (Value.Scalar (Natural 1), _) ->
-                        return right'
-                    (Value.Scalar (Natural 0), _) ->
-                        return (Value.Scalar (Natural 0))
-                    (_, Value.Scalar (Natural 1)) ->
-                        return left'
-                    (_, Value.Scalar (Natural 0)) ->
-                        return (Value.Scalar (Natural 0))
                     (Value.Scalar l, Value.Scalar r)
                         | Natural m <- l
                         , Natural n <- r ->
@@ -611,18 +591,6 @@ evaluate maybeMethods = loop
                 right' <- loop env right
 
                 case (left', right') of
-                    (Value.Scalar (Natural 0), _) ->
-                        return right'
-                    (_, Value.Scalar (Natural 0)) ->
-                        return left'
-                    (Value.Scalar (Text ""), _) ->
-                        return right'
-                    (_, Value.Scalar (Text "")) ->
-                        return left'
-                    (Value.List [], _) ->
-                        return right'
-                    (_, Value.List []) ->
-                        return left'
                     (Value.Scalar l, Value.Scalar r)
                         | Natural m <- l
                         , Natural n <- r ->
@@ -830,24 +798,6 @@ evaluate maybeMethods = loop
 countNames :: Text -> [Text] -> Int
 countNames name = length . filter (== name)
 
-{-| Obtain a unique variable, given a list of variable names currently in scope
-
-    >>> fresh "x" [ "x", "y", "x" ]
-    Variable "x" 2
-    >>> fresh "y" [ "x", "y", "x" ]
-    Variable "y" 1
-    >>> fresh "z" [ "x", "y", "x" ]
-    Variable "z" 0
--}
-fresh
-    :: Text
-    -- ^ Variable base name (without the index)
-    -> [Text]
-    -- ^ Variables currently in scope
-    -> Value
-    -- ^ Unique variable (including the index)
-fresh name names = Value.Variable name (countNames name names)
-
 -- | Convert a `Value` back into the surface `Syntax`
 quote
     :: Maybe Methods
@@ -865,12 +815,30 @@ quote maybeMethods = loop
             Value.Variable name index ->
                 return Syntax.Variable{ index = countNames name names - index - 1, .. }
 
-            Value.Lambda closure@(Closure name _ _) -> do
-                instantiated <- instantiate closure variable
-                body <- loop (name : names) instantiated
-                return Syntax.Lambda{ nameBinding = Syntax.NameBinding{ nameLocation = (), annotation = Nothing, .. }, .. }
-              where
-                variable = fresh name names
+            Value.Lambda (Closure name env body) -> do
+                quoted <- traverse (quote maybeMethods [] . snd) body
+
+                let newBody = Monad.join (first (\_ -> location) quoted)
+
+                let toBinding (n, v) = do
+                        assignment <- loop names v
+
+                        return Syntax.Binding
+                            { name = n
+                            , nameLocation = location
+                            , nameBindings = []
+                            , annotation = Nothing
+                            , ..
+                            }
+
+                withEnv <- case env of
+                    [] -> do
+                        return newBody
+                    e : es -> do
+                        bindings <- traverse toBinding (e :| es)
+                        return Syntax.Let{ body = newBody, .. }
+
+                return Syntax.Lambda{ nameBinding = Syntax.NameBinding{ nameLocation = location, annotation = Nothing, .. }, body = withEnv, .. }
 
             Value.Application function argument -> do
                 newFunction <- loop names function
@@ -898,7 +866,7 @@ quote maybeMethods = loop
 
             Value.Field record field -> do
                 newRecord <- loop names record
-                return Syntax.Field{ record = newRecord, fieldLocation = (), .. }
+                return Syntax.Field{ record = newRecord, fieldLocation = location, .. }
 
             Value.Alternative name ->
                 return Syntax.Alternative{..}
@@ -930,7 +898,7 @@ quote maybeMethods = loop
                 newRight <- loop names right
                 return Syntax.Operator
                     { left = newLeft
-                    , operatorLocation = ()
+                    , operatorLocation = location
                     , right = newRight
                     , ..
                     }
@@ -939,9 +907,6 @@ quote maybeMethods = loop
                 return Syntax.Builtin{..}
 
     location = ()
-
-    instantiate (Closure name env syntax) value =
-        evaluate maybeMethods ((name, value) : env) syntax
 
 -- | Missing API credentials
 data MissingCredentials = MissingCredentials
