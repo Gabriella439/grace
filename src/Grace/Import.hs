@@ -1,4 +1,5 @@
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE NamedFieldPuns     #-}
 {-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE RecordWildCards    #-}
 
@@ -20,7 +21,7 @@ import Data.List.NonEmpty (NonEmpty(..))
 import Data.Maybe (fromJust)
 import Data.Text (Text)
 import Grace.HTTP (HttpException, Manager)
-import Grace.Input (Input(..))
+import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
 import Grace.Syntax (Syntax)
 import System.FilePath ((</>))
@@ -35,6 +36,7 @@ import qualified Data.Text.IO as Text.IO
 import qualified Grace.HTTP as HTTP
 import qualified Grace.Parser as Parser
 import qualified Grace.Pretty as Pretty
+import qualified Grace.Syntax as Syntax
 import qualified System.Environment as Environment
 import qualified System.IO.Unsafe as Unsafe
 import qualified Text.URI as URI
@@ -60,20 +62,26 @@ fetch manager url = do
 -- | Resolve an `Input` by returning the source code that it represents
 resolve :: Manager -> Input -> IO (Syntax Location Input)
 resolve manager input = case input of
-    URI uri
+    URI uri mode
         | let schemes = map (fromJust . URI.mkScheme) [ "http", "https" ]
         , any (`elem` schemes) (URI.uriScheme uri) -> do
             let name = URI.renderStr uri
 
             let handler e = throw (HTTPError e)
 
-            code <- Exception.handle handler (fetch manager (Text.pack name))
+            text <- Exception.handle handler (fetch manager (Text.pack name))
 
-            result <- case Parser.parse name code of
-                Left e -> Exception.throw e
-                Right result -> return result
+            result <- case mode of
+                AsCode -> case Parser.parse name text of
+                    Left e -> Exception.throw e
+                    Right result -> return result
+                AsText -> do
+                    return Syntax.Scalar
+                        { scalar = Syntax.Text text
+                        , location = 0
+                        }
 
-            let locate offset = Location{..}
+            let locate offset = Location{ code = text, .. }
 
             return (first locate result)
 
@@ -87,17 +95,23 @@ resolve manager input = case input of
 
                     maybeCode <- Environment.lookupEnv (Text.unpack var)
 
-                    code <- case maybeCode of
+                    text <- case maybeCode of
                         Nothing -> throw MissingEnvironmentVariable
                         Just string -> return (Text.pack string)
 
                     let name = "env:" <> Text.unpack var
 
-                    result <- case Parser.parse name code of
-                        Left e -> Exception.throw e
-                        Right result -> return result
+                    result <- case mode of
+                        AsCode -> case Parser.parse name text of
+                            Left e -> Exception.throw e
+                            Right result -> return result
+                        AsText -> do
+                            return Syntax.Scalar
+                                { scalar = Syntax.Text text
+                                , location = 0
+                                }
 
-                    let locate offset = Location{..}
+                    let locate offset = Location{ code = text, .. }
 
                     return (first locate result)
                 Left True -> do
@@ -115,15 +129,15 @@ resolve manager input = case input of
                     let pathPiecesToFilePath =
                             foldl' (</>) "/" . map (Text.unpack . URI.unRText) . NonEmpty.toList
 
-                    readPath (pathPiecesToFilePath pieces)
+                    readPath mode (pathPiecesToFilePath pieces)
                 else do
                     throw UnsupportedAuthority
 
         | otherwise -> do
             throw InvalidURI
 
-    Path path -> do
-        readPath path
+    Path path mode -> do
+        readPath mode path
 
     Code name code -> do
         result <- case Parser.parse name code of
@@ -134,14 +148,17 @@ resolve manager input = case input of
 
         return (first locate result)
   where
-    readPath path = do
-        code <- Text.IO.readFile path
+    readPath mode path = do
+        text <- Text.IO.readFile path
 
-        result <- case Parser.parse path code of
-            Left e -> Exception.throw e
-            Right result -> return result
+        result <- case mode of
+            AsCode -> case Parser.parse path text of
+                Left e -> Exception.throw e
+                Right result -> return result
+            AsText -> do
+                return Syntax.Scalar{ scalar = Syntax.Text text, location = 0 }
 
-        let locate offset = Location{ name = path, ..}
+        let locate offset = Location{ name = path, code = text, ..}
 
         return (first locate result)
 
@@ -180,8 +197,12 @@ instance Exception ImportError where
             )
       where
         renderedInput = case input of
-            URI  uri  -> URI.render uri
-            Path path -> Text.pack path
+            URI  uri AsCode -> URI.render uri
+            URI  uri AsText -> URI.render uri <> " : Text"
+
+            Path path AsCode -> Text.pack path
+            Path path AsText -> Text.pack path <> " : Text"
+
             Code _ _  -> "(input)"
 
         renderedError :: Text

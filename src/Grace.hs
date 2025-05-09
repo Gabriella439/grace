@@ -16,7 +16,7 @@ import Control.Exception.Safe (Exception(..))
 import Data.Foldable (traverse_)
 import Data.Functor (void)
 import Data.Void (Void)
-import Grace.Interpret (Input(..))
+import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
 import Grace.Syntax (Builtin(..), Syntax(..))
 import Grace.Type (Type(..))
@@ -183,7 +183,7 @@ main = do
                 "-" -> do
                     Code "(input)" <$> Text.IO.getContents
                 _ -> do
-                    return (Path file)
+                    return (Path file AsCode)
 
             eitherResult <- do
                 Except.runExceptT (Interpret.interpret input)
@@ -211,7 +211,7 @@ main = do
                 "-" -> do
                     Code "(input)" <$> Text.IO.getContents
                 _ -> do
-                    return (Path file)
+                    return (Path file AsCode)
 
             let location =
                     Location

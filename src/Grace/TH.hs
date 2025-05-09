@@ -19,7 +19,7 @@ module Grace.TH
 import Data.Functor (void)
 import Data.Text (Text)
 import Data.Void (Void)
-import Grace.Interpret (Input(..))
+import Grace.Input (Input(..), Mode(..))
 import Grace.Syntax (Syntax)
 import Grace.Type (Type)
 import Language.Haskell.TH.Quote (QuasiQuoter(..))
@@ -67,9 +67,8 @@ expressionFromCode :: Text -> Code Q (Syntax () Void)
 expressionFromCode = expressionFromInput . Code "(input)"
 
 -- | Like `expressionFromCode`, but takes path of a source file as input.
-expressionFromFile
-    :: FilePath -> Code Q (Syntax () Void)
-expressionFromFile = expressionFromInput . Path
+expressionFromFile :: FilePath -> Code Q (Syntax () Void)
+expressionFromFile path = expressionFromInput (Path path AsCode)
 
 -- | Like `expressionFromCode`, but expects `Input` as an argument.
 expressionFromInput :: Input -> Code Q (Syntax () Void)
@@ -88,7 +87,7 @@ typeOfCode = typeOfInput . Code "(input)"
 
 -- | Like `typeOfCode`, but takes path of a source file as input.
 typeOfFile :: FilePath -> Code Q (Type ())
-typeOfFile = typeOfInput . Path
+typeOfFile path = typeOfInput (Path path AsCode)
 
 -- | Like `typeOfCode`, but expects `Input` as an argument.
 typeOfInput :: Input -> Code Q (Type ())
