@@ -31,7 +31,7 @@ import Data.Functor (void, ($>))
 import Data.List.NonEmpty (NonEmpty(..), some1)
 import Data.Scientific (Scientific)
 import Data.Text (Text)
-import Grace.Input (Input(..))
+import Grace.Input (Input(..), Mode(..))
 import Grace.Lexer (LocatedToken(LocatedToken), ParseError(..), Token)
 import Grace.Location (Location(..), Offset(..))
 import Grace.Syntax (Binding(..), NameBinding(..), Syntax(..))
@@ -316,6 +316,16 @@ grammar = mdo
 
         return (foldl (snoc record) record fields)
 
+    modeAnnotation <- rule do
+        let textMode = do
+                token Lexer.Colon
+                token Lexer.Text
+                pure AsText
+
+        let codeMode = pure AsCode
+
+        textMode <|> codeMode
+
     primitiveExpression <- rule
         (   do  ~(location, name) <- locatedLabel
 
@@ -471,11 +481,15 @@ grammar = mdo
 
         <|> do  ~(location, file) <- locatedFile
 
-                return Syntax.Embed{ embedded = Path file, .. }
+                mode <- modeAnnotation
+
+                return Syntax.Embed{ embedded = Path file mode, .. }
 
         <|> do  ~(location, uri) <- locatedURI
 
-                return Syntax.Embed{ embedded = URI uri, .. }
+                mode <- modeAnnotation
+
+                return Syntax.Embed{ embedded = URI uri mode, .. }
 
         <|> do  token Lexer.OpenParenthesis
                 e <- expression

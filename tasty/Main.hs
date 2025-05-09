@@ -8,7 +8,8 @@ module Main where
 
 import Control.Exception.Safe (Exception)
 import Data.Text (Text)
-import Grace.Interpret (Input(..), InterpretError)
+import Grace.Input (Input(..), Mode(..))
+import Grace.Interpret (InterpretError)
 import Grace.Location (Location(..))
 import Grace.Pretty (Pretty(..))
 import Grace.Type (Type(..))
@@ -60,7 +61,7 @@ fileToTestTree prefix = do
 
     let name = FilePath.takeBaseName input
 
-    eitherResult <- interpret (Path input)
+    eitherResult <- interpret (Path input AsCode)
 
     case eitherResult of
         Left e -> do

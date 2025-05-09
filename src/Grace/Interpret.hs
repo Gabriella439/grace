@@ -111,7 +111,7 @@ interpretWith bindings maybeAnnotation manager input = do
             return (inferred, Normalize.evaluate evaluationContext resolvedExpression)
 
 remote :: Input -> Bool
-remote (URI uri) = any (`elem` schemes) (URI.uriScheme uri)
+remote (URI uri _) = any (`elem` schemes) (URI.uriScheme uri)
   where
     schemes = map (fromJust . URI.mkScheme) [ "https", "http" ]
 remote _ = False

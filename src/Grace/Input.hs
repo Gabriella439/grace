@@ -1,7 +1,10 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 -- | This module contains the functions and types that power to URI-base imports
 module Grace.Input
     ( -- * Input
       Input(..)
+    , Mode(..)
     ) where
 
 import Data.List.NonEmpty (NonEmpty(..))
@@ -20,26 +23,27 @@ import qualified Text.URI as URI
     for cases like interpreting code read from standard input.
 -}
 data Input
-    = Path FilePath
+    = Path FilePath Mode
     -- ^ The path to the code
     | Code String Text
     -- ^ Source code: @Code name content@
-    | URI URI.URI
+    | URI URI.URI Mode
     deriving (Eq, Show)
 
 instance Semigroup Input where
-    _ <> URI uri = URI uri
+    _ <> URI uri mode = URI uri mode
 
     _ <> Code name code = Code name code
 
-    Code _ _    <> Path child = Path child
-    Path parent <> Path child = Path (FilePath.takeDirectory parent </> child)
-    URI parent  <> Path child
+    Code _ _    <> Path child mode = Path child mode
+    Path parent _ <> Path child mode =
+        Path (FilePath.takeDirectory parent </> child) mode
+    URI parent _ <> Path child mode
         | FilePath.isRelative child
         , Just uri <- URI.relativeTo childURI parent =
-            URI uri
+            URI uri mode
         | otherwise =
-            Path child
+            Path child mode
       where
         uriPath = do
             c : cs <- traverse (URI.mkPathPiece . Text.pack) (FilePath.splitPath child)
@@ -57,5 +61,17 @@ instance Semigroup Input where
 
 instance Pretty Input where
     pretty (Code _ code) = pretty code
-    pretty (Path path) = pretty path
-    pretty (URI uri) = pretty uri
+    pretty (Path path mode) = pretty path <> pretty mode
+    pretty (URI uri mode) = pretty uri <> pretty mode
+
+-- | How the imported string is interpreted
+data Mode
+    = AsCode
+    -- ^ Interpret the string as Grace code (the default)
+    | AsText
+    -- ^ Interpret the string as raw text
+    deriving (Eq, Show)
+
+instance Pretty Mode where
+    pretty AsCode = mempty
+    pretty AsText = " : Text"
