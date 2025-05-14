@@ -40,6 +40,7 @@ import Numeric.Natural (Natural)
 import Prettyprinter (Doc)
 import Prettyprinter.Render.Terminal (AnsiStyle)
 
+import qualified Control.Monad as Monad
 import qualified Data.Text as Text
 import qualified Grace.Pretty as Pretty
 import qualified Grace.Type as Type
@@ -117,6 +118,50 @@ data Syntax s a
     | Builtin { location :: s, builtin :: Builtin }
     | Embed { location :: s, embedded :: a }
     deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
+
+instance Applicative (Syntax ()) where
+    pure embedded = Embed{ location = (), embedded }
+
+    (<*>) = Monad.ap
+
+instance Monad (Syntax ()) where
+    Variable{..} >>= _ =
+        Variable{..}
+    Lambda{ body, .. } >>= f =
+        Lambda{ body = body >>= f, .. }
+    Application{ function, argument, .. } >>= f =
+        Application{ function = function >>= f, argument = argument >>= f, .. }
+    Annotation{ annotated, .. } >>= f =
+        Annotation{ annotated = annotated >>= f, .. }
+    Let{ bindings, body, .. } >>= f =
+        Let{ bindings = fmap onBinding bindings, body = body >>= f, .. }
+      where
+        onBinding Binding{ assignment, .. } =
+            Binding{ assignment = assignment >>= f, .. }
+    List{ elements, .. } >>= f =
+        List{ elements = fmap (>>= f) elements, .. }
+    Record{ fieldValues, .. } >>= f =
+        Record{ fieldValues = fmap (fmap (>>= f)) fieldValues, .. }
+    Field{ record, .. } >>= f =
+        Field{ record = record >>= f, .. }
+    Alternative{..} >>= _ =
+        Alternative{..}
+    Merge{ handlers, .. } >>= f =
+        Merge{ handlers = handlers >>= f, .. }
+    If{ predicate, ifTrue, ifFalse, .. } >>= f =
+        If  { predicate = predicate >>= f
+            , ifTrue = ifTrue >>= f
+            , ifFalse = ifFalse >>= f
+            , ..
+            }
+    Scalar{..} >>= _ =
+        Scalar{..}
+    Operator{ left, right, .. } >>= f =
+        Operator{ left = left >>= f, right = right >>= f, .. }
+    Builtin{..} >>= _ =
+        Builtin{..}
+    Embed{ embedded } >>= f =
+        f embedded
 
 instance Plated (Syntax s a) where
     plate onSyntax syntax =
