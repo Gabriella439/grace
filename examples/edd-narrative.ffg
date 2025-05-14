@@ -1,0 +1,385 @@
+\organization ->
+
+let optional = merge { null: "", some: \x -> x }
+
+let generateSection section : Text = prompt
+        { text: "
+            We need your help generating an Enhanced Due Diligence (EDD) narrative, which is part of a packet Mercury Technologies (a neobank) generates when reviewing high-risk customers.  These narratives are a summary of all the steps Mercury has done in its Enhanced Due Diligence process to determine whether we can continue providing services to these high-risk customers.  Mercury aims to support as many legitimate customers as possible - unless we have concrete evidence that a user doesn't adhere to our policies, we will try to support them.
+
+            Right now we only need you to generate one section of this EDD narrative: specifically, we want you to generate the ${section.name} section by following these instructions
+
+            ${section.instructions}
+
+            Formatting guidelines:
+
+            * Use bullet points or short paragraphs. No long run-on paragraphs.
+            * Every URL must be shown fully, not just summarized (\"business site found\" is not acceptable — show the actual link).
+            * Always cite direct observations, not inferred conclusions.
+            * If duplicate data (like addresses) appear, normalize and only show one instance unless there's a conflict.
+
+            Tone guidelines:
+
+            * Professional
+            * Neutral tone
+            * Clear, defensive (meaning: easily auditable and explainable)
+
+            Things to avoid:
+
+            * **No speculation.** If data is missing, note it explicitly: (“No articles found,” “No transactions recorded,” etc.)
+            * **No made-up facts or \"reasonable assumptions\"** if data is missing.
+            * **No generalizations** like \"the company has a strong web presence\" unless it is backed with exact URLs.
+            * **No polishing** or making customers \"look good\" unless evidence shows it."
+        }
+
+let header = "
+        Organization ID: ${organization."ORGANIZATION_ID"}
+        Legal name: ${organization."LEGAL_NAME"}
+        Callsign: ${organization."CALLSIGN"}"
+
+let kycInformation = "
+        **Review** the following CIP records.
+
+        Legal name: ${organization."LEGAL_NAME"}
+        Legal name verified by: ${organization."LEGAL_NAME_SYSTEM"}
+        Legal name approved at: ${organization."LEGAL_NAME_SYSTEM_APPROVED_AT"}
+
+        Registration status: ${organization."REGISTRATION_STATUS"}
+        Registration status verified by: ${organization."REGISTRATION_STATUS_SYSTEM"}
+        Registration status approved at: ${organization."REGISTRATION_STATUS_SYSTEM_APPROVED_AT"}
+
+        EIN: ${organization."EIN"}
+        EIN verified by: ${organization."EIN_SYSTEM"}
+        EIN approved at: ${organization."EIN_SYSTEM_APPROVED_AT"}
+
+        Entity structure: ${organization."ENTITY_STRUCTURE"}
+        Entity structure verified by: ${organization."ENTITY_STRUCTURE_SYSTEM"}
+        Entity structure approved at: ${organization."ENTITY_STRUCTURE_SYSTEM_APPROVED_AT"}
+
+        Formation date: ${organization."FORMATION_DATE"}
+        Formation date verified by: ${organization."FORMATION_DATE_SYSTEM"}
+        Formation date approved at: ${organization."FORMATION_DATE_SYSTEM_APPROVED_AT"}
+
+        Beneficial owner #1:
+
+        * ID legal name: ${organization."BO1_LEGAL_NAME"}
+        * ID legal name verified by: ${organization."BO1_LEGAL_NAME_SYSTEM"}
+        * ID legal name approved at: ${organization."BO1_LEGAL_NAME_SYSTEM_APPROVED_AT"}
+
+        * address: ${organization."BO1_ADDRESS"}
+        * address verified by: ${organization."BO1_ADDRESS_SYSTEM"}
+        * address approved at: ${organization."BO1_ADDRESS_SYSTEM_APPROVED_AT"}
+
+        * birth date: ${organization."BO1_BIRTH_DATE"}
+        * birth date verified by: ${organization."BO1_BIRTH_DATE_SYSTEM"}
+        * birth date approved at: ${organization."BO1_BIRTH_DATE_SYSTEM_APPROVED_AT"}
+
+        * ID number: ${organization."BO1_ID_NUMBER"}
+        * ID number verifiedy by: ${organization."BO1_ID_NUMBER_SYSTEM"}
+        * ID number approved at: ${organization."BO1_ID_NUMBER_SYSTEM_APPROVED_AT"}
+
+        * selfie ID: ${organization."BO1_SELFIE_ID"}
+        * selfie verified by: ${organization."BO1_SELFIE_SYSTEM"}
+        * selfie approved at: ${organization."BO1_SELFIE_SYSTEM_APPROVED_AT"}
+
+        Beneficial owner #2:
+
+        * ID legal name: ${organization."BO2_LEGAL_NAME"}
+        * ID legal name verified by: ${organization."BO2_LEGAL_NAME_SYSTEM"}
+        * ID legal name approved at: ${organization."BO2_LEGAL_NAME_SYSTEM_APPROVED_AT"}
+
+        * address: ${organization."BO2_ADDRESS"}
+        * address verified by: ${organization."BO2_ADDRESS_SYSTEM"}
+        * address approved at: ${organization."BO2_ADDRESS_SYSTEM_APPROVED_AT"}
+
+        * birth date: ${organization."BO2_BIRTH_DATE"}
+        * birth date verified by: ${organization."BO2_BIRTH_DATE_SYSTEM"}
+        * birth date approved at: ${organization."BO2_BIRTH_DATE_SYSTEM_APPROVED_AT"}
+
+        * ID number: ${organization."BO2_ID_NUMBER"}
+        * ID number verifiedy by: ${organization."BO2_ID_NUMBER_SYSTEM"}
+        * ID number approved at: ${organization."BO2_ID_NUMBER_SYSTEM_APPROVED_AT"}
+
+        * selfie ID: ${organization."BO2_SELFIE_ID"}
+        * selfie verified by: ${organization."BO2_SELFIE_SYSTEM"}
+        * selfie approved at: ${organization."BO2_SELFIE_SYSTEM_APPROVED_AT"}
+
+        Beneficial owner #3:
+
+        * ID legal name: ${organization."BO3_LEGAL_NAME"}
+        * ID legal name verified by: ${organization."BO3_LEGAL_NAME_SYSTEM"}
+        * ID legal name approved at: ${organization."BO3_LEGAL_NAME_SYSTEM_APPROVED_AT"}
+
+        * address: ${organization."BO3_ADDRESS"}
+        * address verified by: ${organization."BO3_ADDRESS_SYSTEM"}
+        * address approved at: ${organization."BO3_ADDRESS_SYSTEM_APPROVED_AT"}
+
+        * birth date: ${organization."BO3_BIRTH_DATE"}
+        * birth date verified by: ${organization."BO3_BIRTH_DATE_SYSTEM"}
+        * birth date approved at: ${organization."BO3_BIRTH_DATE_SYSTEM_APPROVED_AT"}
+
+        * ID number: ${organization."BO3_ID_NUMBER"}
+        * ID number verifiedy by: ${organization."BO3_ID_NUMBER_SYSTEM"}
+        * ID number approved at: ${organization."BO3_ID_NUMBER_SYSTEM_APPROVED_AT"}
+
+        * selfie ID: ${organization."BO3_SELFIE_ID"}
+        * selfie verified by: ${organization."BO3_SELFIE_SYSTEM"}
+        * selfie approved at: ${organization."BO3_SELFIE_SYSTEM_APPROVED_AT"}
+
+        Beneficial owner #4:
+
+        * ID legal name: ${organization."BO4_LEGAL_NAME"}
+        * ID legal name verified by: ${organization."BO4_LEGAL_NAME_SYSTEM"}
+        * ID legal name approved at: ${organization."BO4_LEGAL_NAME_SYSTEM_APPROVED_AT"}
+
+        * address: ${organization."BO4_ADDRESS"}
+        * address verified by: ${organization."BO4_ADDRESS_SYSTEM"}
+        * address approved at: ${organization."BO4_ADDRESS_SYSTEM_APPROVED_AT"}
+
+        * birth date: ${organization."BO4_BIRTH_DATE"}
+        * birth date verified by: ${organization."BO4_BIRTH_DATE_SYSTEM"}
+        * birth date approved at: ${organization."BO4_BIRTH_DATE_SYSTEM_APPROVED_AT"}
+
+        * ID number: ${organization."BO4_ID_NUMBER"}
+        * ID number verifiedy by: ${organization."BO4_ID_NUMBER_SYSTEM"}
+        * ID number approved at: ${organization."BO4_ID_NUMBER_SYSTEM_APPROVED_AT"}
+
+        * selfie ID: ${organization."BO4_SELFIE_ID"}
+        * selfie verified by: ${organization."BO4_SELFIE_SYSTEM"}
+        * selfie approved at: ${organization."BO4_SELFIE_SYSTEM_APPROVED_AT"}"
+
+let kycInformationReview  = generateSection
+        { name: "KYC Information Review"
+        , instructions: "
+            For the following Know Your Customer information:
+
+            ${kycInformation}
+
+            * **Identify and note** any discrepancies (proof of address, DOB, ID country, document mismatches). If none are found, note that no data errors were identified.
+
+            ${""
+            # if Text/equal organization."ALLOW_RED_FLAGS" "" then "" else "
+            #     List these Alloy red flags: ${organization."ALLOY_RED_FLAGS"}
+            #
+            #     … and also append \"[if relevant, provide additional detail here]\" below the red flags
+            #     "
+            }
+            * Verify that beneficial ownership coverage exceeds 75% or note gaps in the coverage
+              * Beneficial owner #1: ${optional organization."BO1_PERCENT_OWNERSHIP"}% ownership
+              * Beneficial owner #2: ${optional organization."BO2_PERCENT_OWNERSHIP"}% ownership
+              * Beneficial owner #3: ${optional organization."BO3_PERCENT_OWNERSHIP"}% ownership
+              * Beneficial owner #4: ${optional organization."BO4_PERCENT_OWNERSHIP"}% ownership
+                * If ownership coverage exceeds 75%, then this requirement has been met and accounted. Please note that ownership has been accounted for and add the text below:
+                  “[delete this once manually inspected] No indications of additional beneficial owners were found in open-source research, state formation documents, and/or EIN records.]”
+                * If ownership coverage is less than 75%, add the text below
+                  “Ownership >75% has not been accounted for [please follow workflow for guidance on next steps]”"
+        }
+
+let externalResearch = generateSection
+        { name: "External Research"
+        , instructions: "
+            For the following business:
+
+            ${kycInformation}
+
+            * [external source] List all found URLs explicitly: business website(s), BO social media, any articles, Google Street View.
+              * Search the web and list the URLs for any web presence found using the legal_name, trade_name, industry, legal or physical address
+                * These should correspond to this specific business. If confidence is low on a match, don’t add it
+              * Search for the BOs, finding any social media profiles or news articles. Use the associated birth dates and BO addresses to confirm that it is likely the BO and not someone else
+                * Note if any news articles found have negative sentiment
+              * Populate Google Maps Street View direct URLs for the following
+                * Physical address
+                * Address for each BO (ex: bo1_address, bo2_address)
+
+            * Summarize whether external sources support the customer's stated business purpose and if any red flags were found.
+              * Analyze the contents of any found website, social media, and news articles and if they make sense with the information we have on the business,which include the fields: description, industry, nature_of_account
+              * If any red flags - or negative news - is found, please summarize and note"
+        }
+
+let transactionReview = generateSection
+        { name: "Transaction Review"
+        , instructions: "
+            Compare the following expected activity:
+
+            * Expected activity volume:
+
+            ${organization."EXPECTED_ACTIVITY_VOLUME"}
+
+            * Expected activity jurisdictions:
+
+            ${organization."EXPECTED_ACTIVITY_JURISDICTIONS"}
+
+            * Distribution channels:
+
+            ${organization."ORG_DISTRIBUTION_CHANNELS"}
+
+            … against the following actual activity:
+
+            * The overall top parties with the most transactions, regardless of funds flow direction:
+
+            ${organization."TOP_PARTIES_BY_VOLUME"}
+
+            * The top parties and the amounts credited from that party:
+
+            ${organization."TOP_CREDITS_BY_SUM"}
+
+            * The top parties and the amounts debited from that party:
+
+            ${organization."TOP_DEBITS_BY_SUM"}
+
+            * The largest credits for that organization on a transaction basis:
+
+            ${organization."LARGEST_CREDITS"}
+
+            * The largest debits for that organization on a transaction basis:
+
+            ${organization."LARGEST_DEBITS"}
+
+            * International top incoming wire transactions:
+
+            ${organization."INTL_TOP_INCOMING"}
+
+            * International top outgoing wire transactions:
+
+            ${organization."INTL_TOP_OUTGOING"}
+
+            * All transactions in the last 90 days:
+
+            ${organization."TRANSACTION_LOG_90D"}
+
+            … and write a high-level summary on whether the expected and actual activity are in parity or (if there are differences) note what those differences are.
+
+            Assess whether the following transaction activity is steady or volatile
+            * Steady means that overall in-and-out flows of funds are relatively consistent, transaction sizes are relatively similar month-to-month, there are recurring transactions (like rent, utilities, payroll, payment processing deposits) that appear most/all months.
+              * This doesn’t mean that transaction sizes are the same, rather that the collection of transactions looks similar month-to-month
+            * Volatile means that funds flows can vary dramatically month-to-month. There can also be very large transactions relative to other months and other transactions. Total funds flows vary wildly from month to month
+
+            * All transactions in the last 90 days:
+
+            ${organization."TRANSACTION_LOG_90D"}
+
+            List the parties with the most recurring transactions by referring to the following data:
+
+            * The overall top parties with the most transactions, regardless of funds flow direction:
+
+            ${organization."TOP_PARTIES_BY_VOLUME"}
+
+            * All transactions in the last 90 days:
+
+            ${organization."TRANSACTION_LOG_90D"}
+
+            Do these recurring transactions make sense given that the organization is in the following industry?
+
+            * Example: an ecommerce organization would be expected to have recurring transactions from Stripe
+
+            * Industry
+
+            ${organization."INDUSTRY"}
+
+            List the top 3 credits below:
+
+            ${organization."LARGEST_CREDITS"}
+
+            … using this format:
+
+            > The customer's largest 3 credits in the account are:
+            >
+            > - Company A $X
+            > - Company B $Y
+            > - Company C $Z
+
+            List the top 3 debits below:
+
+            ${organization."LARGEST_DEBITS"}
+
+            … using this format:
+
+            > - Company A -$X
+            > - Company B -$Y
+            > - Company C -$Z
+
+            If any credits or debits are international wires, indicate so.
+
+            Summarize transaction geographies by referencing the following data:
+
+            * International top incoming wire transactions:
+
+            ${organization."INTL_TOP_INCOMING"}
+
+            * International top outgoing wire transactions:
+
+            ${organization."INTL_TOP_OUTGOING"}
+
+            Does the activity match the organization's business model or industry?
+            * Example - it would be strange for a medical office to have large transactions to foreign countries, but for a wholesaler it would be reasonable
+
+            * Industry
+
+            ${organization."INDUSTRY"}"
+        }
+
+let findings0 = "
+        ${header}
+
+        ${kycInformationReview}
+
+        ${externalResearch}
+
+        ${transactionReview}
+        "
+
+let internalDueDiligence = generateSection
+        { name: "Internal Due Diligence"
+        , instructions: "
+            Given these initial findings:
+
+            findings0
+
+            Review the following EDD questionnaire:
+
+            ${organization."EDD_VLC_QUESTIONS_ANSWERS"}
+
+            … and note if there are any:
+
+            * Inconsistencies with other data
+
+            * Some of the answers in edd_vlc_questions_answers are flagged as not making sense
+
+            ${if Text/equal organization."PEP_ALERT_ARRAY" "" then "" else "* List the following alerts: ${organization."PEP_ALERT_ARRAY"}"}
+              * Append the following instructions to the narrative
+                * “[Check case history in the last 6 months and note any red flags]”
+                * “[Check EOMs and note their status and if they reasonably align with information found in this review]”
+            }
+            "
+        }
+
+let findings1 = "
+        ${findings0}
+
+        ${internalDueDiligence}
+        "
+
+let outcomeAndRecommendations = generateSection
+        { name: "Outcome and Recommendation"
+        , instructions: "
+            * Based on the findings below, recommend either to **Retain Customer** or **Exit Relationship** the customer relationship.
+
+            ${findings1}
+
+            Here is the guidance for these recommendations:
+            * Retain Customer: The review findings indicate that the customer poses an acceptable level of risk and complies with all applicable AML/CTF policies and regulations.
+            * Exit Relationship: The review findings indicate significant risk factors or policy violations that warrant termination of the relationship.
+
+            Provide a **clear, factual rationale** tied directly to findings.
+            * We are trying to answer whether the activity and information reported “makes sense”
+
+            If exiting, explicitly cite which EDD procedure criteria triggered the recommendation.
+            * This will require external information. Don’t answer this. Instead append the text below if Exit Relationship is recommended
+              * “[Please list the EDD criteria or policy that required escalation and the offboarding recommendation]”
+            "
+        }
+
+in  "
+    ${findings1}
+
+    ${outcomeAndRecommendations}
+    "
