@@ -50,11 +50,11 @@ import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..), Offset(..))
-import Grace.Syntax (Binding(..), NameBinding(..), Syntax(..))
+import Grace.Syntax (Binding(..), Chunks(..), NameBinding(..), Syntax(..))
 import Grace.Type (Type(..))
 import Prelude hiding (lex)
 import Text.Earley (Grammar, Prod, Report(..), rule, (<?>))
-import Text.Megaparsec (ParseErrorBundle(..), try)
+import Text.Megaparsec (ParseErrorBundle(..), State(..), try)
 
 import qualified Control.Monad as Monad
 import qualified Control.Monad.Combinators as Combinators
@@ -183,7 +183,7 @@ lexToken =
 
 lexLocatedToken :: Lexer LocatedToken
 lexLocatedToken = do
-    start <- fmap Offset Megaparsec.getOffset
+    state <- Megaparsec.getParserState
     token <- lexToken
     return LocatedToken{..}
 
@@ -260,10 +260,14 @@ lexText = lexeme do
 
     let isText c =
                 ('\x20' <= c && c <=     '\x21')
-            ||  ('\x23' <= c && c <=     '\x5b')
+            ||   '\x23' == c
+            ||  ('\x25' <= c && c <=     '\x5b')
             ||  ('\x5d' <= c && c <= '\x10FFFF')
 
-    let unescaped = Megaparsec.takeWhile1P (Just "text character") isText
+    let unescaped = do
+            t <- Megaparsec.takeWhile1P (Just "text character") isText
+
+            return (Chunks t [])
 
     let unicodeEscape = do
             "\\u"
@@ -272,7 +276,7 @@ lexText = lexeme do
 
             case Read.hexadecimal (Text.pack codepoint) of
                 Right (n, "") -> do
-                    return (Text.singleton (Char.chr n))
+                    return (Chunks (Text.singleton (Char.chr n)) [])
                 _             -> do
                     fail "Internal error - invalid unicode escape sequence"
 
@@ -286,14 +290,55 @@ lexText = lexeme do
                 , "\n" <$ "\\n"
                 , "\r" <$ "\\r"
                 , "\t" <$ "\\t"
+                , "$"  <$ "\\$"
                 , unicodeEscape
                 ] Megaparsec.<?> "escape sequence"
 
-    texts <- many (unescaped <|> escaped)
+    let interpolated = do
+            "${"
+
+            originalState <- Megaparsec.getParserState
+
+            let loop state = case result of
+                    Left _ -> []
+                    Right token -> token : loop newState
+                  where
+                    (newState, result) =
+                        Megaparsec.runParser' lexLocatedToken state
+
+            let locatedTokens = loop afterSpace
+                  where
+                    (afterSpace, _) = Megaparsec.runParser' space originalState
+
+            (syntax, index) <- case Earley.allParses (Earley.parser (grammar True)) locatedTokens of
+                ([], Report{ position }) -> do
+                    case drop position locatedTokens of
+                        [] ->
+                            return ()
+                        LocatedToken{ state } : _ ->
+                            Megaparsec.setParserState state
+
+                    empty Megaparsec.<?> "Incomplete string interpolation"
+
+                (result : _, _) -> do
+                    return result
+
+            case drop (index - 1) locatedTokens of
+                [] -> do
+                    empty Megaparsec.<?> "Incomplete string literal"
+
+                LocatedToken{ state } : _ -> do
+                    Megaparsec.setParserState state
+
+            "}"
+
+            return (Chunks mempty [(syntax, mempty)])
+
+    chunks <- many (unescaped <|> interpolated <|> escaped <|> ("$" <$ "$"))
 
     "\""
 
-    return (TextLiteral (Text.concat texts))
+    return (TextLiteral (mconcat chunks))
 
 isLabel0 :: Char -> Bool
 isLabel0 c = Char.isLower c || c == '_'
@@ -496,7 +541,7 @@ data Token
     | Plus
     | Text
     | TextEqual
-    | TextLiteral Text
+    | TextLiteral (Chunks Offset Input)
     | Then
     | Times
     | True_
@@ -504,10 +549,10 @@ data Token
     | URI URI.URI
     deriving stock (Eq, Show)
 
-{-| A token with offset information attached, used for reporting line and
-    column numbers in error messages
+{-| A token with parsing state attached, used for reporting line and column
+    numbers in error messages
 -}
-data LocatedToken = LocatedToken { token :: Token, start :: Offset }
+data LocatedToken = LocatedToken { token :: Token, state :: State Text Void }
     deriving (Show)
 
 -- | Errors related to lexing and parsing
@@ -540,9 +585,13 @@ matchInt :: Token -> Maybe Int
 matchInt (Grace.Parser.Int n) = Just n
 matchInt  _                   = Nothing
 
+matchChunks :: Token -> Maybe (Chunks Offset Input)
+matchChunks (Grace.Parser.TextLiteral c) = Just c
+matchChunks  _                           = Nothing
+
 matchText :: Token -> Maybe Text
-matchText (Grace.Parser.TextLiteral t) = Just t
-matchText  _                           = Nothing
+matchText (Grace.Parser.TextLiteral (Chunks t [])) = Just t
+matchText  _                                       = Nothing
 
 matchFile :: Token -> Maybe FilePath
 matchFile (Grace.Parser.File f) = Just f
@@ -577,9 +626,9 @@ parseToken t = void (Earley.satisfy predicate <?> render t)
 locatedTerminal :: (Token -> Maybe a) -> Parser r (Offset, a)
 locatedTerminal match = Earley.terminal match'
   where
-    match' locatedToken_@LocatedToken{ start }  = do
+    match' locatedToken_@LocatedToken{ state }  = do
       a <- match (token locatedToken_)
-      return (start, a)
+      return (Offset (stateOffset state), a)
 
 locatedLabel :: Parser r (Offset, Text)
 locatedLabel = locatedTerminal matchLabel
@@ -592,6 +641,9 @@ locatedReal = locatedTerminal matchReal
 
 locatedInt :: Parser r (Offset, Int)
 locatedInt = locatedTerminal matchInt
+
+locatedChunks :: Parser r (Offset, Chunks Offset Input)
+locatedChunks = locatedTerminal matchChunks
 
 locatedText :: Parser r (Offset, Text)
 locatedText = locatedTerminal matchText
@@ -607,7 +659,7 @@ locatedToken expectedToken =
     Earley.terminal capture <?> render expectedToken
   where
     capture LocatedToken{ token = actualToken, .. }
-        | expectedToken == actualToken = Just start
+        | expectedToken == actualToken = Just (Offset (stateOffset state))
         | otherwise                    = Nothing
 
 -- | This render function is currently never used since `Location.renderError`
@@ -686,8 +738,8 @@ render t = case t of
     Grace.Parser.True_            -> "True"
     Grace.Parser.URI _            -> "a URI"
 
-grammar :: Grammar r (Parser r (Syntax Offset Input))
-grammar = mdo
+grammar :: Bool -> Grammar r (Parser r (Syntax Offset Input))
+grammar endsWithBrace = mdo
     nameBinding <- rule do
         let annotated = do
                 parseToken Grace.Parser.OpenParenthesis
@@ -948,9 +1000,9 @@ grammar = mdo
 
                 return Syntax.Builtin{ builtin = Syntax.TextEqual, .. }
 
-        <|> do  ~(location, t) <- locatedText
+        <|> do  ~(location, chunks) <- locatedChunks
 
-                return Syntax.Scalar{ scalar = Syntax.Text t, .. }
+                return Syntax.Text{..}
 
         <|> do  ~(location, file) <- locatedFile
 
@@ -1130,7 +1182,13 @@ grammar = mdo
         t <- quantifiedType
         return (a, t)
 
-    return expression
+    -- Used for parsing a string interpolation
+    expressionEndingWithBrace <- rule do
+        a <- expression
+        parseToken Grace.Parser.CloseBrace
+        return a
+
+    return (if endsWithBrace then expressionEndingWithBrace else expression)
 
 -- | Parse a complete expression
 parse
@@ -1142,12 +1200,14 @@ parse
 parse name code = do
     tokens <- lex name code
 
-    case Earley.fullParses (Earley.parser grammar) tokens of
+    case Earley.fullParses (Earley.parser (grammar False)) tokens of
         ([], Report{..}) -> do
             let offset =
                     case unconsumed of
-                        []                -> Offset (Text.length code)
-                        locatedToken_ : _ -> start locatedToken_
+                        [] ->
+                            Offset (Text.length code)
+                        locatedToken_ : _ ->
+                            Offset (stateOffset (state locatedToken_))
 
             Left (ParsingFailed (Location{..}))
 

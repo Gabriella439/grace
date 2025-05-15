@@ -10,10 +10,10 @@ let greeting = "Hello, world!"
 let fruits = "🍋🍓🍍🍉🍌"  # Unicode is permitted in string literals
 
 # String concatenation uses `+`
-#
-# Note: Grace does **NOT** support string interpolation, so you need to use
-# string concatenation instead
 let concatenation = "Enjoy some delicious fruit: " + fruits
+
+# Grace also supports string interpolation
+let interpolation = "Enjoy some delicious fruit: ${fruits}"
 
 let bool = true
 
@@ -169,11 +169,11 @@ let presentOptionalValue : Optional Natural = 1
 # `List/head` above).
 
 let makeUser user =
-      let home = "/home/" + user
+      let home = "/home/${user}"
 
-      let privateKey = home + "/.ssh/id_ed25519"
+      let privateKey = "${home}/.ssh/id_ed25519"
 
-      let publicKey  = privateKey + ".pub"
+      let publicKey  = "${privateKey}.pub"
 
       in  # Grace supports record "punning"
           { home, privateKey, publicKey}
@@ -188,6 +188,7 @@ let users =
 in  { greeting
     , fruits
     , concatenation
+    , interpolation
     , bool
     , annotation
     , renderedBool

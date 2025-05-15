@@ -1417,6 +1417,14 @@ infer e₀ = do
 
             return _L₁
 
+        Syntax.Text{ chunks = Syntax.Chunks _ rest, .. } -> do
+            let process (interpolation, _) = do
+                    check interpolation Type.Scalar{ scalar = Monotype.Text, .. }
+
+            traverse_ process rest
+
+            return Type.Scalar{ scalar = Monotype.Text, .. }
+
         -- All the type inference rules for scalars go here.  This part is
         -- pretty self-explanatory: a scalar literal returns the matching
         -- scalar type.
@@ -1431,9 +1439,6 @@ infer e₀ = do
 
         Syntax.Scalar{ scalar = Syntax.Natural _, .. } -> do
             return Type.Scalar{ scalar = Monotype.Natural, .. }
-
-        Syntax.Scalar{ scalar = Syntax.Text _, .. } -> do
-            return Type.Scalar{ scalar = Monotype.Text, .. }
 
         Syntax.Scalar{ scalar = Syntax.Null, .. } -> do
             -- NOTE: You might think that you could just infer that `null`
@@ -1912,8 +1917,11 @@ check Syntax.Record{..} _B@Type.Scalar{ scalar = Monotype.JSON } = do
     traverse_ process fieldValues
 check Syntax.List{..} _B@Type.Scalar{ scalar = Monotype.JSON } = do
     traverse_ (`check` _B) elements
-check Syntax.Scalar{ scalar = Syntax.Text _ } Type.Scalar{ scalar = Monotype.JSON } = do
-    return ()
+check Syntax.Text{ chunks = Syntax.Chunks _ rest, .. } Type.Scalar{ scalar = Monotype.JSON } = do
+    let process (interpolation, _) = do
+            check interpolation Type.Scalar{ scalar = Monotype.Text, .. }
+
+    traverse_ process rest
 check Syntax.Scalar{ scalar = Syntax.Natural _ } Type.Scalar{ scalar = Monotype.JSON } = do
     return ()
 check Syntax.Scalar{ scalar = Syntax.Integer _ } Type.Scalar{ scalar = Monotype.JSON } = do

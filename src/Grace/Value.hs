@@ -7,6 +7,7 @@ module Grace.Value
     ( -- * Value
       Closure(..)
     , Value(..)
+    , Chunks(..)
     ) where
 
 import Data.Aeson (FromJSON(..))
@@ -93,6 +94,7 @@ data Value
     | Alternative Text
     | Merge Value
     | If Value Value Value
+    | Text Chunks
     | Builtin Builtin
     | Scalar Scalar
     | Operator Value Operator Value
@@ -109,10 +111,28 @@ instance FromJSON Value where
         values <- traverse parseJSON array
         pure (List (Seq.fromList (toList values)))
     parseJSON (Aeson.String text) = do
-        pure (Scalar (Syntax.Text text))
+        pure (Text (Chunks text []))
     parseJSON (Aeson.Number scientific) = do
         pure (Scalar (Syntax.Real scientific))
     parseJSON (Aeson.Bool bool) = do
         pure (Scalar (Syntax.Bool bool))
     parseJSON Aeson.Null = do
         pure (Scalar Syntax.Null)
+
+data Chunks = Chunks Text [(Value, Text)]
+    deriving stock (Eq, Show)
+
+instance Monoid Chunks where
+    mempty = Chunks mempty mempty
+
+instance Semigroup Chunks where
+    Chunks text₀ rest₀ <> Chunks text₂ rest₂ = case unsnoc rest₀ of
+        Nothing -> Chunks (text₀ <> text₂) rest₂
+        Just (rest₁, (syntax, text₁)) ->
+            Chunks text₀ (rest₁ <> ((syntax, text₁ <> text₂) : rest₂))
+      where
+        unsnoc [ ] = Nothing
+        unsnoc [x] = Just ([], x)
+        unsnoc (x : xs) = do
+            (i, l) <- unsnoc xs
+            return (x : i, l)

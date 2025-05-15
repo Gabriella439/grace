@@ -90,7 +90,7 @@ parser = do
                 <>  Options.metavar "FILE"
                 )
 
-            return Text{..}
+            return Grace.Text{..}
 
     let format = do
             let parseFile =
@@ -206,7 +206,7 @@ main = do
 
             render (Grace.Pretty.pretty annotatedExpression <> Pretty.hardline)
 
-        Text{..} -> do
+        Grace.Text{..} -> do
             input <- case file of
                 "-" -> do
                     Code "(input)" <$> Text.IO.getContents
@@ -230,10 +230,10 @@ main = do
             (_, value) <- throws eitherResult
 
             case value of
-                Value.Scalar (Syntax.Text text) -> Text.IO.putStr text
+                Value.Text (Value.Chunks text []) -> Text.IO.putStr text
                 _ -> do
                     Text.IO.hPutStrLn IO.stderr
-                        "Internal error: Not a Text literal\n\
+                        "Internal error: Not a plain Text literal\n\
                         \\n\
                         \The input expression did not evaluate to a Text literal, even though it had the\n\
                         \correct type"
