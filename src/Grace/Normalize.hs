@@ -160,6 +160,15 @@ evaluate env syntax =
             ifTrue'    = evaluate env ifTrue
             ifFalse'   = evaluate env ifFalse
 
+        Syntax.Text{ chunks = Syntax.Chunks text rest } ->
+            Value.Text (Value.Chunks text [] <> foldMap onChunk rest)
+          where
+            onChunk (interpolation, text₁) = case evaluate env interpolation of
+                Value.Text (Value.Chunks text₀ []) ->
+                    Value.Chunks (text₀ <> text₁) []
+                v ->
+                    Value.Chunks mempty [(v, text₁)]
+
         Syntax.Scalar{..} ->
             Value.Scalar scalar
 
@@ -219,9 +228,9 @@ evaluate env syntax =
                     right'
                 (_, Value.Scalar (Natural 0)) ->
                     left'
-                (Value.Scalar (Text ""), _) ->
+                (Value.Text (Value.Chunks "" []), _) ->
                     right'
-                (_, Value.Scalar (Text "")) ->
+                (_, Value.Text (Value.Chunks "" [])) ->
                     left'
                 (Value.List [], _) ->
                     right'
@@ -237,9 +246,8 @@ evaluate env syntax =
                     | Just m <- asReal l
                     , Just n <- asReal r ->
                         Value.Scalar (Real (m + n))
-                    | Text m <- l
-                    , Text n <- r ->
-                        Value.Scalar (Text (m <> n))
+                (Value.Text l, Value.Text r) ->
+                    Value.Text (l <> r)
                 (Value.List l, Value.List r) ->
                     Value.List (l <> r)
                 _ ->
@@ -365,14 +373,14 @@ apply (Value.Builtin RealNegate) (Value.Scalar x)
 apply (Value.Builtin IntegerNegate) (Value.Scalar x)
     | Just n <- asInteger x = Value.Scalar (Integer (negate n))
 apply (Value.Builtin RealShow) (Value.Scalar (Natural n)) =
-    Value.Scalar (Text (Text.pack (show n)))
+    Value.Text (Value.Chunks (Text.pack (show n)) [])
 apply (Value.Builtin RealShow) (Value.Scalar (Integer n)) =
-    Value.Scalar (Text (Text.pack (show n)))
+    Value.Text (Value.Chunks (Text.pack (show n)) [])
 apply (Value.Builtin RealShow) (Value.Scalar (Real n)) =
-    Value.Scalar (Text (Text.pack (show n)))
+    Value.Text (Value.Chunks (Text.pack (show n)) [])
 apply
-    (Value.Application (Value.Builtin TextEqual) (Value.Scalar (Text l)))
-    (Value.Scalar (Text r)) =
+    (Value.Application (Value.Builtin TextEqual) (Value.Text (Value.Chunks l [])))
+    (Value.Text (Value.Chunks r [])) =
         Value.Scalar (Bool (l == r))
 apply
     (Value.Application
@@ -401,8 +409,8 @@ apply
         apply integerHandler (Value.Scalar (Integer n))
     loop (Value.Scalar (Real n)) =
         apply realHandler (Value.Scalar (Real n))
-    loop (Value.Scalar (Text t)) =
-        apply stringHandler (Value.Scalar (Text t))
+    loop (Value.Text chunks) =
+        apply stringHandler (Value.Text chunks)
     loop (Value.Scalar Null) =
         nullHandler
     loop (Value.List elements) =
@@ -412,7 +420,7 @@ apply
       where
         adapt (key, value) =
             Value.Record
-                [("key", Value.Scalar (Text key)), ("value", loop value)]
+                [("key", Value.Text (Value.Chunks key [])), ("value", loop value)]
     loop v =
         v
 apply function argument =
@@ -492,6 +500,11 @@ quote names value =
                 , ifFalse = quote names ifFalse
                 , ..
                 }
+
+        Value.Text (Value.Chunks text₀ rest) ->
+            Syntax.Text{ chunks = Syntax.Chunks text₀ (fmap onChunk rest), .. }
+          where
+            onChunk (interpolation, text) = (quote names interpolation, text)
 
         Value.Scalar scalar ->
             Syntax.Scalar{..}

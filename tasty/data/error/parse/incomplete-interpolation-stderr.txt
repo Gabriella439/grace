@@ -1,0 +1,4 @@
+tasty/data/error/parse/incomplete-interpolation-input.ffg:1:10: Invalid input - Lexing failed
+  │
+1 │ "a${"b" +}d"
+  │          ↑

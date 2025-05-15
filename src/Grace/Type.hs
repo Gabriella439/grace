@@ -34,6 +34,7 @@ module Grace.Type
     , prettyRecordLabel
     , prettyAlternativeLabel
     , prettyTextLiteral
+    , prettyTextBody
     ) where
 
 import Control.Lens (Plated(..))
@@ -692,18 +693,20 @@ prettyUnionType (Alternatives (keyType : keyTypes) alternatives) =
 
 -- | Pretty-print a @Text@ literal
 prettyTextLiteral :: Text -> Doc AnsiStyle
-prettyTextLiteral text =
-        "\""
-    <>  ( pretty
-        . Text.replace "\"" "\\\""
-        . Text.replace "\b" "\\b"
-        . Text.replace "\f" "\\f"
-        . Text.replace "\n" "\\n"
-        . Text.replace "\r" "\\r"
-        . Text.replace "\t" "\\t"
-        . Text.replace "\\" "\\\\"
-        ) text
-    <>  "\""
+prettyTextLiteral text = "\"" <> prettyTextBody text <> "\""
+
+-- | Pretty-print the body of a @Text@ literal
+prettyTextBody :: Text -> Doc AnsiStyle
+prettyTextBody text =
+    ( pretty
+    . Text.replace "\"" "\\\""
+    . Text.replace "\b" "\\b"
+    . Text.replace "\f" "\\f"
+    . Text.replace "\n" "\\n"
+    . Text.replace "\r" "\\r"
+    . Text.replace "\t" "\\t"
+    . Text.replace "\\" "\\\\"
+    ) text
 
 -- | Pretty-print a @Text@ literal
 prettyQuotedAlternative :: Text -> Doc AnsiStyle

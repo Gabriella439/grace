@@ -17,6 +17,7 @@
 module Grace.Syntax
     ( -- * Syntax
       Syntax(..)
+    , Chunks(..)
     , Scalar(..)
     , Operator(..)
     , Builtin(..)
@@ -108,6 +109,12 @@ data Syntax s a
     -- ^
     --   >>> pretty @(Syntax () Void) (If () "x" "y" "z")
     --   if x then y else z
+    | Text { location :: s, chunks :: Chunks s a }
+    -- ^
+    --   >>> pretty @(Syntax () Void) (Text () "a\n")
+    --   "a\n"
+    --   >>> pretty @(Syntax () Void) (Text () (Chunks "a" [("x", "b")]))
+    --   "a${x}b"
     | Scalar { location :: s, scalar :: Scalar }
     | Operator { location :: s, left :: Syntax s a, operatorLocation :: s, operator :: Operator, right :: Syntax s a }
     -- ^
@@ -154,6 +161,10 @@ instance Monad (Syntax ()) where
             , ifFalse = ifFalse >>= f
             , ..
             }
+    Text{ chunks = Chunks text₀ rest, .. } >>= f =
+        Text{ chunks = Chunks text₀ (fmap onChunk rest), .. }
+      where
+        onChunk (interpolation, text) = (interpolation >>= f, text)
     Scalar{..} >>= _ =
         Scalar{..}
     Operator{ left, right, .. } >>= f =
@@ -208,6 +219,12 @@ instance Plated (Syntax s a) where
                 newIfTrue <- onSyntax oldIfTrue
                 newIfFalse <- onSyntax oldIfFalse
                 return If{ predicate = newPredicate, ifTrue = newIfTrue, ifFalse = newIfFalse, .. }
+            Text{ chunks = Chunks text₀ rest, .. } -> do
+                let onChunk (interpolation, text) = do
+                        newInterpolation <- onSyntax interpolation
+                        return (newInterpolation, text)
+                newRest <- traverse onChunk rest
+                return Text{ chunks = Chunks text₀ newRest, .. }
             Scalar{..} -> do
                 pure Scalar{..}
             Operator{ left = oldLeft, right = oldRight, .. } -> do
@@ -244,6 +261,8 @@ instance Bifunctor Syntax where
         Merge{ location = f location, handlers = first f handlers, .. }
     first f If{..} =
         If{ location = f location, predicate = first f predicate, ifTrue = first f ifTrue, ifFalse = first f ifFalse, .. }
+    first f Text{..} =
+        Text{ location = f location, chunks = first f chunks }
     first f Scalar{..} =
         Scalar{ location = f location, .. }
     first f Operator{..} =
@@ -262,6 +281,44 @@ instance IsString (Syntax () a) where
 instance Pretty a => Pretty (Syntax s a) where
     pretty = prettyExpression
 
+-- | A text literal with interpolated expressions
+data Chunks s a = Chunks Text [(Syntax s a, Text)]
+    deriving (Eq, Foldable, Functor, Lift, Show, Traversable)
+
+instance Monoid (Chunks s a) where
+    mempty = Chunks mempty mempty
+
+instance Semigroup (Chunks s a) where
+    Chunks text₀ rest₀ <> Chunks text₂ rest₂ = case unsnoc rest₀ of
+        Nothing -> Chunks (text₀ <> text₂) rest₂
+        Just (rest₁, (syntax, text₁)) ->
+            Chunks text₀ (rest₁ <> ((syntax, text₁ <> text₂) : rest₂))
+      where
+        unsnoc [ ] = Nothing
+        unsnoc [x] = Just ([], x)
+        unsnoc (x : xs) = do
+            (i, l) <- unsnoc xs
+            return (x : i, l)
+
+instance Bifunctor Chunks where
+    first f (Chunks text₀ rest) = Chunks text₀ (fmap (first (first f)) rest)
+
+    second = fmap
+
+instance IsString (Chunks s a) where
+    fromString string = Chunks (fromString string) []
+
+instance Pretty a => Pretty (Chunks s a) where
+    pretty (Chunks text₀ rest) =
+            Pretty.scalar ("\"" <> Type.prettyTextBody text₀)
+        <>  foldMap prettyInterpolation rest
+        <>  Pretty.scalar "\""
+      where
+        prettyInterpolation (syntax, text) =
+                Pretty.scalar "${"
+            <>  pretty syntax
+            <>  Pretty.scalar ("}" <> Type.prettyTextBody text)
+
 -- | A scalar value
 data Scalar
     = Real Scientific
@@ -276,10 +333,6 @@ data Scalar
     -- ^
     --   >>> pretty (Natural 1)
     --   1
-    | Text Text
-    -- ^
-    --   >>> pretty (Text "a\n")
-    --   "a\n"
     | Bool Bool
     -- ^
     --   >>> pretty (Bool True)
@@ -298,7 +351,6 @@ instance Pretty Scalar where
     pretty (Real number)    = Pretty.scalar (pretty number)
     pretty (Integer number) = Pretty.scalar (pretty number)
     pretty (Natural number) = Pretty.scalar (pretty number)
-    pretty (Text text)      = Pretty.scalar (Type.prettyTextLiteral text)
     pretty  Null            = Pretty.scalar "null"
 
 -- | A binary infix operator
@@ -514,6 +566,7 @@ prettyExpression If{..} =
             <>  " "
             <> prettyExpression ifFalse
             )
+prettyExpression Text{..} = pretty chunks
 prettyExpression Annotation{..} =
     Pretty.group (Pretty.flatAlt long short)
   where

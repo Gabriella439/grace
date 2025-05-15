@@ -1,0 +1,4 @@
+tasty/data/error/parse/incomplete-string-input.ffg:1:15: Invalid input - Lexing failed
+  │
+1 │ "a${"b" + "c"}
+  │               ↑

@@ -76,8 +76,8 @@ resolve manager input = case input of
                     Left e -> Exception.throw e
                     Right result -> return result
                 AsText -> do
-                    return Syntax.Scalar
-                        { scalar = Syntax.Text text
+                    return Syntax.Text
+                        { chunks = Syntax.Chunks text []
                         , location = 0
                         }
 
@@ -106,8 +106,8 @@ resolve manager input = case input of
                             Left e -> Exception.throw e
                             Right result -> return result
                         AsText -> do
-                            return Syntax.Scalar
-                                { scalar = Syntax.Text text
+                            return Syntax.Text
+                                { chunks = Syntax.Chunks text []
                                 , location = 0
                                 }
 
@@ -156,7 +156,10 @@ resolve manager input = case input of
                 Left e -> Exception.throw e
                 Right result -> return result
             AsText -> do
-                return Syntax.Scalar{ scalar = Syntax.Text text, location = 0 }
+                return Syntax.Text
+                    { chunks = Syntax.Chunks text []
+                    , location = 0
+                    }
 
         let locate offset = Location{ name = path, code = text, ..}
 
