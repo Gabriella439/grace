@@ -230,7 +230,7 @@ main = do
             (_, value) <- throws eitherResult
 
             case value of
-                Value.Text (Value.Chunks text []) -> Text.IO.putStr text
+                Value.Text text -> Text.IO.putStr text
                 _ -> do
                     Text.IO.hPutStrLn IO.stderr
                         "Internal error: Not a plain Text literal\n\

@@ -7,17 +7,15 @@ module Grace.Value
     ( -- * Value
       Closure(..)
     , Value(..)
-    , Chunks(..)
     ) where
 
 import Data.Aeson (FromJSON(..))
 import Data.Foldable (toList)
 import Data.HashMap.Strict.InsOrd (InsOrdHashMap)
 import Data.Sequence (Seq)
-import Data.String (IsString(..))
 import Data.Text (Text)
 import Grace.Location (Location)
-import Grace.Syntax (Builtin, Operator, Scalar, Syntax)
+import Grace.Syntax (Builtin, Scalar, Syntax)
 import Grace.Type (Type)
 
 import qualified Data.Aeson as Aeson
@@ -51,38 +49,7 @@ data Closure =
     * To use a more efficient representation for reduction purposes
 -}
 data Value
-    = Variable Text Int
-      -- ^ The `Data.Text.Text` field is the variable's name (i.e. \"x\")
-      --
-      -- The `Int` field disambiguates variables with the same name if there are
-      -- multiple bound variables of the same name in scope.  Zero refers to the
-      -- nearest bound variable and the index increases by one for each bound
-      -- variable of the same name going outward.  The following diagram may
-      -- help:
-      --
-      -- >              ┌──refers to──┐
-      -- >              │             │
-      -- >              v             │
-      -- > \x -> \y -> \x     ->    x@0
-      -- >
-      -- > ┌─────────refers to────────┐
-      -- > │                          │
-      -- > v                          │
-      -- > \x -> \y -> \x     ->    x@1
-      --
-      -- This `Int` behaves like a De Bruijn index in the spcial case where all
-      -- variables have the same name.
-      --
-      -- You can optionally omit the index if it is 0:
-      --
-      -- >              ┌─refers to─┐
-      -- >              │           │
-      -- >              v           │
-      -- > \x -> \y -> \x     ->    x
-      --
-      -- Zero indices are omitted when pretty-printing variables and non-zero
-      -- indices appear as a numeric suffix.
-    | Lambda Closure
+    = Lambda Closure
       -- The `Lambda` constructor captures the environment at the time it is
       -- evaluated, so that evaluation can be lazily deferred until the function
       -- input is known.  This is essentially the key optimization that powers
@@ -90,18 +57,12 @@ data Value
     | Application Value Value
     | List (Seq Value)
     | Record (InsOrdHashMap Text Value)
-    | Field Value Text
     | Alternative Text
     | Merge Value
-    | If Value Value Value
-    | Text Chunks
+    | Text Text
     | Builtin Builtin
     | Scalar Scalar
-    | Operator Value Operator Value
     deriving stock (Eq, Show)
-
-instance IsString Value where
-    fromString string = Variable (fromString string) 0
 
 instance FromJSON Value where
     parseJSON (Aeson.Object object) = do
@@ -111,28 +72,10 @@ instance FromJSON Value where
         values <- traverse parseJSON array
         pure (List (Seq.fromList (toList values)))
     parseJSON (Aeson.String text) = do
-        pure (Text (Chunks text []))
+        pure (Text text)
     parseJSON (Aeson.Number scientific) = do
         pure (Scalar (Syntax.Real scientific))
     parseJSON (Aeson.Bool bool) = do
         pure (Scalar (Syntax.Bool bool))
     parseJSON Aeson.Null = do
         pure (Scalar Syntax.Null)
-
-data Chunks = Chunks Text [(Value, Text)]
-    deriving stock (Eq, Show)
-
-instance Monoid Chunks where
-    mempty = Chunks mempty mempty
-
-instance Semigroup Chunks where
-    Chunks text₀ rest₀ <> Chunks text₂ rest₂ = case unsnoc rest₀ of
-        Nothing -> Chunks (text₀ <> text₂) rest₂
-        Just (rest₁, (syntax, text₁)) ->
-            Chunks text₀ (rest₁ <> ((syntax, text₁ <> text₂) : rest₂))
-      where
-        unsnoc [ ] = Nothing
-        unsnoc [x] = Just ([], x)
-        unsnoc (x : xs) = do
-            (i, l) <- unsnoc xs
-            return (x : i, l)

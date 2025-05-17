@@ -59,15 +59,7 @@ lookupVariable name index environment =
                  else lookupVariable name (index - 1) rest
             else lookupVariable name index rest
         [] ->
-            -- In the `Value` type, free variables are stored using negative
-            -- indices (starting at -1) to avoid collision with bound variables
-            --
-            -- >>> evaluate [] "x"
-            -- Variable "x" (-1)
-            --
-            -- This has the nice property that `quote` does the right thing when
-            -- converting back to the `Syntax` type.
-            Value.Variable name (negate index - 1)
+            error "Grace.Normalize.lookupVariable: unbound variable"
 
 asInteger :: Scalar -> Maybe Integer
 asInteger (Natural n) = Just (fromIntegral n)
@@ -135,8 +127,8 @@ evaluate env syntax =
                     case HashMap.lookup field fieldValues of
                         Just value -> value
                         Nothing -> Value.Scalar Syntax.Null
-                other ->
-                    Value.Field other field
+                _ ->
+                    error "Grace.Normalize.evaluate: fields can only be accessed from record values"
 
         Syntax.Alternative{..} ->
             Value.Alternative name
@@ -148,20 +140,18 @@ evaluate env syntax =
             case predicate' of
                 Value.Scalar (Bool True) -> ifTrue'
                 Value.Scalar (Bool False) -> ifFalse'
-                _ -> Value.If predicate' ifTrue' ifFalse'
+                _ -> error "Grace.Normalize.evaluate: if predicate must be a boolean value"
           where
             predicate' = evaluate env predicate
             ifTrue'    = evaluate env ifTrue
             ifFalse'   = evaluate env ifFalse
 
-        Syntax.Text{ chunks = Syntax.Chunks text rest } ->
-            Value.Text (Value.Chunks text [] <> foldMap onChunk rest)
+        Syntax.Text{ chunks = Syntax.Chunks text₀ rest } ->
+            Value.Text (text₀ <> foldMap onChunk rest)
           where
-            onChunk (interpolation, text₁) = case evaluate env interpolation of
-                Value.Text (Value.Chunks text₀ []) ->
-                    Value.Chunks (text₀ <> text₁) []
-                v ->
-                    Value.Chunks mempty [(v, text₁)]
+            onChunk (interpolation, text₂) = case evaluate env interpolation of
+                Value.Text text₁ -> text₁ <> text₂
+                _ -> error "Grace.Normalize.evaluate: interpolations must be text values"
 
         Syntax.Scalar{..} ->
             Value.Scalar scalar
@@ -171,7 +161,7 @@ evaluate env syntax =
                 (Value.Scalar (Bool l), Value.Scalar (Bool r)) ->
                     Value.Scalar (Bool (l && r))
                 _ ->
-                    Value.Operator left' Syntax.And right'
+                    error "Grace.Normalize.evaluate: && arguments must be boolean values"
           where
             left'  = evaluate env left
             right' = evaluate env right
@@ -181,7 +171,7 @@ evaluate env syntax =
                 (Value.Scalar (Bool l), Value.Scalar (Bool r)) ->
                     Value.Scalar (Bool (l || r))
                 _ ->
-                    Value.Operator left' Syntax.Or right'
+                    error "Grace.Normalize.evaluate: || arguments must be boolean values"
           where
             left'  = evaluate env left
             right' = evaluate env right
@@ -199,7 +189,7 @@ evaluate env syntax =
                     , Just n <- asReal r ->
                         Value.Scalar (Real (m * n))
                 _ ->
-                    Value.Operator left' Syntax.Times right'
+                    error "Grace.Normalize.evaluate: * arguments must be numeric values"
           where
             left'  = evaluate env left
             right' = evaluate env right
@@ -221,7 +211,7 @@ evaluate env syntax =
                 (Value.List l, Value.List r) ->
                     Value.List (l <> r)
                 _ ->
-                    Value.Operator left' Syntax.Plus right'
+                    error "Grace.Normalize.evaluate: + arguments must be values"
           where
             left'  = evaluate env left
             right' = evaluate env right
@@ -343,14 +333,14 @@ apply (Value.Builtin RealNegate) (Value.Scalar x)
 apply (Value.Builtin IntegerNegate) (Value.Scalar x)
     | Just n <- asInteger x = Value.Scalar (Integer (negate n))
 apply (Value.Builtin RealShow) (Value.Scalar (Natural n)) =
-    Value.Text (Value.Chunks (Text.pack (show n)) [])
+    Value.Text (Text.pack (show n))
 apply (Value.Builtin RealShow) (Value.Scalar (Integer n)) =
-    Value.Text (Value.Chunks (Text.pack (show n)) [])
+    Value.Text (Text.pack (show n))
 apply (Value.Builtin RealShow) (Value.Scalar (Real n)) =
-    Value.Text (Value.Chunks (Text.pack (show n)) [])
+    Value.Text (Text.pack (show n))
 apply
-    (Value.Application (Value.Builtin TextEqual) (Value.Text (Value.Chunks l [])))
-    (Value.Text (Value.Chunks r [])) =
+    (Value.Application (Value.Builtin TextEqual) (Value.Text l))
+    (Value.Text r) =
         Value.Scalar (Bool (l == r))
 apply
     (Value.Application
@@ -389,15 +379,11 @@ apply
         apply objectHandler (Value.List (Seq.fromList (map adapt (HashMap.toList keyValues))))
       where
         adapt (key, value) =
-            Value.Record
-                [("key", Value.Text (Value.Chunks key [])), ("value", loop value)]
+            Value.Record [("key", Value.Text key), ("value", loop value)]
     loop v =
         v
 apply function argument =
     Value.Application function argument
-
-countNames :: Text -> [Text] -> Int
-countNames name = length . filter (== name)
 
 -- | Convert a `Value` back into the surface `Syntax`
 quote
@@ -408,9 +394,6 @@ quote
     -> Syntax () Void
 quote names value =
     case value of
-        Value.Variable name index ->
-            Syntax.Variable{ index = countNames name names - index - 1, .. }
-
         Value.Lambda (Closure name env body) ->
             Syntax.Lambda
                 { nameBinding = Syntax.NameBinding
@@ -458,38 +441,17 @@ quote names value =
           where
             adapt (field, value_) = (field, quote names value_)
 
-        Value.Field record field ->
-            Syntax.Field{ record = quote names record, fieldLocation = location, .. }
-
         Value.Alternative name ->
             Syntax.Alternative{..}
 
         Value.Merge handlers ->
             Syntax.Merge{ handlers = quote names handlers, .. }
 
-        Value.If predicate ifTrue ifFalse ->
-            Syntax.If
-                { predicate = quote names predicate
-                , ifTrue = quote names ifTrue
-                , ifFalse = quote names ifFalse
-                , ..
-                }
-
-        Value.Text (Value.Chunks text₀ rest) ->
-            Syntax.Text{ chunks = Syntax.Chunks text₀ (fmap onChunk rest), .. }
-          where
-            onChunk (interpolation, text) = (quote names interpolation, text)
+        Value.Text text ->
+            Syntax.Text{ chunks = Syntax.Chunks text [], .. }
 
         Value.Scalar scalar ->
             Syntax.Scalar{..}
-
-        Value.Operator left operator right ->
-            Syntax.Operator
-                { left = quote names left
-                , operatorLocation = location
-                , right = quote names right
-                , ..
-                }
 
         Value.Builtin builtin ->
             Syntax.Builtin{..}
