@@ -40,7 +40,7 @@ import Control.Applicative.Combinators (endBy, sepBy)
 import Control.Applicative.Combinators.NonEmpty (sepBy1)
 import Control.Exception.Safe (Exception(..))
 import Control.Monad.Combinators (manyTill)
-import Data.Functor (void, ($>))
+import Data.Functor (void)
 import Data.Foldable (toList)
 import Data.HashSet (HashSet)
 import Data.List.NonEmpty (NonEmpty(..), some1)
@@ -98,6 +98,7 @@ lexToken =
           lexFile
         , lexUri
         , lexLabel
+        , lexNumber
 
         , Combinators.choice
             [ Grace.Parser.Or     <$ symbol "||"
@@ -176,7 +177,6 @@ lexToken =
         , Grace.Parser.Equals           <$ symbol "="
         , Grace.Parser.Lambda           <$ symbol "\\"
 
-        , lexNumber
         , lexText
         , lexAlternative
         , lexQuotedAlternative
@@ -211,16 +211,19 @@ lex name code =
             return tokens
 
 lexNumber :: Lexer Token
-lexNumber =
-  try lexInteger <|> lexScientific
+lexNumber = try lexInteger <|> try lexScientific
   where
-    lexInteger = Int
-      <$> lexeme Lexer.decimal
-      <* Megaparsec.notFollowedBy (Megaparsec.Char.char '.')
+    lexSign = (Positive <$ "+") <|> (Negative <$ "-") <|> pure Unsigned
+
+    lexInteger = do
+        sign <- lexSign
+        n <- lexeme Lexer.decimal <*  Megaparsec.notFollowedBy (Megaparsec.Char.char '.')
+        return (Int sign n)
 
     lexScientific = do
+        sign <- lexSign
         scientific <- lexeme Lexer.scientific
-        return (RealLiteral scientific)
+        return (RealLiteral sign scientific)
 
 lexFile :: Lexer Token
 lexFile = lexeme do
@@ -564,7 +567,7 @@ data Token
     | Real
     | RealEqual
     | RealLessThan
-    | RealLiteral Scientific
+    | RealLiteral Sign Scientific
     | RealNegate
     | RealShow
     | Else
@@ -575,7 +578,7 @@ data Token
     | Forall
     | If
     | In
-    | Int Int
+    | Int Sign Int
     | Integer
     | IntegerAbs
     | IntegerEven
@@ -618,6 +621,9 @@ data Token
     | URI URI.URI
     deriving stock (Eq, Show)
 
+data Sign = Unsigned | Positive | Negative
+    deriving stock (Eq, Show)
+
 {-| A token with parsing state attached, used for reporting line and column
     numbers in error messages
 -}
@@ -646,13 +652,13 @@ matchAlternative :: Token -> Maybe Text
 matchAlternative (Grace.Parser.Alternative a) = Just a
 matchAlternative  _                           = Nothing
 
-matchReal :: Token -> Maybe Scientific
-matchReal (Grace.Parser.RealLiteral n) = Just n
-matchReal  _                           = Nothing
+matchReal :: Token -> Maybe (Sign, Scientific)
+matchReal (Grace.Parser.RealLiteral sign n) = Just (sign, n)
+matchReal  _                                = Nothing
 
-matchInt :: Token -> Maybe Int
-matchInt (Grace.Parser.Int n) = Just n
-matchInt  _                   = Nothing
+matchInt :: Token -> Maybe (Sign, Int)
+matchInt (Grace.Parser.Int sign n) = Just (sign, n)
+matchInt  _                        = Nothing
 
 matchChunks :: Token -> Maybe (Chunks Offset Input)
 matchChunks (Grace.Parser.TextLiteral c) = Just c
@@ -681,7 +687,7 @@ label = terminal matchLabel
 alternative :: Parser r Text
 alternative = terminal matchAlternative
 
-int :: Parser r Int
+int :: Parser r (Sign, Int)
 int = terminal matchInt
 
 text :: Parser r Text
@@ -705,10 +711,10 @@ locatedLabel = locatedTerminal matchLabel
 locatedAlternative :: Parser r (Offset, Text)
 locatedAlternative = locatedTerminal matchAlternative
 
-locatedReal :: Parser r (Offset, Scientific)
+locatedReal :: Parser r (Offset, (Sign, Scientific))
 locatedReal = locatedTerminal matchReal
 
-locatedInt :: Parser r (Offset, Int)
+locatedInt :: Parser r (Offset, (Sign, Int))
 locatedInt = locatedTerminal matchInt
 
 locatedChunks :: Parser r (Offset, Chunks Offset Input)
@@ -752,7 +758,7 @@ render t = case t of
     Grace.Parser.Dash             -> "-"
     Grace.Parser.Dot              -> "."
     Grace.Parser.Real             -> "Real"
-    Grace.Parser.RealLiteral _    -> "a real number literal"
+    Grace.Parser.RealLiteral _ _  -> "a real number literal"
     Grace.Parser.RealEqual        -> "Real/equal"
     Grace.Parser.RealLessThan     -> "Real/lessThan"
     Grace.Parser.RealNegate       -> "Real/negate"
@@ -765,7 +771,7 @@ render t = case t of
     Grace.Parser.Forall           -> "forall"
     Grace.Parser.If               -> "if"
     Grace.Parser.In               -> "in"
-    Grace.Parser.Int _            -> "an integer literal"
+    Grace.Parser.Int _ _          -> "an integer literal"
     Grace.Parser.Integer          -> "Integer"
     Grace.Parser.IntegerAbs       -> "Integer/clamp"
     Grace.Parser.IntegerEven      -> "Integer/even"
@@ -925,11 +931,15 @@ grammar endsWithBrace = mdo
 
                 return Syntax.Variable{ index = 0, .. }
 
-        <|> do  ~(location, name) <- locatedLabel
-                parseToken Grace.Parser.At
-                index <- int
+        <|> do  let withSign Unsigned index = index
+                    withSign Positive index = index
+                    withSign Negative index = negate index
 
-                return Syntax.Variable{..}
+                ~(location, name) <- locatedLabel
+                parseToken Grace.Parser.At
+                ~(sign, index) <- int
+
+                return Syntax.Variable{ index = withSign sign index, ..}
 
         <|> do  ~(location, name) <- locatedAlternative
 
@@ -963,25 +973,22 @@ grammar endsWithBrace = mdo
 
                 return Syntax.Scalar{ scalar = Syntax.Null, .. }
 
-        <|> do  sign <- (parseToken Grace.Parser.Dash $> negate) <|> pure id
+        <|> do  let withSign Unsigned n = Syntax.Real n
+                    withSign Positive n = Syntax.Real n
+                    withSign Negative n = Syntax.Real (negate n)
 
-                ~(location, n) <- locatedReal
+                ~(location, (sign, n)) <- locatedReal
 
-                return Syntax.Scalar{ scalar = Syntax.Real (sign n), .. }
+                return Syntax.Scalar{ scalar = withSign sign n, .. }
 
-        <|> do  parseToken Grace.Parser.Dash
+        <|> do  let withSign Unsigned n = Syntax.Natural (fromIntegral n)
+                    withSign Positive n = Syntax.Integer (fromIntegral n)
+                    withSign Negative n = Syntax.Integer (fromIntegral (negate n))
 
-                ~(location, n) <- locatedInt
-
-                return Syntax.Scalar
-                    { scalar = Syntax.Integer (fromIntegral (negate n))
-                    , ..
-                    }
-
-        <|> do  ~(location, n) <- locatedInt
+                ~(location, (sign, n)) <- locatedInt
 
                 return Syntax.Scalar
-                    { scalar = Syntax.Natural (fromIntegral n)
+                    { scalar = withSign sign n
                     , ..
                     }
 
