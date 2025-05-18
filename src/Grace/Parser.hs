@@ -46,13 +46,14 @@ import Data.HashSet (HashSet)
 import Data.List.NonEmpty (NonEmpty(..), some1)
 import Data.Maybe (fromJust)
 import Data.Scientific (Scientific)
+import Data.Semigroup (sconcat)
 import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..), Offset(..))
 import Grace.Syntax (Binding(..), Chunks(..), NameBinding(..), Syntax(..))
 import Grace.Type (Type(..))
-import Prelude hiding (lex)
+import Prelude hiding (lex, lines, unlines)
 import Text.Earley (Grammar, Prod, Report(..), rule, (<?>))
 import Text.Megaparsec (ParseErrorBundle(..), State(..), try)
 
@@ -254,12 +255,71 @@ lexUri = (lexeme . try) do
         then return (Grace.Parser.URI u)
         else fail "Unsupported Grace URI"
 
+lines :: Chunks s a -> NonEmpty (Chunks s a)
+lines = loop mempty
+  where
+    loop :: Chunks s a -> Chunks s a -> NonEmpty (Chunks s a)
+    loop currentLine (Chunks text₀ rest)
+        | Text.null suffix = case rest of
+            [] -> (currentLine <> Chunks prefix []) :| []
+            (interpolation, text₁) : est ->
+                loop (currentLine <> Chunks prefix [(interpolation, "")])
+                    (Chunks text₁ est)
+        | otherwise =
+            NonEmpty.cons
+                (currentLine <> Chunks prefix [])
+                (loop mempty (Chunks (Text.drop 1 suffix) rest))
+      where
+        (prefix, suffix) = Text.breakOn "\n" text₀
+
+unlines :: NonEmpty (Chunks s a) -> Chunks s a
+unlines ls = sconcat (NonEmpty.intersperse "\n" ls)
+
+commonPrefix :: NonEmpty (Chunks s a) -> Text
+commonPrefix ls = List.foldl' longestCommonPrefix t ts
+  where
+    t :| ts = fmap toPrefix (removeEmpty ls)
+
+    toPrefix (Chunks text₀ _) = Text.takeWhile isPrefixCharacter text₀
+      where
+        isPrefixCharacter c = c == ' ' || c == '\t'
+
+    longestCommonPrefix x y = case Text.commonPrefixes x y of
+        Nothing             -> ""
+        Just (prefix, _, _) -> prefix
+
+removeEmpty :: NonEmpty (Chunks s a) -> NonEmpty (Chunks s a)
+removeEmpty ls = prependList (filter present initLines) (pure lastLine)
+  where
+    initLines = NonEmpty.init ls
+    lastLine  = NonEmpty.last ls
+
+    present (Chunks "" []) = False
+    present  _             = True
+
+prependList :: [a] -> NonEmpty a -> NonEmpty a
+prependList      []        ys  = ys
+prependList (x : xs) (y :| ys) = x :| (xs <> (y : ys))
+
+dedent :: Chunks s a -> Chunks s a
+dedent c = unlines (fmap stripPrefix ls)
+  where
+    ls = lines c
+
+    prefix = commonPrefix ls
+
+    stripPrefix (Chunks text₀ rest) =
+        Chunks (Text.drop (Text.length prefix) text₀) rest
+
 lexText :: Lexer Token
 lexText = lexeme do
     "\""
 
+    multiline <- (True <$ "\n") <|> pure False
+
     let isText c =
-                ('\x20' <= c && c <=     '\x21')
+                ('\x09' <= c && c <=     '\x0A' && multiline)
+            ||  ('\x20' <= c && c <=     '\x21')
             ||   '\x23' == c
             ||  ('\x25' <= c && c <=     '\x5b')
             ||  ('\x5d' <= c && c <= '\x10FFFF')
@@ -282,17 +342,20 @@ lexText = lexeme do
 
     let escaped =
             Combinators.choice
-                [ "\"" <$ "\\\""
-                , "\\" <$ "\\\\"
-                , "/"  <$ "\\/"
-                , "\b" <$ "\\b"
-                , "\f" <$ "\\f"
-                , "\n" <$ "\\n"
-                , "\r" <$ "\\r"
-                , "\t" <$ "\\t"
-                , "$"  <$ "\\$"
-                , unicodeEscape
-                ] Megaparsec.<?> "escape sequence"
+                (   (   if multiline
+                        then []
+                        else [ "\n" <$ "\\n", "\t" <$ "\\t" ]
+                    )
+                <>  [ "\"" <$ "\\\""
+                    , "\\" <$ "\\\\"
+                    , "/"  <$ "\\/"
+                    , "\b" <$ "\\b"
+                    , "\f" <$ "\\f"
+                    , "\r" <$ "\\r"
+                    , "$"  <$ "\\$"
+                    , unicodeEscape
+                    ]
+                ) Megaparsec.<?> "escape sequence"
 
     let interpolated = do
             "${"
@@ -336,9 +399,15 @@ lexText = lexeme do
 
     chunks <- many (unescaped <|> interpolated <|> escaped <|> ("$" <$ "$"))
 
+    let chunk = mconcat chunks
+
+    let dedented
+            | multiline = dedent chunk
+            | otherwise = chunk
+
     "\""
 
-    return (TextLiteral (mconcat chunks))
+    return (TextLiteral dedented)
 
 isLabel0 :: Char -> Bool
 isLabel0 c = Char.isLower c || c == '_'

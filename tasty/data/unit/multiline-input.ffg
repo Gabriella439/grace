@@ -1,0 +1,10 @@
+let example0 = "
+      a
+
+      b
+      "
+
+let example1 = "
+      a"
+
+in  { example0, example1 }
