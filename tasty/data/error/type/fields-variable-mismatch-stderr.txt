@@ -1,6 +1,6 @@
-Not a record subtype
+Record type mismatch
 
-The following type:
+The following record type:
 
   { b }
 
@@ -9,7 +9,7 @@ tasty/data/error/type/fields-variable-mismatch-input.ffg:1:62:
 1 │ let f : forall (a : Fields) . forall (b : Fields) . { a } -> { b } -> { a }
   │                                                              ↑
 
-… cannot be a subtype of:
+… is not a subtype of the following record type:
 
   { a }
 

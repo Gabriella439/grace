@@ -1,0 +1,19 @@
+Not a subtype
+
+The following type:
+
+  Optional d?
+
+tasty/data/error/missing-required-field-input.ffg:1:10: 
+  │
+1 │ { x: 1 }.y : Bool
+  │          ↑
+
+… cannot be a subtype of:
+
+  Bool
+
+tasty/data/error/missing-required-field-input.ffg:1:14: 
+  │
+1 │ { x: 1 }.y : Bool
+  │              ↑

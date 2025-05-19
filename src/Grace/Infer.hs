@@ -363,7 +363,7 @@ subtype _A₀ _B₀ = do
         -- implement a non-trivial type that wasn't already covered by the
         -- paper, so we'll go into more detail here to explain the general
         -- type-checking principles of the paper.
-        (_A@Type.Record{ fields = Type.Fields kAs₀ fields₀ }, _B@Type.Record{ fields = Type.Fields kBs₀ fields₁ }) -> do
+        (Type.Record{ fields = Type.Fields kAs₀ fields₀ }, Type.Record{ fields = Type.Fields kBs₀ fields₁ }) -> do
             let mapA = Map.fromList kAs₀
             let mapB = Map.fromList kBs₀
 
@@ -371,37 +371,6 @@ subtype _A₀ _B₀ = do
             let extraB = Map.difference mapB mapA
 
             let both = Map.intersectionWith (,) mapA mapB
-
-            let flexible  Monotype.EmptyFields          = False
-                flexible (Monotype.VariableFields _   ) = False
-                flexible (Monotype.UnsolvedFields _   ) = True
-
-            let isOptional Optional{} = True
-                isOptional _ = False
-
-            let okayA = Map.null extraA
-                    || (flexible fields₁ && fields₀ /= fields₁)
-
-            let okayB = all isOptional extraB
-                    || (flexible fields₀ && fields₀ /= fields₁)
-
-            -- First we check that there are no mismatches in the record types
-            -- that cannot be resolved by just setting an unsolved Fields
-            -- variable to the right type.
-            --
-            -- For example, `{ x: Bool }` can never be a subtype of
-            -- `{ y: Text }`
-            if | not okayA && not okayB -> do
-                throwError (RecordTypeMismatch _A₀ _B₀ extraA extraB)
-
-               | not okayA -> do
-                throwError (RecordTypeMismatch _A₀ _B₀ extraA mempty)
-
-               | not okayB -> do
-                throwError (RecordTypeMismatch _A₀ _B₀ mempty extraB)
-
-               | otherwise -> do
-                   return ()
 
             -- If record A is a subtype of record B, then all fields in A
             -- must be a subtype of the matching fields in record B
@@ -418,14 +387,34 @@ subtype _A₀ _B₀ = do
             -- variables.
             traverse_ process both
 
-            -- Here is where we handle fields that were only present in one
-            -- record type.  They still might be okay if one or both of the
-            -- record types has an unsolved fields variable.
-            case (fields₀, fields₁) of
-                -- The two records are identical, so there's nothing left to do
-                _ | Map.null extraA && all isOptional extraB && fields₀ == fields₁ -> do
-                        return ()
+            let isRequired _B₁ = do
+                    context <- get
 
+                    let assertOptional = do
+                            existential <- fresh
+
+                            push (Context.UnsolvedType existential)
+
+                            let location = Type.location _B₁
+
+                            let _B₂ = Type.Optional{ type_ = Type.UnsolvedType{ existential, .. }, .. }
+
+                            subtype _B₂ _B₁
+
+                            return False
+
+                    assertOptional `catchError` \_ -> do
+                        set context
+
+                        return True
+
+            let getRequired = fmap (Map.filter id) (traverse isRequired extraB)
+
+            -- Here is where we handle extra fields that were only present in
+            -- the subtype or supertype.  They still might be okay if one or
+            -- both record types has an unsolved fields variable or if extra
+            -- fields in the supertype are `Optional`
+            case (fields₀, fields₁) of
                 -- Both records type have unsolved Fields variables.  Great!
                 -- This is the most flexible case, since we can replace these
                 -- unsolved variables with whatever fields we want to make the
@@ -532,29 +521,46 @@ subtype _A₀ _B₀ = do
 
                 -- If only one of the records has a Fields variable then the
                 -- solution is simpler: just set the Fields variable to the
-                -- extra fields from the opposing record
-                (Monotype.UnsolvedFields p₀, _) -> do
-                    _Θ <- get
+                -- extra fields from the opposing record.
+                (Monotype.UnsolvedFields p₀, _)
+                    | Map.null extraA -> do
+                        _Θ <- get
 
-                    instantiateFieldsL
-                        p₀
-                        (Type.location _B₀)
-                        (Context.solveRecord _Θ
-                            (Type.Fields (Map.toList extraB) fields₁)
-                        )
+                        instantiateFieldsL
+                            p₀
+                            (Type.location _B₀)
+                            (Context.solveRecord _Θ
+                                (Type.Fields (Map.toList extraB) fields₁)
+                            )
 
                 (_, Monotype.UnsolvedFields p₁) -> do
-                    _Θ <- get
+                    requiredB <- getRequired
 
-                    instantiateFieldsR
-                        (Type.location _A₀)
-                        (Context.solveRecord _Θ
-                            (Type.Fields (Map.toList extraA) fields₀)
-                        )
-                        p₁
+                    if Map.null requiredB
+                        then do
+                            _Θ <- get
 
-                (_, _) -> do
-                    throwError (NotRecordSubtype (Type.location _A₀) _A (Type.location _B₀) _B)
+                            instantiateFieldsR
+                                (Type.location _A₀)
+                                (Context.solveRecord _Θ
+                                    (Type.Fields (Map.toList extraA) fields₀)
+                                )
+                                p₁
+                        else
+                            throwError (RecordTypeMismatch _A₀ _B₀ (Map.keys extraA) (Map.keys requiredB))
+
+                _   | Map.null extraA && fields₀ == fields₁ -> do
+                        requiredB <- getRequired
+
+                        if Map.null requiredB
+                            then do
+                                return ()
+                            else
+                                throwError (RecordTypeMismatch _A₀ _B₀ (Map.keys extraA) (Map.keys requiredB))
+                    | otherwise -> do
+                        requiredB <- getRequired
+
+                        throwError (RecordTypeMismatch _A₀ _B₀ (Map.keys extraA) (Map.keys requiredB))
 
         -- Checking if one union is a subtype of another union is basically the
         -- exact same as the logic for checking if a record is a subtype of
@@ -2043,7 +2049,6 @@ data TypeInferenceError
     --
     | NotAlternativesSubtype Location (Existential Monotype.Union) (Type.Union Location)
     | NotFieldsSubtype Location (Existential Monotype.Record) (Type.Record Location)
-    | NotRecordSubtype Location (Type Location) Location (Type Location)
     | NotUnionSubtype Location (Type Location) Location (Type Location)
     | NotSubtype Location (Type Location) Location (Type Location)
     --
@@ -2052,7 +2057,7 @@ data TypeInferenceError
     | UnboundTypeVariable Location Text
     | UnboundVariable Location Text Int
     --
-    | RecordTypeMismatch (Type Location) (Type Location) (Map.Map Text (Type Location)) (Map.Map Text (Type Location))
+    | RecordTypeMismatch (Type Location) (Type Location) [Text] [Text]
     | UnionTypeMismatch (Type Location) (Type Location) (Map.Map Text (Type Location)) (Map.Map Text (Type Location))
     deriving (Eq, Show)
 
@@ -2261,21 +2266,6 @@ instance Exception TypeInferenceError where
         \\n\
         \… because the same fields variable appears within that record type."
 
-    displayException (NotRecordSubtype locA₀ _A locB₀ _B) =
-        "Not a record subtype\n\
-        \\n\
-        \The following type:\n\
-        \\n\
-        \" <> insert _A <> "\n\
-        \\n\
-        \" <> Text.unpack (Location.renderError "" locA₀) <> "\n\
-        \\n\
-        \… cannot be a subtype of:\n\
-        \\n\
-        \" <> insert _B <> "\n\
-        \\n\
-        \" <> Text.unpack (Location.renderError "" locB₀)
-
     displayException (NotUnionSubtype locA₀ _A locB₀ _B) =
         "Not a union subtype\n\
         \\n\
@@ -2328,7 +2318,22 @@ instance Exception TypeInferenceError where
         where
             var = prettyToText @(Syntax.Syntax () Void) Syntax.Variable{ location = (), .. }
 
-    displayException (RecordTypeMismatch _A₀ _B₀ extraA extraB) | extraB == mempty =
+    displayException (RecordTypeMismatch _A₀ _B₀ extraA extraB) | null extraA && null extraB =
+        "Record type mismatch\n\
+        \\n\
+        \The following record type:\n\
+        \\n\
+        \" <> insert _A₀ <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _A₀)) <> "\n\
+        \\n\
+        \… is not a subtype of the following record type:\n\
+        \\n\
+        \" <> insert _B₀ <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _B₀))
+
+    displayException (RecordTypeMismatch _A₀ _B₀ extraA extraB) | null extraB =
         "Record type mismatch\n\
         \\n\
         \The following record type:\n\
@@ -2345,9 +2350,9 @@ instance Exception TypeInferenceError where
         \\n\
         \The former record has the following extra fields:\n\
         \\n\
-        \" <> listToText (Map.keys extraA)
+        \" <> listToText extraA
 
-    displayException (RecordTypeMismatch _A₀ _B₀ extraA extraB) | extraA == mempty =
+    displayException (RecordTypeMismatch _A₀ _B₀ extraA extraB) | null extraA =
         "Record type mismatch\n\
         \\n\
         \The following record type:\n\
@@ -2364,7 +2369,7 @@ instance Exception TypeInferenceError where
         \\n\
         \The latter record has the following extra fields:\n\
         \\n\
-        \" <> listToText (Map.keys extraB)
+        \" <> listToText extraB
 
     displayException (RecordTypeMismatch _A₀ _B₀ extraA extraB) =
         "Record type mismatch\n\
@@ -2383,11 +2388,11 @@ instance Exception TypeInferenceError where
         \\n\
         \The former record has the following extra fields:\n\
         \\n\
-        \" <> listToText (Map.keys extraA) <> "\n\
+        \" <> listToText extraA <> "\n\
         \\n\
         \… while the latter record has the following extra fields:\n\
         \\n\
-        \" <> listToText (Map.keys extraB)
+        \" <> listToText extraB
 
     displayException (UnionTypeMismatch _A₀ _B₀ extraA extraB) | extraB == mempty =
         "Union type mismatch\n\
