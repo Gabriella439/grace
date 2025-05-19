@@ -11,6 +11,7 @@ library
 
   build-depends:       base
                      , aeson
+                     , bytestring
                      , Earley
                      , containers
                      , filepath
@@ -20,6 +21,7 @@ library
                      , megaparsec
                      , modern-uri
                      , mtl
+                     , openai
                      , parser-combinators
                      , prettyprinter
                      , prettyprinter-ansi-terminal
@@ -44,7 +46,6 @@ library
                      , Grace.Pretty
                      , Grace.Syntax
                      , Grace.HTTP
-                     , Grace.TH
                      , Grace.Type
                      , Grace.Value
                      , Grace.Width
@@ -59,6 +60,7 @@ library
     hs-source-dirs:    ghcjs
     build-depends:     ghcjs-base
                      , ghcjs-fetch
+                     , ghcjs-prim
   else
     hs-source-dirs:    ghc
     build-depends:     ansi-terminal
@@ -71,6 +73,7 @@ library
                      , terminal-size
     exposed-modules:   Grace
                      , Grace.REPL
+                     , Grace.TH
 
 executable grace
   main-is:             Main.hs
@@ -92,8 +95,10 @@ executable try-grace
                      , async
                      , ghcjs-base
                      , containers
+                     , generic-lens
                      , grace
                      , insert-ordered-containers
+                     , lens
                      , mtl
                      , scientific
                      , stm

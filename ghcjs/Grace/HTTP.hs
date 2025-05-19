@@ -1,4 +1,6 @@
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DeriveAnyClass     #-}
+{-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE OverloadedStrings  #-}
 
 {-| This module provides a uniform interface for making HTTP requests using both
@@ -10,15 +12,25 @@ module Grace.HTTP
     , newManager
     , fetch
     , renderError
+    , Methods
+    , getMethods
+    , prompt
     ) where
 
 import Control.Exception (Exception(..))
+import Data.Aeson (FromJSON(..), ToJSON(..), Value)
 import Data.Text (Text)
-import GHCJS.Fetch (Request(..), JSPromiseException)
+import GHC.Generics (Generic)
+import GHCJS.Fetch (Request(..), RequestOptions(..), JSPromiseException)
 
+import qualified Control.Exception as Exception
+import qualified Data.Aeson as Aeson
+import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.JSString as JSString
 import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Encoding
 import qualified GHCJS.Fetch as Fetch
+import qualified GHCJS.Prim as Prim
 
 {-| The GHCJS implementation of HTTP requests doesn't require a real `Manager`
     so this supplies an empty placeholder
@@ -57,3 +69,88 @@ fetch _manager url = do
 -- | Render an `HttpException` as `Text`
 renderError :: HttpException -> Text
 renderError = Text.pack . displayException
+
+-- | The GHCJS implementation of OpenAI bindings just stores the API key
+type Methods = Text
+
+getMethods
+    :: Text
+    -- ^ API key
+    -> IO Methods
+getMethods = return
+
+data Response = Response{ choices :: [Choice] }
+    deriving stock (Generic)
+    deriving anyclass (FromJSON)
+
+data Choice = Choice{ message :: Message }
+    deriving stock (Generic)
+    deriving anyclass (FromJSON)
+
+data Message = Message{ content :: Text }
+    deriving stock (Generic)
+    deriving anyclass (FromJSON)
+
+prompt
+    :: Methods
+    -> Text
+    -- ^ Prompt
+    -> Text
+    -- ^ Model
+    -> Maybe Value
+    -- ^ JSON schema
+    -> IO Text
+prompt key text model schema = do
+    let keyBytes = Encoding.encodeUtf8 key
+
+    let value = Aeson.object
+            [ ("model", toJSON model)
+            , ("messages", toJSON
+                [ Aeson.object
+                    [ ("role", "user")
+                    , ("content", toJSON text)
+                    ]
+                ]
+              )
+            , ("response_format", Aeson.object
+                [ ("type", "json_schema")
+                , ("json_schema", Aeson.object
+                    [ ("name", "result")
+                    , ("schema", toJSON schema)
+                    , ("strict", toJSON True)
+                    ]
+                  )
+                ]
+              )
+            ]
+
+    body <- case Encoding.decodeUtf8' (ByteString.Lazy.toStrict (Aeson.encode value)) of
+        Left exception -> Exception.throwIO exception
+        Right text -> return (Text.unpack text)
+
+    let request = Request
+            { reqUrl = "https://api.openai.com/v1/chat/completions"
+            , reqOptions = Fetch.defaultRequestOptions
+                { reqOptMethod = "POST"
+                , reqOptHeaders =
+                    [ ("Content-Type", "application/json")
+                    , ("Authorization", "Bearer " <> keyBytes)
+                    ]
+                , reqOptBody = Just (Prim.toJSString body)
+                }
+            }
+
+    response <- Fetch.fetch request
+
+    jsString <- Fetch.responseText response
+
+    let strictBytes =
+            Encoding.encodeUtf8 (Text.pack (JSString.unpack jsString))
+
+    let lazyBytes = ByteString.Lazy.fromStrict strictBytes
+
+    case Aeson.eitherDecode lazyBytes of
+        Left string ->
+            fail string
+        Right Response{ choices = [ Choice{ message = Message{ content = text } } ] } ->
+            return text

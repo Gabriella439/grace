@@ -21,6 +21,12 @@
 <textarea style="display: none" id="input"></textarea>
 <br/>
 <button id="start-tutorial" type="button" class="btn btn-primary" style="display: none;">Try the tutorial</button>
+<br/>
+<div style="display: none" id="prompt">
+<label for="api-key">OpenAPI key:</label>
+<input type="password" class="form-control" placeholder="sk-proj-…" id="api-key" />
+<button id="run" type="button" class="btn btn-primary">Run</button>
+</div>
 <div id="output"></div>
 <pre id="error"></pre>
 </main>
@@ -36,5 +42,5 @@ function deleteSearchParamWorkaround(x, y) {
     x.delete(y)
 }
 </script>
-<script defer language="javascript" src="js/all.min.js"></script>
+<script defer language="javascript" src="js/all.js"></script>
 </html>

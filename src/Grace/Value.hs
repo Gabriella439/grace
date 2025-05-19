@@ -61,6 +61,7 @@ data Value
     | Alternative Text
     | Merge Value
     | Text Text
+    | Prompt Value
     | Builtin Builtin
     | Scalar Scalar
     deriving stock (Eq, Show)
@@ -102,6 +103,9 @@ instance Plated Value where
             return (Merge newHandlers)
         Text text -> do
             pure (Text text)
+        Prompt arguments -> do
+            newArguments <- onValue arguments
+            return (Prompt newArguments)
         Builtin builtin -> do
             pure (Builtin builtin)
         Scalar scalar -> do

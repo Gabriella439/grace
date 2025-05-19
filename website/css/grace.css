@@ -41,6 +41,6 @@ li .btn {
   height: auto;
 }
 
-#stop-tutorial {
+#start-tutorial, #stop-tutorial, #api-key {
   margin-bottom: 1em;
 }

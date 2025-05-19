@@ -31,6 +31,8 @@
                                       (old: {
                                         doCheck = false;
 
+                                        doHaddock = false;
+
                                         src =
                                           pkgsNew.lib.cleanSourceWith
                                             { inherit (old) src;
@@ -65,32 +67,129 @@
 
                               aeson = haskellPackagesNew.aeson_1_5_6_0;
 
+                              asn1-encoding =
+                                pkgsNew.haskell.lib.dontCheck
+                                  haskellPackagesOld.asn1-encoding;
+
+                              bsb-http-chunked =
+                                pkgsNew.haskell.lib.dontCheck
+                                  haskellPackagesOld.bsb-http-chunked;
+
+                              cryptonite =
+                                pkgsNew.haskell.lib.dontCheck
+                                  haskellPackagesOld.cryptonite;
+
+                              entropy =
+                                pkgsNew.haskell.lib.addBuildDepends
+                                  haskellPackagesOld.entropy
+                                  [ haskellPackagesNew.ghcjs-dom
+                                    haskellPackagesNew.jsaddle
+                                  ];
+
+                              foldl =
+                                pkgsNew.haskell.lib.dontCheck
+                                  haskellPackagesOld.foldl;
+
                               haskeline = haskellPackagesNew.haskeline_0_8_2;
+
+                              hedgehog =
+                                pkgsNew.haskell.lib.dontCheck
+                                  haskellPackagesOld.hedgehog;
+
+                              http-date =
+                                pkgsNew.haskell.lib.dontCheck
+                                  haskellPackagesOld.http-date;
+
+                              hourglass =
+                                pkgsNew.haskell.lib.dontCheck
+                                  haskellPackagesOld.hourglass;
 
                               insert-ordered-containers =
                                 pkgsNew.haskell.lib.dontCheck
                                   haskellPackagesOld.insert-ordered-containers;
 
+                              iproute =
+                                pkgsNew.haskell.lib.dontCheck
+                                  haskellPackagesOld.iproute;
+
+                              memory =
+                                pkgsNew.haskell.lib.dontCheck
+                                  haskellPackagesOld.memory;
+
+                              network =
+                                  haskellPackagesOld.network.overrideAttrs (old: {
+                                    dontUpdateAutotoolsGnuConfigScripts = true;
+                                  });
+
+                              network-byte-order =
+                                pkgsNew.haskell.lib.dontCheck
+                                  haskellPackagesOld.network-byte-order;
+
+                              openai =
+                                pkgsNew.haskell.lib.doJailbreak
+                                  (pkgsNew.haskell.lib.dontHaddock
+                                    haskellPackagesOld.openai
+                                  );
+
                               prettyprinter-ansi-terminal =
                                 pkgsNew.haskell.lib.dontCheck
                                   haskellPackagesOld.prettyprinter-ansi-terminal;
+
+                              servant-client =
+                                pkgsNew.haskell.lib.dontCheck
+                                  haskellPackagesOld.servant-client;
+
+                              servant-multipart-client =
+                                haskellPackagesOld.servant-multipart-client.override (old: {
+                                  servant-multipart = null;
+
+                                  servant-server = null;
+
+                                  warp = null;
+                                });
+
+                              streaming-commons =
+                                pkgsNew.haskell.lib.dontCheck
+                                  haskellPackagesOld.streaming-commons;
 
                               text-short =
                                 pkgsNew.haskell.lib.dontCheck
                                   haskellPackagesOld.text-short;
 
-                              vector =
-                                pkgsNew.haskell.lib.dontCheck haskellPackagesOld.vector;
+                              unix-time =
+                                pkgsNew.haskell.lib.dontCheck
+                                  haskellPackagesOld.unix-time;
 
+                              vector =
+                                pkgsNew.haskell.lib.dontCheck
+                                  haskellPackagesOld.vector;
+
+                              x509 =
+                                pkgsNew.haskell.lib.dontCheck
+                                  haskellPackagesOld.x509;
+
+                              x509-store =
+                                pkgsNew.haskell.lib.dontCheck
+                                  haskellPackagesOld.x509-store;
+
+                              zlib =
+                                pkgsNew.haskell.lib.dontCheck
+                                  haskellPackagesOld.zlib;
                             };
 
                             sourceOverrides = pkgsNew.haskell.lib.packageSourceOverrides {
                               grace = ./.;
                             };
 
+                            directoryOverrides = pkgsNew.haskell.lib.packagesFromDirectory {
+                              directory = ./dependencies;
+                            };
+
                           in
                             pkgsNew.lib.fold pkgsNew.lib.composeExtensions oldOverrides
-                              (   [ sourceOverrides ]
+                              (   [ sourceOverrides
+                                    directoryOverrides
+                                  ]
                               ++  pkgsNew.lib.optional (compiler == "ghcjs") manualOverrides
                               );
                       });
@@ -102,7 +201,7 @@
                     ${pkgsNew.rsync}/bin/rsync --archive ${./website}/ $out
                     ${pkgsNew.rsync}/bin/rsync --archive ${./prelude}/ $out/prelude
                     chmod -R u+w $out
-                    cp ${pkgsNew.haskell.packages."${compiler}".grace}/bin/try-grace.jsexe/all.min.js $out/js
+                    cp ${pkgsNew.haskell.packages."${compiler}".grace}/bin/try-grace.jsexe/all.js $out/js
                   '';
                 };
                 config.allowBroken = true;

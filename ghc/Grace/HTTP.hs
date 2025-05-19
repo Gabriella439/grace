@@ -1,5 +1,8 @@
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE DerivingStrategies    #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE OverloadedLists       #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE NamedFieldPuns        #-}
 
 {-| This module provides a uniform interface for making HTTP requests using both
     GHC and GHCJS
@@ -10,12 +13,29 @@ module Grace.HTTP
     , newManager
     , fetch
     , renderError
+    , Methods
+    , getMethods
+    , prompt
     ) where
 
 import Control.Exception (Exception(..))
+import Data.Aeson (Value)
 import Data.Text (Text)
 import Data.Text.Encoding.Error (UnicodeException)
 import Network.HTTP.Client (HttpExceptionContent(..), Manager)
+import OpenAI.V1 (Methods(..))
+import OpenAI.V1.Models (Model(..))
+import OpenAI.V1.ResponseFormat (JSONSchema(..))
+
+import OpenAI.V1.Chat.Completions
+    ( ChatCompletionObject(..)
+    , Choice(..)
+    , Content(..)
+    , CreateChatCompletion(..)
+    , Message(..)
+    , ResponseFormat(..)
+    , _CreateChatCompletion
+    )
 
 import qualified Control.Exception as Exception
 import qualified Data.Text as Text
@@ -25,6 +45,8 @@ import qualified Data.Text.Lazy.Encoding as Lazy.Encoding
 import qualified Network.HTTP.Client as HTTP
 import qualified Network.HTTP.Client.TLS as TLS
 import qualified Network.HTTP.Types as HTTP.Types
+import qualified OpenAI.V1 as OpenAI
+import qualified OpenAI.V1.Chat.Completions as Completions
 
 -- | Exception type thrown by `fetch` in the event of any failure
 data HttpException
@@ -132,3 +154,37 @@ renderError (NotUTF8 unicodeException) =
     "Not UTF8\n\
     \\n\
     \" <> Text.pack (displayException unicodeException)
+
+getMethods
+    :: Text
+    -- ^ API key
+    -> IO Methods
+getMethods key = do
+    clientEnv <- OpenAI.getClientEnv "https://api.openai.com"
+
+    return (OpenAI.makeMethods clientEnv key)
+
+prompt 
+    :: Methods
+    -> Text
+    -- ^ Prompt
+    -> Text
+    -- ^ Model
+    -> Maybe Value
+    -- ^ JSON schema
+    -> IO Text
+prompt Methods{ createChatCompletion } text model schema = do
+    ChatCompletionObject{ choices = [ Choice{ message } ] } <- createChatCompletion _CreateChatCompletion
+        { messages = [ User{ content = [ Text{ text } ], name = Nothing } ]
+        , model = Model model
+        , response_format = Just JSON_Schema
+            { json_schema = JSONSchema
+                { description = Nothing
+                , name = "result"
+                , schema
+                , strict = Just True
+                }
+            }
+        }
+
+    return (Completions.messageToContent message)

@@ -97,7 +97,7 @@ typeOfInput = helperFunction fst
 helperFunction
     :: Lift r => ((Type (), Syntax () Void) -> r) -> Input -> Code Q r
 helperFunction f input = TH.Code do
-    (inferred, value) <- liftIO (Interpret.interpret input)
+    (inferred, value) <- liftIO (Interpret.interpret Nothing input)
 
     let type_ = void inferred
         syntax = Normalize.quote [] value

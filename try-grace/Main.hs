@@ -1,16 +1,20 @@
 {-# LANGUAGE BlockArguments    #-}
+{-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MultiWayIf        #-}
+{-# LANGUAGE TypeApplications  #-}
 
 module Main where
 
 import Control.Applicative (empty)
 import Control.Concurrent.Async (Async)
-import Control.Exception (Exception(..))
+import Control.Exception (Exception(..), SomeException)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Maybe (MaybeT)
+import Data.Bifunctor (first)
 import Data.Foldable (toList)
+import Data.Generics.Sum (_As)
 import Data.IORef (IORef)
 import Data.JSString (JSString)
 import Data.Text (Text)
@@ -19,6 +23,7 @@ import Grace.Type (Type(..))
 import GHCJS.Foreign.Callback (Callback)
 import GHCJS.Types (JSVal)
 import Grace.Domain (Domain(..))
+import Grace.HTTP (Methods)
 import Grace.Input (Input(..))
 import Grace.Monotype (RemainingAlternatives(..), RemainingFields(..))
 import Grace.Syntax (Scalar(..))
@@ -31,8 +36,8 @@ import qualified Control.Concurrent.Async as Async
 import qualified Control.Concurrent.STM as STM
 import qualified Control.Concurrent.STM.TVar as TVar
 import qualified Control.Exception as Exception
+import qualified Control.Lens as Lens
 import qualified Control.Monad as Monad
-import qualified Control.Monad.Except as Except
 import qualified Control.Monad.State as State
 import qualified Control.Monad.Trans.Maybe as Maybe
 import qualified Data.Aeson as Aeson
@@ -46,10 +51,14 @@ import qualified Data.Text as Text
 import qualified Data.Text.Lazy as Text.Lazy
 import qualified Data.Text.Lazy.Encoding as Text.Encoding
 import qualified GHCJS.Foreign.Callback as Callback
+import qualified Grace.HTTP as HTTP
+import qualified Grace.Import as Import
+import qualified Grace.Infer as Infer
 import qualified Grace.Interpret as Interpret
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Normalize as Normalize
 import qualified Grace.Pretty as Pretty
+import qualified Grace.Syntax as Syntax
 import qualified Grace.Type as Type
 import qualified Grace.Value as Value
 import qualified JavaScript.Array as Array
@@ -264,34 +273,27 @@ fromText = JSString.pack . Text.unpack
 valueToText :: Value -> Text
 valueToText = Pretty.renderStrict False 80 . Normalize.quote []
 
-renderValue :: IORef Natural -> JSVal -> Type s -> Value -> IO ()
-renderValue ref parent Type.Forall{ name, nameLocation, domain = Type, type_ } value = do
+renderValue :: Maybe Methods -> IORef Natural -> JSVal -> Type s -> Value -> IO ()
+renderValue maybeMethods ref parent Type.Forall{ name, nameLocation, domain = Type, type_ } value = do
     -- If an expression has a polymorphic type, specialize the type to JSON
     let json = Type.Scalar{ location = nameLocation, scalar = Monotype.JSON }
 
-    renderValue ref parent (Type.substituteType name 0 json type_) value
+    renderValue maybeMethods ref parent (Type.substituteType name 0 json type_) value
 
-renderValue ref parent Type.Forall{ name, domain = Fields, type_ } value = do
+renderValue maybeMethods ref parent Type.Forall{ name, domain = Fields, type_ } value = do
     let empty_ = Type.Fields [] EmptyFields
 
-    renderValue ref parent (Type.substituteFields name 0 empty_ type_) value
+    renderValue maybeMethods ref parent (Type.substituteFields name 0 empty_ type_) value
 
-renderValue ref parent Type.Forall{ name, domain = Alternatives, type_ } value = do
+renderValue maybeMethods ref parent Type.Forall{ name, domain = Alternatives, type_ } value = do
     let empty_ = Type.Alternatives [] EmptyAlternatives
 
-    renderValue ref parent (Type.substituteAlternatives name 0 empty_ type_) value
+    renderValue maybeMethods ref parent (Type.substituteAlternatives name 0 empty_ type_) value
 
-renderValue ref parent Type.Optional{ type_ } value =
-    renderValue ref parent type_ value
+renderValue maybeMethods ref parent Type.Optional{ type_ } value =
+    renderValue maybeMethods ref parent type_ value
 
-renderValue _ parent _ value@Variable{} = do
-    var <- createElement "var"
-
-    setTextContent var (valueToText value)
-
-    replaceChild parent var
-
-renderValue _ parent _ (Value.Scalar (Text text))= do
+renderValue _ _ parent _ (Value.Text text) = do
     span <- createElement "span"
 
     setAttribute span "style" "whitespace: pre"
@@ -300,7 +302,7 @@ renderValue _ parent _ (Value.Scalar (Text text))= do
 
     replaceChild parent span
 
-renderValue _ parent _ (Value.Scalar (Bool bool)) = do
+renderValue _ _ parent _ (Value.Scalar (Bool bool)) = do
     input <- createElement "input"
 
     setAttribute input "type"     "checkbox"
@@ -311,14 +313,14 @@ renderValue _ parent _ (Value.Scalar (Bool bool)) = do
 
     replaceChild parent input
 
-renderValue _ parent _ (Value.Scalar Null) = do
+renderValue _ _ parent _ (Value.Scalar Null) = do
     span <- createElement "span"
 
     setTextContent span "∅"
 
     replaceChild parent span
 
-renderValue _ parent _ value@Value.Scalar{} = do
+renderValue _ _ parent _ value@Value.Scalar{} = do
     span <- createElement "span"
 
     setTextContent span (valueToText value)
@@ -327,7 +329,7 @@ renderValue _ parent _ value@Value.Scalar{} = do
 
     replaceChild parent span
 
-renderValue ref parent outer (Value.List values) = do
+renderValue maybeMethods ref parent outer (Value.List values) = do
     inner <- case outer of
             Type.List{ type_ } -> do
                 return type_
@@ -336,12 +338,12 @@ renderValue ref parent outer (Value.List values) = do
                 return outer
 
             _ -> do
-                fail "renderValue: Missing element type"
+                fail "renderValue maybeMethods: Missing element type"
 
     lis <- forM values \value -> do
         li <- createElement "li"
 
-        renderValue ref li inner value
+        renderValue maybeMethods ref li inner value
 
         return li
 
@@ -351,7 +353,7 @@ renderValue ref parent outer (Value.List values) = do
 
     replaceChild parent ul
 
-renderValue ref parent outer (Value.Record keyValues) = do
+renderValue maybeMethods ref parent outer (Value.Record keyValues) = do
     let lookupKey = case outer of
             Type.Record{ fields = Type.Fields keyTypes _ } ->
                 \key -> lookup key keyTypes
@@ -364,7 +366,7 @@ renderValue ref parent outer (Value.Record keyValues) = do
 
     let process key value = do
             type_ <- case lookupKey key of
-                Nothing    -> fail "renderValue: Missing field type"
+                Nothing    -> fail "renderValue maybeMethods: Missing field type"
                 Just type_ -> return type_
 
             dt <- createElement "dt"
@@ -385,7 +387,7 @@ renderValue ref parent outer (Value.Record keyValues) = do
 
             setAttribute dd "class" "col"
 
-            renderValue ref dd type_ value
+            renderValue maybeMethods ref dd type_ value
 
             dl <- createElement "dl"
 
@@ -399,15 +401,15 @@ renderValue ref parent outer (Value.Record keyValues) = do
 
     replaceChildren parent (Array.fromList (HashMap.elems dls))
 
-renderValue ref parent outer (Application (Value.Alternative alternative) value) = do
+renderValue maybeMethods ref parent outer (Application (Value.Alternative alternative) value) = do
     inner <- case outer of
             Type.Union{ alternatives = Type.Alternatives keyTypes _ } ->
                 case lookup alternative keyTypes of
-                    Nothing    -> fail "renderValue: Missing alternative type"
+                    Nothing    -> fail "renderValue maybeMethods: Missing alternative type"
                     Just type_ -> return type_
 
             _ -> do
-                fail "renderValue: Missing alternative type"
+                fail "renderValue maybeMethods: Missing alternative type"
 
     -- Render unions the same as a record with one field
     let recordType = Type.Record
@@ -417,9 +419,9 @@ renderValue ref parent outer (Application (Value.Alternative alternative) value)
 
     let recordValue = Value.Record (HashMap.singleton alternative value)
 
-    renderValue ref parent recordType recordValue
+    renderValue maybeMethods ref parent recordType recordValue
 
-renderValue ref parent Type.Function{ input, output } function = do
+renderValue maybeMethods ref parent Type.Function{ input, output } function = do
     result <- Maybe.runMaybeT (renderInput ref input)
 
     case result of
@@ -433,7 +435,9 @@ renderValue ref parent Type.Function{ input, output } function = do
             let invoke = do
                     value <- get
 
-                    renderValue ref outputVal output (Normalize.apply function value)
+                    newValue <- Normalize.evaluate maybeMethods [] (first (\_ -> undefined) Syntax.Application{ Syntax.function = Normalize.quote [] function, Syntax.argument = Normalize.quote [] value, Syntax.location = () })
+
+                    renderValue maybeMethods ref outputVal output newValue
 
             callback <- Callback.asyncCallback invoke
 
@@ -447,7 +451,7 @@ renderValue ref parent Type.Function{ input, output } function = do
 
             replaceChildren parent (Array.fromList [ inputVal, hr, outputVal ])
 
-renderValue _ parent _ value = do
+renderValue _ _ parent _ value = do
     renderDefault parent value
 
 renderDefault :: JSVal -> Value -> IO ()
@@ -459,25 +463,6 @@ renderDefault parent value = do
     replaceChild parent code
 
 renderInput :: IORef Natural -> Type s -> MaybeT IO (JSVal, IO Value)
-renderInput ref Type.Exists{ name, nameLocation, domain = Type, type_ } = do
-    -- If an expression has an existential type, specialize the type to { }
-    let unit = Type.Record
-            { location = nameLocation
-            , fields = Type.Fields [] EmptyFields
-            }
-
-    renderInput ref (Type.substituteType name 0 unit type_)
-
-renderInput ref Type.Exists{ name, domain = Fields, type_ } = do
-    let empty_ = Type.Fields [] EmptyFields
-
-    renderInput ref (Type.substituteFields name 0 empty_ type_)
-
-renderInput ref Type.Exists{ name, domain = Alternatives, type_ } = do
-    let empty_ = Type.Alternatives [] EmptyAlternatives
-
-    renderInput ref (Type.substituteAlternatives name 0 empty_ type_)
-
 renderInput _ Type.Scalar{ scalar = Monotype.Bool } = do
     input <- createElement "input"
 
@@ -568,7 +553,7 @@ renderInput _ Type.Scalar{ scalar = Monotype.Text } = do
     let get = do
             text <- toValue textarea
 
-            return (Value.Scalar (Text text))
+            return (Value.Text text)
 
     return (textarea, get)
 
@@ -821,6 +806,9 @@ main = do
     output        <- getElementById "output"
     error         <- getElementById "error"
     startTutorial <- getElementById "start-tutorial"
+    prompt        <- getElementById "prompt"
+    apiKeyInput   <- getElementById "api-key"
+    runButton     <- getElementById "run"
 
     codeInput <- setupCodemirror input
 
@@ -839,6 +827,8 @@ main = do
 
     tutorialRef <- IORef.newIORef hasTutorial
 
+    maybeMethodsRef <- IORef.newIORef Nothing
+
     let setError text = do
             setTextContent error text
 
@@ -846,51 +836,81 @@ main = do
             setDisplay error  "block"
 
     let setOutput type_ value = do
-            renderValue counter output type_ value
+            maybeMethods <- IORef.readIORef maybeMethodsRef
+
+            renderValue maybeMethods counter output type_ value
 
             setDisplay error  "none"
             setDisplay output "block"
 
-    interpret <- debounce do
-        text <- getValue codeInput
+    let interpret shouldRun = do
+            text <- getValue codeInput
 
-        if text == ""
-            then deleteParam params "expression"
-            else setParam params "expression" (URI.Encode.encodeText text)
+            if text == ""
+                then deleteParam params "expression"
+                else setParam params "expression" (URI.Encode.encodeText text)
 
-        tutorial <- IORef.readIORef tutorialRef
+            tutorial <- IORef.readIORef tutorialRef
 
-        if tutorial == False
-            then deleteParam params "tutorial"
-            else setParam params "tutorial" "true"
+            if tutorial == False
+                then deleteParam params "tutorial"
+                else setParam params "tutorial" "true"
 
-        saveSearchParams params
+            saveSearchParams params
 
-        if  | Text.null text -> do
-                Monad.unless tutorial do
-                    setDisplay startTutorial "inline-block"
+            if  | Text.null text -> do
+                    Monad.unless tutorial do
+                        setDisplay startTutorial "inline-block"
 
-                setError ""
+                    setError ""
 
-            | otherwise -> do
-                setDisplay startTutorial "none"
+                    setDisplay prompt "none"
 
-                let input_ = Code "(input)" text
+                | otherwise -> do
+                    setDisplay startTutorial "none"
 
-                replaceChild error spinner
+                    let input_ = Code "(input)" text
 
-                setDisplay output "none"
-                setDisplay error  "block"
+                    replaceChild error spinner
 
-                result <- Except.runExceptT (Interpret.interpret input_)
+                    setDisplay output "none"
+                    setDisplay error  "block"
 
-                case result of
-                    Left interpretError -> do
-                        setError (Text.pack (displayException interpretError))
-                    Right (type_, value) -> do
-                        setOutput type_ value
+                    maybeMethods <- IORef.readIORef maybeMethodsRef
 
-    inputCallback <- Callback.asyncCallback interpret
+                    result <- Exception.try do
+                        expression <- Import.resolve () input_
+
+                        let run = do
+                                (inferred, elaboratedExpression) <- Infer.typeWith input_ () [] expression
+
+                                value <- Normalize.evaluate maybeMethods [] elaboratedExpression
+
+                                setOutput inferred (Interpret.stripSome value)
+
+                        if Lens.has (Lens.cosmos . _As @"Prompt") expression
+                            then do
+                                setDisplay prompt "block"
+
+                                setDisplay output "none"
+
+                                if shouldRun
+                                    then run
+                                    else setDisplay error "none"
+                            else do
+                                setDisplay prompt "none"
+
+                                run
+
+                    case result of
+                        Left interpretError -> do
+                            setError (Text.pack (displayException (interpretError :: SomeException)))
+                        Right () -> do
+                            return ()
+
+    debouncedInterpret <- debounce (interpret False)
+
+    inputCallback <- Callback.asyncCallback debouncedInterpret
 
     onChange codeInput inputCallback
 
@@ -994,7 +1014,7 @@ main = do
 
                 IORef.writeIORef tutorialRef False
 
-                interpret
+                interpret False
 
                 remove stopTutorial
 
@@ -1025,7 +1045,20 @@ main = do
 
         setValue codeInput (URI.Encode.decodeText expression)
 
-    interpret
+    updateAPIKeyCallback <- Callback.asyncCallback do
+            apiKey <- toValue apiKeyInput
+
+            methods <- HTTP.getMethods apiKey
+
+            IORef.writeIORef maybeMethodsRef (Just methods)
+
+    addEventListener apiKeyInput "input" updateAPIKeyCallback
+
+    runCallback <- Callback.asyncCallback (interpret True)
+
+    addEventListener runButton "click" runCallback
+
+    interpret False
 
 helloWorldExample :: Text
 helloWorldExample =

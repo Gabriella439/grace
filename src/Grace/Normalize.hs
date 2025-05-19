@@ -1,10 +1,12 @@
-{-# LANGUAGE BangPatterns      #-}
-{-# LANGUAGE BlockArguments    #-}
-{-# LANGUAGE NamedFieldPuns    #-}
-{-# LANGUAGE OverloadedLists   #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
-{-# LANGUAGE ViewPatterns      #-}
+{-# LANGUAGE BangPatterns          #-}
+{-# LANGUAGE BlockArguments        #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE OverloadedLists       #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE ViewPatterns          #-}
 
 -- | This module contains the logic for efficiently evaluating an expression
 module Grace.Normalize
@@ -13,25 +15,42 @@ module Grace.Normalize
     , quote
     ) where
 
+import Control.Applicative (empty)
+import Control.Exception (Exception)
 import Data.Bifunctor (first)
+import Data.Foldable (toList)
+import Data.Functor (void)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Scientific (Scientific)
 import Data.Sequence (Seq(..), ViewL(..))
 import Data.Text (Text)
 import Data.Void (Void)
+import Grace.HTTP (Methods)
 import Grace.Location (Location)
 import Grace.Syntax (Builtin(..), Scalar(..), Syntax)
+import Grace.Type (Type)
 import Grace.Value (Closure(..), Value)
 import Prelude hiding (succ)
 
+import qualified Control.Exception as Exception
 import qualified Control.Monad as Monad
+import qualified Data.Aeson as Aeson
+import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.HashMap.Strict.InsOrd as HashMap
 import qualified Data.List as List
+import qualified Data.Map as Map
 import qualified Data.Ord as Ord
+import qualified Data.Scientific as Scientific
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Encoding
 import qualified Data.Void as Void
+import qualified Grace.Compat as Compat
+import qualified Grace.HTTP as HTTP
+import qualified Grace.Monotype as Monotype
+import qualified Grace.Pretty as Pretty
 import qualified Grace.Syntax as Syntax
+import qualified Grace.Type as Type
 import qualified Grace.Value as Value
 import qualified System.IO.Unsafe as Unsafe
 
@@ -73,6 +92,114 @@ asReal (Integer n) = Just (fromInteger  n)
 asReal (Real    n) = Just n
 asReal  _          = Nothing
 
+toJSONSchema :: Type () -> Either UnsupportedModelOutput Aeson.Value
+toJSONSchema Type.Forall{..} = toJSONSchema type_
+toJSONSchema Type.Optional{..} = do
+    present <- toJSONSchema type_
+
+    let absent = Aeson.object [ ("type", "null") ]
+
+    return (Aeson.object [ ("type", "object"), ("anyOf", Aeson.toJSON ([ present, absent ] :: [ Aeson.Value ]))])
+toJSONSchema Type.List{..} = do
+    items <- toJSONSchema type_
+
+    return (Aeson.object [ ("type", "array"), ("items", items) ])
+toJSONSchema Type.Record{ fields = Type.Fields fieldTypes _ } = do
+    let toProperty (field, type_) = do
+            property <- toJSONSchema type_
+
+            return (field, property)
+
+    properties <- traverse toProperty fieldTypes
+
+    return
+        (Aeson.object
+            [ ("type", "object")
+            , ("properties", Aeson.toJSON (Map.fromList properties))
+            , ("additionalProperties", Aeson.toJSON False)
+            , ("required", Aeson.toJSON required)
+            ]
+        )
+  where
+    required = do
+        (field, type_) <- fieldTypes
+
+        case type_ of
+            Type.Optional{ } -> empty
+            _ -> return field
+toJSONSchema Type.Union{ alternatives = Type.Alternatives alternativeTypes _ } = do
+    let toAnyOf (alternative, type_) = do
+            contents <- toJSONSchema type_
+
+            return
+                (Aeson.object
+                    [ ("type", "object")
+                    , ( "properties"
+                      , Aeson.object
+                          [ ( "tag"
+                            , Aeson.object
+                                [ ("type", "string")
+                                , ("const", Aeson.toJSON alternative)
+                                ]
+                            )
+                          , ("contents", contents)
+                          ]
+                      )
+                    , ("required", Aeson.toJSON ([ "tag", "contents" ] :: [Text]))
+                    , ("additionalProperties", Aeson.toJSON False)
+                    ]
+                )
+
+    -- "oneOf" is not supported by OpenAI, so we use "anyOf" as the closest
+    -- equivalent
+    anyOfs <- traverse toAnyOf alternativeTypes
+
+    return (Aeson.object [ ("type", "object"), ("anyOf", Aeson.toJSON anyOfs) ])
+  where
+toJSONSchema Type.Scalar{ scalar = Monotype.Bool } =
+    return (Aeson.object [ ("type", "boolean") ])
+toJSONSchema Type.Scalar{ scalar = Monotype.Real } =
+    return (Aeson.object [ ("type", "number") ])
+toJSONSchema Type.Scalar{ scalar = Monotype.Integer } =
+    return (Aeson.object [ ("type", "integer") ])
+toJSONSchema Type.Scalar{ scalar = Monotype.JSON } =
+    return (Aeson.object [ ])
+toJSONSchema Type.Scalar{ scalar = Monotype.Natural } =
+    return
+        (Aeson.object
+            [ ("type", "number")
+            -- , ("minimum", Aeson.toJSON (0 :: Int))
+            -- ^ Not supported by OpenAI
+            ]
+        )
+toJSONSchema Type.Scalar{ scalar = Monotype.Text } =
+    return (Aeson.object [ ("type", "string") ])
+toJSONSchema type_ = Left UnsupportedModelOutput{..}
+
+fromJSON :: Aeson.Value -> Value
+fromJSON (Aeson.Object [("contents", contents), ("tag", Aeson.String tag)]) =
+    Value.Application (Value.Alternative tag) (fromJSON contents)
+fromJSON (Aeson.Object object) = Value.Record (HashMap.fromList textValues)
+  where
+    textValues = do
+        (key, value) <- HashMap.toList (Compat.fromAesonMap object)
+        return (key, fromJSON value)
+fromJSON (Aeson.Array vector) =
+    Value.List (Seq.fromList (toList elements))
+  where
+    elements = fmap fromJSON vector
+fromJSON (Aeson.String text) = Value.Text text
+fromJSON (Aeson.Number scientific) =
+    case Scientific.floatingOrInteger scientific of
+        Left (_ :: Double) -> Value.Scalar (Real scientific)
+        Right (integer :: Integer)
+            | 0 <= integer -> Value.Scalar (Natural (fromInteger integer))
+            | otherwise    -> Value.Scalar (Integer integer)
+fromJSON (Aeson.Bool bool) =
+    Value.Scalar (Bool bool)
+fromJSON Aeson.Null =
+    Value.Scalar Null
+
 {-| Evaluate an expression, leaving behind a `Value` free of reducible
     sub-expressions
 
@@ -81,13 +208,15 @@ asReal  _          = Nothing
     sub-expression multiple times.
 -}
 evaluate
-    :: [(Text, Value)]
+    :: Maybe Methods
+    -- ^ OpenAI methods
+    -> [(Text, Value)]
     -- ^ Evaluation environment (starting at @[]@ for a top-level expression)
     -> Syntax Location Void
     -- ^ Surface syntax
     -> IO Value
     -- ^ Result, free of reducible sub-expressions
-evaluate = loop
+evaluate maybeMethods = loop
   where
     loop :: [(Text, Value)] -> Syntax Location Void -> IO Value
     loop env syntax =
@@ -177,6 +306,49 @@ evaluate = loop
                     Value.Scalar (Bool True) -> return ifTrue'
                     Value.Scalar (Bool False) -> return ifFalse'
                     _ -> fail "Grace.Normalize.evaluate: if predicate must be a boolean value"
+
+            Syntax.Prompt{ schema = Nothing } -> do
+                Exception.throwIO MissingSchema
+            Syntax.Prompt{ schema = Just schema, ..} -> do
+                value <- loop env arguments
+
+                let extractResponse (Value.Record [("response", response)]) = do
+                        return response
+                    extractResponse other = do
+                        return other
+
+                let (recordSchema, extract) = case void schema of
+                        t@Type.Record{ } -> (t, return)
+                        t -> (Type.Record () (Type.Fields [("response", t)] Monotype.EmptyFields), extractResponse)
+
+                jsonSchema <- case toJSONSchema recordSchema of
+                    Left exception -> Exception.throwIO exception
+                    Right jsonSchema -> return jsonSchema
+
+                case value of
+                    Value.Record fieldValues
+                        | Just (Value.Text prompt) <- HashMap.lookup "text" fieldValues
+                        , Just methods <- maybeMethods -> do
+                            let model = case HashMap.lookup "model" fieldValues of
+                                    Just (Value.Application (Value.Builtin Some) (Value.Text m)) -> m
+                                    _ -> "gpt-4o-mini"
+
+                            let text =
+                                    prompt <> "\n\nGenerate JSON output matching the following type:\n\n" <> Pretty.toSmart recordSchema
+
+                            text_ <- HTTP.prompt methods text model (Just jsonSchema)
+
+                            let bytes = Encoding.encodeUtf8 text_
+                            let lazyBytes =
+                                    ByteString.Lazy.fromStrict bytes
+
+                            v <- case Aeson.eitherDecode lazyBytes of
+                                Left message_ -> Exception.throwIO JSONDecodingFailed{ message = message_, text = text_ }
+                                Right v -> return v
+
+                            extract (fromJSON v)
+                    other ->
+                        return (Value.Prompt other)
 
             Syntax.Scalar{..} ->
                 return (Value.Scalar scalar)
@@ -498,6 +670,13 @@ quote names value =
         Value.Text text ->
             Syntax.Text{ chunks = Syntax.Chunks text [], .. }
 
+        Value.Prompt arguments ->
+            Syntax.Prompt
+                { arguments = quote names arguments
+                , schema = Nothing
+                , ..
+                }
+
         Value.Scalar scalar ->
             Syntax.Scalar{..}
 
@@ -505,3 +684,42 @@ quote names value =
             Syntax.Builtin{..}
   where
     location = ()
+
+newtype UnsupportedModelOutput = UnsupportedModelOutput{ type_ :: Type () }
+    deriving (Show)
+
+instance Exception UnsupportedModelOutput where
+    displayException UnsupportedModelOutput{..} =
+        "Unsupported model output type\n\
+        \\n\
+        \The expected type for the model output is:\n\
+        \\n\
+        \" <> Text.unpack (Pretty.toSmart type_) <> "\n\
+        \\n\
+        \… but that type cannot be encoded as JSON"
+
+data JSONDecodingFailed = JSONDecodingFailed
+    { message :: String
+    , text :: Text
+    } deriving (Show)
+
+instance Exception JSONDecodingFailed where
+    displayException JSONDecodingFailed{..} =
+        "Failed to decode model output as JSON\n\
+        \\n\
+        \The model produced the following output:\n\
+        \\n\
+        \" <> Text.unpack text <> "\n\
+        \\n\
+        \… which failed to decode as JSON.\n\
+        \\n\
+        \Decoding error message:\n\
+        \\n\
+        \" <> message
+
+data MissingSchema = MissingSchema
+    deriving (Show)
+
+instance Exception MissingSchema where
+    displayException MissingSchema =
+        "Internal error - Elaboration failed to infer schema for prompt"

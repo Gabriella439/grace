@@ -1,0 +1,8 @@
+let concatSep = https://raw.githubusercontent.com/Gabriella439/grace/refs/heads/main/prelude/text/concatSep.ffg
+
+let call = merge
+      { HttpRequest: \x -> "curl ${x.url}"
+      , ShellCommand: \x -> concatSep " " ([ x.executable ] + x.arguments)
+      }
+
+in  List/map call (prompt{ text: "Call some tools" })

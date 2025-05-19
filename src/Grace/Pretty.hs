@@ -7,7 +7,9 @@ module Grace.Pretty
       renderStrict
     , renderIO
     , toText
+    , toSmart
     , Pretty(..)
+
       -- * Highlighting
     , keyword
     , punctuation
@@ -25,6 +27,7 @@ import Prettyprinter (Doc, LayoutOptions(..), PageWidth(..))
 import Prettyprinter.Render.Terminal (AnsiStyle)
 import System.IO (Handle)
 
+import qualified Grace.Width as Width
 import qualified Prettyprinter as Pretty
 import qualified Prettyprinter.Render.Terminal as Pretty.Terminal
 import qualified Prettyprinter.Render.Text as Pretty.Text
@@ -156,3 +159,7 @@ operator =
         (   Pretty.Terminal.bold
         <>  Pretty.Terminal.colorDull Pretty.Terminal.Green
         )
+
+-- | Render as `Text` using the smart layout algorithm
+toSmart :: Pretty a => a -> Text
+toSmart = Grace.Pretty.renderStrict False Width.defaultWidth

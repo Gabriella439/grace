@@ -17,6 +17,7 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad.State (MonadState(..))
 import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
+import Grace.HTTP (Methods)
 import Grace.Interpret (Input(..))
 import Grace.Parser (reserved)
 import System.Console.Haskeline (Interrupt(..))
@@ -38,8 +39,8 @@ import qualified System.Console.Repline as Repline
 import qualified System.IO as IO
 
 -- | Entrypoint for the @grace repl@ subcommand
-repl :: IO ()
-repl = do
+repl :: Maybe Methods -> IO ()
+repl maybeMethods = do
     manager <- HTTP.newManager
 
     let err e =
@@ -48,7 +49,7 @@ repl = do
     let interpret input = do
             context <- get
 
-            Exception.try @_ @SomeException (Interpret.interpretWith context Nothing manager input)
+            Exception.try @_ @SomeException (Interpret.interpretWith maybeMethods context Nothing manager input)
 
     let command string = do
             let input = Code "(input)" (Text.pack string)
