@@ -1,3 +1,4 @@
+{-# LANGUAGE BlockArguments     #-}
 {-# LANGUAGE DataKinds          #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts   #-}
@@ -102,13 +103,15 @@ interpretWith bindings maybeAnnotation manager input = do
         Left message -> do
             Except.throwError (TypeInferenceError message)
 
-        Right inferred -> do
+        Right inferred -> liftIO do
             let evaluationContext = do
                     (variable, _, value) <- bindings
 
                     return (variable, value)
 
-            return (inferred, Normalize.evaluate evaluationContext resolvedExpression)
+            value <- Normalize.evaluate evaluationContext resolvedExpression
+
+            return (inferred, value)
 
 remote :: Input -> Bool
 remote (URI uri _) = any (`elem` schemes) (URI.uriScheme uri)

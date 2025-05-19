@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns      #-}
+{-# LANGUAGE BlockArguments    #-}
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedLists   #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -10,7 +11,6 @@ module Grace.Normalize
     ( -- * Normalization
       evaluate
     , quote
-    , apply
     ) where
 
 import Data.Bifunctor (first)
@@ -33,6 +33,7 @@ import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
 import qualified Grace.Syntax as Syntax
 import qualified Grace.Value as Value
+import qualified System.IO.Unsafe as Unsafe
 
 {- $setup
 
@@ -84,306 +85,348 @@ evaluate
     -- ^ Evaluation environment (starting at @[]@ for a top-level expression)
     -> Syntax Location (Type Location, Value)
     -- ^ Surface syntax
-    -> Value
+    -> IO Value
     -- ^ Result, free of reducible sub-expressions
-evaluate env syntax =
-    case syntax of
-        Syntax.Variable{..} ->
-            lookupVariable name index env
+evaluate = loop
+  where
+    loop
+      :: [(Text, Value)] -> Syntax Location (Type Location, Value) -> IO Value
+    loop env syntax =
+        case syntax of
+            Syntax.Variable{..} ->
+                return (lookupVariable name index env)
 
-        Syntax.Application{..} -> apply function' argument'
-          where
-            function' = evaluate env function
-            argument' = evaluate env argument
+            Syntax.Application{..} -> do
+                function' <- loop env function
+                argument' <- loop env argument
 
-        Syntax.Lambda{ nameBinding = Syntax.NameBinding{ name }, ..} ->
-            Value.Lambda (Closure name env body)
+                apply function' argument'
 
-        Syntax.Annotation{..} ->
-            evaluate env annotated
+            Syntax.Lambda{ nameBinding = Syntax.NameBinding{ name }, ..} ->
+                return (Value.Lambda (Closure name env body))
 
-        Syntax.Let{ body = body₀, ..} ->
-            evaluate (foldl snoc env bindings) body₀
-          where
-            snoc environment Syntax.Binding{ nameLocation, name, nameBindings, assignment } =
-                (name, evaluate environment newAssignment) : environment
+            Syntax.Annotation{..} ->
+                loop env annotated
+
+            Syntax.Let{ body = body₀, ..} -> do
+                newEnv <- Monad.foldM snoc env bindings
+
+                loop newEnv body₀
               where
-                newAssignment = foldr cons assignment nameBindings
-                  where
-                    cons nameBinding body =
-                      Syntax.Lambda{ location = nameLocation, ..}
+                snoc environment Syntax.Binding{ nameLocation, name, nameBindings, assignment } = do
+                    let cons nameBinding body =
+                            Syntax.Lambda{ location = nameLocation, ..}
 
-        Syntax.List{..} ->
-            Value.List (fmap (evaluate env) elements)
+                    let newAssignment = foldr cons assignment nameBindings
 
-        Syntax.Record{..} ->
-            Value.Record (HashMap.fromList (map adapt fieldValues))
-          where
-            adapt (key, value) = (key, evaluate env value)
+                    value <- loop environment newAssignment
 
-        Syntax.Field{..} ->
-            case evaluate env record of
-                Value.Record fieldValues ->
-                    case HashMap.lookup field fieldValues of
-                        Just value -> value
-                        Nothing -> Value.Scalar Syntax.Null
-                _ ->
-                    error "Grace.Normalize.evaluate: fields can only be accessed from record values"
+                    return ((name, value) : environment)
 
-        Syntax.Alternative{..} ->
-            Value.Alternative name
+            Syntax.List{..} -> do
+                values <- traverse (loop env) elements
+                return (Value.List values)
 
-        Syntax.Merge{..} ->
-            Value.Merge (evaluate env handlers)
+            Syntax.Record{..} -> do
+                let process (key, field) = do
+                        newField <- loop env field
+                        return (key, newField)
 
-        Syntax.If{..} ->
-            case predicate' of
-                Value.Scalar (Bool True) -> ifTrue'
-                Value.Scalar (Bool False) -> ifFalse'
-                _ -> error "Grace.Normalize.evaluate: if predicate must be a boolean value"
-          where
-            predicate' = evaluate env predicate
-            ifTrue'    = evaluate env ifTrue
-            ifFalse'   = evaluate env ifFalse
+                newFieldValues <- traverse process fieldValues
 
-        Syntax.Text{ chunks = Syntax.Chunks text₀ rest } ->
-            Value.Text (text₀ <> foldMap onChunk rest)
-          where
-            onChunk (interpolation, text₂) = case evaluate env interpolation of
-                Value.Text text₁ -> text₁ <> text₂
-                _ -> error "Grace.Normalize.evaluate: interpolations must be text values"
+                return (Value.Record (HashMap.fromList newFieldValues))
 
-        Syntax.Scalar{..} ->
-            Value.Scalar scalar
+            Syntax.Text{ chunks = Syntax.Chunks text rest } -> do
+                let onChunk (interpolation, text₁) = do
+                        value <- loop env interpolation
+                        case value of
+                            Value.Text text₀ ->
+                                return (text₀ <> text₁)
+                            _ ->
+                                fail "Grace.Normalize.evaluate: interpolations must be text values"
 
-        Syntax.Operator{ operator = Syntax.And, .. } ->
-            case (left', right') of
-                (Value.Scalar (Bool l), Value.Scalar (Bool r)) ->
-                    Value.Scalar (Bool (l && r))
-                _ ->
-                    error "Grace.Normalize.evaluate: && arguments must be boolean values"
-          where
-            left'  = evaluate env left
-            right' = evaluate env right
+                suffix <- foldMap onChunk rest
 
-        Syntax.Operator{ operator = Syntax.Or, .. } ->
-            case (left', right') of
-                (Value.Scalar (Bool l), Value.Scalar (Bool r)) ->
-                    Value.Scalar (Bool (l || r))
-                _ ->
-                    error "Grace.Normalize.evaluate: || arguments must be boolean values"
-          where
-            left'  = evaluate env left
-            right' = evaluate env right
+                return (Value.Text (text <> suffix))
 
-        Syntax.Operator{ operator = Syntax.Times, .. } ->
-            case (left', right') of
-                (Value.Scalar l, Value.Scalar r)
-                    | Natural m <- l
-                    , Natural n <- r ->
-                        Value.Scalar (Natural (m * n))
-                    | Just m <- asInteger l
-                    , Just n <- asInteger r ->
-                        Value.Scalar (Integer (m * n))
-                    | Just m <- asReal l
-                    , Just n <- asReal r ->
-                        Value.Scalar (Real (m * n))
-                _ ->
-                    error "Grace.Normalize.evaluate: * arguments must be numeric values"
-          where
-            left'  = evaluate env left
-            right' = evaluate env right
+            Syntax.Field{..} -> do
+                value <- loop env record
 
-        Syntax.Operator{ operator = Syntax.Plus, .. } ->
-            case (left', right') of
-                (Value.Scalar l, Value.Scalar r)
-                    | Natural m <- l
-                    , Natural n <- r ->
-                        Value.Scalar (Natural (m + n))
-                    | Just m <- asInteger l
-                    , Just n <- asInteger r ->
-                        Value.Scalar (Integer (m + n))
-                    | Just m <- asReal l
-                    , Just n <- asReal r ->
-                        Value.Scalar (Real (m + n))
-                (Value.Text l, Value.Text r) ->
-                    Value.Text (l <> r)
-                (Value.List l, Value.List r) ->
-                    Value.List (l <> r)
-                _ ->
-                    error "Grace.Normalize.evaluate: + arguments must be values"
-          where
-            left'  = evaluate env left
-            right' = evaluate env right
+                case value of
+                    Value.Record fieldValues ->
+                        case HashMap.lookup field fieldValues of
+                            Just v -> return v
+                            Nothing -> return (Value.Scalar Syntax.Null)
+                    _ ->
+                        fail "Grace.Normalize.evaluate: fields can only be accessed from record values"
 
-        Syntax.Builtin{..} ->
-            Value.Builtin builtin
+            Syntax.Alternative{..} ->
+                return (Value.Alternative name)
 
-        Syntax.Embed{ embedded = (_, value) } ->
-            value
+            Syntax.Merge{..} -> do
+                newHandlers <- loop env handlers
 
-{-| This is the function that implements function application, including
-    evaluating anonymous functions and evaluating all built-in functions.
--}
-apply :: Value -> Value -> Value
-apply (Value.Lambda (Closure name capturedEnv body)) argument =
-    evaluate ((name, argument) : capturedEnv) body
-apply
-    (Value.Merge (Value.Record alternativeHandlers))
-    (Value.Application (Value.Alternative alternative) x)
-    | Just f <- HashMap.lookup alternative alternativeHandlers =
-        apply f x
-apply
-    (Value.Application (Value.Builtin ListDrop) (Value.Scalar (Natural n)))
-    (Value.List elements) =
-        Value.List (Seq.drop (fromIntegral n) elements)
-apply
-    (Value.Application (Value.Builtin ListTake) (Value.Scalar (Natural n)))
-    (Value.List elements) =
-        Value.List (Seq.take (fromIntegral n) elements)
-apply (Value.Builtin ListHead) (Value.List []) =
-    Value.Application (Value.Alternative "None") (Value.Record [])
-apply (Value.Builtin ListHead) (Value.List (x :<| _)) =
-    Value.Application (Value.Alternative "Some") x
-apply (Value.Builtin ListLast) (Value.List []) =
-    Value.Application (Value.Alternative "None") (Value.Record [])
-apply (Value.Builtin ListLast) (Value.List (_ :|> x)) =
-    Value.Application (Value.Alternative "Some") x
-apply (Value.Builtin ListReverse) (Value.List xs) =
-    Value.List (Seq.reverse xs)
-apply
-    (Value.Application
-        (Value.Application (Value.Builtin ListEqual) f)
-        (Value.List rs)
-    )
-    (Value.List ls)
-        | length ls /= length rs =
-            Value.Scalar (Bool False)
-        | Just bools <- traverse toBool (Seq.zipWith equal ls rs) =
-        Value.Scalar (Bool (and bools))
-      where
-        toBool (Value.Scalar (Bool b)) = Just b
-        toBool  _                      = Nothing
+                return (Value.Merge newHandlers)
 
-        equal l r = apply (apply f l) r
-apply
-    (Value.Application
-        (Value.Builtin ListFold)
-        (Value.Record
-            (List.sortBy (Ord.comparing fst) . HashMap.toList ->
-                [ ("cons"  , cons)
-                , ("nil"   , nil)
-                ]
-            )
-        )
-    )
-    (Value.List elements) = loop (Seq.reverse elements) nil
-  where
-    loop xs !result =
-        case Seq.viewl xs of
-            EmptyL  -> result
-            y :< ys -> loop ys (apply (apply cons y) result)
-apply (Value.Builtin ListIndexed) (Value.List elements) =
-    Value.List (Seq.mapWithIndex adapt elements)
-  where
-    adapt index value =
-        Value.Record
-            [ ("index", Value.Scalar (Natural (fromIntegral index)))
-            , ("value", value)
-            ]
-apply (Value.Builtin ListLength) (Value.List elements) =
-    Value.Scalar (Natural (fromIntegral (length elements)))
-apply
-    (Value.Application (Value.Builtin ListMap) f)
-    (Value.List elements) =
-        Value.List (fmap (apply f) elements)
-apply
-    (Value.Application
+            Syntax.If{..} -> do
+                predicate' <- loop env predicate
+
+                ifTrue'  <- loop env ifTrue
+                ifFalse' <- loop env ifFalse
+
+                case predicate' of
+                    Value.Scalar (Bool True) -> return ifTrue'
+                    Value.Scalar (Bool False) -> return ifFalse'
+                    _ -> fail "Grace.Normalize.evaluate: if predicate must be a boolean value"
+
+            Syntax.Scalar{..} ->
+                return (Value.Scalar scalar)
+
+            Syntax.Operator{ operator = Syntax.And, .. } -> do
+                left'  <- loop env left
+                right' <- loop env right
+
+                case (left', right') of
+                    (Value.Scalar (Bool l), Value.Scalar (Bool r)) ->
+                        return (Value.Scalar (Bool (l && r)))
+                    _ ->
+                        fail "Grace.Normalize.evaluate: && arguments must be boolean values"
+
+            Syntax.Operator{ operator = Syntax.Or, .. } -> do
+                left'  <- loop env left
+                right' <- loop env right
+
+                case (left', right') of
+                    (Value.Scalar (Bool l), Value.Scalar (Bool r)) ->
+                        return (Value.Scalar (Bool (l || r)))
+                    _ ->
+                        fail "Grace.Normalize.evaluate: || arguments must be boolean values"
+
+            Syntax.Operator{ operator = Syntax.Times, .. } -> do
+                left'  <- loop env left
+                right' <- loop env right
+
+                case (left', right') of
+                    (Value.Scalar l, Value.Scalar r)
+                        | Natural m <- l
+                        , Natural n <- r ->
+                            return (Value.Scalar (Natural (m * n)))
+                        | Just m <- asInteger l
+                        , Just n <- asInteger r ->
+                            return (Value.Scalar (Integer (m * n)))
+                        | Just m <- asReal l
+                        , Just n <- asReal r ->
+                            return (Value.Scalar (Real (m * n)))
+                    _ ->
+                        error "Grace.Normalize.evaluate: * arguments must be numeric values"
+
+            Syntax.Operator{ operator = Syntax.Plus, .. } -> do
+                left'  <- loop env left
+                right' <- loop env right
+
+                case (left', right') of
+                    (Value.Scalar l, Value.Scalar r)
+                        | Natural m <- l
+                        , Natural n <- r ->
+                            return (Value.Scalar (Natural (m + n)))
+                        | Just m <- asInteger l
+                        , Just n <- asInteger r ->
+                            return (Value.Scalar (Integer (m + n)))
+                        | Just m <- asReal l
+                        , Just n <- asReal r ->
+                            return (Value.Scalar (Real (m + n)))
+                    (Value.Text l, Value.Text r) ->
+                        return (Value.Text (l <> r))
+                    (Value.List l, Value.List r) ->
+                        return (Value.List (l <> r))
+                    _ ->
+                        error "Grace.Normalize.evaluate: + arguments must be values"
+
+            Syntax.Builtin{..} ->
+                return (Value.Builtin builtin)
+
+            Syntax.Embed{ embedded = (_, value) } ->
+                return value
+
+    {-| This is the function that implements function application, including
+        evaluating anonymous functions and evaluating all built-in functions.
+    -}
+    apply :: Value -> Value -> IO Value
+    apply (Value.Lambda (Closure name capturedEnv body)) argument =
+        loop ((name, argument) : capturedEnv) body
+    apply
+        (Value.Merge (Value.Record alternativeHandlers))
+        (Value.Application (Value.Alternative alternative) x)
+        | Just f <- HashMap.lookup alternative alternativeHandlers =
+            apply f x
+    apply
+        (Value.Application (Value.Builtin ListDrop) (Value.Scalar (Natural n)))
+        (Value.List elements) =
+            return (Value.List (Seq.drop (fromIntegral n) elements))
+    apply
+        (Value.Application (Value.Builtin ListTake) (Value.Scalar (Natural n)))
+        (Value.List elements) =
+            return (Value.List (Seq.take (fromIntegral n) elements))
+    apply (Value.Builtin ListHead) (Value.List []) =
+        return (Value.Application (Value.Alternative "None") (Value.Record []))
+    apply (Value.Builtin ListHead) (Value.List (x :<| _)) =
+        return (Value.Application (Value.Alternative "Some") x)
+    apply (Value.Builtin ListLast) (Value.List []) =
+        return (Value.Application (Value.Alternative "None") (Value.Record []))
+    apply (Value.Builtin ListLast) (Value.List (_ :|> x)) =
+        return (Value.Application (Value.Alternative "Some") x)
+    apply (Value.Builtin ListReverse) (Value.List xs) =
+        return (Value.List (Seq.reverse xs))
+    apply
         (Value.Application
-            (Value.Builtin NaturalFold)
-            (Value.Scalar (Natural n))
+            (Value.Application (Value.Builtin ListEqual) f)
+            (Value.List rs)
         )
-        succ
-    )
-    zero =
-        go n zero
-  where
-    go 0 !result = result
-    go m !result = go (m - 1) (apply succ result)
-apply (Value.Builtin IntegerEven) (Value.Scalar x)
-    | Just n <- asInteger x = Value.Scalar (Bool (even n))
-apply (Value.Builtin IntegerOdd) (Value.Scalar x)
-    | Just n <- asInteger x = Value.Scalar (Bool (odd n))
-apply
-    (Value.Application (Value.Builtin RealEqual) (Value.Scalar l))
-    (Value.Scalar r)
-    | Just m <- asReal l
-    , Just n <- asReal r =
-        Value.Scalar (Bool (m == n))
-apply
-    (Value.Application (Value.Builtin RealLessThan) (Value.Scalar l))
-    (Value.Scalar r)
-    | Just m <- asReal l
-    , Just n <- asReal r =
-        Value.Scalar (Bool (m < n))
-apply (Value.Builtin IntegerAbs) (Value.Scalar x)
-    | Just n <- asInteger x = Value.Scalar (Natural (fromInteger (abs n)))
-apply (Value.Builtin RealNegate) (Value.Scalar x)
-    | Just n <- asReal x = Value.Scalar (Real (negate n))
-apply (Value.Builtin IntegerNegate) (Value.Scalar x)
-    | Just n <- asInteger x = Value.Scalar (Integer (negate n))
-apply (Value.Builtin RealShow) (Value.Scalar (Natural n)) =
-    Value.Text (Text.pack (show n))
-apply (Value.Builtin RealShow) (Value.Scalar (Integer n)) =
-    Value.Text (Text.pack (show n))
-apply (Value.Builtin RealShow) (Value.Scalar (Real n)) =
-    Value.Text (Text.pack (show n))
-apply
-    (Value.Application (Value.Builtin TextEqual) (Value.Text l))
-    (Value.Text r) =
-        Value.Scalar (Bool (l == r))
-apply
-    (Value.Application
-        (Value.Builtin JSONFold)
-        (Value.Record
-            (List.sortBy (Ord.comparing fst) . HashMap.toList ->
-                [ ("array"  , arrayHandler )
-                , ("bool"   , boolHandler  )
-                , ("integer", integerHandler)
-                , ("natural", naturalHandler)
-                , ("null"   , nullHandler   )
-                , ("object" , objectHandler )
-                , ("real"   , realHandler  )
-                , ("string" , stringHandler )
-                ]
+        (Value.List ls)
+            | length ls /= length rs =
+                return (Value.Scalar (Bool False))
+            | Just bools <- traverse toBool (Seq.zipWith equal ls rs) =
+                return (Value.Scalar (Bool (and bools)))
+          where
+            toBool (Value.Scalar (Bool b)) = Just b
+            toBool  _                      = Nothing
+
+            equal :: Value -> Value -> Value
+            equal l r = Unsafe.unsafePerformIO do
+                x <- apply f l
+                apply x r
+    apply
+        (Value.Application
+            (Value.Builtin ListFold)
+            (Value.Record
+                (List.sortBy (Ord.comparing fst) . HashMap.toList ->
+                    [ ("cons"  , cons)
+                    , ("nil"   , nil)
+                    ]
+                )
             )
         )
-    )
-    v0 = loop v0
-  where
-    loop (Value.Scalar (Bool b)) =
-        apply boolHandler (Value.Scalar (Bool b))
-    loop (Value.Scalar (Natural n)) =
-        apply naturalHandler (Value.Scalar (Natural n))
-    loop (Value.Scalar (Integer n)) =
-        apply integerHandler (Value.Scalar (Integer n))
-    loop (Value.Scalar (Real n)) =
-        apply realHandler (Value.Scalar (Real n))
-    loop (Value.Text chunks) =
-        apply stringHandler (Value.Text chunks)
-    loop (Value.Scalar Null) =
-        nullHandler
-    loop (Value.List elements) =
-        apply arrayHandler (Value.List (fmap loop elements))
-    loop (Value.Record keyValues) =
-        apply objectHandler (Value.List (Seq.fromList (map adapt (HashMap.toList keyValues))))
+        (Value.List elements) = inner (Seq.reverse elements) nil
       where
-        adapt (key, value) =
-            Value.Record [("key", Value.Text key), ("value", loop value)]
-    loop v =
-        v
-apply function argument =
-    Value.Application function argument
+        inner xs !result =
+            case Seq.viewl xs of
+                EmptyL -> do
+                    return result
+                y :< ys -> do
+                    a <- apply cons y
+                    b <- apply a result
+                    inner ys b
+    apply (Value.Builtin ListIndexed) (Value.List elements) =
+        return (Value.List (Seq.mapWithIndex adapt elements))
+      where
+        adapt index value =
+            Value.Record
+                [ ("index", Value.Scalar (Natural (fromIntegral index)))
+                , ("value", value)
+                ]
+    apply (Value.Builtin ListLength) (Value.List elements) =
+        return (Value.Scalar (Natural (fromIntegral (length elements))))
+    apply
+        (Value.Application (Value.Builtin ListMap) f)
+        (Value.List elements) = do
+            newElements <- traverse (apply f) elements
+            return (Value.List newElements)
+    apply
+        (Value.Application
+            (Value.Application
+                (Value.Builtin NaturalFold)
+                (Value.Scalar (Natural n))
+            )
+            succ
+        )
+        zero =
+            go n zero
+      where
+        go 0 !result = do
+            return result
+        go m !result = do
+            x <- apply succ result
+            go (m - 1) x
+    apply (Value.Builtin IntegerEven) (Value.Scalar x)
+        | Just n <- asInteger x = return (Value.Scalar (Bool (even n)))
+    apply (Value.Builtin IntegerOdd) (Value.Scalar x)
+        | Just n <- asInteger x = return (Value.Scalar (Bool (odd n)))
+    apply
+        (Value.Application (Value.Builtin RealEqual) (Value.Scalar l))
+        (Value.Scalar r)
+        | Just m <- asReal l
+        , Just n <- asReal r =
+            return (Value.Scalar (Bool (m == n)))
+    apply
+        (Value.Application (Value.Builtin RealLessThan) (Value.Scalar l))
+        (Value.Scalar r)
+        | Just m <- asReal l
+        , Just n <- asReal r =
+            return (Value.Scalar (Bool (m < n)))
+    apply (Value.Builtin IntegerAbs) (Value.Scalar x)
+        | Just n <- asInteger x =
+            return (Value.Scalar (Natural (fromInteger (abs n))))
+    apply (Value.Builtin RealNegate) (Value.Scalar x)
+        | Just n <- asReal x =
+            return (Value.Scalar (Real (negate n)))
+    apply (Value.Builtin IntegerNegate) (Value.Scalar x)
+        | Just n <- asInteger x =
+            return (Value.Scalar (Integer (negate n)))
+    apply (Value.Builtin RealShow) (Value.Scalar (Natural n)) =
+        return (Value.Text (Text.pack (show n)))
+    apply (Value.Builtin RealShow) (Value.Scalar (Integer n)) =
+        return (Value.Text (Text.pack (show n)))
+    apply (Value.Builtin RealShow) (Value.Scalar (Real n)) =
+        return (Value.Text (Text.pack (show n)))
+    apply
+        (Value.Application (Value.Builtin TextEqual) (Value.Text l))
+        (Value.Text r) =
+            return (Value.Scalar (Bool (l == r)))
+    apply
+        (Value.Application
+            (Value.Builtin JSONFold)
+            (Value.Record
+                (List.sortBy (Ord.comparing fst) . HashMap.toList ->
+                    [ ("array"  , arrayHandler )
+                    , ("bool"   , boolHandler  )
+                    , ("integer", integerHandler)
+                    , ("natural", naturalHandler)
+                    , ("null"   , nullHandler   )
+                    , ("object" , objectHandler )
+                    , ("real"   , realHandler  )
+                    , ("string" , stringHandler )
+                    ]
+                )
+            )
+        )
+        v0 = inner v0
+      where
+        inner (Value.Scalar (Bool b)) =
+            apply boolHandler (Value.Scalar (Bool b))
+        inner (Value.Scalar (Natural n)) =
+            apply naturalHandler (Value.Scalar (Natural n))
+        inner (Value.Scalar (Integer n)) =
+            apply integerHandler (Value.Scalar (Integer n))
+        inner (Value.Scalar (Real n)) =
+            apply realHandler (Value.Scalar (Real n))
+        inner (Value.Text t) =
+            apply stringHandler (Value.Text t)
+        inner (Value.Scalar Null) =
+            return nullHandler
+        inner (Value.List elements) = do
+            newElements <- traverse inner elements
+            apply arrayHandler (Value.List newElements)
+        inner (Value.Record keyValues) = do
+            elements <- traverse adapt (HashMap.toList keyValues)
+            apply objectHandler (Value.List (Seq.fromList elements))
+          where
+            adapt (key, value) = do
+                newValue <- inner value
+                return (Value.Record [("key", Value.Text key), ("value", newValue)])
+        inner v =
+            return v
+    apply function argument =
+        return (Value.Application function argument)
 
 -- | Convert a `Value` back into the surface `Syntax`
 quote
