@@ -39,7 +39,7 @@ pretty_ x =
         (pretty x <> Pretty.hardline)
 
 interpret :: Input -> IO (Either SomeException (Type Location, Value.Value))
-interpret input = Exception.try (Interpret.interpret input)
+interpret input = Exception.try (Interpret.interpret Nothing input)
 
 throws :: Exception e => IO (Either e a) -> IO a
 throws io = do

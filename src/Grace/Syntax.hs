@@ -116,6 +116,7 @@ data Syntax s a
     --   "a\n"
     --   >>> pretty @(Syntax () Void) (Text () (Chunks "a" [("x", "b")]))
     --   "a${x}b"
+    | Prompt{ location :: s, arguments :: Syntax s a, schema :: Maybe (Type s) }
     | Scalar { location :: s, scalar :: Scalar }
     | Operator { location :: s, left :: Syntax s a, operatorLocation :: s, operator :: Operator, right :: Syntax s a }
     -- ^
@@ -166,6 +167,8 @@ instance Monad (Syntax ()) where
         Text{ chunks = Chunks text₀ (fmap onChunk rest), .. }
       where
         onChunk (interpolation, text) = (interpolation >>= f, text)
+    Prompt{ arguments, ..} >>= f =
+        Prompt{ arguments = arguments >>= f, ..}
     Scalar{..} >>= _ =
         Scalar{..}
     Operator{ left, right, .. } >>= f =
@@ -226,6 +229,9 @@ instance Plated (Syntax s a) where
                         return (newInterpolation, text)
                 newRest <- traverse onChunk rest
                 return Text{ chunks = Chunks text₀ newRest, .. }
+            Prompt{ arguments = oldArguments, .. } -> do
+                newArguments <- onSyntax oldArguments
+                return Prompt{ arguments = newArguments, .. }
             Scalar{..} -> do
                 pure Scalar{..}
             Operator{ left = oldLeft, right = oldRight, .. } -> do
@@ -264,6 +270,8 @@ instance Bifunctor Syntax where
         If{ location = f location, predicate = first f predicate, ifTrue = first f ifTrue, ifFalse = first f ifFalse, .. }
     first f Text{..} =
         Text{ location = f location, chunks = first f chunks }
+    first f Prompt{..} =
+        Prompt{ location = f location, arguments = first f arguments, schema = fmap (fmap f) schema }
     first f Scalar{..} =
         Scalar{ location = f location, .. }
     first f Operator{..} =
@@ -326,6 +334,8 @@ types k Lambda{ nameBinding = NameBinding{ annotation = Just t, .. }, .. } =
     fmap (\t' -> Lambda{ nameBinding = NameBinding{ annotation = Just t', .. }, .. }) (k t)
 types k Annotation{ annotation = t, .. } =
     fmap (\t' -> Annotation{ annotation = t', .. }) (k t)
+types k Prompt{ schema = Just t, .. } =
+    fmap (\t' -> Prompt{ schema = Just t', .. }) (k t)
 types k Let{ bindings = bs, .. } =
     fmap (\bs' -> Let{ bindings = bs', .. }) (traverse onBinding bs)
   where
@@ -587,6 +597,29 @@ prettyExpression If{..} =
             <> prettyExpression ifFalse
             )
 prettyExpression Text{..} = pretty chunks
+prettyExpression Prompt{ schema = Just schema, ..} = Pretty.group (Pretty.flatAlt long short)
+  where
+    short =
+            keyword "prompt"
+        <>  " "
+        <>  prettyFieldExpression arguments
+        <>  " "
+        <>  Pretty.operator ":"
+        <>  " "
+        <>  pretty schema
+
+    long =
+        Pretty.align
+            (   keyword "prompt"
+            <>  Pretty.hardline
+            <>  "  "
+            <>  prettyFieldExpression arguments
+            <>  Pretty.hardline
+            <>  "  "
+            <>  Pretty.operator ":"
+            <>  " "
+            <>  pretty schema
+            )
 prettyExpression Annotation{..} =
     Pretty.group (Pretty.flatAlt long short)
   where
@@ -673,6 +706,7 @@ prettyApplicationExpression expression
   where
     isApplication Application{} = True
     isApplication Merge{}       = True
+    isApplication Prompt{}      = True
     isApplication _             = False
 
     short = prettyShort expression
@@ -685,6 +719,8 @@ prettyApplicationExpression expression
         <>  prettyFieldExpression argument
     prettyShort Merge{..} =
             keyword "merge" <> " " <> prettyFieldExpression handlers
+    prettyShort Prompt{ schema = Nothing, .. } =
+            keyword "prompt" <> " " <> prettyFieldExpression arguments
     prettyShort other =
         prettyFieldExpression other
 
@@ -698,6 +734,11 @@ prettyApplicationExpression expression
         <>  Pretty.hardline
         <>  "  "
         <>  prettyFieldExpression handlers
+    prettyLong Prompt{..} =
+            keyword "prompt"
+        <>  Pretty.hardline
+        <>  "  "
+        <>  prettyFieldExpression arguments
     prettyLong other =
         prettyFieldExpression other
 

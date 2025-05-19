@@ -1,0 +1,11 @@
+let question = prompt{ text: "Give me a question that I can ask another model" }
+
+let answer : Text = prompt
+        { text: "
+            ${question}
+
+            Keep your answer short
+            "
+        }
+
+in  { question, answer }

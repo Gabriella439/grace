@@ -115,6 +115,7 @@ lexToken =
             , Grace.Parser.Then         <$ symbol "then"
             , Grace.Parser.Else         <$ symbol "else"
             , Grace.Parser.Merge        <$ symbol "merge"
+            , Grace.Parser.Prompt       <$ symbol "prompt"
             , Grace.Parser.Type         <$ symbol "Type"
             , Grace.Parser.Fields       <$ symbol "Fields"
             , Grace.Parser.Alternatives <$ symbol "Alternatives"
@@ -487,6 +488,7 @@ reserved =
         , "merge"
         , "some"
         , "null"
+        , "prompt"
         , "then"
         , "true"
         ]
@@ -616,6 +618,7 @@ data Token
     | Optional
     | Or
     | Plus
+    | Prompt
     | Some
     | Text
     | TextEqual
@@ -817,6 +820,7 @@ render t = case t of
     Grace.Parser.Optional         -> "List"
     Grace.Parser.Or               -> "||"
     Grace.Parser.Plus             -> "+"
+    Grace.Parser.Prompt           -> "prompt"
     Grace.Parser.Some             -> "some"
     Grace.Parser.Text             -> "Text"
     Grace.Parser.TextEqual        -> "Text/equal"
@@ -911,7 +915,14 @@ grammar endsWithBrace = mdo
             Syntax.Application{ location = Syntax.location function, .. }
 
     applicationExpression <- rule
-        (   do  es <- some1 fieldExpression
+        (   do  location <- locatedToken Grace.Parser.Prompt
+
+                ~(arguments :| es) <- some1 fieldExpression
+
+                return do
+                    let nil = Syntax.Prompt{ schema = Nothing, ..  }
+                    foldl application nil es
+        <|> do  es <- some1 fieldExpression
                 return (foldl application (NonEmpty.head es) (NonEmpty.tail es))
         <|> do  location <- locatedToken Grace.Parser.Merge
                 ~(handlers :| es) <- some1 fieldExpression

@@ -1,0 +1,61 @@
+let concatSep =
+      https://raw.githubusercontent.com/Gabriella439/grace/refs/heads/main/prelude/text/concatSep.ffg
+
+let lines = concatSep "\n"
+
+let generatePoem idea =
+        let structure = prompt
+                { model: "gpt-4o"
+                , text: "
+                    Plan the structure of a new poem based on this idea:
+
+                    ${idea}
+
+                    Describe its form, stanza count, lines per stanza, and rhyme scheme.
+                    "
+                }
+
+        let renderedStructure = "
+                - Form: ${structure.form}
+                - Stanzas: ${Real/show structure.stanzaCount}
+                - Lines per stanza: ${Real/show structure.linesPerStanza}
+                - Rhyme scheme: ${structure.rhymeScheme}
+                "
+
+        let style = prompt
+                { model: "gpt-4o"
+                , text: "
+                    Given this poem structure:
+
+                    ${renderedStructure}
+
+                    Choose a poetic style: tone, voice, and literary devices to emphasize.
+                    "
+                }
+
+        let renderedStyle = "
+                - Tone: ${style.tone}
+                - Voice: ${style.voice}
+                - Literary Devices: ${concatSep ", " style.literaryDevices}
+                "
+
+        let poem : Text = prompt
+                { model: "gpt-4o"
+                , text: "
+                    Write a complete poem based on this idea:
+
+                    ${idea}
+
+                    Structure:
+
+                    ${renderedStructure}
+
+                    Style:
+
+                    ${renderedStyle}
+                    "
+                }
+
+        in { structure, style, poem }
+
+in  generatePoem "The stillness of early morning"
