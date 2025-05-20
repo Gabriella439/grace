@@ -1,21 +1,17 @@
 # Concatenate a `List` of `Text` values with a separator in between each value
-let concatSep
-      : Text -> List Text -> Text
-      = \separator ->
-        \xs ->
-          let status
-                = List/fold
-                    { "cons": \element ->
-                                merge
-                                  { "None": \_ -> Some element
-                                  , "Some": \result ->
-                                              Some
-                                                (element + separator + result)
-                                  }
-                    , "nil": None { }
-                    }
-                    xs
+let concatSep (separator : Text) (xs : List Text) : Text =
+      let status
+            = List/fold
+                { "cons": \element ->
+                            merge
+                              { "null": some element
+                              , "some": \result ->
+                                          some (element + separator + result)
+                              }
+                , "nil": null
+                }
+                xs
 
-          in  merge { "None": \_ -> "", "Some": \result -> result } status
+      in  merge { "null": "", "some": \result -> result } status
 
 in  concatSep

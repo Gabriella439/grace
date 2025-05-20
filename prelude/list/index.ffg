@@ -2,7 +2,7 @@
 let index
       : forall (a : Type) .
         forall (b : Alternatives) .
-          Natural -> List a -> < Some: a | None: { } | b >
+          Natural -> List a -> Optional a
       = \n -> \xs -> List/head (List/drop n xs)
 
 in  index

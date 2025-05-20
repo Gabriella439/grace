@@ -2,7 +2,7 @@
 let last
       : forall (a : Type) .
         forall (b : Alternatives) .
-          List a -> < Some: a | None: { } | b >
+          List a -> Optional a
       = List/last
 
 in  last

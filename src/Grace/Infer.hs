@@ -5,6 +5,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE TypeApplications  #-}
+{-# LANGUAGE ViewPatterns      #-}
 
 {-| This module is based on the bidirectional type-checking algorithm from:
 
@@ -46,7 +47,9 @@ import Grace.Value (Value)
 
 import qualified Control.Monad as Monad
 import qualified Control.Monad.State as State
+import qualified Data.List as List
 import qualified Data.Map as Map
+import qualified Data.Ord as Ord
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
 import qualified Grace.Context as Context
@@ -337,12 +340,6 @@ subtype _A₀ _B₀ = do
 
         (Type.Scalar{ scalar = Monotype.Integer }, Type.Scalar{ scalar = Monotype.Real }) -> do
             return ()
-
-        -- Similarly, this is the rule that says that `T` is a subtype of
-        -- `Optional T`.  If that feels unprincipled to you then delete this
-        -- rule.
-        (_, Type.Optional{..}) -> do
-            subtype _A₀ type_
 
         (Type.Scalar{ }, Type.Scalar{ scalar = Monotype.JSON }) -> do
             return ()
@@ -1358,6 +1355,25 @@ infer e₀ = do
             let _R' = Context.solveType _Γ _R
 
             case _R' of
+                Type.Record{ fields = Type.Fields (List.sortBy (Ord.comparing fst) -> [("null", nullHandlerType), ("some", someHandlerType)]) Monotype.EmptyFields } -> do
+                    a <- fresh
+                    b <- fresh
+
+                    push (Context.UnsolvedType a)
+                    push (Context.UnsolvedType b)
+
+                    subtype nullHandlerType Type.UnsolvedType{ existential = b, .. }
+                    subtype someHandlerType Type.Function{ input = Type.UnsolvedType{ existential = a, .. }, output = Type.UnsolvedType{ existential = b, .. }, .. }
+                    return
+                        (   Type.Optional
+                                { type_ =
+                                    Type.UnsolvedType{ existential = a, .. }
+                                , ..
+                                }
+                        ~>  Type.UnsolvedType{  existential = b, .. }
+                        )
+
+
                 Type.Record{ fields = Type.Fields keyTypes Monotype.EmptyFields } -> do
                     existential <- fresh
 
@@ -1508,6 +1524,15 @@ infer e₀ = do
                 _ -> do
                     throwError (InvalidOperands (Syntax.location left) _L')
 
+        Syntax.Builtin{ builtin = Syntax.Some, .. }-> do
+            return Type.Forall
+                { nameLocation = Syntax.location e₀
+                , name = "a"
+                , domain = Domain.Type
+                , type_ = var "a" ~> Type.Optional{ type_ = var "a", .. }
+                , ..
+                }
+
         Syntax.Builtin{ builtin = Syntax.RealEqual, .. }-> do
             return
                 (   Type.Scalar{ scalar = Monotype.Real, .. }
@@ -1561,15 +1586,7 @@ infer e₀ = do
                         , domain = Domain.Alternatives
                         , type_ =
                                 Type.List { type_ = var "a", .. }
-                            ~>  Type.Union
-                                    { alternatives =
-                                        Type.Alternatives
-                                            [ ("Some", var "a" )
-                                            , ("None", Type.Record{ fields = Type.Fields [] Monotype.EmptyFields, .. })
-                                            ]
-                                            (Monotype.VariableAlternatives "b")
-                                    , ..
-                                    }
+                            ~>  Type.Optional{ type_ = var "a", .. }
                         , ..
                         }
                 , ..
@@ -1652,15 +1669,7 @@ infer e₀ = do
                     , domain  = Domain.Alternatives
                     , type_ =
                             Type.List{ type_ = var "a", .. }
-                        ~>  Type.Union
-                                { alternatives =
-                                    Type.Alternatives
-                                        [ ("Some", var "a")
-                                        , ("None", Type.Record{ fields = Type.Fields [] Monotype.EmptyFields, .. })
-                                        ]
-                                        (Monotype.VariableAlternatives "b")
-                                , ..
-                                }
+                        ~>  Type.Optional{ type_ = var "a", .. }
                     , ..
                     }
                 , ..

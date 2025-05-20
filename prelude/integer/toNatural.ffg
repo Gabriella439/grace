@@ -1,7 +1,6 @@
-# Convert an `Integer` to a `Natural` number, returning `None` if the `Natural`
+# Convert an `Integer` to a `Natural` number, returning `null` if the `Natural`
 # number is negative
-let toNatural
-      : forall (a : Alternatives) . Integer -> < Some : Natural | None : { } | a >
-      = \n -> if Real/lessThan n 0 then None { } else Some (Integer/abs n)
+let toNatural (n : Integer) : Optional Natural
+      = if Real/lessThan n 0 then null else some (Integer/abs n)
 
 in  toNatural

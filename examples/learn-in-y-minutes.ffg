@@ -153,20 +153,14 @@ let duplicatedBool : List Bool = duplicate false
 #
 # … and another polymorphic built-in function is `List/head`:
 #
-#     List/head : forall (a : Type) (b : Alternatives) . List a -> < Some: a | None: { } | b >
+#     List/head : forall (a : Type) . List a -> Optional a
 let firstPrime = List/head somePrimes
 
 # `null` is an absent `Optional` value of any type
 let absentOptionalValue : Optional Natural = null
 
-# All types `T` are subtypes of `Optional T`, meaning that you can case any
-# type to the equivalent `Optional` type
-let presentOptionalValue : Optional Natural = 1
-
-# However, there is no way to pattern match an `Optional` value (`merge` does
-# not work on them.  If you want an `Optional` type that you can pattern match
-# on then use a union type like `< Some: T | None: { } >` (like the type of
-# `List/head` above).
+# `some` wraps a present `Optional` value
+let presentOptionalValue : Optional Natural = some 1
 
 let makeUser user =
       let home = "/home/${user}"

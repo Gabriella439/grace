@@ -1,0 +1,1 @@
+merge { null: false, some: \_ -> true }

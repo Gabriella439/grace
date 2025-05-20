@@ -1,0 +1,7 @@
+let toNatural
+      : Optional Natural -> Natural
+      = merge { some: \x -> x, null: 0 }
+
+in  { example0: toNatural (List/head [ ])
+    , example1: toNatural (List/head [ 1 ])
+    }

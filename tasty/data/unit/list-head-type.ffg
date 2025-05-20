@@ -1,1 +1,1 @@
-forall (a : Alternatives) . < Some: Natural | None: { } | a >
+Optional Natural

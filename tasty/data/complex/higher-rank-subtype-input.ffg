@@ -1,5 +1,5 @@
 # The purpose of this test is to fully exercise the <:∀R judgment
-let f : Natural -> Optional (forall (a : Type) . Bool) -> Natural
-      = \n -> \_ -> n
+let f : Natural -> (forall (a : Type) . Bool) -> Natural
+      = \n _ -> n
 
-in  f 0 (true : Optional (forall (a : Type) . Bool))
+in  f 0 (true : forall (a : Type) . Bool)

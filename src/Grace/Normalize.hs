@@ -255,6 +255,14 @@ evaluate = loop
     apply (Value.Lambda (Closure name capturedEnv body)) argument =
         loop ((name, argument) : capturedEnv) body
     apply
+        (Value.Merge (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("null", _), ("some", someHandler)])))
+        (Value.Application (Value.Builtin Some) x) =
+            apply someHandler x
+    apply
+        (Value.Merge (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("null", nullHandler), ("some", _)])))
+        (Value.Scalar Null)  =
+            return nullHandler
+    apply
         (Value.Merge (Value.Record alternativeHandlers))
         (Value.Application (Value.Alternative alternative) x)
         | Just f <- HashMap.lookup alternative alternativeHandlers =
@@ -268,13 +276,13 @@ evaluate = loop
         (Value.List elements) =
             return (Value.List (Seq.take (fromIntegral n) elements))
     apply (Value.Builtin ListHead) (Value.List []) =
-        return (Value.Application (Value.Alternative "None") (Value.Record []))
+        return (Value.Scalar Null)
     apply (Value.Builtin ListHead) (Value.List (x :<| _)) =
-        return (Value.Application (Value.Alternative "Some") x)
+        return (Value.Application (Value.Builtin Some) x)
     apply (Value.Builtin ListLast) (Value.List []) =
-        return (Value.Application (Value.Alternative "None") (Value.Record []))
+        return (Value.Scalar Null)
     apply (Value.Builtin ListLast) (Value.List (_ :|> x)) =
-        return (Value.Application (Value.Alternative "Some") x)
+        return (Value.Application (Value.Builtin Some) x)
     apply (Value.Builtin ListReverse) (Value.List xs) =
         return (Value.List (Seq.reverse xs))
     apply

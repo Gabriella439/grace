@@ -381,7 +381,11 @@ instance Pretty Operator where
 
 -- | A built-in function
 data Builtin
-    = RealEqual
+    = Some
+    -- ^
+    --   >>> pretty Some
+    --   some
+    | RealEqual
     -- ^
     --   >>> pretty RealEqual
     --   Real/equal
@@ -468,6 +472,7 @@ data Builtin
     deriving (Bounded, Enum, Eq, Generic, Lift, Show)
 
 instance Pretty Builtin where
+    pretty Some           = Pretty.builtin "some"
     pretty RealEqual      = Pretty.builtin "Real/equal"
     pretty RealLessThan   = Pretty.builtin "Real/lessThan"
     pretty RealNegate     = Pretty.builtin "Real/negate"

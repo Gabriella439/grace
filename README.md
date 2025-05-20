@@ -534,22 +534,6 @@ let render
 in  [ render (Left 2.0), render (Right true) ]
 ```
 
-There is no way to consume `Optional` values (not even using `merge`).  The
-`Optional` type solely exists for compatibility with JSON (so that `null` is
-not rejected).  If you actually want a usable `Optional` type then use a
-union with constructors named `Some` or `None` (or whatever names you prefer):
-
-```dhall
-let values = [ Some 1, None { } ]
-
-let toNumber = merge { Some: \n -> n, None: \_ -> 0 }
-
-in  List/map toNumber values
-```
-
-If you don't care about JSON compatibility then you can edit the language to
-remove `null` and `Optional`.
-
 Grace supports anonymous functions using `\input -> output` syntax.  For
 example:
 
@@ -590,7 +574,7 @@ List/fold
 List/head
   : forall (a : Type) .
     forall (b : Alternatives) .
-      List a -> < Some: a | None: { } | b >
+      List a -> Optional a
 
 # Annotate each element of a list with its index
 List/indexed : forall (a : Type) . List a -> List { index: Natural, value: a }
@@ -599,7 +583,7 @@ List/indexed : forall (a : Type) . List a -> List { index: Natural, value: a }
 List/last
   : forall (a : Type) .
     forall (b : Alternatives) .
-      List a -> < Some: a | None: { } | b >
+      List a -> Optional a
 
 # Compute the length of a list
 List/length : forall (a : Type) . List a -> Natural

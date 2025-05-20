@@ -144,6 +144,7 @@ lexToken =
             , Grace.Parser.TextEqual      <$ symbol "Text/equal"
             , Grace.Parser.False_         <$ symbol "false"
             , Grace.Parser.True_          <$ symbol "true"
+            , Grace.Parser.Some           <$ symbol "some"
             , Grace.Parser.Null           <$ symbol "null"
             ] Megaparsec.<?> "built-in value"
 
@@ -425,9 +426,12 @@ validRecordLabel text_ =
         Nothing ->
             False
         Just (h, t) ->
-                isLabel0 h
-            &&  Text.all isLabel t
-            &&  not (HashSet.member text_ reserved)
+                (   isLabel0 h
+                &&  Text.all isLabel t
+                &&  not (HashSet.member text_ reserved)
+                )
+            ||  text_ == "null"
+            ||  text_ == "some"
 
 -- | Returns `True` if the given alternative label is a valid when unquoted
 validAlternativeLabel :: Text -> Bool
@@ -481,6 +485,7 @@ reserved =
         , "in"
         , "let"
         , "merge"
+        , "some"
         , "null"
         , "then"
         , "true"
@@ -611,6 +616,7 @@ data Token
     | Optional
     | Or
     | Plus
+    | Some
     | Text
     | TextEqual
     | TextLiteral (Chunks Offset Input)
@@ -692,6 +698,13 @@ int = terminal matchInt
 
 text :: Parser r Text
 text = terminal matchText
+
+optionalLabel :: Parser r Text
+optionalLabel = terminal matchSome
+  where
+    matchSome Grace.Parser.Some = Just "some"
+    matchSome Grace.Parser.Null = Just "null"
+    matchSome _                 = Nothing
 
 parseToken :: Token -> Parser r ()
 parseToken t = void (Earley.satisfy predicate <?> render t)
@@ -804,6 +817,7 @@ render t = case t of
     Grace.Parser.Optional         -> "List"
     Grace.Parser.Or               -> "||"
     Grace.Parser.Plus             -> "+"
+    Grace.Parser.Some             -> "some"
     Grace.Parser.Text             -> "Text"
     Grace.Parser.TextEqual        -> "Text/equal"
     Grace.Parser.TextLiteral _    -> "a text literal"
@@ -992,6 +1006,10 @@ grammar endsWithBrace = mdo
                     , ..
                     }
 
+        <|> do  location <- locatedToken Grace.Parser.Some
+
+                return Syntax.Builtin{ builtin = Syntax.Some, .. }
+
         <|> do  location <- locatedToken Grace.Parser.RealEqual
 
                 return Syntax.Builtin{ builtin = Syntax.RealEqual, .. }
@@ -1121,7 +1139,7 @@ grammar endsWithBrace = mdo
                 return Syntax.Binding{..}
         )
 
-    recordLabel <- rule (label <|> alternative <|> text)
+    recordLabel <- rule (optionalLabel <|> label <|> alternative <|> text)
 
     locatedRecordLabel <- rule (locatedLabel <|> locatedText)
 

@@ -1,8 +1,6 @@
 # Return the first element of a `List`
 let head
-      : forall (a : Type) .
-        forall (b : Alternatives) .
-          List a -> < Some: a | None: { } | b >
+      : forall (a : Type) (b : Alternatives) .  List a -> Optional a
       = List/head
 
 in  head
