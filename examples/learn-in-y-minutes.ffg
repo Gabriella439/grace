@@ -162,6 +162,10 @@ let absentOptionalValue : Optional Natural = null
 # `some` wraps a present `Optional` value
 let presentOptionalValue : Optional Natural = some 1
 
+# You can also omit `some` if the type is `Optional`.  A `some` will be
+# automatically inserted wherever it's missing.
+let anotherOptionalValue : Optional Natural = 1
+
 let makeUser user =
       let home = "/home/${user}"
 

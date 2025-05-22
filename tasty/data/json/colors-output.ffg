@@ -1,7 +1,7 @@
 { "colors": [ { "category": "hue"
               , "code": { "hex": "#000", "rgba": [ 255, 255, 255, 1 ] }
               , "color": "black"
-              , "type": some ("primary")
+              , "type": "primary"
               }
             , { "category": "value"
               , "code": { "hex": "#FFF", "rgba": [ 0, 0, 0, 1 ] }
@@ -10,22 +10,22 @@
             , { "category": "hue"
               , "code": { "hex": "#FF0", "rgba": [ 255, 0, 0, 1 ] }
               , "color": "red"
-              , "type": some ("primary")
+              , "type": "primary"
               }
             , { "category": "hue"
               , "code": { "hex": "#00F", "rgba": [ 0, 0, 255, 1 ] }
               , "color": "blue"
-              , "type": some ("primary")
+              , "type": "primary"
               }
             , { "category": "hue"
               , "code": { "hex": "#FF0", "rgba": [ 255, 255, 0, 1 ] }
               , "color": "yellow"
-              , "type": some ("primary")
+              , "type": "primary"
               }
             , { "category": "hue"
               , "code": { "hex": "#0F0", "rgba": [ 0, 255, 0, 1 ] }
               , "color": "green"
-              , "type": some ("secondary")
+              , "type": "secondary"
               }
             ]
 }

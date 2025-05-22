@@ -13,7 +13,7 @@
       "etag": "\"m2yskBQFythfE4irbTIeOgYYfBU/QpOIr3QKlV5EUlzfFcVvDiJT0hw\"",
       "id": {
         "kind": "youtube#channel",
-        "channelId": some "UCJowOS1R0FnhipXVqEnYU1A"
+        "channelId": "UCJowOS1R0FnhipXVqEnYU1A"
       }
     },
     {
@@ -21,7 +21,7 @@
       "etag": "\"m2yskBQFythfE4irbTIeOgYYfBU/AWutzVOt_5p1iLVifyBdfoSTf9E\"",
       "id": {
         "kind": "youtube#video",
-        "videoId": some "Eqa2nAAhHN0"
+        "videoId": "Eqa2nAAhHN0"
       }
     },
     {
@@ -29,7 +29,7 @@
       "etag": "\"m2yskBQFythfE4irbTIeOgYYfBU/2dIR9BTfr7QphpBuY3hPU-h5u-4\"",
       "id": {
         "kind": "youtube#video",
-        "videoId": some "IirngItQuVs"
+        "videoId": "IirngItQuVs"
       }
     }
   ]

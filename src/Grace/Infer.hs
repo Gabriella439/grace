@@ -1973,6 +1973,30 @@ check e Type.Forall{..} = do
     scoped (Context.Variable domain name) do
         check e type_
 
+check e@Syntax.Scalar{ scalar = Syntax.Null } Type.Optional{ } = do
+    return e
+
+check Syntax.Application{ function = Syntax.Builtin{ builtin = Syntax.Some }, argument = e } Type.Optional{ type_ } = do
+    check e type_
+
+check e _B@Type.Optional{ type_ } = do
+    let normal = do
+            (_A₀, newE) <- infer e
+
+            _Θ <- get
+
+            subtype (Context.solveType _Θ _A₀) (Context.solveType _Θ _B)
+
+            return newE
+
+    normal `catchError` \typeInferenceError -> do
+        newE <- check e type_ `catchError` \_ -> do
+            throwError typeInferenceError
+
+        let location = Syntax.location e
+
+        return Syntax.Application{ function = Syntax.Builtin{ builtin = Syntax.Some, .. }, argument = newE, .. }
+
 check Syntax.Operator{ operator = Syntax.Times, .. } _B@Type.Scalar{ scalar }
     | scalar `elem` ([ Monotype.Natural, Monotype.Integer, Monotype.Real ] :: [Monotype.Scalar])= do
     newLeft <- check left _B
@@ -2065,7 +2089,8 @@ check Syntax.List{..} _B@Type.Scalar{ scalar = Monotype.JSON } = do
     newElements <- traverse (`check` _B) elements
 
     return Syntax.List{ elements = newElements, .. }
-check Syntax.Text{ chunks = Syntax.Chunks text₀ rest, .. } Type.Scalar{ scalar = Monotype.JSON } = do
+
+check Syntax.Text{ chunks = Syntax.Chunks text₀ rest, .. } Type.Scalar{ scalar = Monotype.Text } = do
     let process (interpolation, text) = do
             newInterpolation <- check interpolation Type.Scalar{ scalar = Monotype.Text, .. }
 
@@ -2074,6 +2099,8 @@ check Syntax.Text{ chunks = Syntax.Chunks text₀ rest, .. } Type.Scalar{ scalar
     newRest <- traverse process rest
 
     return Syntax.Text{ chunks = Syntax.Chunks text₀ newRest, .. }
+check e@Syntax.Text{ } Type.Scalar{ scalar = Monotype.JSON, .. } = do
+    check e Type.Scalar{ scalar = Monotype.Text, .. }
 check e@Syntax.Scalar{ scalar = Syntax.Natural _ } Type.Scalar{ scalar = Monotype.JSON } = do
     return e
 check e@Syntax.Scalar{ scalar = Syntax.Integer _ } Type.Scalar{ scalar = Monotype.JSON } = do

@@ -1,1 +1,5 @@
-[ null, some 1 ] : List (Optional Natural)
+# This test illustrates that you can unify `null` with other types so long as
+# you provide a type annotation, since the interpreter will automatically wrap
+# the non-`null` values with a `some` in the course of interpretation (and then
+# strip the `some` in the final result)
+[ null, 1 ] : List (Optional Natural)

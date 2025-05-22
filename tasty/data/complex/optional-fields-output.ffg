@@ -1,1 +1,1 @@
-[ { "x": some 1, "y": null }, { "x": null, "y": some true } ]
+[ { "x": 1 }, { "y": true } ]

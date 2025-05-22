@@ -1,3 +1,3 @@
 # This verifies that the idiom of unifying present/absent fields using
 # `Optional` types works
-[ { x: some 1, y: null }, { x: null, y: some true } ]
+[ { x: 1 }, { y: true } ] : List { x: Optional Natural, y: Optional Bool }

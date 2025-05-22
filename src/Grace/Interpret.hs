@@ -12,6 +12,7 @@ module Grace.Interpret
       Input(..)
     , interpret
     , interpretWith
+
       -- * Errors related to interpretation
     , InterpretError(..)
     ) where
@@ -38,6 +39,7 @@ import qualified Grace.Infer as Infer
 import qualified Grace.Normalize as Normalize
 import qualified Grace.Parser as Parser
 import qualified Grace.Syntax as Syntax
+import qualified Grace.Value as Value
 import qualified Text.URI as URI
 
 {-| Interpret Grace source code, return the inferred type and the evaluated
@@ -111,7 +113,7 @@ interpretWith bindings maybeAnnotation manager input = do
 
             value <- Normalize.evaluate evaluationContext elaboratedExpression
 
-            return (inferred, value)
+            return (inferred, stripSome value)
 
 remote :: Input -> Bool
 remote (URI uri _) = any (`elem` schemes) (URI.uriScheme uri)
@@ -161,6 +163,14 @@ annotate = Lens.transform transformSyntax . fmap ((,) Nothing)
         Embed{ embedded = (Just annotation, a), .. }
     transformSyntax syntax =
         syntax
+
+-- | Strip all @some@s from the final result.  They are only used internally for
+-- the purpose of evaluation but do not need to be user-visible.
+stripSome :: Value -> Value
+stripSome = Lens.transform transformValue
+  where
+    transformValue (Value.Application (Value.Builtin Syntax.Some) e) = e
+    transformValue e = e
 
 -- | Errors related to interpretation of an expression
 data InterpretError
