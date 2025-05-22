@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds          #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE NamedFieldPuns     #-}
 {-# LANGUAGE OverloadedStrings  #-}
@@ -7,12 +8,14 @@
 module Grace.Import
     ( -- * Import resolution
       resolve
+    , referentiallySane
+
       -- * Exceptions
     , ResolutionError(..)
     , ImportError(..)
     ) where
 
-import Control.Exception.Safe (Exception(..))
+import Control.Exception.Safe (Exception(..), MonadCatch)
 import Data.Bifunctor (first)
 import Data.Foldable (foldl')
 import Data.HashMap.Strict (HashMap)
@@ -25,7 +28,7 @@ import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
 import Grace.Syntax (Syntax)
 import System.FilePath ((</>))
-import Text.URI (Authority)
+import Text.URI (Authority, RText, RTextLabel(..))
 
 import qualified Control.Exception.Safe as Exception
 import qualified Data.HashMap.Strict as HashMap
@@ -59,12 +62,14 @@ fetch manager url = do
         Just body -> do
             return body
 
+remoteSchemes :: [RText 'Scheme]
+remoteSchemes = map (fromJust . URI.mkScheme) [ "http", "https" ]
+
 -- | Resolve an `Input` by returning the source code that it represents
 resolve :: Manager -> Input -> IO (Syntax Location Input)
 resolve manager input = case input of
     URI uri mode
-        | let schemes = map (fromJust . URI.mkScheme) [ "http", "https" ]
-        , any (`elem` schemes) (URI.uriScheme uri) -> do
+        | any (`elem` remoteSchemes) (URI.uriScheme uri) -> do
             let name = URI.renderStr uri
 
             let handler e = throw (HTTPError e)
@@ -173,6 +178,19 @@ emptyAuthority = URI.Authority
     , URI.authHost = fromJust (URI.mkHost "")
     , URI.authPort = Nothing
     }
+
+remote :: Input -> Bool
+remote (URI uri _) = any (`elem` remoteSchemes) (URI.uriScheme uri)
+remote _ = False
+
+-- | Fail if the child import tries to access something that the parent import
+-- should not have access to
+referentiallySane :: MonadCatch m => Input -> Input -> m ()
+referentiallySane parent child
+    | remote parent && not (remote child) = do
+        Exception.throwIO (ImportError parent (ReferentiallyInsane child))
+    | otherwise = do
+        return ()
 
 -- | The base error for `ImportError` (without the @input@ information)
 data ResolutionError

@@ -16,6 +16,7 @@ module Grace.TH
     , typeOfInput
     ) where
 
+import Control.Monad.IO.Class (liftIO)
 import Data.Functor (void)
 import Data.Text (Text)
 import Data.Void (Void)
@@ -25,8 +26,6 @@ import Grace.Type (Type)
 import Language.Haskell.TH.Quote (QuasiQuoter(..))
 import Language.Haskell.TH.Syntax (Code(examineCode), Lift, Q, TExp(..))
 
-import qualified Control.Exception.Safe as Exception
-import qualified Control.Monad.Except as Except
 import qualified Data.Text as Text
 import qualified Grace.Interpret as Interpret
 import qualified Grace.Normalize as Normalize
@@ -98,11 +97,7 @@ typeOfInput = helperFunction fst
 helperFunction
     :: Lift r => ((Type (), Syntax () Void) -> r) -> Input -> Code Q r
 helperFunction f input = TH.Code do
-    eitherResult <- Except.runExceptT (Interpret.interpret input)
-
-    (inferred, value) <- case eitherResult of
-        Left e -> Exception.throwIO e
-        Right result -> return result
+    (inferred, value) <- liftIO (Interpret.interpret input)
 
     let type_ = void inferred
         syntax = Normalize.quote [] value

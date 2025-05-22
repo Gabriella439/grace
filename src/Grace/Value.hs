@@ -16,9 +16,9 @@ import Data.Foldable (toList)
 import Data.HashMap.Strict.InsOrd (InsOrdHashMap)
 import Data.Sequence (Seq)
 import Data.Text (Text)
+import Data.Void (Void)
 import Grace.Location (Location)
 import Grace.Syntax (Builtin, Scalar, Syntax)
-import Grace.Type (Type)
 
 import qualified Data.Aeson as Aeson
 import qualified Data.Sequence as Seq
@@ -36,8 +36,7 @@ import qualified Grace.Syntax as Syntax
     This provides efficiency comparable to a higher-order abstract syntax
     tree, except using a first-order representation.
 -}
-data Closure =
-    Closure Text [(Text, Value)] (Syntax Location (Type Location, Value))
+data Closure = Closure Text [(Text, Value)] (Syntax Location Void)
     deriving stock (Eq, Show)
 
 {-| This type represents a fully evaluated expression with no reducible

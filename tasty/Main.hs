@@ -6,10 +6,9 @@
 
 module Main where
 
-import Control.Exception.Safe (Exception)
+import Control.Exception.Safe (Exception, SomeException)
 import Data.Text (Text)
 import Grace.Input (Input(..), Mode(..))
-import Grace.Interpret (InterpretError)
 import Grace.Location (Location(..))
 import Grace.Pretty (Pretty(..))
 import Grace.Type (Type(..))
@@ -17,7 +16,6 @@ import System.FilePath ((</>))
 import Test.Tasty (TestTree)
 
 import qualified Control.Exception.Safe as Exception
-import qualified Control.Monad.Except as Except
 import qualified Data.Text as Text
 import qualified Grace.Interpret as Interpret
 import qualified Grace.Monotype as Monotype
@@ -40,9 +38,8 @@ pretty_ x =
     Grace.Pretty.renderStrict False Width.defaultWidth
         (pretty x <> Pretty.hardline)
 
-interpret
-    :: Input -> IO (Either InterpretError (Type Location, Value.Value))
-interpret input = Except.runExceptT (Interpret.interpret input)
+interpret :: Input -> IO (Either SomeException (Type Location, Value.Value))
+interpret input = Exception.try (Interpret.interpret input)
 
 throws :: Exception e => IO (Either e a) -> IO a
 throws io = do

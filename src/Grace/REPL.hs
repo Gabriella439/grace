@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE TypeApplications  #-}
 
 -- | This module contains the implementation of the @grace repl@ subcommand
 
@@ -11,7 +12,7 @@ module Grace.REPL
     ) where
 
 import Control.Applicative (empty)
-import Control.Exception.Safe (displayException, throwIO)
+import Control.Exception.Safe (SomeException, displayException, throwIO)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.State (MonadState(..))
 import Data.Foldable (toList)
@@ -23,7 +24,6 @@ import System.Console.Repline (CompleterStyle(..), MultiLine(..), ReplOpts(..))
 
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Monad as Monad
-import qualified Control.Monad.Except as Except
 import qualified Control.Monad.State as State
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text.IO
@@ -48,12 +48,7 @@ repl = do
     let interpret input = do
             context <- get
 
-            result <- Exception.try (Except.runExceptT (Interpret.interpretWith context Nothing manager input))
-
-            case result of
-                Left e -> return (Left e)
-                Right (Left e) -> return (Left (Exception.toException e))
-                Right (Right r) -> return (Right r)
+            Exception.try @_ @SomeException (Interpret.interpretWith context Nothing manager input)
 
     let command string = do
             let input = Code "(input)" (Text.pack string)

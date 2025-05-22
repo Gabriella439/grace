@@ -21,7 +21,6 @@ import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Location (Location)
 import Grace.Syntax (Builtin(..), Scalar(..), Syntax)
-import Grace.Type (Type)
 import Grace.Value (Closure(..), Value)
 import Prelude hiding (succ)
 
@@ -31,6 +30,7 @@ import qualified Data.List as List
 import qualified Data.Ord as Ord
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
+import qualified Data.Void as Void
 import qualified Grace.Syntax as Syntax
 import qualified Grace.Value as Value
 import qualified System.IO.Unsafe as Unsafe
@@ -83,14 +83,13 @@ asReal  _          = Nothing
 evaluate
     :: [(Text, Value)]
     -- ^ Evaluation environment (starting at @[]@ for a top-level expression)
-    -> Syntax Location (Type Location, Value)
+    -> Syntax Location Void
     -- ^ Surface syntax
     -> IO Value
     -- ^ Result, free of reducible sub-expressions
 evaluate = loop
   where
-    loop
-      :: [(Text, Value)] -> Syntax Location (Type Location, Value) -> IO Value
+    loop :: [(Text, Value)] -> Syntax Location Void -> IO Value
     loop env syntax =
         case syntax of
             Syntax.Variable{..} ->
@@ -245,8 +244,8 @@ evaluate = loop
             Syntax.Builtin{..} ->
                 return (Value.Builtin builtin)
 
-            Syntax.Embed{ embedded = (_, value) } ->
-                return value
+            Syntax.Embed{ embedded } ->
+                Void.absurd embedded
 
     {-| This is the function that implements function application, including
         evaluating anonymous functions and evaluating all built-in functions.
@@ -456,9 +455,7 @@ quote names value =
                 , ..
                 }
           where
-            quoted = fmap (quote [] . snd) body
-
-            newBody = Monad.join (first (\_ -> location) quoted)
+            newBody = first (\_ -> location) body
 
             toBinding (n, v) = Syntax.Binding
                 { name = n

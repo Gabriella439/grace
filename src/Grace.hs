@@ -1,5 +1,6 @@
 {-# LANGUAGE ApplicativeDo     #-}
 {-# LANGUAGE BlockArguments    #-}
+{-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 
@@ -24,7 +25,6 @@ import Options.Applicative (Parser, ParserInfo)
 import Prettyprinter (Doc)
 import Prettyprinter.Render.Terminal (AnsiStyle)
 
-import qualified Control.Monad.Except as Except
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text.IO
 import qualified GHC.IO.Encoding
@@ -185,10 +185,7 @@ main = do
                 _ -> do
                     return (Path file AsCode)
 
-            eitherResult <- do
-                Except.runExceptT (Interpret.interpret input)
-
-            (inferred, value) <- throws eitherResult
+            (inferred, value) <- Interpret.interpret input
 
             let syntax = Normalize.quote [] value
 
@@ -220,14 +217,11 @@ main = do
                         , offset = 4
                         }
 
-            let expected = Type.Scalar{ scalar = Monotype.Text, .. }
-
             manager <- HTTP.newManager
 
-            eitherResult <- do
-                Except.runExceptT (Interpret.interpretWith [] (Just expected) manager input)
+            let expected = Type.Scalar{ scalar = Monotype.Text, location }
 
-            (_, value) <- throws eitherResult
+            (_, value) <- Interpret.interpretWith [] (Just expected) manager input
 
             case value of
                 Value.Text text -> Text.IO.putStr text
@@ -265,24 +259,26 @@ main = do
                     traverse_ formatFile files
 
         Builtins{..} -> do
+            manager <- HTTP.newManager
+
             let displayBuiltin :: Builtin -> IO ()
                 displayBuiltin builtin = do
+                    let code =
+                            Grace.Pretty.renderStrict
+                                False
+                                Width.defaultWidth
+                                (Grace.Pretty.pretty builtin)
+
                     let expression =
                             Syntax.Builtin
-                                { location =
-                                    Location
-                                        { name = "(input)"
-                                        , code =
-                                            Grace.Pretty.renderStrict
-                                                False
-                                                Width.defaultWidth
-                                                (Grace.Pretty.pretty builtin)
-                                        , offset = 0
-                                        }
+                                { location = Location
+                                    { name = "(input)", code, offset = 0 }
                                 , ..
                                 }
 
-                    (type_, _) <- throws (Infer.typeOf expression)
+                    let input = Code "(input)" code
+
+                    (type_, _) <- Infer.typeOf input manager expression
 
                     let annotated :: Syntax Location Void
                         annotated =

@@ -1,11 +1,13 @@
-{-# LANGUAGE BlockArguments    #-}
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE MultiWayIf        #-}
-{-# LANGUAGE NamedFieldPuns    #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
-{-# LANGUAGE TypeApplications  #-}
-{-# LANGUAGE ViewPatterns      #-}
+{-# LANGUAGE BlockArguments      #-}
+{-# LANGUAGE DerivingStrategies  #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE MultiWayIf          #-}
+{-# LANGUAGE NamedFieldPuns      #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE ViewPatterns        #-}
 
 {-| This module is based on the bidirectional type-checking algorithm from:
 
@@ -28,9 +30,9 @@ module Grace.Infer
     ) where
 
 import Control.Applicative ((<|>))
-import Control.Exception.Safe (Exception(..))
+import Control.Exception.Safe (Exception(..), MonadCatch, MonadThrow)
 import Control.Monad (when)
-import Control.Monad.Except (MonadError(..))
+import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.State.Strict (MonadState)
 import Data.Foldable (traverse_)
 import Data.Sequence (ViewL(..), (<|))
@@ -38,13 +40,15 @@ import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Context (Context, Entry)
 import Grace.Existential (Existential)
+import Grace.Input (Input)
 import Grace.Location (Location(..))
 import Grace.Monotype (Monotype)
 import Grace.Pretty (Pretty(..))
 import Grace.Syntax (Syntax)
 import Grace.Type (Type(..))
-import Grace.Value (Value)
+import Network.HTTP.Client (Manager)
 
+import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
 import qualified Control.Monad as Monad
 import qualified Control.Monad.State as State
@@ -56,6 +60,7 @@ import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
 import qualified Grace.Context as Context
 import qualified Grace.Domain as Domain
+import qualified Grace.Import as Import
 import qualified Grace.Location as Location
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Pretty
@@ -69,13 +74,20 @@ data Status = Status
     { count :: !Int
       -- ^ Used to generate fresh unsolved variables (e.g. α̂, β̂ from the
       --   original paper)
+
     , context :: Context Location
       -- ^ The type-checking context (e.g. Γ, Δ, Θ)
+
+    , manager :: Manager
+      -- ^ Used to resolve HTTP(S) imports
+
+    , input :: Input
+      -- ^ The parent import, used to resolve relative imports
     }
 
-orDie :: MonadError e m => Maybe a -> e -> m a
+orDie :: (Exception e, MonadThrow m) => Maybe a -> e -> m a
 Just x  `orDie` _ = return x
-Nothing `orDie` e = throwError e
+Nothing `orDie` e = Exception.throwIO e
 
 -- | Generate a fresh existential variable (of any type)
 fresh :: MonadState Status m => m (Existential a)
@@ -150,7 +162,7 @@ scopedUnsolvedAlternatives k = do
     … which checks that under context Γ, the type A is well-formed
 -}
 wellFormedType
-    :: MonadError TypeInferenceError m
+    :: MonadThrow m
     => Context Location -> Type Location -> m ()
 wellFormedType _Γ type₀ =
     case type₀ of
@@ -158,7 +170,7 @@ wellFormedType _Γ type₀ =
         Type.VariableType{..}
             | Context.Variable Domain.Type name `elem` _Γ -> do
                 return ()
-            | otherwise -> throwError (UnboundTypeVariable location name)
+            | otherwise -> Exception.throwIO (UnboundTypeVariable location name)
 
         -- ArrowWF
         Type.Function{..} -> do
@@ -174,7 +186,7 @@ wellFormedType _Γ type₀ =
             | any predicate _Γ -> do
                 return ()
             | otherwise -> do
-                throwError (IllFormedType location _A _Γ)
+                Exception.throwIO (IllFormedType location _A _Γ)
           where
             predicate (Context.UnsolvedType a  ) = existential == a
             predicate (Context.SolvedType   a _) = existential == a
@@ -193,7 +205,7 @@ wellFormedType _Γ type₀ =
             | any predicate _Γ -> do
                 traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
             | otherwise -> do
-                throwError (IllFormedFields location a₀ _Γ)
+                Exception.throwIO (IllFormedFields location a₀ _Γ)
           where
             predicate (Context.UnsolvedFields a₁  ) = a₀ == a₁
             predicate (Context.SolvedFields   a₁ _) = a₀ == a₁
@@ -203,7 +215,7 @@ wellFormedType _Γ type₀ =
             | Context.Variable Domain.Fields a `elem` _Γ -> do
                 traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
             | otherwise -> do
-                throwError (UnboundFields location a)
+                Exception.throwIO (UnboundFields location a)
 
         Type.Union{ alternatives = Type.Alternatives kAs Monotype.EmptyAlternatives } -> do
             traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
@@ -212,7 +224,7 @@ wellFormedType _Γ type₀ =
             | any predicate _Γ -> do
                 traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
             | otherwise -> do
-                throwError (IllFormedAlternatives location a₀ _Γ)
+                Exception.throwIO (IllFormedAlternatives location a₀ _Γ)
           where
             predicate (Context.UnsolvedAlternatives a₁  ) = a₀ == a₁
             predicate (Context.SolvedAlternatives   a₁ _) = a₀ == a₁
@@ -222,7 +234,7 @@ wellFormedType _Γ type₀ =
             | Context.Variable Domain.Alternatives a `elem` _Γ -> do
                 traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
             | otherwise -> do
-                throwError (UnboundAlternatives location a)
+                Exception.throwIO (UnboundAlternatives location a)
 
         Type.Scalar{} -> do
             return ()
@@ -235,7 +247,7 @@ wellFormedType _Γ type₀ =
     type A is a subtype of type B.
 -}
 subtype
-    :: (MonadState Status m, MonadError TypeInferenceError m)
+    :: (MonadState Status m, MonadCatch m)
     => Type Location -> Type Location -> m ()
 subtype _A₀ _B₀ = do
     _Γ <- get
@@ -402,7 +414,7 @@ subtype _A₀ _B₀ = do
 
                             return False
 
-                    assertOptional `catchError` \_ -> do
+                    assertOptional `Exception.catch` \(_ :: TypeInferenceError) -> do
                         set context
 
                         return True
@@ -485,7 +497,7 @@ subtype _A₀ _B₀ = do
 
                     case p₀First <|> p₁First of
                         Nothing -> do
-                            throwError (MissingOneOfFields [Type.location _A₀, Type.location _B₀] p₀ p₁ _Γ)
+                            Exception.throwIO (MissingOneOfFields [Type.location _A₀, Type.location _B₀] p₀ p₁ _Γ)
 
                         Just setContext -> do
                             setContext
@@ -546,7 +558,7 @@ subtype _A₀ _B₀ = do
                                 )
                                 p₁
                         else
-                            throwError (RecordTypeMismatch _A₀ _B₀ (Map.keys extraA) (Map.keys requiredB))
+                            Exception.throwIO (RecordTypeMismatch _A₀ _B₀ (Map.keys extraA) (Map.keys requiredB))
 
                 _   | Map.null extraA && fields₀ == fields₁ -> do
                         requiredB <- getRequired
@@ -555,11 +567,11 @@ subtype _A₀ _B₀ = do
                             then do
                                 return ()
                             else
-                                throwError (RecordTypeMismatch _A₀ _B₀ (Map.keys extraA) (Map.keys requiredB))
+                                Exception.throwIO (RecordTypeMismatch _A₀ _B₀ (Map.keys extraA) (Map.keys requiredB))
                     | otherwise -> do
                         requiredB <- getRequired
 
-                        throwError (RecordTypeMismatch _A₀ _B₀ (Map.keys extraA) (Map.keys requiredB))
+                        Exception.throwIO (RecordTypeMismatch _A₀ _B₀ (Map.keys extraA) (Map.keys requiredB))
 
         -- Checking if one union is a subtype of another union is basically the
         -- exact same as the logic for checking if a record is a subtype of
@@ -583,13 +595,13 @@ subtype _A₀ _B₀ = do
                     ||  (flexible alternatives₀ && alternatives₀ /= alternatives₁)
 
             if | not okayA && not okayB -> do
-                throwError (UnionTypeMismatch _A₀ _B₀ extraA extraB)
+                Exception.throwIO (UnionTypeMismatch _A₀ _B₀ extraA extraB)
 
                | not okayA && okayB -> do
-                throwError (UnionTypeMismatch _A₀ _B₀ extraA mempty)
+                Exception.throwIO (UnionTypeMismatch _A₀ _B₀ extraA mempty)
 
                | okayA && not okayB -> do
-                throwError (UnionTypeMismatch _A₀ _B₀ mempty extraB)
+                Exception.throwIO (UnionTypeMismatch _A₀ _B₀ mempty extraB)
 
                | otherwise -> do
                 return ()
@@ -644,7 +656,7 @@ subtype _A₀ _B₀ = do
 
                     case p₀First <|> p₁First of
                         Nothing -> do
-                            throwError (MissingOneOfAlternatives [Type.location _A₀, Type.location _B₀] p₀ p₁ _Γ)
+                            Exception.throwIO (MissingOneOfAlternatives [Type.location _A₀, Type.location _B₀] p₀ p₁ _Γ)
 
                         Just setContext -> do
                             setContext
@@ -703,7 +715,7 @@ subtype _A₀ _B₀ = do
                         p₁
 
                 (_, _) -> do
-                    throwError (NotUnionSubtype (Type.location _A₀) _A (Type.location _B₀) _B)
+                    Exception.throwIO (NotUnionSubtype (Type.location _A₀) _A (Type.location _B₀) _B)
 
         -- Unfortunately, we need to have this wildcard match at the end,
         -- otherwise we'd have to specify a number of cases that is quadratic
@@ -722,7 +734,7 @@ subtype _A₀ _B₀ = do
         -- `subtype` function and then I'll remember to add a case for my new
         -- complex type here.
         (_A, _B) -> do
-            throwError (NotSubtype (Type.location _A₀) _A (Type.location _B₀) _B)
+            Exception.throwIO (NotSubtype (Type.location _A₀) _A (Type.location _B₀) _B)
 
 {-| This corresponds to the judgment:
 
@@ -736,7 +748,7 @@ subtype _A₀ _B₀ = do
     However, for consistency with the paper we still name them @instantiate*@.
 -}
 instantiateTypeL
-    :: (MonadState Status m, MonadError TypeInferenceError m)
+    :: (MonadState Status m, MonadCatch m)
     => Existential Monotype -> Type Location -> m ()
 instantiateTypeL a _A₀ = do
     _Γ₀ <- get
@@ -863,7 +875,7 @@ instantiateTypeL a _A₀ = do
     α̂ such that A :< α̂.
 -}
 instantiateTypeR
-    :: (MonadState Status m, MonadError TypeInferenceError m)
+    :: (MonadState Status m, MonadCatch m)
     => Type Location -> Existential Monotype -> m ()
 instantiateTypeR _A₀ a = do
     _Γ₀ <- get
@@ -962,7 +974,7 @@ instantiateTypeR _A₀ a = do
 -}
 
 equateFields
-    :: (MonadState Status m, MonadError TypeInferenceError m)
+    :: (MonadState Status m, MonadThrow m)
     => Existential Monotype.Record -> Existential Monotype.Record -> m ()
 equateFields p₀ p₁ = do
     _Γ₀ <- get
@@ -983,20 +995,20 @@ equateFields p₀ p₁ = do
 
     case p₀First <|> p₁First of
         Nothing -> do
-            throwError (MissingOneOfFields [] p₀ p₁ _Γ₀)
+            Exception.throwIO (MissingOneOfFields [] p₀ p₁ _Γ₀)
 
         Just setContext -> do
             setContext
 
 instantiateFieldsL
-    :: (MonadState Status m, MonadError TypeInferenceError m)
+    :: (MonadState Status m, MonadCatch m)
     => Existential Monotype.Record
     -> Location
     -> Type.Record Location
     -> m ()
 instantiateFieldsL p₀ location fields@(Type.Fields kAs rest) = do
     when (p₀ `Type.fieldsFreeIn` Type.Record{..}) do
-        throwError (NotFieldsSubtype location p₀ fields)
+        Exception.throwIO (NotFieldsSubtype location p₀ fields)
 
     let process (k, _A) = do
             b <- fresh
@@ -1034,14 +1046,14 @@ instantiateFieldsL p₀ location fields@(Type.Fields kAs rest) = do
     traverse_ instantiate kAbs
 
 instantiateFieldsR
-    :: (MonadState Status m, MonadError TypeInferenceError m)
+    :: (MonadState Status m, MonadCatch m)
     => Location
     -> Type.Record Location
     -> Existential Monotype.Record
     -> m ()
 instantiateFieldsR location fields@(Type.Fields kAs rest) p₀ = do
     when (p₀ `Type.fieldsFreeIn` Type.Record{..}) do
-        throwError (NotFieldsSubtype location p₀ fields)
+        Exception.throwIO (NotFieldsSubtype location p₀ fields)
 
     let process (k, _A) = do
             b <- fresh
@@ -1079,7 +1091,7 @@ instantiateFieldsR location fields@(Type.Fields kAs rest) p₀ = do
     traverse_ instantiate kAbs
 
 equateAlternatives
-    :: (MonadState Status m, MonadError TypeInferenceError m)
+    :: (MonadState Status m, MonadThrow m)
     => Existential Monotype.Union-> Existential Monotype.Union -> m ()
 equateAlternatives p₀ p₁ = do
     _Γ₀ <- get
@@ -1100,20 +1112,20 @@ equateAlternatives p₀ p₁ = do
 
     case p₀First <|> p₁First of
         Nothing -> do
-            throwError (MissingOneOfAlternatives [] p₀ p₁ _Γ₀)
+            Exception.throwIO (MissingOneOfAlternatives [] p₀ p₁ _Γ₀)
 
         Just setContext -> do
             setContext
 
 instantiateAlternativesL
-    :: (MonadState Status m, MonadError TypeInferenceError m)
+    :: (MonadState Status m, MonadCatch m)
     => Existential Monotype.Union
     -> Location
     -> Type.Union Location
     -> m ()
 instantiateAlternativesL p₀ location alternatives@(Type.Alternatives kAs rest) = do
     when (p₀ `Type.alternativesFreeIn` Type.Union{..}) do
-        throwError (NotAlternativesSubtype location p₀ alternatives)
+        Exception.throwIO (NotAlternativesSubtype location p₀ alternatives)
 
     let process (k, _A) = do
             b <- fresh
@@ -1151,14 +1163,14 @@ instantiateAlternativesL p₀ location alternatives@(Type.Alternatives kAs rest)
     traverse_ instantiate kAbs
 
 instantiateAlternativesR
-    :: (MonadState Status m, MonadError TypeInferenceError m)
+    :: (MonadState Status m, MonadCatch m)
     => Location
     -> Type.Union Location
     -> Existential Monotype.Union
     -> m ()
 instantiateAlternativesR location alternatives@(Type.Alternatives kAs rest) p₀ = do
     when (p₀ `Type.alternativesFreeIn` Type.Union{..}) do
-        throwError (NotAlternativesSubtype location p₀ alternatives)
+        Exception.throwIO (NotAlternativesSubtype location p₀ alternatives)
 
     let process (k, _A) = do
             b <- fresh
@@ -1203,9 +1215,9 @@ instantiateAlternativesR location alternatives@(Type.Alternatives kAs rest) p₀
     type of A and an updated context Δ.
 -}
 infer
-    :: (MonadState Status m, MonadError TypeInferenceError m)
-    => Syntax Location (Type Location, Value)
-    -> m (Type Location, Syntax Location (Type Location, Value))
+    :: (MonadState Status m, MonadCatch m, MonadIO m)
+    => Syntax Location Input
+    -> m (Type Location, Syntax Location Void)
 infer e₀ = do
     let input ~> output = Type.Function{ location = Syntax.location e₀, ..}
 
@@ -1217,7 +1229,7 @@ infer e₀ = do
             _Γ <- get
 
             type_ <- Context.lookup name index _Γ `orDie` UnboundVariable location name index
-            return (type_, e₀)
+            return (type_, Syntax.Variable{..})
 
         -- →I⇒
         Syntax.Lambda{ nameBinding = Syntax.NameBinding{ annotation = Nothing, .. }, ..} -> do
@@ -1325,7 +1337,7 @@ infer e₀ = do
 
                     push (Context.UnsolvedType existential)
 
-                    return (Type.List{ type_ = Type.UnsolvedType{..}, .. }, e₀)
+                    return (Type.List{ type_ = Type.UnsolvedType{..}, .. }, Syntax.List{ elements = Seq.empty, .. })
                 y :< ys -> do
                     (type_, newY) <- infer y
 
@@ -1377,7 +1389,7 @@ infer e₀ = do
                             (Monotype.UnsolvedAlternatives p)
                         , ..
                         }
-                , e₀
+                , Syntax.Alternative{..}
                 )
 
         Syntax.Merge{..} -> do
@@ -1428,7 +1440,7 @@ infer e₀ = do
 
                             return (key, input)
                         process (_, _A) = do
-                            throwError (MergeInvalidHandler (Type.location _A) _A)
+                            Exception.throwIO (MergeInvalidHandler (Type.location _A) _A)
 
                     keyTypes' <- traverse process keyTypes
 
@@ -1447,10 +1459,10 @@ infer e₀ = do
                         )
 
                 Type.Record{} -> do
-                    throwError (MergeConcreteRecord (Type.location _R) _R)
+                    Exception.throwIO (MergeConcreteRecord (Type.location _R) _R)
 
                 _ -> do
-                    throwError (MergeRecord (Type.location _R) _R)
+                    Exception.throwIO (MergeRecord (Type.location _R) _R)
 
         Syntax.Field{..} -> do
             existential <- fresh
@@ -1499,17 +1511,17 @@ infer e₀ = do
         -- All the type inference rules for scalars go here.  This part is
         -- pretty self-explanatory: a scalar literal returns the matching
         -- scalar type.
-        Syntax.Scalar{ scalar = Syntax.Bool _, .. } -> do
-            return (Type.Scalar{ scalar = Monotype.Bool, .. }, e₀)
+        Syntax.Scalar{ scalar = Syntax.Bool bool, .. } -> do
+            return (Type.Scalar{ scalar = Monotype.Bool, .. }, Syntax.Scalar{ scalar = Syntax.Bool bool, .. })
 
-        Syntax.Scalar{ scalar = Syntax.Real _, .. } -> do
-            return (Type.Scalar{ scalar = Monotype.Real, .. }, e₀)
+        Syntax.Scalar{ scalar = Syntax.Real real, .. } -> do
+            return (Type.Scalar{ scalar = Monotype.Real, .. }, Syntax.Scalar{ scalar = Syntax.Real real, .. })
 
-        Syntax.Scalar{ scalar = Syntax.Integer _, .. } -> do
-            return (Type.Scalar{ scalar = Monotype.Integer, .. }, e₀)
+        Syntax.Scalar{ scalar = Syntax.Integer integer, .. } -> do
+            return (Type.Scalar{ scalar = Monotype.Integer, .. }, Syntax.Scalar{ scalar = Syntax.Integer integer, .. })
 
-        Syntax.Scalar{ scalar = Syntax.Natural _, .. } -> do
-            return (Type.Scalar{ scalar = Monotype.Natural, .. }, e₀)
+        Syntax.Scalar{ scalar = Syntax.Natural natural, .. } -> do
+            return (Type.Scalar{ scalar = Monotype.Natural, .. }, Syntax.Scalar{ scalar = Syntax.Natural natural, .. })
 
         Syntax.Scalar{ scalar = Syntax.Null, .. } -> do
             -- NOTE: You might think that you could just infer that `null`
@@ -1520,7 +1532,7 @@ infer e₀ = do
 
             push (Context.UnsolvedType existential)
 
-            return (Type.Optional{ type_ = Type.UnsolvedType{..}, .. }, e₀)
+            return (Type.Optional{ type_ = Type.UnsolvedType{..}, .. }, Syntax.Scalar{ scalar = Syntax.Null, .. })
 
         Syntax.Operator{ operator = Syntax.And, .. } -> do
             newLeft <- check left  Type.Scalar{ scalar = Monotype.Bool, location = operatorLocation }
@@ -1556,7 +1568,7 @@ infer e₀ = do
                 Type.Scalar{ scalar = Monotype.Integer } -> return (_L, newTimes)
                 Type.Scalar{ scalar = Monotype.Real    } -> return (_L, newTimes)
                 _ -> do
-                    throwError (InvalidOperands (Syntax.location left) _L')
+                    Exception.throwIO (InvalidOperands (Syntax.location left) _L')
 
         Syntax.Operator{ operator = Syntax.Plus, .. } -> do
             (_L, newLeft) <- infer left
@@ -1579,7 +1591,7 @@ infer e₀ = do
                 Type.List{}                              -> return (_L, newPlus)
 
                 _ -> do
-                    throwError (InvalidOperands (Syntax.location left) _L')
+                    Exception.throwIO (InvalidOperands (Syntax.location left) _L')
 
         Syntax.Builtin{ builtin = Syntax.Some, .. }-> do
             return
@@ -1590,7 +1602,7 @@ infer e₀ = do
                         , type_ = var "a" ~> Type.Optional{ type_ = var "a", .. }
                         , ..
                         }
-                , e₀
+                , Syntax.Builtin{ builtin = Syntax.Some, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.RealEqual, .. }-> do
@@ -1599,7 +1611,7 @@ infer e₀ = do
                 ~>  (   Type.Scalar{ scalar = Monotype.Real, .. }
                     ~>  Type.Scalar{ scalar = Monotype.Bool, .. }
                     )
-                , e₀
+                , Syntax.Builtin{ builtin = Syntax.RealEqual, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.RealLessThan, .. } -> do
@@ -1608,21 +1620,21 @@ infer e₀ = do
                 ~>  (   Type.Scalar{ scalar = Monotype.Real, .. }
                     ~>  Type.Scalar{ scalar = Monotype.Bool, .. }
                     )
-                , e₀
+                , Syntax.Builtin{ builtin = Syntax.RealLessThan, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.RealNegate, .. } -> do
             return
                 (   Type.Scalar{ scalar = Monotype.Real, .. }
                 ~>  Type.Scalar{ scalar = Monotype.Real, .. }
-                , e₀
+                , Syntax.Builtin{ builtin = Syntax.RealNegate, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.RealShow, .. } -> do
             return
                 (   Type.Scalar{ scalar = Monotype.Real, .. }
                 ~>  Type.Scalar{ scalar = Monotype.Text, .. }
-                , e₀
+                , Syntax.Builtin{ builtin = Syntax.RealShow, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.ListDrop, .. } -> do
@@ -1638,7 +1650,7 @@ infer e₀ = do
                             )
                     , ..
                     }
-                , e₀
+                , Syntax.Builtin{ builtin = Syntax.ListDrop, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.ListHead, .. } -> do
@@ -1659,7 +1671,7 @@ infer e₀ = do
                             }
                     , ..
                     }
-                , e₀
+                , Syntax.Builtin{ builtin = Syntax.ListHead, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.ListEqual, .. } -> do
@@ -1679,7 +1691,7 @@ infer e₀ = do
                             )
                     , ..
                     }
-                , e₀
+                , Syntax.Builtin{ builtin = Syntax.ListEqual, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.ListFold, .. } -> do
@@ -1707,7 +1719,7 @@ infer e₀ = do
                         }
                     , ..
                     }
-                , e₀
+                , Syntax.Builtin{ builtin = Syntax.ListFold, .. }
                 )
 
 
@@ -1734,7 +1746,7 @@ infer e₀ = do
                                 }
                     , ..
                     }
-                , e₀
+                , Syntax.Builtin{ builtin = Syntax.ListIndexed, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.ListLast, .. } -> do
@@ -1754,7 +1766,7 @@ infer e₀ = do
                         }
                     , ..
                     }
-                , e₀
+                , Syntax.Builtin{ builtin = Syntax.ListLast, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.ListLength, .. } -> do
@@ -1768,7 +1780,7 @@ infer e₀ = do
                         ~>  Type.Scalar{ scalar = Monotype.Natural, .. }
                     , ..
                     }
-                , e₀
+                , Syntax.Builtin{ builtin = Syntax.ListLength, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.ListMap, .. } -> do
@@ -1790,35 +1802,35 @@ infer e₀ = do
                         }
                     , ..
                     }
-                , e₀
+                , Syntax.Builtin{ builtin = Syntax.ListMap, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.IntegerAbs, .. } -> do
             return
                 (   Type.Scalar{ scalar = Monotype.Integer, .. }
                 ~>  Type.Scalar{ scalar = Monotype.Natural, .. }
-                , e₀
+                , Syntax.Builtin{ builtin = Syntax.IntegerAbs, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.IntegerEven, .. } -> do
             return
                 (   Type.Scalar{ scalar = Monotype.Integer, .. }
                 ~>  Type.Scalar{ scalar = Monotype.Bool, .. }
-                , e₀
+                , Syntax.Builtin{ builtin = Syntax.IntegerEven, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.IntegerNegate, .. } -> do
             return
                 (   Type.Scalar{ scalar = Monotype.Integer, .. }
                 ~>  Type.Scalar{ scalar = Monotype.Integer, .. }
-                , e₀
+                , Syntax.Builtin{ builtin = Syntax.IntegerNegate, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.IntegerOdd, .. } -> do
             return
                 (   Type.Scalar{ scalar = Monotype.Integer, .. }
                 ~>  Type.Scalar{ scalar = Monotype.Bool, .. }
-                , e₀
+                , Syntax.Builtin{ builtin = Syntax.IntegerOdd, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.ListReverse, .. } -> do
@@ -1830,7 +1842,7 @@ infer e₀ = do
                     , type_ = Type.List{ type_ = var "a", .. } ~> Type.List{ type_ = var "a", .. }
                     , ..
                     }
-                , e₀
+                , Syntax.Builtin{ builtin = Syntax.ListReverse, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.ListTake, .. } -> do
@@ -1846,7 +1858,7 @@ infer e₀ = do
                             )
                     , ..
                     }
-                , e₀
+                , Syntax.Builtin{ builtin = Syntax.ListTake, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.JSONFold, .. } -> do
@@ -1889,7 +1901,7 @@ infer e₀ = do
                             )
                     , ..
                     }
-                , e₀
+                , Syntax.Builtin{ builtin = Syntax.JSONFold, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.NaturalFold, .. } -> do
@@ -1903,7 +1915,7 @@ infer e₀ = do
                         ~>  ((var "a" ~> var "a") ~> (var "a" ~> var "a"))
                     , ..
                     }
-                , e₀
+                , Syntax.Builtin{ builtin = Syntax.NaturalFold, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.TextEqual, .. } -> do
@@ -1912,11 +1924,27 @@ infer e₀ = do
                 ~>  (   Type.Scalar{ scalar = Monotype.Text, .. }
                     ~>  Type.Scalar{ scalar = Monotype.Bool, .. }
                     )
-                , e₀
+                , Syntax.Builtin{ builtin = Syntax.TextEqual, .. }
                 )
 
-        Syntax.Embed{ embedded = (type_, _) } -> do
-            return (type_, e₀)
+        Syntax.Embed{..} -> do
+            _Γ <- get
+
+            Status{ manager, input, .. } <- State.get
+
+            let absolute = input <> embedded
+
+            Import.referentiallySane input absolute
+
+            State.put Status{ manager, input = absolute, .. }
+
+            syntax <- liftIO (Import.resolve manager absolute)
+
+            result <- infer syntax
+
+            State.modify (\s -> s{ Grace.Infer.input = input })
+
+            return result
 
 {-| This corresponds to the judgment:
 
@@ -1926,10 +1954,10 @@ infer e₀ = do
     context Δ.
 -}
 check
-    :: (MonadState Status m, MonadError TypeInferenceError m)
-    => Syntax Location (Type Location, Value)
+    :: (MonadState Status m, MonadCatch m, MonadIO m)
+    => Syntax Location Input
     -> Type Location
-    -> m (Syntax Location (Type Location, Value))
+    -> m (Syntax Location Void)
 -- The check function is the most important function to understand for the
 -- bidirectional type-checking algorithm.
 --
@@ -1973,8 +2001,8 @@ check e Type.Forall{..} = do
     scoped (Context.Variable domain name) do
         check e type_
 
-check e@Syntax.Scalar{ scalar = Syntax.Null } Type.Optional{ } = do
-    return e
+check Syntax.Scalar{ scalar = Syntax.Null, .. } Type.Optional{ } = do
+    return Syntax.Scalar{ scalar = Syntax.Null, .. }
 
 check Syntax.Application{ function = Syntax.Builtin{ builtin = Syntax.Some }, argument = e } Type.Optional{ type_ } = do
     check e type_
@@ -1989,9 +2017,9 @@ check e _B@Type.Optional{ type_ } = do
 
             return newE
 
-    normal `catchError` \typeInferenceError -> do
-        newE <- check e type_ `catchError` \_ -> do
-            throwError typeInferenceError
+    normal `Exception.catch` \(typeInferenceError :: TypeInferenceError) -> do
+        newE <- check e type_ `Exception.catch` \(_ :: TypeInferenceError) -> do
+            Exception.throwIO typeInferenceError
 
         let location = Syntax.location e
 
@@ -2101,16 +2129,35 @@ check Syntax.Text{ chunks = Syntax.Chunks text₀ rest, .. } Type.Scalar{ scalar
     return Syntax.Text{ chunks = Syntax.Chunks text₀ newRest, .. }
 check e@Syntax.Text{ } Type.Scalar{ scalar = Monotype.JSON, .. } = do
     check e Type.Scalar{ scalar = Monotype.Text, .. }
-check e@Syntax.Scalar{ scalar = Syntax.Natural _ } Type.Scalar{ scalar = Monotype.JSON } = do
-    return e
-check e@Syntax.Scalar{ scalar = Syntax.Integer _ } Type.Scalar{ scalar = Monotype.JSON } = do
-    return e
-check e@Syntax.Scalar{ scalar = Syntax.Real _ } Type.Scalar{ scalar = Monotype.JSON } = do
-    return e
-check e@Syntax.Scalar{ scalar = Syntax.Bool _ } Type.Scalar{ scalar = Monotype.JSON } = do
-    return e
-check e@Syntax.Scalar{ scalar = Syntax.Null } Type.Scalar{ scalar = Monotype.JSON } = do
-    return e
+check Syntax.Scalar{ scalar = Syntax.Natural natural, ..} Type.Scalar{ scalar = Monotype.JSON } = do
+    return Syntax.Scalar{ scalar = Syntax.Natural natural, .. }
+check Syntax.Scalar{ scalar = Syntax.Integer integer, .. } Type.Scalar{ scalar = Monotype.JSON } = do
+    return Syntax.Scalar{ scalar = Syntax.Integer integer, .. }
+check Syntax.Scalar{ scalar = Syntax.Real real, .. } Type.Scalar{ scalar = Monotype.JSON } = do
+    return Syntax.Scalar{ scalar = Syntax.Real real, .. }
+check Syntax.Scalar{ scalar = Syntax.Bool bool, .. } Type.Scalar{ scalar = Monotype.JSON } = do
+    return Syntax.Scalar{ scalar = Syntax.Bool bool, .. }
+check Syntax.Scalar{ scalar = Syntax.Null, .. } Type.Scalar{ scalar = Monotype.JSON } = do
+    return Syntax.Scalar{ scalar = Syntax.Null, .. }
+
+check Syntax.Embed{ embedded } _B = do
+    _Γ <- get
+
+    Status{ manager, input, .. } <- State.get
+
+    let absolute = input <> embedded
+
+    Import.referentiallySane input absolute
+
+    State.put Status{ manager, input = absolute, .. }
+
+    syntax <- liftIO (Import.resolve manager absolute)
+
+    result <- check syntax _B
+
+    State.modify (\s -> s{ Grace.Infer.input = input })
+
+    return result
 
 -- Sub
 check e _B = do
@@ -2130,10 +2177,10 @@ check e _B = do
     input argument e, under input context Γ, producing an updated context Δ.
 -}
 inferApplication
-    :: (MonadState Status m, MonadError TypeInferenceError m)
+    :: (MonadState Status m, MonadCatch m, MonadIO m)
     => Type Location
-    -> Syntax Location (Type Location, Value)
-    -> m (Type Location, Syntax Location (Type Location, Value))
+    -> Syntax Location Input
+    -> m (Type Location, Syntax Location Void)
 -- ∀App
 inferApplication Type.Forall{ domain = Domain.Type, .. } e = do
     a <- fresh
@@ -2179,23 +2226,29 @@ inferApplication Type.Function{..} e = do
 
     return (output, newE)
 inferApplication Type.VariableType{..} _ = do
-    throwError (NotNecessarilyFunctionType location name)
+    Exception.throwIO (NotNecessarilyFunctionType location name)
 inferApplication _A _ = do
-    throwError (NotFunctionType (location _A) _A)
+    Exception.throwIO (NotFunctionType (location _A) _A)
 
 -- | Infer the `Type` of the given `Syntax` tree
 typeOf
-    :: Syntax Location (Type Location, Value)
-    -> Either TypeInferenceError (Type Location, Syntax Location (Type Location, Value))
-typeOf = typeWith []
+    :: (MonadCatch m, MonadIO m)
+    => Input
+    -> Manager
+    -> Syntax Location Input
+    -> m (Type Location, Syntax Location Void)
+typeOf input manager = typeWith input manager []
 
 -- | Like `typeOf`, but accepts a custom type-checking `Context`
 typeWith
-    :: Context Location
-    -> Syntax Location (Type Location, Value)
-    -> Either TypeInferenceError (Type Location, Syntax Location (Type Location, Value))
-typeWith context syntax = do
-    let initialStatus = Status{ count = 0, context }
+    :: (MonadCatch m, MonadIO m)
+    => Input
+    -> Manager
+    -> Context Location
+    -> Syntax Location Input
+    -> m (Type Location, Syntax Location Void)
+typeWith input manager context syntax = do
+    let initialStatus = Status{ count = 0, context, manager, input }
 
     ((_A, elaborated), Status{ context = _Δ }) <- State.runStateT (infer syntax) initialStatus
 
