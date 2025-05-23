@@ -97,32 +97,44 @@ prompt
     -- ^ Prompt
     -> Text
     -- ^ Model
+    -> Bool
+    -- ^ Web search
     -> Maybe Value
     -- ^ JSON schema
     -> IO Text
-prompt key text model schema = do
+prompt key text model search schema = do
     let keyBytes = Encoding.encodeUtf8 key
 
     let value = Aeson.object
-            [ ("model", toJSON model)
-            , ("messages", toJSON
-                [ Aeson.object
-                    [ ("role", "user")
-                    , ("content", toJSON text)
-                    ]
-                ]
-              )
-            , ("response_format", Aeson.object
-                [ ("type", "json_schema")
-                , ("json_schema", Aeson.object
-                    [ ("name", "result")
-                    , ("schema", toJSON schema)
-                    , ("strict", toJSON True)
+            (   [ ("model", toJSON model)
+                , ("messages", toJSON
+                    [ Aeson.object
+                        [ ("role", "user")
+                        , ("content", toJSON text)
+                        ]
                     ]
                   )
                 ]
-              )
-            ]
+            <>  (   if search
+                    then [ ("web_search_options", Aeson.object [ ]) ]
+                    else [ ]
+                )
+            <>  (   case schema of
+                        Nothing -> [ ]
+                        Just s ->
+                            [ ("response_format", Aeson.object
+                                [ ("type", "json_schema")
+                                , ("json_schema", Aeson.object
+                                    [ ("name", "result")
+                                    , ("schema", toJSON s)
+                                    , ("strict", toJSON True)
+                                    ]
+                                  )
+                                ]
+                              )
+                            ]
+                )
+            )
 
     body <- case Encoding.decodeUtf8' (ByteString.Lazy.toStrict (Aeson.encode value)) of
         Left exception -> Exception.throwIO exception

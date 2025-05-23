@@ -34,6 +34,7 @@ import OpenAI.V1.Chat.Completions
     , CreateChatCompletion(..)
     , Message(..)
     , ResponseFormat(..)
+    , WebSearchOptions(..)
     , _CreateChatCompletion
     )
 
@@ -164,16 +165,18 @@ getMethods key = do
 
     return (OpenAI.makeMethods clientEnv key)
 
-prompt 
+prompt
     :: Methods
     -> Text
     -- ^ Prompt
     -> Text
     -- ^ Model
+    -> Bool
+    -- ^ Web search
     -> Maybe Value
     -- ^ JSON schema
     -> IO Text
-prompt Methods{ createChatCompletion } text model schema = do
+prompt Methods{ createChatCompletion } text model search schema = do
     let response_format = do
             s <- schema
 
@@ -186,10 +189,18 @@ prompt Methods{ createChatCompletion } text model schema = do
                     }
                 }
 
+    let web_search_options
+            | search = Just WebSearchOptions
+                { search_context_size = Nothing
+                , user_location = Nothing
+                }
+            | otherwise = Nothing
+
     ChatCompletionObject{ choices = [ Choice{ message } ] } <- createChatCompletion _CreateChatCompletion
         { messages = [ User{ content = [ Text{ text } ], name = Nothing } ]
         , model = Model model
         , response_format
+        , web_search_options
         }
 
     return (Completions.messageToContent message)
