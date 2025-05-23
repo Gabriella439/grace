@@ -50,6 +50,7 @@ import OpenAI.V1.Chat.Completions
     , CreateChatCompletion(..)
     , _CreateChatCompletion
     , ResponseFormat(..)
+    , WebSearchOptions(..)
     )
 
 import qualified Control.Exception as Exception
@@ -390,24 +391,31 @@ evaluate maybeMethods = loop
             Syntax.Prompt{ schema = Just schema, ..} -> do
                 value <- loop env arguments
 
-                let extractResponse (Value.Record [("response", response)]) = do
-                        return response
-                    extractResponse other = do
-                        return other
-
                 case value of
                     Value.Record fieldValues
                         | Just (Value.Text prompt) <- HashMap.lookup "text" fieldValues -> case maybeMethods of
                             Nothing -> do
                                 Exception.throwIO MissingCredentials
                             Just Methods{..} -> do
+                                let search = case HashMap.lookup "search" fieldValues of
+                                        Just (Value.Application (Value.Builtin Some) (Value.Scalar (Syntax.Bool c))) -> c
+                                        _ -> False
+
                                 let model = case HashMap.lookup "model" fieldValues of
                                         Just (Value.Application (Value.Builtin Some) (Value.Text m)) -> m
-                                        _ -> "o4-mini"
+                                        _ | search -> "gpt-4o-search-preview"
+                                          | otherwise -> "o4-mini"
 
                                 let code = case HashMap.lookup "code" fieldValues of
                                         Just (Value.Application (Value.Builtin Some) (Value.Scalar (Syntax.Bool c))) -> c
                                         _ -> False
+
+                                let web_search_options
+                                        | search = Just WebSearchOptions
+                                            { search_context_size = Nothing
+                                            , user_location = Nothing
+                                            }
+                                        | otherwise = Nothing
 
                                 if code
                                     then do
@@ -494,6 +502,7 @@ evaluate maybeMethods = loop
                                                     ChatCompletionObject{ choices = [ OpenAI.Choice{ message } ] } <- createChatCompletion _CreateChatCompletion
                                                         { messages = [ OpenAI.User{ content = [ OpenAI.Text{ text = input } ], name = Nothing } ]
                                                         , model = Model model
+                                                        , web_search_options
                                                         }
 
                                                     let output = OpenAI.messageToContent message
@@ -510,25 +519,16 @@ evaluate maybeMethods = loop
 
                                         retry []
                                     else do
-                                        let (recordSchema, extract) = case schema of
-                                                t@Type.Record{ } -> (t, return)
-                                                t -> (Type.Record location(Type.Fields [("response", t)] Monotype.EmptyFields), extractResponse)
+                                        let decode text = do
+                                                let bytes = Encoding.encodeUtf8 text
 
-                                        (jsonSchema, newRecordSchema) <- case toJSONSchema recordSchema of
-                                            Left exception -> Exception.throwIO exception
-                                            Right result -> return result
+                                                let lazyBytes = ByteString.Lazy.fromStrict bytes
 
-                                        let input =
-                                                prompt <> "\n\
-                                                \\n\
-                                                \Generate JSON output matching the following type:\n\
-                                                \\n\
-                                                \" <> Pretty.toSmart newRecordSchema
+                                                case Aeson.eitherDecode lazyBytes of
+                                                    Left message_ -> Exception.throwIO JSONDecodingFailed{ message = message_, text }
+                                                    Right v -> return v
 
-                                        ChatCompletionObject{ choices = [ OpenAI.Choice{ message } ] } <- createChatCompletion _CreateChatCompletion
-                                            { messages = [ OpenAI.User{ content = [ OpenAI.Text{ text = input } ], name = Nothing } ]
-                                            , model = Model model
-                                            , response_format = Just JSON_Schema
+                                        let toResponseFormat jsonSchema = Just JSON_Schema
                                                 { json_schema = JSONSchema
                                                     { description = Nothing
                                                     , name = "result"
@@ -536,22 +536,84 @@ evaluate maybeMethods = loop
                                                     , strict = Just True
                                                     }
                                                 }
+
+                                        let requestJSON newSchema =
+                                                prompt <> "\n\
+                                                \\n\
+                                                \Generate JSON output matching the following type:\n\
+                                                \\n\
+                                                \" <> Pretty.toSmart newSchema
+
+                                        let extractText = do
+                                                let extract text = do
+                                                        return (Value.Text text)
+
+                                                return
+                                                    ( prompt
+                                                    , Nothing
+                                                    , extract
+                                                    )
+
+                                        let extractRecord = do
+                                                (jsonSchema, newSchema) <- case toJSONSchema schema of
+                                                    Left exception -> Exception.throwIO exception
+                                                    Right result -> return result
+
+                                                let extract text = do
+                                                        v <- decode text
+
+                                                        case fromJSON newSchema v of
+                                                            Left invalidJSON -> Exception.throwIO invalidJSON
+                                                            Right e -> return e
+
+                                                return
+                                                    ( requestJSON newSchema
+                                                    , toResponseFormat jsonSchema
+                                                    , extract
+                                                    )
+
+                                        let extractNonRecord = do
+                                                let adjustedSchema =
+                                                        Type.Record location (Type.Fields [("response", schema)] Monotype.EmptyFields)
+
+                                                (jsonSchema, newSchema) <- case toJSONSchema adjustedSchema of
+                                                    Left exception -> Exception.throwIO exception
+                                                    Right result -> return result
+
+                                                let extract text = do
+                                                        v <- decode text
+
+                                                        expression <- case fromJSON newSchema v of
+                                                            Left invalidJSON -> Exception.throwIO invalidJSON
+                                                            Right expression -> return expression
+
+                                                        case expression of
+                                                            Value.Record [("response", response)] -> do
+                                                                return response
+                                                            other -> do
+                                                                return other
+
+                                                return
+                                                    ( requestJSON newSchema
+                                                    , toResponseFormat jsonSchema
+                                                    , extract
+                                                    )
+
+                                        (text, response_format, extract) <- case schema of
+                                                Type.Scalar{ scalar = Monotype.Text } -> extractText
+                                                Type.Record{ } -> extractRecord
+                                                _ -> extractNonRecord
+
+                                        ChatCompletionObject{ choices = [ OpenAI.Choice{ message } ] } <- createChatCompletion _CreateChatCompletion
+                                            { messages = [ OpenAI.User{ content = [ OpenAI.Text{ text } ], name = Nothing } ]
+                                            , model = Model model
+                                            , response_format
+                                            , web_search_options
                                             }
 
                                         let output = OpenAI.messageToContent message
-                                        let bytes = Encoding.encodeUtf8 output
-                                        let lazyBytes =
-                                                ByteString.Lazy.fromStrict bytes
 
-                                        v <- case Aeson.eitherDecode lazyBytes of
-                                            Left message_ -> Exception.throwIO JSONDecodingFailed{ message = message_, text = output }
-                                            Right v -> return v
-
-                                        case fromJSON newRecordSchema v of
-                                            Left invalidJSON ->
-                                                Exception.throwIO invalidJSON
-                                            Right e ->
-                                                extract e
+                                        extract output
                     other ->
                         return (Value.Prompt other)
 

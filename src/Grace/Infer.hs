@@ -1514,6 +1514,7 @@ infer e₀ = do
                         [ ("text", Type.Scalar{ scalar = Monotype.Text, .. })
                         , ("model", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Text, .. }, .. })
                         , ("code", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Bool, .. }, .. })
+                        , ("search", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Bool, .. }, .. })
                         ]
                         Monotype.EmptyFields
                 , ..
@@ -2162,6 +2163,7 @@ check Syntax.Prompt{..} _B = do
                 [ ("text", Type.Scalar{ scalar = Monotype.Text, .. })
                 , ("model", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Text, .. }, .. })
                 , ("code", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Bool, .. }, .. })
+                , ("search", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Bool, .. }, .. })
                 ]
                 Monotype.EmptyFields
         , ..
