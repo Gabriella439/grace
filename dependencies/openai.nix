@@ -8,8 +8,8 @@ mkDerivation {
   version = "1.1.0";
   src = fetchgit {
     url = "https://github.com/MercuryTechnologies/openai.git";
-    sha256 = "1z25h5nnsm5x6lbqmz58k4va3hymab53d7rj2apm5yv7058y5zys";
-    rev = "681e8f6e9802764ddb64ea428ffd79035b00c721";
+    sha256 = "1wfgbsifz1svyyb3x6zlfvakc2ydzz3gdh3xlw2fbcrb3kz492qs";
+    rev = "cf8b361762529ec7f1b3326bf238293c9a4ae824";
     fetchSubmodules = true;
   };
   isLibrary = true;
