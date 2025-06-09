@@ -377,195 +377,212 @@ evaluate maybeMethods = loop
                 value <- loop env arguments
 
                 case value of
-                    Value.Record fieldValues
-                        | Just (Value.Text prompt) <- HashMap.lookup "text" fieldValues -> case maybeMethods of
-                            Nothing -> do
-                                Exception.throwIO MissingCredentials
-                            Just methods -> do
-                                let search = case HashMap.lookup "search" fieldValues of
-                                        Just (Value.Application (Value.Builtin Some) (Value.Scalar (Syntax.Bool c))) -> c
-                                        _ -> False
+                    Value.Record fieldValues -> case maybeMethods of
+                        Nothing -> do
+                            Exception.throwIO MissingCredentials
+                        Just methods -> do
+                            let prompt = do
+                                    Value.Application (Value.Builtin Some) (Value.Text p) <- HashMap.lookup "text" fieldValues
+                                    return p
 
-                                let model = case HashMap.lookup "model" fieldValues of
-                                        Just (Value.Application (Value.Builtin Some) (Value.Text m)) -> m
-                                        _ | search -> "gpt-4o-search-preview"
-                                          | otherwise -> "o4-mini"
+                            let search = case HashMap.lookup "search" fieldValues of
+                                    Just (Value.Application (Value.Builtin Some) (Value.Scalar (Syntax.Bool c))) -> c
+                                    _ -> False
 
-                                let code = case HashMap.lookup "code" fieldValues of
-                                        Just (Value.Application (Value.Builtin Some) (Value.Scalar (Syntax.Bool c))) -> c
-                                        _ -> False
+                            let model = case HashMap.lookup "model" fieldValues of
+                                    Just (Value.Application (Value.Builtin Some) (Value.Text m)) -> m
+                                    _ | search -> "gpt-4o-search-preview"
+                                      | otherwise -> "o4-mini"
 
-                                if code
-                                    then do
-                                        let retry :: [(Text, SomeException)] -> IO Value
-                                            retry errors
-                                                | (_, interpretError) : rest <- errors
-                                                , length rest == 3 = do
-                                                    Exception.throwIO interpretError
-                                                | otherwise = do
-                                                    examples <- do
-                                                        let files :: [FilePath]
-                                                            files =
-                                                                [ "learn-in-y-minutes.ffg"
-                                                                , "chaining.ffg"
-                                                                , "prompt.ffg"
-                                                                , "tools.ffg"
-                                                                ]
+                            let code = case HashMap.lookup "code" fieldValues of
+                                    Just (Value.Application (Value.Builtin Some) (Value.Scalar (Syntax.Bool c))) -> c
+                                    _ -> False
 
-                                                        let process file = do
-                                                                content <- DataFile.readDataFile ("examples" </> file)
+                            if code
+                                then do
+                                    let retry :: [(Text, SomeException)] -> IO Value
+                                        retry errors
+                                            | (_, interpretError) : rest <- errors
+                                            , length rest == 3 = do
+                                                Exception.throwIO interpretError
+                                            | otherwise = do
+                                                examples <- do
+                                                    let files :: [FilePath]
+                                                        files =
+                                                            [ "learn-in-y-minutes.ffg"
+                                                            , "chaining.ffg"
+                                                            , "prompt.ffg"
+                                                            , "tools.ffg"
+                                                            ]
 
-                                                                return
-                                                                    ( "Example: " <> Text.pack file <> "\n\
-                                                                      \\n\
-                                                                      \" <> content <> "\n\
-                                                                      \\n"
-                                                                    )
+                                                    let process file = do
+                                                            content <- DataFile.readDataFile ("examples" </> file)
 
-                                                        traverse process files
-
-                                                    prompts <- do
-                                                        let files :: [FilePath]
-                                                            files =
-                                                                [ "inference.md"
-                                                                , "abnf.md"
-                                                                ]
-
-                                                        let process file = do
-                                                                content <- DataFile.readDataFile ("prompts" </> file)
-
-                                                                return
-                                                                    ( "Post: " <> Text.pack file <> "\n\
-                                                                      \\n\
-                                                                      \" <> content <> "\n\
-                                                                      \\n"
-                                                                    )
-
-                                                        traverse process files
-
-                                                    let failedAttempts = do
-                                                            (index, (program, interpretError)) <- zip [ 0 .. ] (reverse errors)
                                                             return
-                                                                ( "Your failed attempt " <> Text.pack (show (index :: Natural)) <> ":\n\
+                                                                ( "Example: " <> Text.pack file <> "\n\
                                                                   \\n\
-                                                                  \" <> program <> "\n\
-                                                                  \\n\
-                                                                  \Error:\n\
-                                                                  \" <> Text.pack (displayException interpretError) <> "\n\
+                                                                  \" <> content <> "\n\
                                                                   \\n"
                                                                 )
 
-                                                    let input =
-                                                            Text.concat prompts <> "\n\
+                                                    traverse process files
+
+                                                prompts <- do
+                                                    let files :: [FilePath]
+                                                        files =
+                                                            [ "inference.md"
+                                                            , "abnf.md"
+                                                            ]
+
+                                                    let process file = do
+                                                            content <- DataFile.readDataFile ("prompts" </> file)
+
+                                                            return
+                                                                ( "Post: " <> Text.pack file <> "\n\
+                                                                  \\n\
+                                                                  \" <> content <> "\n\
+                                                                  \\n"
+                                                                )
+
+                                                    traverse process files
+
+                                                let failedAttempts = do
+                                                        (index, (program, interpretError)) <- zip [ 0 .. ] (reverse errors)
+                                                        return
+                                                            ( "Your failed attempt " <> Text.pack (show (index :: Natural)) <> ":\n\
+                                                              \\n\
+                                                              \" <> program <> "\n\
+                                                              \\n\
+                                                              \Error:\n\
+                                                              \" <> Text.pack (displayException interpretError) <> "\n\
+                                                              \\n"
+                                                            )
+
+                                                let instructions = case prompt of
+                                                        Nothing ->
+                                                            ""
+                                                        Just p ->
+                                                            "… according to these instructions:\n\
                                                             \\n\
-                                                            \" <> Text.concat examples <> "\n\
-                                                            \\n\
-                                                            \Now generate a standalone Grace expression matching the following type:\n\
-                                                            \\n\
-                                                            \" <> Pretty.toSmart schema <> "\n\
-                                                            \\n\
-                                                            \… according to these instructions:\n\
-                                                            \\n\
-                                                            \" <> prompt <> "\n\
-                                                            \\n\
-                                                            \Output a naked Grace expression without any code fence or explanation.\n\
-                                                            \Your response in its entirety should be a valid input to the Grace interpreter.\n\
-                                                            \\n\
-                                                            \" <> Text.concat failedAttempts
+                                                            \" <> p
+                                                let input =
+                                                        Text.concat prompts <> "\n\
+                                                        \\n\
+                                                        \" <> Text.concat examples <> "\n\
+                                                        \\n\
+                                                        \Now generate a standalone Grace expression matching the following type:\n\
+                                                        \\n\
+                                                        \" <> Pretty.toSmart schema <> "\n\
+                                                        \\n\
+                                                        \" <> instructions <> "\n\
+                                                        \\n\
+                                                        \Output a naked Grace expression without any code fence or explanation.\n\
+                                                        \Your response in its entirety should be a valid input to the Grace interpreter.\n\
+                                                        \\n\
+                                                        \" <> Text.concat failedAttempts
 
-                                                    output <- HTTP.prompt methods input model search Nothing
+                                                output <- HTTP.prompt methods input model search Nothing
 
-                                                    manager <- HTTP.newManager
+                                                manager <- HTTP.newManager
 
-                                                    result <- Except.runExceptT (Interpret.interpretWith maybeMethods [] (Just schema) manager (Code "(generated)" output))
+                                                result <- Except.runExceptT (Interpret.interpretWith maybeMethods [] (Just schema) manager (Code "(generated)" output))
 
-                                                    case result of
-                                                        Left interpretError ->
-                                                            retry ((output, interpretError) : errors)
-                                                        Right (_, e) ->
-                                                            return e
+                                                case result of
+                                                    Left interpretError ->
+                                                        retry ((output, interpretError) : errors)
+                                                    Right (_, e) ->
+                                                        return e
 
-                                        retry []
-                                    else do
-                                        let decode text = do
-                                                let bytes = Encoding.encodeUtf8 text
+                                    retry []
+                                else do
+                                    let decode text = do
+                                            let bytes = Encoding.encodeUtf8 text
 
-                                                let lazyBytes = ByteString.Lazy.fromStrict bytes
+                                            let lazyBytes = ByteString.Lazy.fromStrict bytes
 
-                                                case Aeson.eitherDecode lazyBytes of
-                                                    Left message_ -> Exception.throwIO JSONDecodingFailed{ message = message_, text }
-                                                    Right v -> return v
+                                            case Aeson.eitherDecode lazyBytes of
+                                                Left message_ -> Exception.throwIO JSONDecodingFailed{ message = message_, text }
+                                                Right v -> return v
 
-                                        let requestJSON newSchema =
-                                                prompt <> "\n\
-                                                \\n\
-                                                \Generate JSON output matching the following type:\n\
-                                                \\n\
-                                                \" <> Pretty.toSmart newSchema
+                                    let requestJSON newSchema =
+                                            instructions <> "Generate JSON output matching the following type:\n\
+                                            \\n\
+                                            \" <> Pretty.toSmart newSchema
+                                          where
+                                            instructions = case prompt of
+                                                Nothing ->
+                                                    ""
+                                                Just p ->
+                                                    p <> "\n\
+                                                    \\n"
 
-                                        let extractText = do
-                                                let extract text = do
-                                                        return (Value.Text text)
+                                    let extractText = do
+                                            let extract text = do
+                                                    return (Value.Text text)
 
-                                                return
-                                                    ( prompt
-                                                    , Nothing
-                                                    , extract
-                                                    )
+                                            let instructions = case prompt of
+                                                    Nothing -> ""
+                                                    Just p  -> p
 
-                                        let extractRecord = do
-                                                (jsonSchema, newSchema) <- case toJSONSchema schema of
-                                                    Left exception -> Exception.throwIO exception
-                                                    Right result -> return result
+                                            return
+                                                ( instructions
+                                                , Nothing
+                                                , extract
+                                                )
 
-                                                let extract text = do
-                                                        v <- decode text
+                                    let extractRecord = do
+                                            (jsonSchema, newSchema) <- case toJSONSchema schema of
+                                                Left exception -> Exception.throwIO exception
+                                                Right result -> return result
 
-                                                        case fromJSON newSchema v of
-                                                            Left invalidJSON -> Exception.throwIO invalidJSON
-                                                            Right e -> return e
+                                            let extract text = do
+                                                    v <- decode text
 
-                                                return
-                                                    ( requestJSON newSchema
-                                                    , Just jsonSchema
-                                                    , extract
-                                                    )
+                                                    case fromJSON newSchema v of
+                                                        Left invalidJSON -> Exception.throwIO invalidJSON
+                                                        Right e -> return e
 
-                                        let extractNonRecord = do
-                                                let adjustedSchema =
-                                                        Type.Record location (Type.Fields [("response", schema)] Monotype.EmptyFields)
+                                            return
+                                                ( requestJSON newSchema
+                                                , Just jsonSchema
+                                                , extract
+                                                )
 
-                                                (jsonSchema, newSchema) <- case toJSONSchema adjustedSchema of
-                                                    Left exception -> Exception.throwIO exception
-                                                    Right result -> return result
+                                    let extractNonRecord = do
+                                            let adjustedSchema =
+                                                    Type.Record location (Type.Fields [("response", schema)] Monotype.EmptyFields)
 
-                                                let extract text = do
-                                                        v <- decode text
+                                            (jsonSchema, newSchema) <- case toJSONSchema adjustedSchema of
+                                                Left exception -> Exception.throwIO exception
+                                                Right result -> return result
 
-                                                        expression <- case fromJSON newSchema v of
-                                                            Left invalidJSON -> Exception.throwIO invalidJSON
-                                                            Right expression -> return expression
+                                            let extract text = do
+                                                    v <- decode text
 
-                                                        case expression of
-                                                            Value.Record [("response", response)] -> do
-                                                                return response
-                                                            other -> do
-                                                                return other
+                                                    expression <- case fromJSON newSchema v of
+                                                        Left invalidJSON -> Exception.throwIO invalidJSON
+                                                        Right expression -> return expression
 
-                                                return
-                                                    ( requestJSON newSchema
-                                                    , Just jsonSchema
-                                                    , extract
-                                                    )
+                                                    case expression of
+                                                        Value.Record [("response", response)] -> do
+                                                            return response
+                                                        other -> do
+                                                            return other
 
-                                        (text, responseFormat, extract) <- case schema of
-                                                Type.Scalar{ scalar = Monotype.Text } -> extractText
-                                                Type.Record{ } -> extractRecord
-                                                _ -> extractNonRecord
+                                            return
+                                                ( requestJSON newSchema
+                                                , Just jsonSchema
+                                                , extract
+                                                )
 
-                                        output <- HTTP.prompt methods text model search responseFormat
+                                    (text, responseFormat, extract) <- case schema of
+                                            Type.Scalar{ scalar = Monotype.Text } -> extractText
+                                            Type.Record{ } -> extractRecord
+                                            _ -> extractNonRecord
 
-                                        extract output
+                                    output <- HTTP.prompt methods text model search responseFormat
+
+                                    extract output
                     other ->
                         return (Value.Prompt other)
 
