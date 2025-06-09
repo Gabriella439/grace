@@ -46,7 +46,6 @@ import {-# SOURCE #-} qualified Grace.Interpret as Interpret
 
 import qualified Control.Exception as Exception
 import qualified Control.Monad as Monad
-import qualified Control.Monad.Except as Except
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.HashMap.Strict.InsOrd as HashMap
@@ -398,9 +397,11 @@ evaluate maybeMethods = loop
                                     Just (Value.Application (Value.Builtin Some) (Value.Scalar (Syntax.Bool c))) -> c
                                     _ -> False
 
+                            manager <- HTTP.newManager
+
                             if code
                                 then do
-                                    let retry :: [(Text, SomeException)] -> IO Value
+                                    let retry :: [(Text, SomeException)] -> IO (Type Location, Value)
                                         retry errors
                                             | (_, interpretError) : rest <- errors
                                             , length rest == 3 = do
@@ -483,17 +484,13 @@ evaluate maybeMethods = loop
 
                                                 output <- HTTP.prompt methods input model search Nothing
 
-                                                manager <- HTTP.newManager
-
-                                                result <- Except.runExceptT (Interpret.interpretWith maybeMethods [] (Just schema) manager (Code "(generated)" output))
-
-                                                case result of
-                                                    Left interpretError ->
+                                                Interpret.interpretWith maybeMethods [] (Just schema) manager (Code "(generated)" output)
+                                                    `Exception.catch` \interpretError -> do
                                                         retry ((output, interpretError) : errors)
-                                                    Right (_, e) ->
-                                                        return e
 
-                                    retry []
+                                    (_, e) <- retry []
+
+                                    return e
                                 else do
                                     let decode text = do
                                             let bytes = Encoding.encodeUtf8 text
