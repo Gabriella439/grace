@@ -12,37 +12,125 @@ expression
 ; A variable name (e.g. `x`)
 identifier  = (LOWER / "_") (ALPHANUM / "_" / "-" / "/")
 
-; An name for one of the alternatives of a union
+; A name for one of the alternatives of a union
 alternative = (UPPER / "_") (ALPHANUM / "_" / "-" / "/")
 
 lambda = "\" 1*name-binding "->" expression
 
+; If you annotate a function argument with a type you have to parenthesize the
+; annotation.
+;
+; BAD:
+;
+; ```
+; \x : Natural ->
+;     let f y : Natural : Natural = x + y
+;     in  f 2
+; ```
+;
+; GOOD:
+;
+; ```
+; \(x : Natural) ->
+;     let f (y : Natural) : Natural = x + y
+;     in  f 2
+; ```
+;
+; Also note that Grace does not provide syntactic support for destructuring
+; records:
+;
+;
+; BAD:
+;
+; ```
+; \{ x, y } -> x + y
+; ```
+;
+; GOOD:
+;
+; ```
+; \p -> p.x + p.y
+; ```
 name-binding = identifier / "(" identifier ":" type ")"
 
 ; Note: Every sequence of `let`s (even top-level `let`s) must have a matching
-; `in`.  Dangling `let`s are a parse error in any context
+; `in`.  Dangling `let`s are a parse error in any context.
+;
+; BAD:
+;
+;     let x = 2
+;     let y = 3  # Missing `in` at the end, which is a syntax error
+;
+; GOOD:
+;
+;     let x = 2
+;     let y = 3
+;     in  { x, y }  # To "export" let bindings, package them in a record
 let = 1*binding "in" expression
 
+; Every binding must begin with a `let` because Grace is not
+; whitespace-sensitive.
+;
+; BAD:
+;
+; ```
+; let x = 2
+;     y = 3  # Missing `let`, so this is misparsed as `let x = 2 y = 3`
+; in  x + y
+; ```
+;
+; GOOD:
+;
+; ```
+; let x = 2
+; let y = 3
+; in  x + y
+; ```
 binding = "let" identifier *name-binding [ ":" type ] "=" expression
 
 if = "if" expression "then" expression "else" expression
 
 annotation = operator ":" type
 
-; Grace has an *extremely* limited set of operators.  There are no other
-; operators
+; Grace has an *extremely* limited set of operators.  There are no operators
+; other than these ones
+;
+; Most notably, Grace does not support the following operators:
+;
+; - subtraction (`-`)
+;
+;   Instead of `x - y`, use `x + {Natural,Integer/Real}/negate y`.
+;
+; - division (`/`)
+;
+;   Grace does not support division at all.
+;
+; - equality (`==`)
+;
+;   Use one of the following alternatives instead:
+;
+;   - `Text`: use `Text/equal`
+;   - `Natural`, `Integer`, or `Real`: use `Real/equal`
+;   - `List`: use `List/equal`
+;   - `Bool`: use an `if` expression
+;   - unions: use a `merge` expression
+;   - records; compare the records field-wise
+;
+; - comparison (`>`, `>=`, `<`, `<=`)
+;
+;   Use `Real/lessThan` and `Real/equal` instead.
 operator = and *( "||" and )
 and = plus *( "&&" plus )
 plus = times *( "+" times )
 times = application *( "*" application )
 
 application
-  ; Keyword to prompt an LLM to generate either JSON (the default) or Grace
+  ; Keyword to prompt an LLM to generate a plain value (the default) or Grace
   ; code (when given `code: true` as an argument)
   ;
   ; The `prompt` keyword technically only takes one argument.  Arguments after
   ; the first one are treated as ordinary function applications (which comes in
-  ; handy if you're Grace code for a function)
+  ; handy if you're generating Grace code for a function)
   = "prompt" 1*projection
 
   ; Keyword to pattern match on a union
@@ -85,16 +173,7 @@ primitive
 ; https://www.haskellforall.com/2021/08/namespaced-de-bruijn-indices.html
 ;
 ; The vast majority of the time you do *not* need to use this feature and it
-; mainly exists so that when Grace β-reduces something like this:
-;
-;     \x -> (\y x -> y) x
-;
-; … the result can be pretty-printed without variable name mangling like this:
-;
-;     \x x -> x@1
-;
-; … although it *is* legal in input Grace expressions if you *really* want to
-; refer to shadowed variables.
+; solely exists so that you can reference shadowed-variables.
 variable = identifier [ "@" integer ]
 
 boolean = "true" / "false"
@@ -110,13 +189,33 @@ integer = "-" natural
 ; All other numbers are parsed as `Real`s
 real = [ "-" ] 1*DIGIT "." 1*DIGIT
 
-string = '"' *( character / escape ) '"'
-character = %x20-21 / %x23-5B / %x5D-7E
-escape = "\\" ( %x22 / "\\" / "n" / "t" / "r" / "b" / "f" )
+string = '"' *( character / interpolation / escape) '"'
 
-record = "{" [ projection-value *( "," projection-value ) ] "}"
+character = %x20-21 / %x23-5B / %x5D-7E
+
+; Interpolated expressions must have type `Text`.  Grace does *not* perform
+; any automatic conversion of interpolated values to `Text`.  If you want to
+; interpolate a number, then use:
+;
+; ```
+; "… ${Real/show number} …"
+; ```
+interpolation = "${" expression "}"
+
+; NOTE: You can escape a string interpolation using a backslash like this:
+;
+; ```
+; "Example: \${…}"
+; ```
+;
+; … if you don't want Grace to interpret the string interpolation.  This comes
+; in handy if you, say, want to use Grace to generate a Bash script without
+; interpreting Bash string interpolations.
+escape = "\\" ( %x22 / "\\" / "n" / "t" / "r" / "b" / "f" / "$")
 
 list = "[" [ expression *( "," expression ) ] "]"
+
+record = "{" [ projection-value *( "," projection-value ) ] "}"
 
 projection-value
   ; Grace uses JSON syntax for projection values: ':' instead of '='.  This is
@@ -126,6 +225,8 @@ projection-value
 
   ; Field punning.  In other words, `{ x }` is the same thing as `{ x: x }`
   / field
+
+field = identifier / alternative / string
 
 builtin
     = "Real/equal"      ; Real -> Real -> Bool
@@ -161,8 +262,6 @@ builtin
     / "Natural/fold"    ; forall (a : Type) . Natural -> (a -> a) -> a -> a
     / "Text/equal"      ; Text -> Text -> Bool
 
-field = identifier / alternative / string
-
 type = quantified-type
 
 quantified-type = *forall function-type
@@ -190,5 +289,6 @@ primitive-type
   / "(" type ")"
 
 record-type = "{" [ field ":" type *( "," field ":" type ) ] [ "," identifier ] "}"
+
 union-type = "<" [ alternative ":" type *( "|" alternative ":" type ) ] [ "|" identifier ] ">"
 ```
