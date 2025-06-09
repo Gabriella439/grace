@@ -1511,7 +1511,7 @@ infer e₀ = do
             newArguments <- check arguments Type.Record
                 { fields =
                     Type.Fields
-                        [ ("text", Type.Scalar{ scalar = Monotype.Text, .. })
+                        [ ("text", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Text, .. }, .. })
                         , ("model", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Text, .. }, .. })
                         , ("code", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Bool, .. }, .. })
                         , ("search", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Bool, .. }, .. })
@@ -2160,7 +2160,7 @@ check Syntax.Prompt{..} _B = do
     newArguments <- check arguments Type.Record
         { fields =
             Type.Fields
-                [ ("text", Type.Scalar{ scalar = Monotype.Text, .. })
+                [ ("text", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Text, .. }, .. })
                 , ("model", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Text, .. }, .. })
                 , ("code", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Bool, .. }, .. })
                 , ("search", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Bool, .. }, .. })
