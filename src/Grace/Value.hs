@@ -6,7 +6,8 @@
 -}
 module Grace.Value
     ( -- * Value
-      Closure(..)
+      Names(..)
+    , Closure(..)
     , Value(..)
     ) where
 
@@ -25,6 +26,12 @@ import qualified Data.Sequence as Seq
 import qualified Grace.Compat as Compat
 import qualified Grace.Syntax as Syntax
 
+{-| This is basically `Syntax.NameBinding` but with only the names and not
+    the values or locations
+-}
+data Names = Name Text | FieldNames [Text]
+    deriving stock (Eq, Show)
+
 {-| A `Closure` captures the current evaluation environment in order to defer
     evaluation until the value of some bound variable is known
 
@@ -36,7 +43,7 @@ import qualified Grace.Syntax as Syntax
     This provides efficiency comparable to a higher-order abstract syntax
     tree, except using a first-order representation.
 -}
-data Closure = Closure Text [(Text, Value)] (Syntax Location Void)
+data Closure = Closure Names [(Text, Value)] (Syntax Location Void)
     deriving stock (Eq, Show)
 
 {-| This type represents a fully evaluated expression with no reducible

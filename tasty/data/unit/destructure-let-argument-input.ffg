@@ -1,0 +1,3 @@
+let f { x, y : Natural } = x + y
+
+in  f { x: 2, y: 3 }
