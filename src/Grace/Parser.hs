@@ -51,11 +51,13 @@ import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..), Offset(..))
-import Grace.Syntax (Binding(..), Chunks(..), NameBinding(..), Syntax(..))
 import Grace.Type (Type(..))
 import Prelude hiding (lex, lines, unlines)
 import Text.Earley (Grammar, Prod, Report(..), rule, (<?>))
 import Text.Megaparsec (ParseErrorBundle(..), State(..), try)
+
+import Grace.Syntax
+    (Binding(..), Chunks(..), FieldName(..), NameBinding(..), Syntax(..))
 
 import qualified Control.Monad as Monad
 import qualified Control.Monad.Combinators as Combinators
@@ -846,7 +848,24 @@ grammar endsWithBrace = mdo
                 ~(nameLocation, name) <- locatedLabel
                 pure NameBinding{ annotation = Nothing, .. }
 
-        annotated <|> unannotated
+        let fields = do
+                let parseAnnotation = do
+                        parseToken Grace.Parser.Colon
+                        annotation <- quantifiedType
+                        pure (Just annotation)
+
+                let parseFieldName = do
+                        ~(fieldNameLocation, name) <- locatedLabel
+                        annotation <- parseAnnotation <|> pure Nothing
+                        return FieldName{ fieldNameLocation, name, annotation }
+
+                fieldNamesLocation <- locatedToken Grace.Parser.OpenBrace
+                fieldNames <- parseFieldName `sepBy` parseToken Grace.Parser.Comma
+                parseToken Grace.Parser.CloseBrace
+
+                pure FieldNamesBinding{ fieldNamesLocation, fieldNames }
+
+        annotated <|> unannotated <|> fields
 
     expression <- rule
         (   do  location <- locatedToken Grace.Parser.Lambda

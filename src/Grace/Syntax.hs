@@ -22,6 +22,7 @@ module Grace.Syntax
     , Scalar(..)
     , Operator(..)
     , Builtin(..)
+    , FieldName(..)
     , NameBinding(..)
     , Binding(..)
     ) where
@@ -849,18 +850,52 @@ prettyPrimitiveExpression other = Pretty.group (Pretty.flatAlt long short)
             <>  punctuation ")"
             )
 
+{-| A bound field name
+
+    >>> pretty (FieldName () "x" Nothing)
+    x
+-}
+data FieldName s = FieldName
+    { fieldNameLocation :: s
+    , name :: Text
+    , annotation :: Maybe (Type s)
+    } deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
+
+instance IsString (FieldName ()) where
+    fromString string = FieldName
+        { fieldNameLocation = ()
+        , name = fromString string
+        , annotation = Nothing
+        }
+
+instance Pretty (FieldName s) where
+    pretty FieldName{ name, annotation = Nothing } =
+        label (pretty name)
+    pretty FieldName{ name, annotation = Just type_ } =
+        label (pretty name) <> " " <> punctuation ":" <> " " <> pretty type_
+
 {-| A bound variable, possibly with a type annotation
 
     >>> pretty (NameBinding () "x" Nothing)
     x
     >>> pretty (NameBinding () "x" (Just "X"))
     (x : X)
+    >>> pretty (FieldNamesBinding () [])
+    { }
+    >>> pretty (FieldNamesBinding () [ "x", "y" ])
+    { x, y }
 -}
-data NameBinding s = NameBinding
-    { nameLocation :: s
-    , name :: Text
-    , annotation :: Maybe (Type s)
-    } deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
+data NameBinding s
+    = NameBinding
+        { nameLocation :: s
+        , name :: Text
+        , annotation :: Maybe (Type s)
+        }
+    | FieldNamesBinding
+        { fieldNamesLocation :: s
+        , fieldNames :: [FieldName s]
+        }
+    deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
 
 instance IsString (NameBinding ()) where
     fromString string =
@@ -881,6 +916,17 @@ instance Pretty (NameBinding s) where
         <>  " "
         <>  pretty type_
         <>  punctuation ")"
+    pretty FieldNamesBinding{ fieldNames = [ ] } =
+            punctuation "{"
+        <>  " "
+        <>  punctuation "}"
+    pretty FieldNamesBinding{ fieldNames = fieldName : fieldNames } =
+            punctuation "{"
+        <>  " "
+        <>  pretty fieldName
+        <>  foldMap (\f -> punctuation "," <> " " <> pretty f) fieldNames
+        <>  " "
+        <>  punctuation "}"
 
 {-| The assignment part of a @let@ binding
 

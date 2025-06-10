@@ -1231,36 +1231,76 @@ infer e₀ = do
             return (type_, Syntax.Variable{..})
 
         -- →I⇒
-        Syntax.Lambda{ nameBinding = Syntax.NameBinding{ annotation = Nothing, .. }, ..} -> do
-            a <- fresh
-            b <- fresh
+        Syntax.Lambda{ location, nameBinding, body } -> do
+            (entries, input) <- case nameBinding of
+                Syntax.NameBinding{ nameLocation, name, annotation = Nothing } -> do
+                    existential <- fresh
 
-            let input = Type.UnsolvedType{ location = nameLocation, existential = a }
+                    push (Context.UnsolvedType existential)
 
-            let output = Type.UnsolvedType{ location = Syntax.location body, existential = b, .. }
+                    let input =
+                            Type.UnsolvedType
+                                { existential, location = nameLocation }
 
-            push (Context.UnsolvedType a)
-            push (Context.UnsolvedType b)
+                    return ([Context.Annotation name input], input)
 
-            scoped (Context.Annotation name input) do
-                newBody <- check body output
+                Syntax.NameBinding{ name, annotation = Just input } -> do
+                    return ([Context.Annotation name input], input)
 
-                _Γ <- get
+                Syntax.FieldNamesBinding{ fieldNamesLocation, fieldNames } -> do
+                    let process Syntax.FieldName{ fieldNameLocation, name, annotation = Nothing } = do
+                            existential <- fresh
 
-                return (Type.Function{..}, Syntax.Lambda{ nameBinding = Syntax.NameBinding{ annotation = Nothing, .. }, body = solveSyntax _Γ newBody, .. })
-        Syntax.Lambda{ nameBinding = Syntax.NameBinding{ annotation = Just input, .. }, ..} -> do
-            b <- fresh
+                            push (Context.UnsolvedType existential)
 
-            let output = Type.UnsolvedType{ location = Syntax.location body, existential = b, .. }
+                            let type_ =
+                                    Type.UnsolvedType
+                                        { existential
+                                        , location = fieldNameLocation
+                                        }
 
-            push (Context.UnsolvedType b)
+                            return (name, type_)
+                        process Syntax.FieldName{ name, annotation = Just type_ } = do
+                            return (name, type_)
 
-            scoped (Context.Annotation name input) do
-                newBody <- check body output
+                    fieldTypes <- traverse process fieldNames
 
-                _Γ <- get
+                    let entries = do
+                            (name, type_) <- fieldTypes
 
-                return (Type.Function{..}, Syntax.Lambda{ nameBinding = Syntax.NameBinding{ annotation = Just input, .. }, body = solveSyntax _Γ newBody, .. })
+                            return (Context.Annotation name type_)
+
+                    existential <- fresh
+
+                    push (Context.UnsolvedFields existential)
+
+                    let input = Type.Record
+                            { location = fieldNamesLocation
+                            , fields =
+                                Type.Fields fieldTypes (Monotype.UnsolvedFields existential)
+                            }
+
+                    return (entries, input)
+
+            output <- do
+                existential <- fresh
+
+                push (Context.UnsolvedType existential)
+
+                return Type.UnsolvedType{ location = Syntax.location body, .. }
+
+            let done = do
+                    newBody <- check body output
+
+                    let newNameBinding = case nameBinding of
+                            Syntax.NameBinding{..} -> Syntax.NameBinding{ annotation = Nothing, .. }
+                            Syntax.FieldNamesBinding{..} -> Syntax.FieldNamesBinding{..}
+
+                    _Γ <- get
+
+                    return (Type.Function{..}, Syntax.Lambda{ nameBinding = newNameBinding, body = solveSyntax _Γ newBody, .. })
+
+            foldr scoped done entries
 
         -- →E
         Syntax.Application{..} -> do
@@ -1300,8 +1340,8 @@ infer e₀ = do
                                 , location = nameLocation₀
                                 }
 
-                    let toLambda (nameBinding@Syntax.NameBinding{ nameLocation } : nameBindings) =
-                            Syntax.Lambda{ location = nameLocation, body = toLambda nameBindings, .. }
+                    let toLambda (nameBinding : nameBindings) =
+                            Syntax.Lambda{ location = nameLocation₀, body = toLambda nameBindings, .. }
                         toLambda [] =
                             annotatedAssignment
 

@@ -10,10 +10,10 @@ expression
   / operator
 
 ; A variable name (e.g. `x`)
-identifier  = (LOWER / "_") (ALPHANUM / "_" / "-" / "/")
+identifier  = (LOWER / "_") *(ALPHANUM / "_" / "-" / "/")
 
 ; A name for one of the alternatives of a union
-alternative = (UPPER / "_") (ALPHANUM / "_" / "-" / "/")
+alternative = (UPPER / "_") *(ALPHANUM / "_" / "-" / "/")
 
 lambda = "\" 1*name-binding "->" expression
 
@@ -35,23 +35,15 @@ lambda = "\" 1*name-binding "->" expression
 ;     let f (y : Natural) : Natural = x + y
 ;     in  f 2
 ; ```
-;
-; Also note that Grace does not provide syntactic support for destructuring
-; records:
-;
-;
-; BAD:
-;
-; ```
-; \{ x, y } -> x + y
-; ```
-;
-; GOOD:
-;
-; ```
-; \p -> p.x + p.y
-; ```
-name-binding = identifier / "(" identifier ":" type ")"
+name-binding
+  ; plain bound variable: `\x -> …`
+  = identifier
+
+  ; bound variable with a type annotation: `\(x : T) -> …`
+  / "(" identifier ":" type ")"
+
+  ; destructure a record: `\{ x, y : Natural } -> …`
+  / "{" [ identifier [ ":" type ] *("," identifier [ ":" type ]) ] "}"
 
 ; Note: Every sequence of `let`s (even top-level `let`s) must have a matching
 ; `in`.  Dangling `let`s are a parse error in any context.

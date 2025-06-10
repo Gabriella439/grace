@@ -294,7 +294,14 @@ evaluate maybeMethods = loop
                 apply function' argument'
 
             Syntax.Lambda{ nameBinding = Syntax.NameBinding{ name }, ..} ->
-                return (Value.Lambda (Closure name env body))
+                return (Value.Lambda (Closure (Value.Name name) env body))
+
+            Syntax.Lambda{ nameBinding = Syntax.FieldNamesBinding{ fieldNames }, ..} -> do
+                let names = do
+                        Syntax.FieldName{ name } <- fieldNames
+                        return name
+
+                return (Value.Lambda (Closure (Value.FieldNames names) env body))
 
             Syntax.Annotation{..} ->
                 loop env annotated
@@ -466,6 +473,7 @@ evaluate maybeMethods = loop
                                                             "… according to these instructions:\n\
                                                             \\n\
                                                             \" <> p
+
                                                 let input =
                                                         Text.concat prompts <> "\n\
                                                         \\n\
@@ -656,8 +664,19 @@ evaluate maybeMethods = loop
         evaluating anonymous functions and evaluating all built-in functions.
     -}
     apply :: Value -> Value -> IO Value
-    apply (Value.Lambda (Closure name capturedEnv body)) argument =
+    apply (Value.Lambda (Closure (Value.Name name) capturedEnv body)) argument =
         loop ((name, argument) : capturedEnv) body
+    apply (Value.Lambda (Closure (Value.FieldNames fieldNames) capturedEnv body)) (Value.Record keyValues) =
+        loop (extraEnv <> capturedEnv) body
+      where
+        extraEnv = do
+            fieldName <- fieldNames
+
+            let value = case HashMap.lookup fieldName keyValues of
+                    Nothing -> Value.Scalar Null
+                    Just n  -> n
+
+            return (fieldName, value)
     apply
         (Value.Merge (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("null", _), ("some", someHandler)])))
         (Value.Application (Value.Builtin Some) x) =
@@ -849,17 +868,24 @@ quote
     -> Syntax () Void
 quote names value =
     case value of
-        Value.Lambda (Closure name env body) ->
-            Syntax.Lambda
-                { nameBinding = Syntax.NameBinding
-                    { nameLocation = location
-                    , annotation = Nothing
-                    , ..
-                    }
-                , body = withEnv
-                , ..
-                }
+        Value.Lambda (Closure names_ env body) ->
+            Syntax.Lambda{ nameBinding, body = withEnv, ..  }
           where
+            nameBinding = case names_ of
+                Value.Name name ->
+                    Syntax.NameBinding
+                        { nameLocation = location
+                        , annotation = Nothing
+                        , name
+                        }
+                Value.FieldNames fieldNames ->
+                    Syntax.FieldNamesBinding
+                        { fieldNamesLocation = location
+                        , fieldNames = do
+                            fieldName <- fieldNames
+                            return Syntax.FieldName{ name = fieldName, fieldNameLocation = location, annotation = Nothing }
+                        }
+
             newBody = first (\_ -> location) body
 
             toBinding (n, v) = Syntax.Binding
