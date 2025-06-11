@@ -40,8 +40,22 @@ import Grace.Pretty (Pretty(..), keyword, label, punctuation)
 import Grace.Type (Type)
 import Language.Haskell.TH.Syntax (Lift)
 import Numeric.Natural (Natural)
-import Prettyprinter (Doc)
 import Prettyprinter.Render.Terminal (AnsiStyle)
+
+import Prettyprinter.Internal
+    ( Doc
+        ( Annotated
+        , Cat
+        , Column
+        , Fail
+        , FlatAlt
+        , Line
+        , Nest
+        , Nesting
+        , Union
+        , WithPageWidth
+        )
+    )
 
 import qualified Control.Monad as Monad
 import qualified Data.Text as Text
@@ -326,7 +340,7 @@ instance Pretty a => Pretty (Chunks s a) where
       where
         prettyInterpolation (syntax, text) =
                 Pretty.scalar "${"
-            <>  pretty syntax
+            <>  flatten (pretty syntax)
             <>  Pretty.scalar ("}" <> Type.prettyTextBody text)
 
 -- | `Traversal'` from a `Syntax` to its immediate `Type` annotations
@@ -597,7 +611,6 @@ prettyExpression If{..} =
             <>  " "
             <> prettyExpression ifFalse
             )
-prettyExpression Text{..} = pretty chunks
 prettyExpression Prompt{ schema = Just schema, ..} = Pretty.group (Pretty.flatAlt long short)
   where
     short =
@@ -835,6 +848,7 @@ prettyPrimitiveExpression Builtin{..} =
     pretty builtin
 prettyPrimitiveExpression Scalar{..} =
     pretty scalar
+prettyPrimitiveExpression Text{..} = pretty chunks
 prettyPrimitiveExpression Embed{..} =
     pretty embedded
 prettyPrimitiveExpression other = Pretty.group (Pretty.flatAlt long short)
@@ -1014,3 +1028,16 @@ instance Pretty a => Pretty (Binding s a) where
             <>  punctuation "="
             <>  " "
             <>  pretty assignment
+
+flatten :: Doc ann -> Doc ann
+flatten doc = case doc of
+    FlatAlt _ y     -> flatten y
+    Cat x y         -> Cat (flatten x) (flatten y)
+    Nest i x        -> Nest i (flatten x)
+    Line            -> Fail
+    Union x _       -> flatten x
+    Column f        -> Column (flatten . f)
+    WithPageWidth f -> WithPageWidth (flatten . f)
+    Nesting f       -> Nesting (flatten . f)
+    Annotated ann x -> Annotated ann (flatten x)
+    _               -> doc
