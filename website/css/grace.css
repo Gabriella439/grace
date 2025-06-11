@@ -30,11 +30,17 @@ pre {
 li .btn {
   font-family: 'FiraMono', monospace !important;
   vertical-align: top !important;
-  margin: 1px;
+  margin: 0.1em;
 }
 
 .form-check-label {
   vertical-align: top;
+  font-weight: bold;
+  padding-right: 0.75em;
+}
+
+.form-check {
+  margin-left: 0.75em;
 }
 
 .CodeMirror {

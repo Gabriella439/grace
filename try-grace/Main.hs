@@ -375,13 +375,11 @@ renderValue maybeMethods ref parent outer (Value.Record keyValues) = do
 
             case value of
                 Value.Record kvs | HashMap.null kvs -> do
-                    mempty
+                    setTextContent dt key
                 Value.List xs | Seq.null xs -> do
-                    mempty
+                    setTextContent dt key
                 _ -> do
-                    setAttribute dt "style" "border-right: solid;"
-
-            setTextContent dt key
+                    setTextContent dt (key <> ":")
 
             dd <- createElement "dd"
 
@@ -577,7 +575,7 @@ renderInput ref Type.Record{ fields = Type.Fields keyTypes _ } = do
 
             setAttribute dt "class" "col-auto"
 
-            setTextContent dt key
+            setTextContent dt (key <> ":")
 
             dd <- createElement "dd"
 
@@ -641,7 +639,11 @@ renderInput ref Type.Union{ alternatives = Type.Alternatives keyTypes _ }
                 setAttribute label "class" "form-check-label"
                 setAttribute label "for"   id
 
-                setTextContent label key
+                case type_ of
+                    Type.Record{ fields = Type.Fields kts _ } | null kts -> do
+                        setTextContent label key
+                    _ -> do
+                        setTextContent label (key <> ":")
 
                 span <- createElement "span"
 
