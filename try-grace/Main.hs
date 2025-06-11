@@ -54,7 +54,6 @@ import qualified GHCJS.Foreign.Callback as Callback
 import qualified Grace.HTTP as HTTP
 import qualified Grace.Import as Import
 import qualified Grace.Infer as Infer
-import qualified Grace.Interpret as Interpret
 import qualified Grace.Location as Location
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Normalize as Normalize

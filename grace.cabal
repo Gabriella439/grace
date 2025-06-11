@@ -34,6 +34,7 @@ library
                      , template-haskell
                      , text >= 1.2.4.0
                      , unordered-containers
+                     , vector
 
   exposed-modules:     Grace.Context
                      , Grace.DataFile

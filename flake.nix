@@ -24,46 +24,31 @@
                                   [ haskellPackagesNew.ghcjs-base ];
 
                               grace =
-                                let
-                                  drv =
-                                    pkgsNew.haskell.lib.overrideCabal
-                                      haskellPackagesOld.grace
-                                      (old: {
-                                        doCheck = false;
+                                pkgsNew.haskell.lib.overrideCabal
+                                  haskellPackagesOld.grace
+                                  (old: {
+                                    doCheck = false;
 
-                                        doHaddock = false;
+                                    doHaddock = false;
 
-                                        src =
-                                          pkgsNew.lib.cleanSourceWith
-                                            { inherit (old) src;
+                                    src =
+                                      pkgsNew.lib.cleanSourceWith
+                                        { inherit (old) src;
 
-                                              filter = path: type:
-                                                    pkgsNew.lib.cleanSourceFilter path type
-                                                &&  (!((pkgsNew.lib.hasPrefix "result" (baseNameOf path) && type == "symlink")
-                                                    || (pkgsNew.lib.hasSuffix ".nix" (baseNameOf path) && type == "regular")
-                                                    || (pkgsNew.lib.hasSuffix ".md" (baseNameOf path) && type == "regular")
-                                                    || (baseNameOf path == "cabal.project.local" && type == "regular")
-                                                    || (baseNameOf path == "dist" && type == "directory")
-                                                    || (baseNameOf path == "dist-newstyle" && type == "directory")
-                                                    || (baseNameOf path == "examples" && type == "directory")
-                                                    || (baseNameOf path == "prelude" && type == "directory")
-                                                    || (baseNameOf path == "website" && type == "directory")
-                                                    ));
-                                            };
-                                      });
-
-                                in
-                                  if compiler == "ghcjs"
-                                  then
-                                    pkgsNew.haskell.lib.overrideCabal drv
-                                      (old: {
-                                        postInstall = (old.postInstall or "") +
-                                        ''
-                                        ${pkgsNew.closurecompiler}/bin/closure-compiler $out/bin/try-grace.jsexe/all.js --jscomp_off=checkVars --externs=$out/bin/try-grace.jsexe/all.js.externs > $out/bin/try-grace.jsexe/all.min.js
-                                        '';
-                                      })
-                                  else
-                                    drv;
+                                          filter = path: type:
+                                                pkgsNew.lib.cleanSourceFilter path type
+                                            &&  (!((pkgsNew.lib.hasPrefix "result" (baseNameOf path) && type == "symlink")
+                                                || (pkgsNew.lib.hasSuffix ".nix" (baseNameOf path) && type == "regular")
+                                                || (pkgsNew.lib.hasSuffix ".md" (baseNameOf path) && type == "regular")
+                                                || (baseNameOf path == "cabal.project.local" && type == "regular")
+                                                || (baseNameOf path == "dist" && type == "directory")
+                                                || (baseNameOf path == "dist-newstyle" && type == "directory")
+                                                || (baseNameOf path == "examples" && type == "directory")
+                                                || (baseNameOf path == "prelude" && type == "directory")
+                                                || (baseNameOf path == "website" && type == "directory")
+                                                ));
+                                        };
+                                  });
 
                               aeson = haskellPackagesNew.aeson_1_5_6_0;
 

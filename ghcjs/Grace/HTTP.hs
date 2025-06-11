@@ -1,7 +1,4 @@
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE DeriveAnyClass     #-}
-{-# LANGUAGE DeriveGeneric      #-}
-{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 {-| This module provides a uniform interface for making HTTP requests using both
     GHC and GHCJS
@@ -14,14 +11,13 @@ module Grace.HTTP
     , renderError
     , Methods
     , getMethods
-    , prompt
+    , createChatCompletion
     ) where
 
 import Control.Exception (Exception(..))
-import Data.Aeson (FromJSON(..), ToJSON(..), Value)
 import Data.Text (Text)
-import GHC.Generics (Generic)
 import GHCJS.Fetch (Request(..), RequestOptions(..), JSPromiseException)
+import OpenAI.V1.Chat.Completions (ChatCompletionObject, CreateChatCompletion)
 
 import qualified Control.Exception as Exception
 import qualified Data.Aeson as Aeson
@@ -80,65 +76,15 @@ getMethods
     -> IO Methods
 getMethods = return
 
-data Response = Response{ choices :: [Choice] }
-    deriving stock (Generic)
-    deriving anyclass (FromJSON)
-
-data Choice = Choice{ message :: Message }
-    deriving stock (Generic)
-    deriving anyclass (FromJSON)
-
-data Message = Message{ content :: Text }
-    deriving stock (Generic)
-    deriving anyclass (FromJSON)
-
 -- | This powers the @prompt@ keyword
-prompt
+createChatCompletion
     :: Methods
-    -> Text
-    -- ^ Prompt
-    -> Text
-    -- ^ Model
-    -> Bool
-    -- ^ Web search
-    -> Maybe Value
-    -- ^ JSON schema
-    -> IO Text
-prompt key text model search schema = do
+    -> CreateChatCompletion
+    -> IO ChatCompletionObject
+createChatCompletion key createChatCompletion_ = do
     let keyBytes = Encoding.encodeUtf8 key
 
-    let value = Aeson.object
-            (   [ ("model", toJSON model)
-                , ("messages", toJSON
-                    [ Aeson.object
-                        [ ("role", "user")
-                        , ("content", toJSON text)
-                        ]
-                    ]
-                  )
-                ]
-            <>  (   if search
-                    then [ ("web_search_options", Aeson.object [ ]) ]
-                    else [ ]
-                )
-            <>  (   case schema of
-                        Nothing -> [ ]
-                        Just s ->
-                            [ ("response_format", Aeson.object
-                                [ ("type", "json_schema")
-                                , ("json_schema", Aeson.object
-                                    [ ("name", "result")
-                                    , ("schema", toJSON s)
-                                    , ("strict", toJSON True)
-                                    ]
-                                  )
-                                ]
-                              )
-                            ]
-                )
-            )
-
-    body <- case Encoding.decodeUtf8' (ByteString.Lazy.toStrict (Aeson.encode value)) of
+    body <- case Encoding.decodeUtf8' (ByteString.Lazy.toStrict (Aeson.encode createChatCompletion_)) of
         Left exception -> Exception.throwIO exception
         Right text -> return (Text.unpack text)
 
@@ -158,13 +104,12 @@ prompt key text model search schema = do
 
     jsString <- Fetch.responseText response
 
-    let strictBytes =
-            Encoding.encodeUtf8 (Text.pack (JSString.unpack jsString))
+    let strictBytes = Encoding.encodeUtf8 (Text.pack (JSString.unpack jsString))
 
     let lazyBytes = ByteString.Lazy.fromStrict strictBytes
 
     case Aeson.eitherDecode lazyBytes of
         Left string ->
             fail string
-        Right Response{ choices = [ Choice{ message = Message{ content = text } } ] } ->
-            return text
+        Right chatCompletionObject ->
+            return chatCompletionObject

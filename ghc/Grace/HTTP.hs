@@ -15,28 +15,15 @@ module Grace.HTTP
     , renderError
     , Methods
     , getMethods
-    , prompt
+    , Grace.HTTP.createChatCompletion
     ) where
 
 import Control.Exception (Exception(..))
-import Data.Aeson (Value)
 import Data.Text (Text)
 import Data.Text.Encoding.Error (UnicodeException)
 import Network.HTTP.Client (HttpExceptionContent(..), Manager)
 import OpenAI.V1 (Methods(..))
-import OpenAI.V1.Models (Model(..))
-import OpenAI.V1.ResponseFormat (JSONSchema(..))
-
-import OpenAI.V1.Chat.Completions
-    ( ChatCompletionObject(..)
-    , Choice(..)
-    , Content(..)
-    , CreateChatCompletion(..)
-    , Message(..)
-    , ResponseFormat(..)
-    , WebSearchOptions(..)
-    , _CreateChatCompletion
-    )
+import OpenAI.V1.Chat.Completions (ChatCompletionObject, CreateChatCompletion)
 
 import qualified Control.Exception as Exception
 import qualified Data.Text as Text
@@ -47,7 +34,6 @@ import qualified Network.HTTP.Client as HTTP
 import qualified Network.HTTP.Client.TLS as TLS
 import qualified Network.HTTP.Types as HTTP.Types
 import qualified OpenAI.V1 as OpenAI
-import qualified OpenAI.V1.Chat.Completions as Completions
 
 -- | Exception type thrown by `fetch` in the event of any failure
 data HttpException
@@ -167,42 +153,8 @@ getMethods key = do
     return (OpenAI.makeMethods clientEnv key)
 
 -- | This powers the @prompt@ keyword
-prompt
+createChatCompletion
     :: Methods
-    -> Text
-    -- ^ Prompt
-    -> Text
-    -- ^ Model
-    -> Bool
-    -- ^ Web search
-    -> Maybe Value
-    -- ^ JSON schema
-    -> IO Text
-prompt Methods{ createChatCompletion } text model search schema = do
-    let response_format = do
-            s <- schema
-
-            return JSON_Schema
-                { json_schema = JSONSchema
-                    { description = Nothing
-                    , name = "result"
-                    , schema = Just s
-                    , strict = Just True
-                    }
-                }
-
-    let web_search_options
-            | search = Just WebSearchOptions
-                { search_context_size = Nothing
-                , user_location = Nothing
-                }
-            | otherwise = Nothing
-
-    ChatCompletionObject{ choices = [ Choice{ message } ] } <- createChatCompletion _CreateChatCompletion
-        { messages = [ User{ content = [ Text{ text } ], name = Nothing } ]
-        , model = Model model
-        , response_format
-        , web_search_options
-        }
-
-    return (Completions.messageToContent message)
+    -> CreateChatCompletion
+    -> IO ChatCompletionObject
+createChatCompletion Methods{ createChatCompletion = c } = c

@@ -30,6 +30,7 @@ import Data.Scientific (Scientific)
 import Data.Sequence (Seq(..), ViewL(..))
 import Data.Text (Text)
 import Data.Typeable (Typeable)
+import Data.Vector (Vector)
 import Data.Void (Void)
 import Grace.DataFile as DataFile
 import Grace.HTTP (Methods)
@@ -39,8 +40,19 @@ import Grace.Syntax (Builtin(..), Scalar(..), Syntax)
 import Grace.Type (Type)
 import Grace.Value (Closure(..), Value)
 import Numeric.Natural (Natural)
+import OpenAI.V1.Models (Model(..))
+import OpenAI.V1.ResponseFormat (JSONSchema(..), ResponseFormat(..))
 import Prelude hiding (succ)
 import System.FilePath ((</>))
+
+import OpenAI.V1.Chat.Completions
+    ( ChatCompletionObject(..)
+    , Choice(..)
+    , CreateChatCompletion(..)
+    , Message(..)
+    , WebSearchOptions(..)
+    , _CreateChatCompletion
+    )
 
 import {-# SOURCE #-} qualified Grace.Interpret as Interpret
 
@@ -65,6 +77,7 @@ import qualified Grace.Pretty as Pretty
 import qualified Grace.Syntax as Syntax
 import qualified Grace.Type as Type
 import qualified Grace.Value as Value
+import qualified OpenAI.V1.Chat.Completions as Completions
 import qualified System.IO.Unsafe as Unsafe
 
 {- $setup
@@ -442,13 +455,34 @@ evaluate maybeMethods = loop
                                     _ -> False
 
                             let model = case HashMap.lookup "model" fieldValues of
-                                    Just (Value.Application (Value.Builtin Some) (Value.Text m)) -> m
+                                    Just (Value.Application (Value.Builtin Some) (Value.Text m)) -> Model m
                                     _ | search -> "gpt-4o-search-preview"
                                       | otherwise -> "o4-mini"
 
                             let code = case HashMap.lookup "code" fieldValues of
                                     Just (Value.Application (Value.Builtin Some) (Value.Scalar (Syntax.Bool c))) -> c
                                     _ -> False
+
+                            let web_search_options
+                                    | search = Just WebSearchOptions
+                                        { search_context_size = Nothing
+                                        , user_location = Nothing
+                                        }
+                                    | otherwise = Nothing
+
+                            let toResponseFormat s = JSON_Schema
+                                    { json_schema = JSONSchema
+                                        { description = Nothing
+                                        , name = "result"
+                                        , schema = Just s
+                                        , strict = Just True
+                                        }
+                                    }
+
+                            let toOutput ChatCompletionObject{ choices = [ Choice{ message = Assistant{ assistant_content = Just output } } ] } = do
+                                    return output
+                                toOutput ChatCompletionObject{ choices } = do
+                                    Exception.throwIO UnexpectedModelResponse{ choices }
 
                             manager <- HTTP.newManager
 
@@ -494,7 +528,13 @@ evaluate maybeMethods = loop
                                                         \\n\
                                                         \" <> Text.concat failedAttempts
 
-                                                output <- HTTP.prompt methods input model search Nothing
+                                                chatCompletionObject <- HTTP.createChatCompletion methods _CreateChatCompletion
+                                                    { messages = [ User{ content = [ Completions.Text{ text = input } ], name = Nothing } ]
+                                                    , model
+                                                    , web_search_options
+                                                    }
+
+                                                output <- toOutput chatCompletionObject
 
                                                 Interpret.interpretWith maybeMethods [] (Just schema) manager (Code "(generated)" output)
                                                     `Exception.catch` \interpretError -> do
@@ -553,7 +593,7 @@ evaluate maybeMethods = loop
 
                                             return
                                                 ( requestJSON newSchema
-                                                , Just jsonSchema
+                                                , Just (toResponseFormat jsonSchema)
                                                 , extract
                                                 )
 
@@ -580,16 +620,22 @@ evaluate maybeMethods = loop
 
                                             return
                                                 ( requestJSON newSchema
-                                                , Just jsonSchema
+                                                , Just (toResponseFormat jsonSchema)
                                                 , extract
                                                 )
 
-                                    (text, responseFormat, extract) <- case schema of
+                                    (text, response_format, extract) <- case schema of
                                             Type.Scalar{ scalar = Monotype.Text } -> extractText
                                             Type.Record{ } -> extractRecord
                                             _ -> extractNonRecord
 
-                                    output <- HTTP.prompt methods text model search responseFormat
+                                    chatCompletionObject <- HTTP.createChatCompletion methods _CreateChatCompletion
+                                        { messages = [ User{ content = [ Completions.Text{ text } ], name = Nothing  } ]
+                                        , model
+                                        , response_format
+                                        }
+
+                                    output <- toOutput chatCompletionObject
 
                                     extract output
                     other ->
@@ -1019,3 +1065,44 @@ instance (Show a, Typeable a) => Exception (InvalidJSON a) where
         \… which does not match the following expected type:\n\
         \\n\
         \" <> Text.unpack (Pretty.toSmart type_)
+
+-- | The model didn't return an expected, successful response
+data UnexpectedModelResponse = UnexpectedModelResponse{ choices :: Vector Choice }
+    deriving (Show)
+
+instance Exception UnexpectedModelResponse where
+    displayException UnexpectedModelResponse{ choices } =
+        case toList choices of
+            [] ->
+                "Unexpected model response\n\
+                \\n\
+                \The model did not return any choices"
+
+            _ : _ : _ ->
+                "Unexpected model response\n\
+                \\n\
+                \The model returned multiple choices when only one was expected"
+            [ Choice{ message = Assistant{ refusal = Just refusal } } ] ->
+                "Unexpected model response\n\
+                \\n\
+                \The model refused to answer for the following reason:\n\
+                \\n\
+                \" <> Text.unpack refusal
+            [ Choice{ message = Assistant{ assistant_content = Nothing } } ] ->
+                "Unexpected model response\n\
+                \\n\
+                \The model returned an empty answer"
+            [ Choice{ message } ] ->
+                "Unexpected model response\n\
+                \\n\
+                \The model responded with a non-assistant message\n\
+                \\n\
+                \Message:\n\
+                \\n\
+                \" <> string
+              where
+                bytes = ByteString.Lazy.toStrict (Aeson.encode message)
+
+                string = case Encoding.decodeUtf8' bytes of
+                    Left  _    -> show bytes
+                    Right text -> Text.unpack text
