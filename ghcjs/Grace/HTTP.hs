@@ -66,13 +66,14 @@ fetch _manager url = do
 
     return (Text.pack (JSString.unpack jsString))
 
--- | Render an `HttpException` as `Text`
+-- | Render an `HttpException` as `Data.Text.Text`
 renderError :: HttpException -> Text
 renderError = Text.pack . displayException
 
 -- | The GHCJS implementation of OpenAI bindings just stores the API key
 type Methods = Text
 
+-- | Initialize API for prompting
 getMethods
     :: Text
     -- ^ API key
@@ -91,6 +92,7 @@ data Message = Message{ content :: Text }
     deriving stock (Generic)
     deriving anyclass (FromJSON)
 
+-- | This powers the @prompt@ keyword
 prompt
     :: Methods
     -> Text

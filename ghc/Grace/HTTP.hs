@@ -83,7 +83,7 @@ fetch manager url = do
         Left exception -> Exception.throwIO (NotUTF8 exception)
         Right lazyText -> return (Text.Lazy.toStrict lazyText)
 
--- | Render an `HttpException` as `Text`
+-- | Render an `HttpException` as `Data.Text.Text`
 renderError :: HttpException -> Text
 renderError (HttpException httpException) = case httpException of
     HTTP.InvalidUrlException _ _ ->
@@ -156,6 +156,7 @@ renderError (NotUTF8 unicodeException) =
     \\n\
     \" <> Text.pack (displayException unicodeException)
 
+-- | Initialize API for prompting
 getMethods
     :: Text
     -- ^ API key
@@ -165,6 +166,7 @@ getMethods key = do
 
     return (OpenAI.makeMethods clientEnv key)
 
+-- | This powers the @prompt@ keyword
 prompt
     :: Methods
     -> Text

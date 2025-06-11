@@ -343,7 +343,7 @@ instance Pretty a => Pretty (Chunks s a) where
             <>  flatten (pretty syntax)
             <>  Pretty.scalar ("}" <> Type.prettyTextBody text)
 
--- | `Traversal'` from a `Syntax` to its immediate `Type` annotations
+-- | @Traversal'@ from a `Syntax` to its immediate `Type` annotations
 types :: Traversal' (Syntax s a) (Type s)
 types k Lambda{ nameBinding = NameBinding{ annotation = Just t, .. }, .. } =
     fmap (\t' -> Lambda{ nameBinding = NameBinding{ annotation = Just t', .. }, .. }) (k t)
