@@ -13,7 +13,6 @@ module Grace.Interpret
       Input(..)
     , interpret
     , interpretWith
-    , stripSome
     ) where
 
 import Control.Exception.Safe (MonadCatch)
@@ -25,14 +24,12 @@ import Grace.Location (Location(..))
 import Grace.Type (Type)
 import Grace.Value (Value)
 
-import qualified Control.Lens as Lens
 import qualified Grace.Context as Context
 import qualified Grace.HTTP as HTTP
 import qualified Grace.Import as Import
 import qualified Grace.Infer as Infer
 import qualified Grace.Normalize as Normalize
 import qualified Grace.Syntax as Syntax
-import qualified Grace.Value as Value
 
 {-| Interpret Grace source code, return the inferred type and the evaluated
     result
@@ -86,12 +83,4 @@ interpretWith maybeMethods bindings maybeAnnotation manager input = do
 
     value <- liftIO (Normalize.evaluate maybeMethods evaluationContext elaboratedExpression)
 
-    return (inferred, stripSome value)
-
--- | Strip all @some@s from the final result.  They are only used internally for
--- the purpose of evaluation but do not need to be user-visible.
-stripSome :: Value -> Value
-stripSome = Lens.transform transformValue
-  where
-    transformValue (Value.Application (Value.Builtin Syntax.Some) e) = e
-    transformValue e = e
+    return (inferred, value)

@@ -55,6 +55,7 @@ import qualified Grace.HTTP as HTTP
 import qualified Grace.Import as Import
 import qualified Grace.Infer as Infer
 import qualified Grace.Interpret as Interpret
+import qualified Grace.Location as Location
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Normalize as Normalize
 import qualified Grace.Pretty as Pretty
@@ -401,6 +402,9 @@ renderValue maybeMethods ref parent outer (Value.Record keyValues) = do
 
     replaceChildren parent (Array.fromList (HashMap.elems dls))
 
+renderValue maybeMethods ref parent outer (Application (Value.Builtin Syntax.Some) value) = do
+    renderValue maybeMethods ref parent outer value
+
 renderValue maybeMethods ref parent outer (Application (Value.Alternative alternative) value) = do
     inner <- case outer of
             Type.Union{ alternatives = Type.Alternatives keyTypes _ } ->
@@ -435,7 +439,16 @@ renderValue maybeMethods ref parent Type.Function{ input, output } function = do
             let invoke = do
                     value <- get
 
-                    newValue <- Normalize.evaluate maybeMethods [] (first (\_ -> undefined) Syntax.Application{ Syntax.function = Normalize.quote [] function, Syntax.argument = Normalize.quote [] value, Syntax.location = () })
+                    let expression = Syntax.Application{ Syntax.function = Normalize.quote [] function, Syntax.argument = Normalize.quote [] value, Syntax.location = () }
+
+                    let Just expressionWithoutImports = traverse (\_ -> Nothing) expression
+
+                    let location = Location.Location "" "" 0
+
+                    (_, elaboratedExpression) <- Infer.typeWith undefined undefined [] (first (\_ -> location) expressionWithoutImports)
+
+
+                    newValue <- Normalize.evaluate maybeMethods [] (first (\_ -> undefined) elaboratedExpression)
 
                     renderValue maybeMethods ref outputVal output newValue
 
@@ -886,7 +899,7 @@ main = do
 
                                 value <- Normalize.evaluate maybeMethods [] elaboratedExpression
 
-                                setOutput inferred (Interpret.stripSome value)
+                                setOutput inferred value
 
                         if Lens.has (Lens.cosmos . _As @"Prompt") expression
                             then do

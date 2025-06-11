@@ -11,7 +11,6 @@ module Grace.Value
     , Value(..)
     ) where
 
-import Control.Lens.Plated (Plated(..))
 import Data.Aeson (FromJSON(..))
 import Data.Foldable (toList)
 import Data.HashMap.Strict.InsOrd (InsOrdHashMap)
@@ -88,32 +87,3 @@ instance FromJSON Value where
         pure (Scalar (Syntax.Bool bool))
     parseJSON Aeson.Null = do
         pure (Scalar Syntax.Null)
-
-instance Plated Value where
-    plate onValue value = case value of
-        Lambda closure -> do
-            pure (Lambda closure)
-        Application function argument -> do
-            newFunction <- onValue function
-            newArgument <- onValue argument
-            return (Application newFunction newArgument)
-        List elements -> do
-            newElements <- traverse onValue elements
-            return (List newElements)
-        Record fieldValues -> do
-            newFieldValues <- traverse onValue fieldValues
-            return (Record newFieldValues)
-        Alternative tag -> do
-            pure (Alternative tag)
-        Merge handlers -> do
-            newHandlers <- onValue handlers
-            return (Merge newHandlers)
-        Text text -> do
-            pure (Text text)
-        Prompt arguments -> do
-            newArguments <- onValue arguments
-            return (Prompt newArguments)
-        Builtin builtin -> do
-            pure (Builtin builtin)
-        Scalar scalar -> do
-            pure (Scalar scalar)

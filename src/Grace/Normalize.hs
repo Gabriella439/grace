@@ -45,6 +45,7 @@ import System.FilePath ((</>))
 import {-# SOURCE #-} qualified Grace.Interpret as Interpret
 
 import qualified Control.Exception as Exception
+import qualified Control.Lens as Lens
 import qualified Control.Monad as Monad
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy as ByteString.Lazy
@@ -866,8 +867,9 @@ quote
     --   expression)
     -> Value
     -> Syntax () Void
-quote names value =
-    case value of
+quote names value₀ = Lens.transform stripSome (loop value₀)
+  where
+    loop value = case value of
         Value.Lambda (Closure names_ env body) ->
             Syntax.Lambda{ nameBinding, body = withEnv, ..  }
           where
@@ -941,8 +943,11 @@ quote names value =
 
         Value.Builtin builtin ->
             Syntax.Builtin{..}
-  where
+
     location = ()
+
+    stripSome Syntax.Application{ function = Syntax.Builtin{ builtin = Some }, argument } = argument
+    stripSome e = e
 
 -- | Missing API credentials
 data MissingCredentials = MissingCredentials
