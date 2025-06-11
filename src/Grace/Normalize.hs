@@ -264,6 +264,51 @@ fromJSON Type.Optional{ } Aeson.Null =
 fromJSON type_ value = do
     Left InvalidJSON{..}
 
+staticAssets :: Text
+staticAssets = Unsafe.unsafePerformIO do
+    examples <- do
+        let files :: [FilePath]
+            files =
+                [ "learn-in-y-minutes.ffg"
+                , "chaining.ffg"
+                , "prompt.ffg"
+                , "tools.ffg"
+                ]
+
+        let process file = do
+                content <- DataFile.readDataFile ("examples" </> file)
+
+                return
+                    ( "Example: " <> Text.pack file <> "\n\
+                      \\n\
+                      \" <> content <> "\n\
+                      \\n"
+                    )
+
+        traverse process files
+
+    prompts <- do
+        let files :: [FilePath]
+            files =
+                [ "inference.md"
+                , "abnf.md"
+                ]
+
+        let process file = do
+                content <- DataFile.readDataFile ("prompts" </> file)
+
+                return
+                    ( "Post: " <> Text.pack file <> "\n\
+                      \\n\
+                      \" <> content <> "\n\
+                      \\n"
+                    )
+
+        traverse process files
+
+    return (Text.concat prompts <> "\n\n" <> Text.concat examples)
+{-# NOINLINE staticAssets #-}
+
 {-| Evaluate an expression, leaving behind a `Value` free of reducible
     sub-expressions
 
@@ -415,46 +460,6 @@ evaluate maybeMethods = loop
                                             , length rest == 3 = do
                                                 Exception.throwIO interpretError
                                             | otherwise = do
-                                                examples <- do
-                                                    let files :: [FilePath]
-                                                        files =
-                                                            [ "learn-in-y-minutes.ffg"
-                                                            , "chaining.ffg"
-                                                            , "prompt.ffg"
-                                                            , "tools.ffg"
-                                                            ]
-
-                                                    let process file = do
-                                                            content <- DataFile.readDataFile ("examples" </> file)
-
-                                                            return
-                                                                ( "Example: " <> Text.pack file <> "\n\
-                                                                  \\n\
-                                                                  \" <> content <> "\n\
-                                                                  \\n"
-                                                                )
-
-                                                    traverse process files
-
-                                                prompts <- do
-                                                    let files :: [FilePath]
-                                                        files =
-                                                            [ "inference.md"
-                                                            , "abnf.md"
-                                                            ]
-
-                                                    let process file = do
-                                                            content <- DataFile.readDataFile ("prompts" </> file)
-
-                                                            return
-                                                                ( "Post: " <> Text.pack file <> "\n\
-                                                                  \\n\
-                                                                  \" <> content <> "\n\
-                                                                  \\n"
-                                                                )
-
-                                                    traverse process files
-
                                                 let failedAttempts = do
                                                         (index, (program, interpretError)) <- zip [ 0 .. ] (reverse errors)
                                                         return
@@ -476,9 +481,7 @@ evaluate maybeMethods = loop
                                                             \" <> p
 
                                                 let input =
-                                                        Text.concat prompts <> "\n\
-                                                        \\n\
-                                                        \" <> Text.concat examples <> "\n\
+                                                        staticAssets <> "\n\
                                                         \\n\
                                                         \Now generate a standalone Grace expression matching the following type:\n\
                                                         \\n\
