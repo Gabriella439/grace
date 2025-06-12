@@ -222,13 +222,7 @@ wellFormed context Type.Union{ location, alternatives = Type.Alternatives kAs re
 wellFormed _ Type.Scalar{} = do
     return ()
 
-{-| This corresponds to the judgment:
-
-    > Γ ⊢ A <: B ⊣ Δ
-
-    … which updates the context Γ to produce the new context Δ, given that the
-    type A is a subtype of type B.
--}
+-- | @`subtype` sub super@ checks that @sub@ is a subtype of @super@
 subtype
     :: (MonadState Status m, MonadCatch m)
     => Type Location -> Type Location -> m ()
@@ -236,19 +230,16 @@ subtype _A₀ _B₀ = do
     _Γ <- get
 
     case (_A₀, _B₀) of
-        -- <:Var
         (Type.VariableType{ name = a₀ }, Type.VariableType{ name = a₁ })
             | a₀ == a₁ -> do
                 wellFormed _Γ _A₀
 
-        -- <:Exvar
         (Type.UnsolvedType{ existential = a₀ }, Type.UnsolvedType{ existential = a₁ })
             | a₀ == a₁ && Context.UnsolvedType a₀ `elem` _Γ -> do
                 return ()
 
-        -- InstantiateL
         (Type.UnsolvedType{ existential = a }, _)
-            -- The `not (a `Type.typeFreeIn` _B)` is the "occurs check" which
+            -- The @not (a `Type.typeFreeIn` _B)@ is the "occurs check" which
             -- prevents a type variable from being defined in terms of itself
             -- (i.e. a type should not "occur" within itself).
             --
@@ -260,23 +251,19 @@ subtype _A₀ _B₀ = do
             &&  elem (Context.UnsolvedType a) _Γ -> do
                 instantiateTypeL a _B₀
 
-        -- InstantiateR
         (_, Type.UnsolvedType{ existential = a})
             |   not (a `Type.typeFreeIn` _A₀)
             &&  elem (Context.UnsolvedType a) _Γ -> do
                 instantiateTypeR _A₀ a
 
-        -- <:→
         (Type.Function{ input = _A₁, output = _A₂ }, Type.Function{ input= _B₁, output = _B₂ }) -> do
             subtype _B₁ _A₁
 
-            _Θ <- get
-
             -- CAREFULLY NOTE: Pay really close attention to how we need to use
-            -- `Context.solveType` any time we update the context.  The paper
-            -- already mentions this, but if you forget to do this then you
-            -- will get bugs due to unsolved variables not getting solved
-            -- correctly.
+            -- `Context.solveType` any time we do something that either updates
+            -- the context or potentially updates the context (like the above
+            -- `subtype` command).  If you forget to do this then you will get
+            -- bugs due to unsolved variables not getting solved correctly.
             --
             -- A much more reliable way to fix this problem would simply be to
             -- have every function (like `subtype`, `instantiateL`, …)
@@ -296,14 +283,14 @@ subtype _A₀ _B₀ = do
             -- in many cases.  So, the tradeoff here is that we get improved
             -- performance if we're willing to remember to call `solveType` in
             -- the right places.
+            _Θ <- get
+
             subtype (Context.solveType _Θ _A₂) (Context.solveType _Θ _B₂)
 
-        -- <:∀R
         (_, Type.Forall{..}) -> do
             scoped (Context.Variable domain name) do
                 subtype _A₀ type_
 
-        -- <:∀L
         (Type.Forall{ domain = Domain.Type, .. }, _) -> do
             scopedUnsolvedType nameLocation \a -> do
                 subtype (Type.substituteType name 0 a type_) _B₀
@@ -343,7 +330,6 @@ subtype _A₀ _B₀ = do
 
         (Type.List{ type_ = _A }, Type.Scalar{ scalar = Monotype.JSON }) -> do
             subtype _A _B₀
-            return ()
 
         (Type.Record{ fields = Type.Fields kAs Monotype.EmptyFields }, Type.Scalar{ scalar = Monotype.JSON }) -> do
             let process (_, _A) = do
@@ -364,22 +350,16 @@ subtype _A₀ _B₀ = do
             let extraA = Map.difference mapA mapB
             let extraB = Map.difference mapB mapA
 
-            let both = Map.intersectionWith (,) mapA mapB
-
             -- If record A is a subtype of record B, then all fields in A
             -- must be a subtype of the matching fields in record B
-            let process (_A₁, _B₁) = do
+            let process _A₁ _B₁ = do
                     _Θ <- get
 
                     subtype
                         (Context.solveType _Θ _A₁)
                         (Context.solveType _Θ _B₁)
 
-            -- We only check fields are present in `both` records.  For
-            -- mismatched fields present only in one record type we have to
-            -- skip to the next step of resolving the mismatch by solving Fields
-            -- variables.
-            traverse_ process both
+            sequence_ (Map.intersectionWith process mapA mapB)
 
             let isRequired _B₁ = do
                     context <- get
@@ -389,11 +369,13 @@ subtype _A₀ _B₀ = do
 
                             push (Context.UnsolvedType existential)
 
-                            let location = Type.location _B₁
+                            let optional = Type.Optional{ .. }
+                                  where
+                                    location = Type.location _B₁
 
-                            let _B₂ = Type.Optional{ type_ = Type.UnsolvedType{ existential, .. }, .. }
+                                    type_ = Type.UnsolvedType{ existential, .. }
 
-                            subtype _B₂ _B₁
+                            subtype _B₁ optional
 
                             return False
 
@@ -402,7 +384,10 @@ subtype _A₀ _B₀ = do
 
                         return True
 
-            let getRequired = fmap (Map.filter id) (traverse isRequired extraB)
+            let getRequired = do
+                    m <- traverse isRequired extraB
+
+                    return (Map.keys (Map.filter id m))
 
             -- Here is where we handle extra fields that were only present in
             -- the subtype or supertype.  They still might be okay if one or
@@ -428,137 +413,131 @@ subtype _A₀ _B₀ = do
                 -- … because that is not the most general solution for `p₀` and
                 -- `p₁`!  The actual most general solution is:
                 --
-                --     p₀ = { y: Text, p₂ }
-                --     p₁ = { x: Bool, p₂ }
+                --     p₀ = y: Text, p₂
+                --     p₁ = x: Bool, p₂
                 --
                 -- … where `p₂` is a fresh Fields type variable representing the
                 -- fact that both records could potentially have even more
                 -- fields other than `x` and `y`.
-                (Monotype.UnsolvedFields p₀, Monotype.UnsolvedFields p₁) -> do
-                    p₂ <- fresh
+                (Monotype.UnsolvedFields p₀, Monotype.UnsolvedFields p₁)
+                    | p₀ /= p₁ -> do
+                        p₂ <- fresh
 
-                    _Γ₀ <- get
+                        _Γ₀ <- get
 
-                    -- We have to insert p₂ before both p₀ and p₁ within the
-                    -- context because the bidirectional type-checking algorithm
-                    -- requires that the context is ordered and all variables
-                    -- within the context can only reference prior variables
-                    -- within the context.
-                    --
-                    -- Since `p₀` and `p₁` both have to reference `p₂`, then we
-                    -- need to insert `p₂` right before `p₀` or `p₁`, whichever
-                    -- one comes first
-                    let p₀First = do
-                            (_Γ', _Γ) <- Context.splitOnUnsolvedFields p₀ _Γ₀
+                        -- We have to insert p₂ before both p₀ and p₁ within the
+                        -- context because the bidirectional type-checking algorithm
+                        -- requires that the context is ordered and all variables
+                        -- within the context can only reference prior variables
+                        -- within the context.
+                        --
+                        -- Since `p₀` and `p₁` both have to reference `p₂`, then we
+                        -- need to insert `p₂` right before `p₀` or `p₁`, whichever
+                        -- one comes first
+                        let p₀First = do
+                                (_Γ', _Γ) <- Context.splitOnUnsolvedFields p₀ _Γ₀
 
-                            Monad.guard (Context.UnsolvedFields p₁ `elem` _Γ')
+                                Monad.guard (Context.UnsolvedFields p₁ `elem` _Γ')
 
-                            let command =
-                                    set (   _Γ'
-                                        <>  ( Context.UnsolvedFields p₀
-                                            : Context.UnsolvedFields p₂
-                                            : _Γ
+                                let command =
+                                        set (   _Γ'
+                                            <>  ( Context.UnsolvedFields p₀
+                                                : Context.UnsolvedFields p₂
+                                                : _Γ
+                                                )
                                             )
-                                        )
 
-                            return command
+                                return command
 
-                    let p₁First = do
-                            (_Γ', _Γ) <- Context.splitOnUnsolvedFields p₁ _Γ₀
+                        let p₁First = do
+                                (_Γ', _Γ) <- Context.splitOnUnsolvedFields p₁ _Γ₀
 
-                            Monad.guard (Context.UnsolvedFields p₀ `elem` _Γ')
+                                Monad.guard (Context.UnsolvedFields p₀ `elem` _Γ')
 
-                            let command =
-                                    set (   _Γ'
-                                        <>  ( Context.UnsolvedFields p₁
-                                            : Context.UnsolvedFields p₂
-                                            : _Γ
+                                let command =
+                                        set (   _Γ'
+                                            <>  ( Context.UnsolvedFields p₁
+                                                : Context.UnsolvedFields p₂
+                                                : _Γ
+                                                )
                                             )
-                                        )
 
-                            return command
+                                return command
 
-                    case p₀First <|> p₁First of
-                        Nothing -> do
-                            Exception.throwIO (MissingOneOfFields [Type.location _A₀, Type.location _B₀] p₀ p₁ _Γ)
+                        case p₀First <|> p₁First of
+                            Nothing -> do
+                                Exception.throwIO (MissingOneOfFields [Type.location _A₀, Type.location _B₀] p₀ p₁ _Γ)
 
-                        Just setContext -> do
-                            setContext
+                            Just setContext -> do
+                                setContext
 
-                    _Θ <- get
-
-                    -- Now we solve for `p₀`.  This is basically saying:
-                    --
-                    -- p₀ = { extraFieldsFromRecordB, p₂ }
-                    instantiateFieldsL
-                        p₀
-                        (Type.location _B₀)
-                        (Context.solveRecord _Θ
-                            (Type.Fields (Map.toList extraB)
-                                (Monotype.UnsolvedFields p₂)
-                            )
-                        )
-
-                    _Δ <- get
-
-                    -- Similarly, solve for `p₁`.  This is basically saying:
-                    --
-                    -- p₁ = { extraFieldsFromRecordA, p₂ }
-                    instantiateFieldsR
-                        (Type.location _A₀)
-                        (Context.solveRecord _Δ
-                            (Type.Fields (Map.toList extraA)
-                                (Monotype.UnsolvedFields p₂)
-                            )
-                        )
-                        p₁
-
-                -- If only one of the records has a Fields variable then the
-                -- solution is simpler: just set the Fields variable to the
-                -- extra fields from the opposing record.
-                (Monotype.UnsolvedFields p₀, _)
-                    | Map.null extraA -> do
                         _Θ <- get
 
+                        -- Now we solve for `p₀`.  This is basically saying:
+                        --
+                        -- p₀ = extraFieldsFromRecordB, p₂
                         instantiateFieldsL
                             p₀
                             (Type.location _B₀)
                             (Context.solveRecord _Θ
-                                (Type.Fields (Map.toList extraB) fields₁)
+                                (Type.Fields (Map.toList extraB)
+                                    (Monotype.UnsolvedFields p₂)
+                                )
                             )
+
+                        _Δ <- get
+
+                        -- Similarly, solve for `p₁`.  This is basically saying:
+                        --
+                        -- p₁ = extraFieldsFromRecordA, p₂
+                        instantiateFieldsR
+                            (Type.location _A₀)
+                            (Context.solveRecord _Δ
+                                (Type.Fields (Map.toList extraA)
+                                    (Monotype.UnsolvedFields p₂)
+                                )
+                            )
+                            p₁
+
+                -- If only one of the records has a Fields variable then the
+                -- solution is simpler: just set the Fields variable to the
+                -- extra fields from the opposing record.
+                (Monotype.UnsolvedFields p₀, _) -> do
+                    _Θ <- get
+
+                    instantiateFieldsL
+                        p₀
+                        (Type.location _B₀)
+                        (Context.solveRecord _Θ
+                            (Type.Fields (Map.toList extraB) fields₁)
+                        )
 
                 (_, Monotype.UnsolvedFields p₁) -> do
                     requiredB <- getRequired
 
-                    if Map.null requiredB
-                        then do
-                            _Θ <- get
+                    Monad.unless (null requiredB) do
+                        Exception.throwIO (RecordTypeMismatch _A₀ _B₀ requiredB)
 
-                            instantiateFieldsR
-                                (Type.location _A₀)
-                                (Context.solveRecord _Θ
-                                    (Type.Fields (Map.toList extraA) fields₀)
-                                )
-                                p₁
-                        else
-                            Exception.throwIO (RecordTypeMismatch _A₀ _B₀ (Map.keys extraA) (Map.keys requiredB))
+                    _Θ <- get
 
-                _   | Map.null extraA && fields₀ == fields₁ -> do
+                    instantiateFieldsR
+                        (Type.location _A₀)
+                        (Context.solveRecord _Θ
+                            (Type.Fields (Map.toList extraA) fields₀)
+                        )
+                        p₁
+
+                _   | fields₀ == fields₁ -> do
                         requiredB <- getRequired
 
-                        if Map.null requiredB
-                            then do
-                                return ()
-                            else
-                                Exception.throwIO (RecordTypeMismatch _A₀ _B₀ (Map.keys extraA) (Map.keys requiredB))
+                        Monad.unless (null requiredB) do
+                            Exception.throwIO (RecordTypeMismatch _A₀ _B₀ requiredB)
+
                     | otherwise -> do
                         requiredB <- getRequired
 
-                        Exception.throwIO (RecordTypeMismatch _A₀ _B₀ (Map.keys extraA) (Map.keys requiredB))
+                        Exception.throwIO (RecordTypeMismatch _A₀ _B₀ requiredB)
 
-        -- Checking if one union is a subtype of another union is basically the
-        -- exact same as the logic for checking if a record is a subtype of
-        -- another record.
         (_A@Type.Union{ alternatives = Type.Alternatives kAs₀ alternatives₀ }, _B@Type.Union{ alternatives = Type.Alternatives kBs₀ alternatives₁ }) -> do
             let mapA = Map.fromList kAs₀
             let mapB = Map.fromList kBs₀
@@ -2354,7 +2333,7 @@ data TypeInferenceError
     | UnboundTypeVariable Location Text
     | UnboundVariable Location Text Int
     --
-    | RecordTypeMismatch (Type Location) (Type Location) [Text] [Text]
+    | RecordTypeMismatch (Type Location) (Type Location) [Text]
     | UnionTypeMismatch (Type Location) (Type Location) (Map.Map Text (Type Location)) (Map.Map Text (Type Location))
     deriving (Eq, Show)
 
@@ -2615,7 +2594,7 @@ instance Exception TypeInferenceError where
         where
             var = Grace.Pretty.toSmart @(Syntax.Syntax () Void) Syntax.Variable{ location = (), .. }
 
-    displayException (RecordTypeMismatch _A₀ _B₀ extraA extraB) | null extraA && null extraB =
+    displayException (RecordTypeMismatch _A₀ _B₀ extraB) | null extraB =
         "Record type mismatch\n\
         \\n\
         \The following record type:\n\
@@ -2630,26 +2609,7 @@ instance Exception TypeInferenceError where
         \\n\
         \" <> Text.unpack (Location.renderError "" (Type.location _B₀))
 
-    displayException (RecordTypeMismatch _A₀ _B₀ extraA extraB) | null extraB =
-        "Record type mismatch\n\
-        \\n\
-        \The following record type:\n\
-        \\n\
-        \" <> insert _A₀ <> "\n\
-        \\n\
-        \" <> Text.unpack (Location.renderError "" (Type.location _A₀)) <> "\n\
-        \\n\
-        \… is not a subtype of the following record type:\n\
-        \\n\
-        \" <> insert _B₀ <> "\n\
-        \\n\
-        \" <> Text.unpack (Location.renderError "" (Type.location _B₀)) <> "\n\
-        \\n\
-        \The former record has the following extra fields:\n\
-        \\n\
-        \" <> listToText extraA
-
-    displayException (RecordTypeMismatch _A₀ _B₀ extraA extraB) | null extraA =
+    displayException (RecordTypeMismatch _A₀ _B₀ extraB) =
         "Record type mismatch\n\
         \\n\
         \The following record type:\n\
@@ -2665,29 +2625,6 @@ instance Exception TypeInferenceError where
         \" <> Text.unpack (Location.renderError "" (Type.location _B₀)) <> "\n\
         \\n\
         \The latter record has the following extra fields:\n\
-        \\n\
-        \" <> listToText extraB
-
-    displayException (RecordTypeMismatch _A₀ _B₀ extraA extraB) =
-        "Record type mismatch\n\
-        \\n\
-        \The following record type:\n\
-        \\n\
-        \" <> insert _A₀ <> "\n\
-        \\n\
-        \" <> Text.unpack (Location.renderError "" (Type.location _A₀)) <> "\n\
-        \\n\
-        \… is not a subtype of the following record type:\n\
-        \\n\
-        \" <> insert _B₀ <> "\n\
-        \\n\
-        \" <> Text.unpack (Location.renderError "" (Type.location _B₀)) <> "\n\
-        \\n\
-        \The former record has the following extra fields:\n\
-        \\n\
-        \" <> listToText extraA <> "\n\
-        \\n\
-        \… while the latter record has the following extra fields:\n\
         \\n\
         \" <> listToText extraB
 

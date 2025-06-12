@@ -1,0 +1,2 @@
+let f (r : { x : Natural }) = r.x
+in  f { x: 1, y: true }
