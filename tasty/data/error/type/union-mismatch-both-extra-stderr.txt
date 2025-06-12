@@ -21,7 +21,3 @@ tasty/data/error/type/union-mismatch-both-extra-input.ffg:1:27:
 The former union has the following extra alternatives:
 
 • A
-
-… while the latter union has the following extra alternatives:
-
-• B

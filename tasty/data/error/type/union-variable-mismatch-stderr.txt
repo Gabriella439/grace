@@ -1,6 +1,6 @@
-Not a union subtype
+Union type mismatch
 
-The following type:
+The following union type:
 
   < b >
 
@@ -9,7 +9,7 @@ tasty/data/error/type/union-variable-mismatch-input.ffg:1:74:
 1 │ let f : forall (a : Alternatives) . forall (b : Alternatives) . < a > -> < b > -> < a >
   │                                                                          ↑
 
-… cannot be a subtype of:
+… is not a subtype of the following union type:
 
   < a >
 

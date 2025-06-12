@@ -545,124 +545,93 @@ subtype _A₀ _B₀ = do
             let extraA = Map.difference mapA mapB
             let extraB = Map.difference mapB mapA
 
-            let both = Map.intersectionWith (,) mapA mapB
-
-            let flexible  Monotype.EmptyAlternatives          = False
-                flexible (Monotype.VariableAlternatives _   ) = False
-                flexible (Monotype.UnsolvedAlternatives _   ) = True
-
-            let okayA = Map.null extraA
-                    ||  (flexible alternatives₁ && alternatives₀ /= alternatives₁)
-            let okayB = Map.null extraB
-                    ||  (flexible alternatives₀ && alternatives₀ /= alternatives₁)
-
-            if | not okayA && not okayB -> do
-                Exception.throwIO (UnionTypeMismatch _A₀ _B₀ extraA extraB)
-
-               | not okayA && okayB -> do
-                Exception.throwIO (UnionTypeMismatch _A₀ _B₀ extraA mempty)
-
-               | okayA && not okayB -> do
-                Exception.throwIO (UnionTypeMismatch _A₀ _B₀ mempty extraB)
-
-               | otherwise -> do
-                return ()
-
-            let process (_A₁, _B₁) = do
+            let process _A₁ _B₁ = do
                     _Θ <- get
 
                     subtype
                         (Context.solveType _Θ _A₁)
                         (Context.solveType _Θ _B₁)
 
-            traverse_ process both
+            sequence_ (Map.intersectionWith process mapA mapB)
 
             case (alternatives₀, alternatives₁) of
-                _ | null extraA && null extraB && alternatives₀ == alternatives₁ -> do
-                        return ()
-
-                (Monotype.UnsolvedAlternatives p₀, Monotype.UnsolvedAlternatives p₁) -> do
-                    p₂ <- fresh
-
-                    _Γ₀ <- get
-
-                    let p₀First = do
-                            (_Γ', _Γ) <- Context.splitOnUnsolvedAlternatives p₀ _Γ₀
-
-                            Monad.guard (Context.UnsolvedAlternatives p₁ `elem` _Γ')
-
-                            let command =
-                                    set (   _Γ'
-                                        <>  ( Context.UnsolvedAlternatives p₀
-                                            : Context.UnsolvedAlternatives p₂
-                                            : _Γ
-                                            )
-                                        )
-
-                            return command
-
-                    let p₁First = do
-                            (_Γ', _Γ) <- Context.splitOnUnsolvedAlternatives p₁ _Γ₀
-
-                            Monad.guard (Context.UnsolvedAlternatives p₀ `elem` _Γ')
-
-                            let command =
-                                    set (   _Γ'
-                                        <>  ( Context.UnsolvedAlternatives p₁
-                                            : Context.UnsolvedAlternatives p₂
-                                            : _Γ
-                                            )
-                                        )
-
-                            return command
-
-                    case p₀First <|> p₁First of
-                        Nothing -> do
-                            Exception.throwIO (MissingOneOfAlternatives [Type.location _A₀, Type.location _B₀] p₀ p₁ _Γ)
-
-                        Just setContext -> do
-                            setContext
-
-                    _Θ <- get
-
-                    instantiateAlternativesL
-                        p₀
-                        (Type.location _B₀)
-                        (Context.solveUnion _Θ
-                            (Type.Alternatives (Map.toList extraB)
-                                (Monotype.UnsolvedAlternatives p₂)
-                            )
-                        )
-
-                    _Δ <- get
-
-                    instantiateAlternativesR
-                        (Type.location _A₀)
-                        (Context.solveUnion _Δ
-                            (Type.Alternatives (Map.toList extraA)
-                                (Monotype.UnsolvedAlternatives p₂)
-                            )
-                        )
-                        p₁
-
-                (Monotype.EmptyAlternatives, Monotype.EmptyAlternatives) -> do
-                    return ()
-
-                (Monotype.UnsolvedAlternatives p₀, _) -> do
-                    _Θ <- get
-
-                    instantiateAlternativesL
-                        p₀
-                        (Type.location _B₀)
-                        (Context.solveUnion _Θ
-                            (Type.Alternatives (Map.toList extraB)
-                                alternatives₁
-                            )
-                        )
-
-                (Monotype.VariableAlternatives p₀, Monotype.VariableAlternatives p₁)
+                (Monotype.UnsolvedAlternatives p₀, Monotype.UnsolvedAlternatives p₁)
                     | p₀ == p₁ -> do
-                        return ()
+                        p₂ <- fresh
+
+                        _Γ₀ <- get
+
+                        let p₀First = do
+                                (_Γ', _Γ) <- Context.splitOnUnsolvedAlternatives p₀ _Γ₀
+
+                                Monad.guard (Context.UnsolvedAlternatives p₁ `elem` _Γ')
+
+                                let command =
+                                        set (   _Γ'
+                                            <>  ( Context.UnsolvedAlternatives p₀
+                                                : Context.UnsolvedAlternatives p₂
+                                                : _Γ
+                                                )
+                                            )
+
+                                return command
+
+                        let p₁First = do
+                                (_Γ', _Γ) <- Context.splitOnUnsolvedAlternatives p₁ _Γ₀
+
+                                Monad.guard (Context.UnsolvedAlternatives p₀ `elem` _Γ')
+
+                                let command =
+                                        set (   _Γ'
+                                            <>  ( Context.UnsolvedAlternatives p₁
+                                                : Context.UnsolvedAlternatives p₂
+                                                : _Γ
+                                                )
+                                            )
+
+                                return command
+
+                        case p₀First <|> p₁First of
+                            Nothing -> do
+                                Exception.throwIO (MissingOneOfAlternatives [Type.location _A₀, Type.location _B₀] p₀ p₁ _Γ)
+
+                            Just setContext -> do
+                                setContext
+
+                        _Θ <- get
+
+                        instantiateAlternativesL
+                            p₀
+                            (Type.location _B₀)
+                            (Context.solveUnion _Θ
+                                (Type.Alternatives (Map.toList extraB)
+                                    (Monotype.UnsolvedAlternatives p₂)
+                                )
+                            )
+
+                        _Δ <- get
+
+                        instantiateAlternativesR
+                            (Type.location _A₀)
+                            (Context.solveUnion _Δ
+                                (Type.Alternatives (Map.toList extraA)
+                                    (Monotype.UnsolvedAlternatives p₂)
+                                )
+                            )
+                            p₁
+
+                (Monotype.UnsolvedAlternatives p₀, _)
+                    | Map.null extraA -> do
+                        _Θ <- get
+
+                        instantiateAlternativesL
+                            p₀
+                            (Type.location _B₀)
+                            (Context.solveUnion _Θ
+                                (Type.Alternatives (Map.toList extraB)
+                                    alternatives₁
+                                )
+                            )
 
                 (_, Monotype.UnsolvedAlternatives p₁) -> do
                     _Θ <- get
@@ -676,8 +645,12 @@ subtype _A₀ _B₀ = do
                         )
                         p₁
 
-                (_, _) -> do
-                    Exception.throwIO (NotUnionSubtype (Type.location _A₀) _A (Type.location _B₀) _B)
+                _   | alternatives₀ == alternatives₁ && Map.null extraA -> do
+                        return ()
+
+                    | otherwise -> do
+                        Exception.throwIO (UnionTypeMismatch _A₀ _B₀ (Map.keys extraA))
+
 
         -- Unfortunately, we need to have this wildcard match at the end,
         -- otherwise we'd have to specify a number of cases that is quadratic
@@ -2325,7 +2298,6 @@ data TypeInferenceError
     --
     | NotAlternativesSubtype Location (Existential Monotype.Union) (Type.Union Location)
     | NotFieldsSubtype Location (Existential Monotype.Record) (Type.Record Location)
-    | NotUnionSubtype Location (Type Location) Location (Type Location)
     | NotSubtype Location (Type Location) Location (Type Location)
     --
     | UnboundAlternatives Location Text
@@ -2334,7 +2306,7 @@ data TypeInferenceError
     | UnboundVariable Location Text Int
     --
     | RecordTypeMismatch (Type Location) (Type Location) [Text]
-    | UnionTypeMismatch (Type Location) (Type Location) (Map.Map Text (Type Location)) (Map.Map Text (Type Location))
+    | UnionTypeMismatch (Type Location) (Type Location) [Text]
     deriving (Eq, Show)
 
 instance Exception TypeInferenceError where
@@ -2542,21 +2514,6 @@ instance Exception TypeInferenceError where
         \\n\
         \… because the same fields variable appears within that record type."
 
-    displayException (NotUnionSubtype locA₀ _A locB₀ _B) =
-        "Not a union subtype\n\
-        \\n\
-        \The following type:\n\
-        \\n\
-        \" <> insert _A <> "\n\
-        \\n\
-        \" <> Text.unpack (Location.renderError "" locA₀) <> "\n\
-        \\n\
-        \… cannot be a subtype of:\n\
-        \\n\
-        \" <> insert _B <> "\n\
-        \\n\
-        \" <> Text.unpack (Location.renderError "" locB₀)
-
     displayException (NotSubtype locA₀ _A locB₀ _B) =
         "Not a subtype\n\
         \\n\
@@ -2628,7 +2585,22 @@ instance Exception TypeInferenceError where
         \\n\
         \" <> listToText extraB
 
-    displayException (UnionTypeMismatch _A₀ _B₀ extraA extraB) | extraB == mempty =
+    displayException (UnionTypeMismatch _A₀ _B₀ extraA) | null extraA =
+        "Union type mismatch\n\
+        \\n\
+        \The following union type:\n\
+        \\n\
+        \" <> insert _A₀ <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _A₀)) <> "\n\
+        \\n\
+        \… is not a subtype of the following union type:\n\
+        \\n\
+        \" <> insert _B₀ <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location _B₀))
+
+    displayException (UnionTypeMismatch _A₀ _B₀ extraA) =
         "Union type mismatch\n\
         \\n\
         \The following union type:\n\
@@ -2645,49 +2617,7 @@ instance Exception TypeInferenceError where
         \\n\
         \The former union has the following extra alternatives:\n\
         \\n\
-        \" <> listToText (Map.keys extraA)
-
-    displayException (UnionTypeMismatch _A₀ _B₀ extraA extraB) | extraA == mempty =
-        "Union type mismatch\n\
-        \\n\
-        \The following union type:\n\
-        \\n\
-        \" <> insert _A₀ <> "\n\
-        \\n\
-        \" <> Text.unpack (Location.renderError "" (Type.location _A₀)) <> "\n\
-        \\n\
-        \… is not a subtype of the following union type:\n\
-        \\n\
-        \" <> insert _B₀ <> "\n\
-        \\n\
-        \" <> Text.unpack (Location.renderError "" (Type.location _B₀)) <> "\n\
-        \\n\
-        \The latter union has the following extra alternatives:\n\
-        \\n\
-        \" <> listToText (Map.keys extraB)
-
-    displayException (UnionTypeMismatch _A₀ _B₀ extraA extraB) =
-        "Union type mismatch\n\
-        \\n\
-        \The following union type:\n\
-        \\n\
-        \" <> insert _A₀ <> "\n\
-        \\n\
-        \" <> Text.unpack (Location.renderError "" (Type.location _A₀)) <> "\n\
-        \\n\
-        \… is not a subtype of the following union type:\n\
-        \\n\
-        \" <> insert _B₀ <> "\n\
-        \\n\
-        \" <> Text.unpack (Location.renderError "" (Type.location _B₀)) <> "\n\
-        \\n\
-        \The former union has the following extra alternatives:\n\
-        \\n\
-        \" <> listToText (Map.keys extraA) <> "\n\
-        \\n\
-        \… while the latter union has the following extra alternatives:\n\
-        \\n\
-        \" <> listToText (Map.keys extraB)
+        \" <> listToText extraA
 
 -- Helper functions for displaying errors
 
