@@ -71,6 +71,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
 import qualified Data.Void as Void
 import qualified Grace.Compat as Compat
+import qualified Grace.Domain as Domain
 import qualified Grace.HTTP as HTTP
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Pretty as Pretty
@@ -118,43 +119,35 @@ asReal (Integer n) = Just (fromInteger  n)
 asReal (Real    n) = Just n
 asReal  _          = Nothing
 
-toJSONSchema :: Type a -> Either (UnsupportedModelOutput a) (Aeson.Value, Type a)
+toJSONSchema :: Type a -> Either (UnsupportedModelOutput a) Aeson.Value
 toJSONSchema original = loop original
   where
     loop Type.Forall{ location, name, type_ } = do
         loop
             (Type.substituteType name 0 Type.Scalar{ location, scalar = Monotype.Text } type_)
-    loop Type.Optional{ location, type_ } = do
-        (present, newType) <- loop type_
+    loop Type.Optional{ type_ } = do
+        present <- loop type_
 
         let absent = Aeson.object [ ("type", "null") ]
 
-        return (Aeson.object [ ("type", "object"), ("anyOf", Aeson.toJSON ([ present, absent ] :: [ Aeson.Value ]))], Type.Optional{ location, type_ = newType })
-
-    loop Type.List{ location, type_ } = do
-        (items, newType) <- loop type_
-
         return
-            ( Aeson.object [ ("type", "array"), ("items", items) ]
-            , Type.List{ location, type_ = newType }
+            ( Aeson.object
+                [ ("type", "object")
+                , ("anyOf", Aeson.toJSON ([ present, absent ] :: [ Aeson.Value ]))
+                ]
             )
-    loop Type.Record{ fields = Type.Fields fieldTypes remaining, .. } = do
+
+    loop Type.List{ type_ } = do
+        items <- loop type_
+
+        return (Aeson.object [ ("type", "array"), ("items", items) ])
+    loop Type.Record{ fields = Type.Fields fieldTypes _ } = do
         let toProperty (field, type_) = do
-                (property, newType) <- loop type_
-
-                return (field, property, newType)
-
-        triples <- traverse toProperty fieldTypes
-
-        let properties = do
-                (field, property, _) <- triples
+                property <- loop type_
 
                 return (field, property)
 
-        let newFieldTypes = do
-                (field, _, newType) <- triples
-
-                return (field, newType)
+        properties <- traverse toProperty fieldTypes
 
         return
             ( Aeson.object
@@ -163,7 +156,6 @@ toJSONSchema original = loop original
                 , ("additionalProperties", Aeson.toJSON False)
                 , ("required", Aeson.toJSON required)
                 ]
-            , Type.Record{ fields = Type.Fields newFieldTypes remaining, .. }
             )
       where
         required = do
@@ -172,9 +164,9 @@ toJSONSchema original = loop original
             case type_ of
                 Type.Optional{ } -> empty
                 _ -> return field
-    loop Type.Union{ alternatives = Type.Alternatives alternativeTypes remaining, .. } = do
+    loop Type.Union{ alternatives = Type.Alternatives alternativeTypes _ } = do
         let toAnyOf (alternative, type_) = do
-                (contents, newType) <- loop type_
+                contents <- loop type_
 
                 return
                     (Aeson.object
@@ -193,43 +185,32 @@ toJSONSchema original = loop original
                         , ("required", Aeson.toJSON ([ "tag", "contents" ] :: [Text]))
                         , ("additionalProperties", Aeson.toJSON False)
                         ]
-                    , (alternative, newType)
                     )
 
-        results <- traverse toAnyOf alternativeTypes
-
-        let anyOfs = fmap fst results
-
-        let newAlternativeTypes = fmap snd results
+        anyOfs <- traverse toAnyOf alternativeTypes
 
         return
             ( Aeson.object
                 [ ("type", "object"), ("anyOf", Aeson.toJSON anyOfs) ]
-            , Type.Union
-                { alternatives =
-                    Type.Alternatives newAlternativeTypes remaining
-                , ..
-                }
             )
-    loop oldType@Type.Scalar{ scalar = Monotype.Bool } =
-        return (Aeson.object [ ("type", "boolean") ], oldType)
-    loop oldType@Type.Scalar{ scalar = Monotype.Real } =
-        return (Aeson.object [ ("type", "number") ], oldType)
-    loop oldType@Type.Scalar{ scalar = Monotype.Integer } =
-        return (Aeson.object [ ("type", "integer") ], oldType)
-    loop oldType@Type.Scalar{ scalar = Monotype.JSON } =
-        return (Aeson.object [ ], oldType)
-    loop oldType@Type.Scalar{ scalar = Monotype.Natural } =
+    loop Type.Scalar{ scalar = Monotype.Bool } =
+        return (Aeson.object [ ("type", "boolean") ])
+    loop Type.Scalar{ scalar = Monotype.Real } =
+        return (Aeson.object [ ("type", "number") ])
+    loop Type.Scalar{ scalar = Monotype.Integer } =
+        return (Aeson.object [ ("type", "integer") ])
+    loop Type.Scalar{ scalar = Monotype.JSON } =
+        return (Aeson.object [ ])
+    loop Type.Scalar{ scalar = Monotype.Natural } =
         return
             (Aeson.object
                 [ ("type", "number")
                 -- , ("minimum", Aeson.toJSON (0 :: Int))
                 -- ^ Not supported by OpenAI
                 ]
-            , oldType
             )
-    loop oldType@Type.Scalar{ scalar = Monotype.Text } =
-        return (Aeson.object [ ("type", "string") ], oldType)
+    loop Type.Scalar{ scalar = Monotype.Text } =
+        return (Aeson.object [ ("type", "string") ])
     loop _ = Left UnsupportedModelOutput{..}
 
 fromJSON :: Type a -> Aeson.Value -> Either (InvalidJSON a) Value
@@ -438,7 +419,17 @@ evaluate maybeMethods = loop
 
             Syntax.Prompt{ schema = Nothing } -> do
                 Exception.throwIO MissingSchema
-            Syntax.Prompt{ schema = Just schema, ..} -> do
+            Syntax.Prompt{ schema = Just schema, location = _, .. } -> do
+                let defaultToText Type.Forall{ location, name, domain = Domain.Type, type_ } =
+                        Type.substituteType name 0 Type.Scalar{ location, scalar = Monotype.Text } type_
+                    defaultToText Type.Forall{ name, domain = Domain.Fields, type_ } =
+                        Type.substituteFields name 0 (Type.Fields [] Monotype.EmptyFields) type_
+                    defaultToText Type.Forall{ name, domain = Domain.Alternatives, type_ } =
+                        Type.substituteAlternatives name 0 (Type.Alternatives [] Monotype.EmptyAlternatives) type_
+                    defaultToText type_ = type_
+
+                let defaultedSchema = Lens.transform defaultToText schema
+
                 value <- loop env arguments
 
                 case value of
@@ -553,10 +544,10 @@ evaluate maybeMethods = loop
                                                 Left message_ -> Exception.throwIO JSONDecodingFailed{ message = message_, text }
                                                 Right v -> return v
 
-                                    let requestJSON newSchema =
+                                    let requestJSON =
                                             instructions <> "Generate JSON output matching the following type:\n\
                                             \\n\
-                                            \" <> Pretty.toSmart newSchema
+                                            \" <> Pretty.toSmart defaultedSchema
                                           where
                                             instructions = case prompt of
                                                 Nothing ->
@@ -580,35 +571,35 @@ evaluate maybeMethods = loop
                                                 )
 
                                     let extractRecord = do
-                                            (jsonSchema, newSchema) <- case toJSONSchema schema of
+                                            jsonSchema <- case toJSONSchema defaultedSchema of
                                                 Left exception -> Exception.throwIO exception
                                                 Right result -> return result
 
                                             let extract text = do
                                                     v <- decode text
 
-                                                    case fromJSON newSchema v of
+                                                    case fromJSON defaultedSchema v of
                                                         Left invalidJSON -> Exception.throwIO invalidJSON
                                                         Right e -> return e
 
                                             return
-                                                ( requestJSON newSchema
+                                                ( requestJSON
                                                 , Just (toResponseFormat jsonSchema)
                                                 , extract
                                                 )
 
                                     let extractNonRecord = do
                                             let adjustedSchema =
-                                                    Type.Record location (Type.Fields [("response", schema)] Monotype.EmptyFields)
+                                                    Type.Record (Type.location defaultedSchema) (Type.Fields [("response", defaultedSchema)] Monotype.EmptyFields)
 
-                                            (jsonSchema, newSchema) <- case toJSONSchema adjustedSchema of
+                                            jsonSchema <- case toJSONSchema adjustedSchema of
                                                 Left exception -> Exception.throwIO exception
                                                 Right result -> return result
 
                                             let extract text = do
                                                     v <- decode text
 
-                                                    expression <- case fromJSON newSchema v of
+                                                    expression <- case fromJSON adjustedSchema v of
                                                         Left invalidJSON -> Exception.throwIO invalidJSON
                                                         Right expression -> return expression
 
@@ -619,12 +610,12 @@ evaluate maybeMethods = loop
                                                             return other
 
                                             return
-                                                ( requestJSON newSchema
+                                                ( requestJSON
                                                 , Just (toResponseFormat jsonSchema)
                                                 , extract
                                                 )
 
-                                    (text, response_format, extract) <- case schema of
+                                    (text, response_format, extract) <- case defaultedSchema of
                                             Type.Scalar{ scalar = Monotype.Text } -> extractText
                                             Type.Record{ } -> extractRecord
                                             _ -> extractNonRecord
@@ -1062,9 +1053,17 @@ instance (Show a, Typeable a) => Exception (InvalidJSON a) where
         \\n\
         \The model produced the following JSON value:\n\
         \\n\
+        \" <> string <> "\n\
+        \\n\
         \… which does not match the following expected type:\n\
         \\n\
         \" <> Text.unpack (Pretty.toSmart type_)
+      where
+        bytes = ByteString.Lazy.toStrict (Aeson.encode value)
+
+        string = case Encoding.decodeUtf8' bytes of
+            Left  _    -> show bytes
+            Right text -> Text.unpack text
 
 -- | The model didn't return an expected, successful response
 data UnexpectedModelResponse = UnexpectedModelResponse{ choices :: Vector Choice }
