@@ -154,89 +154,73 @@ scopedUnsolvedAlternatives k = do
 
         k (Type.Alternatives [] (Monotype.UnsolvedAlternatives a))
 
-{-| This corresponds to the judgment:
-
-    > Γ ⊢ A
-
-    … which checks that under context Γ, the type A is well-formed
+{-| @`wellFormed` context type@ checks that all type/fields/alternatives
+    variables within @type@ are declared within the @context@
 -}
-wellFormedType
-    :: MonadThrow m
-    => Context Location -> Type Location -> m ()
-wellFormedType _Γ type₀ =
-    case type₀ of
-        -- UvarWF
-        Type.VariableType{..}
-            | Context.Variable Domain.Type name `elem` _Γ -> do
-                return ()
-            | otherwise -> Exception.throwIO (UnboundTypeVariable location name)
+wellFormed :: MonadThrow m => Context Location -> Type Location -> m ()
+wellFormed context Type.VariableType{..}
+    | Context.Variable Domain.Type name `elem` context = do
+        return ()
+    | otherwise = do
+        Exception.throwIO (UnboundTypeVariable location name)
 
-        -- ArrowWF
-        Type.Function{..} -> do
-            wellFormedType _Γ input
-            wellFormedType _Γ output
+wellFormed context Type.Function{..} = do
+    wellFormed context input
+    wellFormed context output
 
-        -- ForallWF
-        Type.Forall{..} -> do
-            wellFormedType (Context.Variable domain name : _Γ) type_
+wellFormed context Type.Forall{..} = do
+    wellFormed (Context.Variable domain name : context) type_
 
-        -- EvarWF / SolvedEvarWF
-        _A@Type.UnsolvedType{..}
-            | any predicate _Γ -> do
-                return ()
-            | otherwise -> do
-                Exception.throwIO (IllFormedType location _A _Γ)
+wellFormed context _A@Type.UnsolvedType{..}
+    | all mismatch context = do
+        Exception.throwIO (IllFormedType location _A context)
+    | otherwise = do
+        return ()
+  where
+    mismatch (Context.UnsolvedType a  ) = existential /= a
+    mismatch (Context.SolvedType   a _) = existential /= a
+    mismatch  _                         = True
+
+wellFormed context Type.Optional{..} = do
+    wellFormed context type_
+
+wellFormed context Type.List{..} = do
+    wellFormed context type_
+
+wellFormed context Type.Record{ location, fields = Type.Fields kAs remainingFields } =
+    case remainingFields of
+        Monotype.UnsolvedFields a₀
+            | all mismatch context ->
+                Exception.throwIO (IllFormedFields location a₀ context)
           where
-            predicate (Context.UnsolvedType a  ) = existential == a
-            predicate (Context.SolvedType   a _) = existential == a
-            predicate  _                         = False
+            mismatch (Context.UnsolvedFields a₁  ) = a₀ /= a₁
+            mismatch (Context.SolvedFields   a₁ _) = a₀ /= a₁
+            mismatch  _                            = True
 
-        Type.Optional{..} -> do
-            wellFormedType _Γ type_
-
-        Type.List{..} -> do
-            wellFormedType _Γ type_
-
-        Type.Record{ fields = Type.Fields kAs Monotype.EmptyFields } -> do
-            traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
-
-        Type.Record{ fields = Type.Fields kAs (Monotype.UnsolvedFields a₀), .. }
-            | any predicate _Γ -> do
-                traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
-            | otherwise -> do
-                Exception.throwIO (IllFormedFields location a₀ _Γ)
-          where
-            predicate (Context.UnsolvedFields a₁  ) = a₀ == a₁
-            predicate (Context.SolvedFields   a₁ _) = a₀ == a₁
-            predicate  _                            = False
-
-        Type.Record{ fields = Type.Fields kAs (Monotype.VariableFields a), .. }
-            | Context.Variable Domain.Fields a `elem` _Γ -> do
-                traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
-            | otherwise -> do
+        Monotype.VariableFields a
+            | Context.Variable Domain.Fields a `notElem` context ->
                 Exception.throwIO (UnboundFields location a)
 
-        Type.Union{ alternatives = Type.Alternatives kAs Monotype.EmptyAlternatives } -> do
-            traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
+        _ -> do
+            traverse_ (\(_, _A) -> wellFormed context _A) kAs
 
-        Type.Union{ alternatives = Type.Alternatives kAs (Monotype.UnsolvedAlternatives a₀), .. }
-            | any predicate _Γ -> do
-                traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
-            | otherwise -> do
-                Exception.throwIO (IllFormedAlternatives location a₀ _Γ)
+wellFormed context Type.Union{ location, alternatives = Type.Alternatives kAs remainingAlternatives } =
+    case remainingAlternatives of
+        Monotype.UnsolvedAlternatives a₀
+            | all mismatch context ->
+                Exception.throwIO (IllFormedAlternatives location a₀ context)
           where
-            predicate (Context.UnsolvedAlternatives a₁  ) = a₀ == a₁
-            predicate (Context.SolvedAlternatives   a₁ _) = a₀ == a₁
-            predicate  _                                  = False
-
-        Type.Union{ alternatives = Type.Alternatives kAs (Monotype.VariableAlternatives a), .. }
-            | Context.Variable Domain.Alternatives a `elem` _Γ -> do
-                traverse_ (\(_, _A) -> wellFormedType _Γ _A) kAs
-            | otherwise -> do
+            mismatch (Context.UnsolvedAlternatives a₁  ) = a₀ /= a₁
+            mismatch (Context.SolvedAlternatives   a₁ _) = a₀ /= a₁
+            mismatch  _                                  = True
+        Monotype.VariableAlternatives a
+            | Context.Variable Domain.Alternatives a `notElem` context ->
                 Exception.throwIO (UnboundAlternatives location a)
+        _ ->
+            traverse_ (\(_, _A) -> wellFormed context _A) kAs
 
-        Type.Scalar{} -> do
-            return ()
+wellFormed _ Type.Scalar{} = do
+    return ()
 
 {-| This corresponds to the judgment:
 
@@ -255,7 +239,7 @@ subtype _A₀ _B₀ = do
         -- <:Var
         (Type.VariableType{ name = a₀ }, Type.VariableType{ name = a₁ })
             | a₀ == a₁ -> do
-                wellFormedType _Γ _A₀
+                wellFormed _Γ _A₀
 
         -- <:Exvar
         (Type.UnsolvedType{ existential = a₀ }, Type.UnsolvedType{ existential = a₁ })
@@ -755,7 +739,7 @@ instantiateTypeL a _A₀ = do
     (_Γ', _Γ) <- Context.splitOnUnsolvedType a _Γ₀ `orDie` MissingVariable a _Γ₀
 
     let instLSolve τ = do
-            wellFormedType _Γ _A₀
+            wellFormed _Γ _A₀
 
             set (_Γ' <> (Context.SolvedType a τ : _Γ))
 
@@ -882,7 +866,7 @@ instantiateTypeR _A₀ a = do
     (_Γ', _Γ) <- Context.splitOnUnsolvedType a _Γ₀ `orDie` MissingVariable a _Γ₀
 
     let instRSolve τ = do
-            wellFormedType _Γ _A₀
+            wellFormed _Γ _A₀
 
             set (_Γ' <> (Context.SolvedType a τ : _Γ))
 
@@ -1032,7 +1016,7 @@ instantiateFieldsL p₀ location fields@(Type.Fields kAs rest) = do
             equateFields p₁ p₂
 
         _ -> do
-            wellFormedType (bs <> _Γ)
+            wellFormed (bs <> _Γ)
                 Type.Record{ fields = Type.Fields [] rest, .. }
 
             set (_Γ' <> (Context.SolvedFields p₀ (Monotype.Fields kbs rest) : bs <> _Γ))
@@ -1077,7 +1061,7 @@ instantiateFieldsR location fields@(Type.Fields kAs rest) p₀ = do
             equateFields p₁ p₂
 
         _ -> do
-            wellFormedType (bs <> _Γ)
+            wellFormed (bs <> _Γ)
                 Type.Record{ fields = Type.Fields [] rest, .. }
 
             set (_Γ' <> (Context.SolvedFields p₀ (Monotype.Fields kbs rest) : bs <> _Γ))
@@ -1149,7 +1133,7 @@ instantiateAlternativesL p₀ location alternatives@(Type.Alternatives kAs rest)
             equateAlternatives p₁ p₂
 
         _ -> do
-            wellFormedType (bs <> _Γ)
+            wellFormed (bs <> _Γ)
                 Type.Union{ alternatives = Type.Alternatives [] rest, .. }
 
             set (_Γ' <> (Context.SolvedAlternatives p₀ (Monotype.Alternatives kbs rest) : bs <> _Γ))
@@ -1194,7 +1178,7 @@ instantiateAlternativesR location alternatives@(Type.Alternatives kAs rest) p₀
             equateAlternatives p₁ p₂
 
         _ -> do
-            wellFormedType (bs <> _Γ)
+            wellFormed (bs <> _Γ)
                 Type.Union{ alternatives = Type.Alternatives [] rest, .. }
 
             set (_Γ' <> (Context.SolvedAlternatives p₀ (Monotype.Alternatives kbs rest) : bs <> _Γ))
@@ -1318,7 +1302,7 @@ infer e₀ = do
         Syntax.Annotation{..} -> do
             _Γ <- get
 
-            wellFormedType _Γ annotation
+            wellFormed _Γ annotation
 
             newAnnotated <- check annotated annotation
 
