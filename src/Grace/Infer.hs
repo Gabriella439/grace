@@ -779,28 +779,67 @@ instantiateTypeL a _A₀ = do
 
             instantiateTypeL a₁ type_
 
-        -- This is still the same one-layer-at-a-time principle, with a small
-        -- twist.  In order to solve:
-        --
-        --     a = { r }
-        --
-        -- We replace `r` with a new unsolved Fields variable and then solve for
-        -- that Fields variable.
-        Type.Record{..} -> do
+        Type.Record{ fields = Type.Fields fieldTypes remainingFields } -> do
             p <- fresh
 
-            set (_Γ' <> (Context.SolvedType a (Monotype.Record (Monotype.Fields [] (Monotype.UnsolvedFields p))) : Context.UnsolvedFields p : _Γ))
+            let process (field, type_) = do
+                    existential <- fresh
 
-            instantiateFieldsL p (Type.location _A₀) fields
+                    let monotype = Monotype.UnsolvedType existential
 
-        -- Same principle as for `Record`, but replacing the Field variable with
-        -- an Alternatives variable
-        Type.Union{..} -> do
+                    let entry = Context.UnsolvedType existential
+
+                    let instantiation = do
+                            _Θ <- get
+
+                            instantiateTypeL existential (Context.solveType _Θ type_)
+
+                    return ((field, monotype), entry, instantiation)
+
+            results <- traverse process fieldTypes
+
+            let (fieldMonotypes, entries, instantiations) = unzip3 results
+
+            let recordMonotype =
+                    Monotype.Record
+                        (Monotype.Fields fieldMonotypes (Monotype.UnsolvedFields p))
+
+            set (_Γ' <> (Context.SolvedType a recordMonotype : Context.UnsolvedFields p : (entries <> _Γ)))
+
+            instantiateFieldsL p (Type.location _A₀) (Type.Fields [] remainingFields)
+
+            sequence_ instantiations
+
+        Type.Union{ alternatives = Type.Alternatives alternativeTypes remainingAlternatives } -> do
             p <- fresh
 
-            set (_Γ' <> (Context.SolvedType a (Monotype.Union (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives p))) : Context.UnsolvedAlternatives p : _Γ))
+            let process (alternative, type_) = do
+                    existential <- fresh
 
-            instantiateAlternativesL p (Type.location _A₀) alternatives
+                    let monotype = Monotype.UnsolvedType existential
+
+                    let entry = Context.UnsolvedType existential
+
+                    let instantiation = do
+                            _Θ <- get
+
+                            instantiateTypeL existential (Context.solveType _Θ type_)
+
+                    return ((alternative, monotype), entry, instantiation)
+
+            results <- traverse process alternativeTypes
+
+            let (alternativeMonotypes, entries, instantiations) = unzip3 results
+
+            let unionMonotype =
+                    Monotype.Union
+                        (Monotype.Alternatives alternativeMonotypes (Monotype.UnsolvedAlternatives p))
+
+            set (_Γ' <> (Context.SolvedType a unionMonotype : Context.UnsolvedAlternatives p : (entries <> _Γ)))
+
+            instantiateAlternativesL p (Type.location _A₀) (Type.Alternatives [] remainingAlternatives)
+
+            sequence_ instantiations
 
 {-| This corresponds to the judgment:
 
@@ -874,19 +913,67 @@ instantiateTypeR _A₀ a = do
 
             instantiateTypeR type_ a₁
 
-        Type.Record{..}  -> do
+        Type.Record{ fields = Type.Fields fieldTypes remainingFields } -> do
             p <- fresh
 
-            set (_Γ' <> (Context.SolvedType a (Monotype.Record (Monotype.Fields [] (Monotype.UnsolvedFields p))) : Context.UnsolvedFields p : _Γ))
+            let process (field, type_) = do
+                    existential <- fresh
 
-            instantiateFieldsR (Type.location _A₀) fields p
+                    let monotype = Monotype.UnsolvedType existential
 
-        Type.Union{..} -> do
+                    let entry = Context.UnsolvedType existential
+
+                    let instantiation = do
+                            _Θ <- get
+
+                            instantiateTypeR (Context.solveType _Θ type_) existential
+
+                    return ((field, monotype), entry, instantiation)
+
+            results <- traverse process fieldTypes
+
+            let (fieldMonotypes, entries, instantiations) = unzip3 results
+
+            let recordMonotype =
+                    Monotype.Record
+                        (Monotype.Fields fieldMonotypes (Monotype.UnsolvedFields p))
+
+            set (_Γ' <> (Context.SolvedType a recordMonotype : Context.UnsolvedFields p : (entries <> _Γ)))
+
+            instantiateFieldsR (Type.location _A₀) (Type.Fields [] remainingFields) p
+
+            sequence_ instantiations
+
+        Type.Union{ alternatives = Type.Alternatives alternativeTypes remainingAlternatives } -> do
             p <- fresh
 
-            set (_Γ' <> (Context.SolvedType a (Monotype.Union (Monotype.Alternatives [] (Monotype.UnsolvedAlternatives p))) : Context.UnsolvedAlternatives p : _Γ))
+            let process (alternative, type_) = do
+                    existential <- fresh
 
-            instantiateAlternativesR (Type.location _A₀) alternatives p
+                    let monotype = Monotype.UnsolvedType existential
+
+                    let entry = Context.UnsolvedType existential
+
+                    let instantiation = do
+                            _Θ <- get
+
+                            instantiateTypeR (Context.solveType _Θ type_) existential
+
+                    return ((alternative, monotype), entry, instantiation)
+
+            results <- traverse process alternativeTypes
+
+            let (alternativeMonotypes, entries, instantiations) = unzip3 results
+
+            let unionMonotype =
+                    Monotype.Union
+                        (Monotype.Alternatives alternativeMonotypes (Monotype.UnsolvedAlternatives p))
+
+            set (_Γ' <> (Context.SolvedType a unionMonotype : Context.UnsolvedAlternatives p : (entries <> _Γ)))
+
+            instantiateAlternativesR (Type.location _A₀) (Type.Alternatives [] remainingAlternatives) p
+
+            sequence_ instantiations
 
 {- The following `equateFields` / `instantiateFieldsL` / `instantiateFieldsR`,
    `equateAlternatives` / `instantiateAlternativesL` /
