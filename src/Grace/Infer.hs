@@ -1639,6 +1639,49 @@ infer e₀ = do
 
             return (Type.Scalar{ scalar = Monotype.Bool, location = operatorLocation }, Syntax.Operator{ operator = Syntax.Or, left = solveSyntax _Γ newLeft, right = solveSyntax _Γ newRight, .. })
 
+        Syntax.Operator{ operator = Syntax.Equals, .. } -> do
+            (_L, newLeft) <- infer left
+            (_R, newRight) <- infer right
+
+            _ <- check left  _R
+            _ <- check right _L
+
+            _Γ <- get
+
+            let _L' = Context.solveType _Γ _L
+            let _R' = Context.solveType _Γ _R
+
+            let newEquals = Syntax.Operator{ operator = Syntax.Equals, left = solveSyntax _Γ newLeft, right = solveSyntax _Γ newRight, .. }
+
+            let isEquatable Type.VariableType{ } =
+                    False
+                isEquatable Type.UnsolvedType{ } =
+                    False
+                isEquatable Type.Forall{ } =
+                    False
+                isEquatable Type.Function{ } =
+                    False
+                isEquatable Type.Scalar{ } =
+                     True
+                isEquatable Type.Optional{ type_ } =
+                    isEquatable type_
+                isEquatable Type.List{ type_ } =
+                    isEquatable type_
+                isEquatable Type.Record{ fields = Type.Fields fieldTypes Monotype.EmptyFields } =
+                    all (isEquatable . snd) fieldTypes
+                isEquatable Type.Record{ } =
+                    False
+                isEquatable Type.Union{ alternatives = Type.Alternatives alternativeTypes Monotype.EmptyAlternatives } =
+                    all (isEquatable . snd) alternativeTypes
+                isEquatable Type.Union{ } =
+                    False
+
+            let bool = Type.Scalar{ scalar = Monotype.Bool, location = operatorLocation }
+
+            if isEquatable _L' && isEquatable _R'
+                then return (bool, newEquals)
+                else Exception.throwIO (InvalidOperands "compare" (Syntax.location left) _L')
+
         Syntax.Operator{ operator = Syntax.Times, .. } -> do
             (_L, newLeft) <- infer left
             (_R, newRight) <- infer right
@@ -1657,7 +1700,7 @@ infer e₀ = do
                 Type.Scalar{ scalar = Monotype.Integer } -> return (_L, newTimes)
                 Type.Scalar{ scalar = Monotype.Real    } -> return (_L, newTimes)
                 _ -> do
-                    Exception.throwIO (InvalidOperands (Syntax.location left) _L')
+                    Exception.throwIO (InvalidOperands "multiply" (Syntax.location left) _L')
 
         Syntax.Operator{ operator = Syntax.Plus, .. } -> do
             (_L, newLeft) <- infer left
@@ -1680,7 +1723,7 @@ infer e₀ = do
                 Type.List{}                              -> return (_L, newPlus)
 
                 _ -> do
-                    Exception.throwIO (InvalidOperands (Syntax.location left) _L')
+                    Exception.throwIO (InvalidOperands "add" (Syntax.location left) _L')
 
         Syntax.Builtin{ builtin = Syntax.Some, .. }-> do
             return
@@ -1692,15 +1735,6 @@ infer e₀ = do
                         , ..
                         }
                 , Syntax.Builtin{ builtin = Syntax.Some, .. }
-                )
-
-        Syntax.Builtin{ builtin = Syntax.RealEqual, .. }-> do
-            return
-                (   Type.Scalar{ scalar = Monotype.Real, .. }
-                ~>  (   Type.Scalar{ scalar = Monotype.Real, .. }
-                    ~>  Type.Scalar{ scalar = Monotype.Bool, .. }
-                    )
-                , Syntax.Builtin{ builtin = Syntax.RealEqual, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.RealLessThan, .. } -> do
@@ -1761,26 +1795,6 @@ infer e₀ = do
                     , ..
                     }
                 , Syntax.Builtin{ builtin = Syntax.ListHead, .. }
-                )
-
-        Syntax.Builtin{ builtin = Syntax.ListEqual, .. } -> do
-            return
-                ( Type.Forall
-                    { nameLocation = Syntax.location e₀
-                    , name = "a"
-                    , domain = Domain.Type
-                    , type_ =
-                            (   var "a"
-                            ~>  (var "a" ~> Type.Scalar{ scalar = Monotype.Bool, .. })
-                            )
-                        ~>  (   Type.List{ type_ = var "a", .. }
-                            ~>  (   Type.List{ type_ = var "a", .. }
-                                ~>  Type.Scalar{ scalar = Monotype.Bool, .. }
-                                )
-                            )
-                    , ..
-                    }
-                , Syntax.Builtin{ builtin = Syntax.ListEqual, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.ListFold, .. } -> do
@@ -2005,15 +2019,6 @@ infer e₀ = do
                     , ..
                     }
                 , Syntax.Builtin{ builtin = Syntax.NaturalFold, .. }
-                )
-
-        Syntax.Builtin{ builtin = Syntax.TextEqual, .. } -> do
-            return
-                (   Type.Scalar{ scalar = Monotype.Text, .. }
-                ~>  (   Type.Scalar{ scalar = Monotype.Text, .. }
-                    ~>  Type.Scalar{ scalar = Monotype.Bool, .. }
-                    )
-                , Syntax.Builtin{ builtin = Syntax.TextEqual, .. }
                 )
 
         Syntax.Embed{..} -> do
@@ -2368,7 +2373,7 @@ data TypeInferenceError
     | IllFormedFields Location (Existential Monotype.Record) (Context Location)
     | IllFormedType Location (Type Location) (Context Location)
     --
-    | InvalidOperands Location (Type Location)
+    | InvalidOperands Text Location (Type Location)
     --
     | MergeConcreteRecord Location (Type Location)
     | MergeInvalidHandler Location (Type Location)
@@ -2436,10 +2441,10 @@ instance Exception TypeInferenceError where
         \\n\
         \" <> Text.unpack (Location.renderError "" location)
 
-    displayException (InvalidOperands location _L') =
+    displayException (InvalidOperands action location _L') =
         "Invalid operands\n\
         \\n\
-        \You cannot add values of type:\n\
+        \You cannot " <> Text.unpack action <> " values of type:\n\
         \\n\
         \" <> insert _L' <> "\n\
         \\n\

@@ -1185,14 +1185,11 @@ builtinsExample =
     \, \"x * y : Natural\": \\input -> (input.x * input.y) : Natural\n\
     \, \"x || y\": \\input -> input.x || input.y\n\
     \, \"x && y\": \\input -> input.x && input.y\n\
-    \, \"Real/equal\": Real/equal\n\
     \, \"Real/lessThan\": Real/lessThan\n\
     \, \"Real/negate\": Real/negate\n\
     \, \"Real/show\": Real/show\n\
     \, \"List/drop\": List/drop\n\
-    \, \"List/equal\": List/equal\n\
     \, \"List/fold\": List/fold\n\
-    \, \"List/equal\": List/equal\n\
     \, \"List/head\": List/head\n\
     \, \"List/indexed\": List/indexed\n\
     \, \"List/last\": List/last\n\
@@ -1206,7 +1203,6 @@ builtinsExample =
     \, \"Integer/abs\": Integer/abs\n\
     \, \"JSON/fold\": JSON/fold\n\
     \, \"Natural/fold\": Natural/fold\n\
-    \, \"Text/equal\": Text/equal\n\
     \}"
 
 preludeExample :: Text

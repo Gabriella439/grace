@@ -103,10 +103,11 @@ lexToken =
         , lexNumber
 
         , Combinators.choice
-            [ Grace.Parser.Or     <$ symbol "||"
-            , Grace.Parser.And    <$ symbol "&&"
-            , Grace.Parser.Plus   <$ symbol "+"
-            , Grace.Parser.Times  <$ symbol "*"
+            [ Grace.Parser.Or           <$ symbol "||"
+            , Grace.Parser.And          <$ symbol "&&"
+            , Grace.Parser.Plus         <$ symbol "+"
+            , Grace.Parser.Times        <$ symbol "*"
+            , Grace.Parser.DoubleEquals <$ symbol "=="
             ] Megaparsec.<?> "operator"
 
         , Combinators.choice
@@ -124,12 +125,10 @@ lexToken =
             ] Megaparsec.<?> "keyword"
 
         , Combinators.choice
-            [ Grace.Parser.RealEqual      <$ symbol "Real/equal"
-            , Grace.Parser.RealLessThan   <$ symbol "Real/lessThan"
+            [ Grace.Parser.RealLessThan   <$ symbol "Real/lessThan"
             , Grace.Parser.RealNegate     <$ symbol "Real/negate"
             , Grace.Parser.RealShow       <$ symbol "Real/show"
             , Grace.Parser.ListDrop       <$ symbol "List/drop"
-            , Grace.Parser.ListEqual      <$ symbol "List/equal"
             , Grace.Parser.ListFold       <$ symbol "List/fold"
             , Grace.Parser.ListHead       <$ symbol "List/head"
             , Grace.Parser.ListIndexed    <$ symbol "List/indexed"
@@ -144,7 +143,6 @@ lexToken =
             , Grace.Parser.IntegerOdd     <$ symbol "Integer/odd"
             , Grace.Parser.JSONFold       <$ symbol "JSON/fold"
             , Grace.Parser.NaturalFold    <$ symbol "Natural/fold"
-            , Grace.Parser.TextEqual      <$ symbol "Text/equal"
             , Grace.Parser.False_         <$ symbol "false"
             , Grace.Parser.True_          <$ symbol "true"
             , Grace.Parser.Some           <$ symbol "some"
@@ -573,8 +571,8 @@ data Token
     | Comma
     | Dash
     | Dot
+    | DoubleEquals
     | Real
-    | RealEqual
     | RealLessThan
     | RealLiteral Sign Scientific
     | RealNegate
@@ -600,7 +598,6 @@ data Token
     | Let
     | List
     | ListDrop
-    | ListEqual
     | ListFold
     | ListHead
     | ListIndexed
@@ -623,7 +620,6 @@ data Token
     | Prompt
     | Some
     | Text
-    | TextEqual
     | TextLiteral (Chunks Offset Input)
     | Then
     | Times
@@ -775,9 +771,9 @@ render t = case t of
     Grace.Parser.Comma            -> ","
     Grace.Parser.Dash             -> "-"
     Grace.Parser.Dot              -> "."
+    Grace.Parser.DoubleEquals     -> "=="
     Grace.Parser.Real             -> "Real"
     Grace.Parser.RealLiteral _ _  -> "a real number literal"
-    Grace.Parser.RealEqual        -> "Real/equal"
     Grace.Parser.RealLessThan     -> "Real/lessThan"
     Grace.Parser.RealNegate       -> "Real/negate"
     Grace.Parser.RealShow         -> "Real/show"
@@ -802,7 +798,6 @@ render t = case t of
     Grace.Parser.Let              -> "let"
     Grace.Parser.List             -> "list"
     Grace.Parser.ListDrop         -> "List/drop"
-    Grace.Parser.ListEqual        -> "List/equal"
     Grace.Parser.ListFold         -> "List/fold"
     Grace.Parser.ListHead         -> "List/head"
     Grace.Parser.ListIndexed      -> "List/indexed"
@@ -825,7 +820,6 @@ render t = case t of
     Grace.Parser.Prompt           -> "prompt"
     Grace.Parser.Some             -> "some"
     Grace.Parser.Text             -> "Text"
-    Grace.Parser.TextEqual        -> "Text/equal"
     Grace.Parser.TextLiteral _    -> "a text literal"
     Grace.Parser.Then             -> "then"
     Grace.Parser.Type             -> "Type"
@@ -907,7 +901,7 @@ grammar endsWithBrace = mdo
         <|> do  operatorExpression
         )
 
-    operatorExpression <- rule plusExpression
+    operatorExpression <- rule orExpression
 
     let op token_ operator subExpression = do
             let snoc left (operatorLocation, right) =
@@ -922,13 +916,15 @@ grammar endsWithBrace = mdo
 
             return (foldl snoc e0 ses)
 
-    plusExpression <- rule (op Grace.Parser.Plus Syntax.Plus timesExpression)
-
-    timesExpression <- rule (op Grace.Parser.Times Syntax.Times orExpression)
-
     orExpression <- rule (op Grace.Parser.Or Syntax.Or andExpression)
 
-    andExpression <- rule (op Grace.Parser.And Syntax.And applicationExpression)
+    andExpression <- rule (op Grace.Parser.And Syntax.And equalsExpression)
+
+    equalsExpression <- rule (op Grace.Parser.DoubleEquals Syntax.Equals plusExpression)
+
+    plusExpression <- rule (op Grace.Parser.Plus Syntax.Plus timesExpression)
+
+    timesExpression <- rule (op Grace.Parser.Times Syntax.Times applicationExpression)
 
     let application function argument =
             Syntax.Application{ location = Syntax.location function, .. }
@@ -1040,10 +1036,6 @@ grammar endsWithBrace = mdo
 
                 return Syntax.Builtin{ builtin = Syntax.Some, .. }
 
-        <|> do  location <- locatedToken Grace.Parser.RealEqual
-
-                return Syntax.Builtin{ builtin = Syntax.RealEqual, .. }
-
         <|> do  location <- locatedToken Grace.Parser.RealLessThan
 
                 return Syntax.Builtin{ builtin = Syntax.RealLessThan, .. }
@@ -1059,10 +1051,6 @@ grammar endsWithBrace = mdo
         <|> do  location <- locatedToken Grace.Parser.ListDrop
 
                 return Syntax.Builtin{ builtin = Syntax.ListDrop, .. }
-
-        <|> do  location <- locatedToken Grace.Parser.ListEqual
-
-                return Syntax.Builtin{ builtin = Syntax.ListEqual, .. }
 
         <|> do  location <- locatedToken Grace.Parser.ListFold
 
@@ -1119,10 +1107,6 @@ grammar endsWithBrace = mdo
         <|> do  location <- locatedToken Grace.Parser.NaturalFold
 
                 return Syntax.Builtin{ builtin = Syntax.NaturalFold, .. }
-
-        <|> do  location <- locatedToken Grace.Parser.TextEqual
-
-                return Syntax.Builtin{ builtin = Syntax.TextEqual, .. }
 
         <|> do  ~(location, chunks) <- locatedChunks
 

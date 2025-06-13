@@ -655,6 +655,12 @@ evaluate maybeMethods = loop
                     _ ->
                         fail "Grace.Normalize.evaluate: || arguments must be boolean values"
 
+            Syntax.Operator{ operator = Syntax.Equals, .. } -> do
+                left'  <- loop env left
+                right' <- loop env right
+
+                return (Value.Scalar (Bool (left' == right')))
+
             Syntax.Operator{ operator = Syntax.Times, .. } -> do
                 left'  <- loop env left
                 right' <- loop env right
@@ -751,24 +757,6 @@ evaluate maybeMethods = loop
         return (Value.List (Seq.reverse xs))
     apply
         (Value.Application
-            (Value.Application (Value.Builtin ListEqual) f)
-            (Value.List rs)
-        )
-        (Value.List ls)
-            | length ls /= length rs =
-                return (Value.Scalar (Bool False))
-            | Just bools <- traverse toBool (Seq.zipWith equal ls rs) =
-                return (Value.Scalar (Bool (and bools)))
-          where
-            toBool (Value.Scalar (Bool b)) = Just b
-            toBool  _                      = Nothing
-
-            equal :: Value -> Value -> Value
-            equal l r = Unsafe.unsafePerformIO do
-                x <- apply f l
-                apply x r
-    apply
-        (Value.Application
             (Value.Builtin ListFold)
             (Value.Record
                 (List.sortBy (Ord.comparing fst) . HashMap.toList ->
@@ -824,12 +812,6 @@ evaluate maybeMethods = loop
     apply (Value.Builtin IntegerOdd) (Value.Scalar x)
         | Just n <- asInteger x = return (Value.Scalar (Bool (odd n)))
     apply
-        (Value.Application (Value.Builtin RealEqual) (Value.Scalar l))
-        (Value.Scalar r)
-        | Just m <- asReal l
-        , Just n <- asReal r =
-            return (Value.Scalar (Bool (m == n)))
-    apply
         (Value.Application (Value.Builtin RealLessThan) (Value.Scalar l))
         (Value.Scalar r)
         | Just m <- asReal l
@@ -850,10 +832,6 @@ evaluate maybeMethods = loop
         return (Value.Text (Text.pack (show n)))
     apply (Value.Builtin RealShow) (Value.Scalar (Real n)) =
         return (Value.Text (Text.pack (show n)))
-    apply
-        (Value.Application (Value.Builtin TextEqual) (Value.Text l))
-        (Value.Text r) =
-            return (Value.Scalar (Bool (l == r)))
     apply
         (Value.Application
             (Value.Builtin JSONFold)

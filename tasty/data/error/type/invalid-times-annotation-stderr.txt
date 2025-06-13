@@ -1,6 +1,6 @@
 Invalid operands
 
-You cannot add values of type:
+You cannot multiply values of type:
 
   Bool
 

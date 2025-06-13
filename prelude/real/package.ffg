@@ -1,5 +1,4 @@
-{ equal: ./equal.ffg
-, greaterThan: ./greaterThan.ffg
+{ greaterThan: ./greaterThan.ffg
 , greaterThanOrEqual: ./greaterThanOrEqual.ffg
 , lessThan: ./lessThan.ffg
 , lessThanOrEqual: ./lessThanOrEqual.ffg

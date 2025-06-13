@@ -1,6 +1,0 @@
-# Returns `true` if two `Real`s are equal, false otherwise
-let equal
-      : Real -> Real -> Bool
-      = Real/equal
-
-in  equal

@@ -1,0 +1,2 @@
+    { number: 0, bool: true, list: [ 2, 3, 5 ], text: "" }
+==  { number: 0, bool: true, list: [ 2, 3, 5 ], text: "" }

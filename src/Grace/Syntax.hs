@@ -403,6 +403,10 @@ data Operator
     -- ^
     --   >>> pretty Or
     --   ||
+    | Equals
+    -- ^
+    --   >>> pretty Equals
+    --   ==
     | Plus
     -- ^
     --   >>> pretty Plus
@@ -416,6 +420,7 @@ data Operator
 instance Pretty Operator where
     pretty And    = Pretty.operator "&&"
     pretty Or     = Pretty.operator "||"
+    pretty Equals = Pretty.operator "=="
     pretty Plus   = Pretty.operator "+"
     pretty Times  = Pretty.operator "*"
 
@@ -425,10 +430,6 @@ data Builtin
     -- ^
     --   >>> pretty Some
     --   some
-    | RealEqual
-    -- ^
-    --   >>> pretty RealEqual
-    --   Real/equal
     | RealLessThan
     -- ^
     --   >>> pretty RealLessThan
@@ -445,10 +446,6 @@ data Builtin
     -- ^
     --   >>> pretty ListDrop
     --   List/drop
-    | ListEqual
-    -- ^
-    --   >>> pretty ListEqual
-    --   List/equal
     | ListFold
     -- ^
     --   >>> pretty ListFold
@@ -505,15 +502,10 @@ data Builtin
     -- ^
     --   >>> pretty NaturalFold
     --   Natural/fold
-    | TextEqual
-    -- ^
-    --   >>> pretty TextEqual
-    --   Text/equal
     deriving (Bounded, Enum, Eq, Generic, Lift, Show)
 
 instance Pretty Builtin where
     pretty Some           = Pretty.builtin "some"
-    pretty RealEqual      = Pretty.builtin "Real/equal"
     pretty RealLessThan   = Pretty.builtin "Real/lessThan"
     pretty RealNegate     = Pretty.builtin "Real/negate"
     pretty RealShow       = Pretty.builtin "Real/show"
@@ -523,7 +515,6 @@ instance Pretty Builtin where
     pretty IntegerOdd     = Pretty.builtin "Integer/odd"
     pretty JSONFold       = Pretty.builtin "JSON/fold"
     pretty ListDrop       = Pretty.builtin "List/drop"
-    pretty ListEqual      = Pretty.builtin "List/equal"
     pretty ListFold       = Pretty.builtin "List/fold"
     pretty ListHead       = Pretty.builtin "List/head"
     pretty ListIndexed    = Pretty.builtin "List/indexed"
@@ -533,7 +524,6 @@ instance Pretty Builtin where
     pretty ListReverse    = Pretty.builtin "List/reverse"
     pretty ListTake       = Pretty.builtin "List/take"
     pretty NaturalFold    = Pretty.builtin "Natural/fold"
-    pretty TextEqual      = Pretty.builtin "Text/equal"
 
 -- | Pretty-print an expression
 prettyExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
@@ -705,7 +695,10 @@ prettyTimesExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
 prettyTimesExpression = prettyOperator Times prettyPlusExpression
 
 prettyPlusExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
-prettyPlusExpression = prettyOperator Plus prettyOrExpression
+prettyPlusExpression = prettyOperator Plus prettyEqualsExpression
+
+prettyEqualsExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
+prettyEqualsExpression = prettyOperator Equals prettyOrExpression
 
 prettyOrExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
 prettyOrExpression = prettyOperator Or prettyAndExpression

@@ -1,7 +1,0 @@
-# Returns `true` if the two `List`s are equal (given a comparison function for
-# their elements), `false` otherwise
-let equal
-      : forall (a : Type) . (a -> a -> Bool) -> List a -> List a -> Bool
-      = List/equal
-
-in  equal

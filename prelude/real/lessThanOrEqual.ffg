@@ -2,6 +2,6 @@
 # `Real`, and `false` otherwise
 let lessThanOrEqual
       : Real -> Real -> Bool
-      = \l -> \r -> Real/lessThan l r || Real/equal l r
+      = \l -> \r -> Real/lessThan l r || l == r
 
 in  lessThanOrEqual

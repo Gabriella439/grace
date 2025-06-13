@@ -546,9 +546,6 @@ in  twice 2
 You can also use the built-in functions, including:
 
 ```dhall
-# Compare two `Reals` for equality
-Real/equal : Real -> Real -> Bool
-
 # Check if one `Real` is less than another `Real`
 Real/lessThan : Real -> Real -> Bool
 
@@ -560,9 +557,6 @@ Real/show : Real -> Text
 
 # Drop the first N elements from a `List`
 List/drop : forall (a : Type) . Natural -> List a -> List a
-
-# Compare two lists for equality, given an element-wise equality test
-List/equal : forall (a : Type) . (a -> a -> Bool) -> List a -> List a -> Bool
 
 # Fold a list
 List/fold
@@ -626,9 +620,6 @@ JSON/fold
 
 # Fold a `Natural` number
 Natural/fold : forall (a : Type) . Natural -> (a -> a) -> a -> a
-
-# Compare two `Text` values for equality
-Text/equal : Text -> Text -> Bool
 ```
 
 For an up-to-date list of builtin functions and their types, run

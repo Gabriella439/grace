@@ -97,22 +97,12 @@ annotation = operator ":" type
 ;
 ;   Grace does not support division at all.
 ;
-; - equality (`==`)
-;
-;   Use one of the following alternatives instead:
-;
-;   - `Text`: use `Text/equal`
-;   - `Natural`, `Integer`, or `Real`: use `Real/equal`
-;   - `List`: use `List/equal`
-;   - `Bool`: use an `if` expression
-;   - unions: use a `merge` expression
-;   - records; compare the records field-wise
-;
 ; - comparison (`>`, `>=`, `<`, `<=`)
 ;
-;   Use `Real/lessThan` and `Real/equal` instead.
-operator = and *( "||" and )
-and = plus *( "&&" plus )
+;   Use `Real/lessThan` and `==` instead.
+operator = and *( "||" and)
+and = equals *( "&&" equals)
+equals = plus *( "==" plus)
 plus = times *( "+" times )
 times = application *( "*" application )
 
@@ -221,12 +211,10 @@ projection-value
 field = identifier / alternative / string
 
 builtin
-    = "Real/equal"      ; Real -> Real -> Bool
-    / "Real/lessThan"   ; Real -> Real -> Bool
+    = "Real/lessThan"   ; Real -> Real -> Bool
     / "Real/negate"     ; Real -> Real
     / "Real/show"       ; Real -> Text
     / "List/drop"       ; forall (a : Type) . Natural -> List a -> List a
-    / "List/equal"      ; forall (a : Type) . (a -> a -> Bool) -> List a -> List a -> Bool
     / "List/fold"       ; forall (a : Type) (b : Type) . { cons: a -> b -> b, nil: b } -> List a -> b
     / "List/head"       ; forall (a : Type) . List a -> Optional a
     / "List/indexed"    ; forall (a : Type) . List a -> List { index: Natural, value: a }
@@ -252,7 +240,6 @@ builtin
                         ;   JSON ->
                         ;     a
     / "Natural/fold"    ; forall (a : Type) . Natural -> (a -> a) -> a -> a
-    / "Text/equal"      ; Text -> Text -> Bool
 
 type = quantified-type
 
