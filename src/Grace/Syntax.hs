@@ -395,18 +395,38 @@ instance Pretty Scalar where
 
 -- | A binary infix operator
 data Operator
-    = And
-    -- ^
-    --   >>> pretty And
-    --   &&
-    | Or
+    = Or
     -- ^
     --   >>> pretty Or
     --   ||
-    | Equals
+    | And
     -- ^
-    --   >>> pretty Equals
+    --   >>> pretty And
+    --   &&
+    | Equal
+    -- ^
+    --   >>> pretty Equal
     --   ==
+    | NotEqual
+    -- ^
+    --   >>> pretty NotEqual
+    --   !=
+    | LessThan
+    -- ^
+    --   >>> pretty LessThan
+    --   <
+    | LessThanOrEqual
+    -- ^
+    --   >>> pretty LessThanOrEqual
+    --   <=
+    | GreaterThan
+    -- ^
+    --   >>> pretty GreaterThan
+    --   >
+    | GreaterThanOrEqual
+    -- ^
+    --   >>> pretty GreaterThanOrEqual
+    --   >=
     | Plus
     -- ^
     --   >>> pretty Plus
@@ -418,11 +438,16 @@ data Operator
     deriving (Eq, Generic, Lift, Show)
 
 instance Pretty Operator where
-    pretty And    = Pretty.operator "&&"
-    pretty Or     = Pretty.operator "||"
-    pretty Equals = Pretty.operator "=="
-    pretty Plus   = Pretty.operator "+"
-    pretty Times  = Pretty.operator "*"
+    pretty And                = Pretty.operator "&&"
+    pretty Or                 = Pretty.operator "||"
+    pretty Equal              = Pretty.operator "=="
+    pretty NotEqual           = Pretty.operator "!="
+    pretty LessThan           = Pretty.operator "<"
+    pretty LessThanOrEqual    = Pretty.operator "<="
+    pretty GreaterThan        = Pretty.operator ">"
+    pretty GreaterThanOrEqual = Pretty.operator ">="
+    pretty Plus               = Pretty.operator "+"
+    pretty Times              = Pretty.operator "*"
 
 -- | A built-in function
 data Builtin
@@ -430,10 +455,6 @@ data Builtin
     -- ^
     --   >>> pretty Some
     --   some
-    | RealLessThan
-    -- ^
-    --   >>> pretty RealLessThan
-    --   Real/lessThan
     | RealNegate
     -- ^
     --   >>> pretty RealNegate
@@ -506,7 +527,6 @@ data Builtin
 
 instance Pretty Builtin where
     pretty Some           = Pretty.builtin "some"
-    pretty RealLessThan   = Pretty.builtin "Real/lessThan"
     pretty RealNegate     = Pretty.builtin "Real/negate"
     pretty RealShow       = Pretty.builtin "Real/show"
     pretty IntegerAbs     = Pretty.builtin "Integer/abs"
@@ -628,7 +648,7 @@ prettyExpression Annotation{..} =
     Pretty.group (Pretty.flatAlt long short)
   where
     short =
-            prettyTimesExpression annotated
+            prettyOperatorExpression annotated
         <>  " "
         <>  Pretty.operator ":"
         <>  " "
@@ -636,7 +656,7 @@ prettyExpression Annotation{..} =
 
     long =
         Pretty.align
-            (   prettyTimesExpression annotated
+            (   prettyOperatorExpression annotated
             <>  Pretty.hardline
             <>  "  "
             <>  Pretty.operator ":"
@@ -644,7 +664,7 @@ prettyExpression Annotation{..} =
             <>  pretty annotation
             )
 prettyExpression other =
-    prettyTimesExpression other
+    prettyOperatorExpression other
 
 prettyOperator
     :: Pretty a
@@ -691,20 +711,38 @@ prettyOperator operator0 prettyNext expression@Operator{ operator = operator1 }
 prettyOperator _ prettyNext other =
     prettyNext other
 
-prettyTimesExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
-prettyTimesExpression = prettyOperator Times prettyPlusExpression
-
-prettyPlusExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
-prettyPlusExpression = prettyOperator Plus prettyEqualsExpression
-
-prettyEqualsExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
-prettyEqualsExpression = prettyOperator Equals prettyOrExpression
+prettyOperatorExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
+prettyOperatorExpression = prettyOrExpression
 
 prettyOrExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
 prettyOrExpression = prettyOperator Or prettyAndExpression
 
 prettyAndExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
-prettyAndExpression = prettyOperator And prettyApplicationExpression
+prettyAndExpression = prettyOperator And prettyEqualExpression
+
+prettyEqualExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
+prettyEqualExpression = prettyOperator Equal prettyNotEqualExpression
+
+prettyNotEqualExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
+prettyNotEqualExpression = prettyOperator NotEqual prettyLessThanExpression
+
+prettyLessThanExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
+prettyLessThanExpression = prettyOperator LessThan prettyLessThanOrEqualExpression
+
+prettyLessThanOrEqualExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
+prettyLessThanOrEqualExpression = prettyOperator LessThanOrEqual prettyGreaterThanExpression
+
+prettyGreaterThanExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
+prettyGreaterThanExpression = prettyOperator GreaterThan prettyGreaterThanOrEqualExpression
+
+prettyGreaterThanOrEqualExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
+prettyGreaterThanOrEqualExpression = prettyOperator GreaterThanOrEqual prettyPlusExpression
+
+prettyPlusExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
+prettyPlusExpression = prettyOperator Plus prettyTimesExpression
+
+prettyTimesExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
+prettyTimesExpression = prettyOperator Times prettyApplicationExpression
 
 prettyApplicationExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
 prettyApplicationExpression expression

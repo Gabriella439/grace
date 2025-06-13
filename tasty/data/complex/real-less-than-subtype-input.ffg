@@ -1,2 +1,0 @@
-# This test checks that subtyping works for `Real/lessThan`
-Real/lessThan 1 -2

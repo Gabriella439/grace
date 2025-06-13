@@ -1122,7 +1122,7 @@ importExample =
     \# the following URL encodes a function for computing US federal income\n\
     \# tax for 2022:\n\
     \\n\
-    \https://gist.githubusercontent.com/Gabriella439/712d0648bbdcfcc83eadd0ee394beed3/raw/1b03f661577521b4d3dc6ca73dd11475a30c1594/incomeTax.ffg"
+    \https://gist.githubusercontent.com/Gabriella439/712d0648bbdcfcc83eadd0ee394beed3/raw/4dc98fbab25d97e1ff362f6227c96d4336a99f86/incomeTax.ffg"
 
 jsonExample :: Text
 jsonExample =
@@ -1185,7 +1185,6 @@ builtinsExample =
     \, \"x * y : Natural\": \\input -> (input.x * input.y) : Natural\n\
     \, \"x || y\": \\input -> input.x || input.y\n\
     \, \"x && y\": \\input -> input.x && input.y\n\
-    \, \"Real/lessThan\": Real/lessThan\n\
     \, \"Real/negate\": Real/negate\n\
     \, \"Real/show\": Real/show\n\
     \, \"List/drop\": List/drop\n\

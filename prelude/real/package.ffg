@@ -1,12 +1,4 @@
-{ greaterThan: ./greaterThan.ffg
-, greaterThanOrEqual: ./greaterThanOrEqual.ffg
-, lessThan: ./lessThan.ffg
-, lessThanOrEqual: ./lessThanOrEqual.ffg
-, negate: ./negate.ffg
-, negative: ./negative.ffg
-, nonNegative: ./nonNegative.ffg
-, nonPositive: ./nonPositive.ffg
-, positive: ./positive.ffg
+{ negate: ./negate.ffg
 , product: ./product.ffg
 , show: ./show.ffg
 , sum: ./sum.ffg

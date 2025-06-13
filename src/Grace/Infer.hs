@@ -1639,7 +1639,7 @@ infer e₀ = do
 
             return (Type.Scalar{ scalar = Monotype.Bool, location = operatorLocation }, Syntax.Operator{ operator = Syntax.Or, left = solveSyntax _Γ newLeft, right = solveSyntax _Γ newRight, .. })
 
-        Syntax.Operator{ operator = Syntax.Equals, .. } -> do
+        Syntax.Operator{ operator = Syntax.Equal, .. } -> do
             (_L, newLeft) <- infer left
             (_R, newRight) <- infer right
 
@@ -1651,7 +1651,7 @@ infer e₀ = do
             let _L' = Context.solveType _Γ _L
             let _R' = Context.solveType _Γ _R
 
-            let newEquals = Syntax.Operator{ operator = Syntax.Equals, left = solveSyntax _Γ newLeft, right = solveSyntax _Γ newRight, .. }
+            let newEquals = Syntax.Operator{ operator = Syntax.Equal, left = solveSyntax _Γ newLeft, right = solveSyntax _Γ newRight, .. }
 
             let isEquatable Type.VariableType{ } =
                     False
@@ -1681,6 +1681,161 @@ infer e₀ = do
             if isEquatable _L' && isEquatable _R'
                 then return (bool, newEquals)
                 else Exception.throwIO (InvalidOperands "compare" (Syntax.location left) _L')
+
+        Syntax.Operator{ operator = Syntax.NotEqual, .. } -> do
+            (_L, newLeft) <- infer left
+            (_R, newRight) <- infer right
+
+            _ <- check left  _R
+            _ <- check right _L
+
+            _Γ <- get
+
+            let _L' = Context.solveType _Γ _L
+            let _R' = Context.solveType _Γ _R
+
+            let newNotEquals = Syntax.Operator{ operator = Syntax.NotEqual, left = solveSyntax _Γ newLeft, right = solveSyntax _Γ newRight, .. }
+
+            let isEquatable Type.VariableType{ } =
+                    False
+                isEquatable Type.UnsolvedType{ } =
+                    False
+                isEquatable Type.Forall{ } =
+                    False
+                isEquatable Type.Function{ } =
+                    False
+                isEquatable Type.Scalar{ } =
+                     True
+                isEquatable Type.Optional{ type_ } =
+                    isEquatable type_
+                isEquatable Type.List{ type_ } =
+                    isEquatable type_
+                isEquatable Type.Record{ fields = Type.Fields fieldTypes Monotype.EmptyFields } =
+                    all (isEquatable . snd) fieldTypes
+                isEquatable Type.Record{ } =
+                    False
+                isEquatable Type.Union{ alternatives = Type.Alternatives alternativeTypes Monotype.EmptyAlternatives } =
+                    all (isEquatable . snd) alternativeTypes
+                isEquatable Type.Union{ } =
+                    False
+
+            let bool = Type.Scalar{ scalar = Monotype.Bool, location = operatorLocation }
+
+            if isEquatable _L' && isEquatable _R'
+                then return (bool, newNotEquals)
+                else Exception.throwIO (InvalidOperands "compare" (Syntax.location left) _L')
+
+        Syntax.Operator{ operator = Syntax.LessThan, .. } -> do
+            let real =
+                    Type.Scalar
+                        { scalar = Monotype.Real
+                        , location = operatorLocation
+                        }
+
+            newLeft  <- check left  real
+            newRight <- check right real
+
+            let bool =
+                    Type.Scalar
+                        { scalar = Monotype.Bool
+                        , location = operatorLocation
+                        }
+
+            _Γ <- get
+
+            let newLessThan =
+                    Syntax.Operator
+                        { operator = Syntax.LessThan
+                        , left = solveSyntax _Γ newLeft
+                        , right = solveSyntax _Γ newRight
+                        , ..
+                        }
+
+            return (bool, newLessThan)
+
+        Syntax.Operator{ operator = Syntax.LessThanOrEqual, .. } -> do
+            let real =
+                    Type.Scalar
+                        { scalar = Monotype.Real
+                        , location = operatorLocation
+                        }
+
+            newLeft  <- check left  real
+            newRight <- check right real
+
+            let bool =
+                    Type.Scalar
+                        { scalar = Monotype.Bool
+                        , location = operatorLocation
+                        }
+
+            _Γ <- get
+
+            let newLessThanOrEqual =
+                    Syntax.Operator
+                        { operator = Syntax.LessThanOrEqual
+                        , left = solveSyntax _Γ newLeft
+                        , right = solveSyntax _Γ newRight
+                        , ..
+                        }
+
+            return (bool, newLessThanOrEqual)
+
+        Syntax.Operator{ operator = Syntax.GreaterThan, .. } -> do
+            let real =
+                    Type.Scalar
+                        { scalar = Monotype.Real
+                        , location = operatorLocation
+                        }
+
+            newLeft  <- check left  real
+            newRight <- check right real
+
+            let bool =
+                    Type.Scalar
+                        { scalar = Monotype.Bool
+                        , location = operatorLocation
+                        }
+
+            _Γ <- get
+
+            let newGreaterThan =
+                    Syntax.Operator
+                        { operator = Syntax.GreaterThan
+                        , left = solveSyntax _Γ newLeft
+                        , right = solveSyntax _Γ newRight
+                        , ..
+                        }
+
+            return (bool, newGreaterThan)
+
+        Syntax.Operator{ operator = Syntax.GreaterThanOrEqual, .. } -> do
+            let real =
+                    Type.Scalar
+                        { scalar = Monotype.Real
+                        , location = operatorLocation
+                        }
+
+            newLeft  <- check left  real
+            newRight <- check right real
+
+            let bool =
+                    Type.Scalar
+                        { scalar = Monotype.Bool
+                        , location = operatorLocation
+                        }
+
+            _Γ <- get
+
+            let newGreaterThanOrEqual =
+                    Syntax.Operator
+                        { operator = Syntax.GreaterThanOrEqual
+                        , left = solveSyntax _Γ newLeft
+                        , right = solveSyntax _Γ newRight
+                        , ..
+                        }
+
+            return (bool, newGreaterThanOrEqual)
 
         Syntax.Operator{ operator = Syntax.Times, .. } -> do
             (_L, newLeft) <- infer left
@@ -1735,15 +1890,6 @@ infer e₀ = do
                         , ..
                         }
                 , Syntax.Builtin{ builtin = Syntax.Some, .. }
-                )
-
-        Syntax.Builtin{ builtin = Syntax.RealLessThan, .. } -> do
-            return
-                (   Type.Scalar{ scalar = Monotype.Real, .. }
-                ~>  (   Type.Scalar{ scalar = Monotype.Real, .. }
-                    ~>  Type.Scalar{ scalar = Monotype.Bool, .. }
-                    )
-                , Syntax.Builtin{ builtin = Syntax.RealLessThan, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.RealNegate, .. } -> do

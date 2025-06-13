@@ -655,11 +655,90 @@ evaluate maybeMethods = loop
                     _ ->
                         fail "Grace.Normalize.evaluate: || arguments must be boolean values"
 
-            Syntax.Operator{ operator = Syntax.Equals, .. } -> do
+            Syntax.Operator{ operator = Syntax.Equal, .. } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
                 return (Value.Scalar (Bool (left' == right')))
+
+            Syntax.Operator{ operator = Syntax.NotEqual, .. } -> do
+                left'  <- loop env left
+                right' <- loop env right
+
+                return (Value.Scalar (Bool (left' /= right')))
+
+            Syntax.Operator{ operator = Syntax.LessThan, .. } -> do
+                left'  <- loop env left
+                right' <- loop env right
+
+                case (left', right') of
+                    (Value.Scalar l, Value.Scalar r)
+                        | Natural m <- l
+                        , Natural n <- r ->
+                            return (Value.Scalar (Bool (m < n)))
+                        | Just m <- asInteger l
+                        , Just n <- asInteger r ->
+                            return (Value.Scalar (Bool (m < n)))
+                        | Just m <- asReal l
+                        , Just n <- asReal r ->
+                            return (Value.Scalar (Bool (m < n)))
+                    _ ->
+                        error "Grace.Normalize.evaluate: < arguments must be numeric values"
+
+
+            Syntax.Operator{ operator = Syntax.LessThanOrEqual, .. } -> do
+                left'  <- loop env left
+                right' <- loop env right
+
+                case (left', right') of
+                    (Value.Scalar l, Value.Scalar r)
+                        | Natural m <- l
+                        , Natural n <- r ->
+                            return (Value.Scalar (Bool (m <= n)))
+                        | Just m <- asInteger l
+                        , Just n <- asInteger r ->
+                            return (Value.Scalar (Bool (m <= n)))
+                        | Just m <- asReal l
+                        , Just n <- asReal r ->
+                            return (Value.Scalar (Bool (m <= n)))
+                    _ ->
+                        error "Grace.Normalize.evaluate: <= arguments must be numeric values"
+
+            Syntax.Operator{ operator = Syntax.GreaterThan, .. } -> do
+                left'  <- loop env left
+                right' <- loop env right
+
+                case (left', right') of
+                    (Value.Scalar l, Value.Scalar r)
+                        | Natural m <- l
+                        , Natural n <- r ->
+                            return (Value.Scalar (Bool (m > n)))
+                        | Just m <- asInteger l
+                        , Just n <- asInteger r ->
+                            return (Value.Scalar (Bool (m > n)))
+                        | Just m <- asReal l
+                        , Just n <- asReal r ->
+                            return (Value.Scalar (Bool (m > n)))
+                    _ ->
+                        error "Grace.Normalize.evaluate: > arguments must be numeric values"
+
+            Syntax.Operator{ operator = Syntax.GreaterThanOrEqual, .. } -> do
+                left'  <- loop env left
+                right' <- loop env right
+
+                case (left', right') of
+                    (Value.Scalar l, Value.Scalar r)
+                        | Natural m <- l
+                        , Natural n <- r ->
+                            return (Value.Scalar (Bool (m >= n)))
+                        | Just m <- asInteger l
+                        , Just n <- asInteger r ->
+                            return (Value.Scalar (Bool (m >= n)))
+                        | Just m <- asReal l
+                        , Just n <- asReal r ->
+                            return (Value.Scalar (Bool (m >= n)))
+                    _ ->
+                        error "Grace.Normalize.evaluate: >= arguments must be numeric values"
 
             Syntax.Operator{ operator = Syntax.Times, .. } -> do
                 left'  <- loop env left
@@ -811,12 +890,6 @@ evaluate maybeMethods = loop
         | Just n <- asInteger x = return (Value.Scalar (Bool (even n)))
     apply (Value.Builtin IntegerOdd) (Value.Scalar x)
         | Just n <- asInteger x = return (Value.Scalar (Bool (odd n)))
-    apply
-        (Value.Application (Value.Builtin RealLessThan) (Value.Scalar l))
-        (Value.Scalar r)
-        | Just m <- asReal l
-        , Just n <- asReal r =
-            return (Value.Scalar (Bool (m < n)))
     apply (Value.Builtin IntegerAbs) (Value.Scalar x)
         | Just n <- asInteger x =
             return (Value.Scalar (Natural (fromInteger (abs n))))

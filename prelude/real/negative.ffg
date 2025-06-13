@@ -1,6 +1,0 @@
-# Returns `true` if a `Real` is negative, and `false` otherwise
-let negative
-      : Real -> Bool
-      = \n -> Real/lessThan n 0
-
-in  negative

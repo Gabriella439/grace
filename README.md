@@ -546,9 +546,6 @@ in  twice 2
 You can also use the built-in functions, including:
 
 ```dhall
-# Check if one `Real` is less than another `Real`
-Real/lessThan : Real -> Real -> Bool
-
 # Negate a `Real` number
 Real/negate : Real -> Real
 

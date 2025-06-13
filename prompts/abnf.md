@@ -82,12 +82,11 @@ binding = "let" identifier *name-binding [ ":" type ] "=" expression
 
 if = "if" expression "then" expression "else" expression
 
-annotation = operator ":" type
+annotation = application *( operator application ) ":" type
 
-; Grace has an *extremely* limited set of operators.  There are no operators
-; other than these ones
+; Operators in descending order of precedence
 ;
-; Most notably, Grace does not support the following operators:
+; Grace does not support the following operators:
 ;
 ; - subtraction (`-`)
 ;
@@ -96,15 +95,17 @@ annotation = operator ":" type
 ; - division (`/`)
 ;
 ;   Grace does not support division at all.
-;
-; - comparison (`>`, `>=`, `<`, `<=`)
-;
-;   Use `Real/lessThan` and `==` instead.
-operator = and *( "||" and)
-and = equals *( "&&" equals)
-equals = plus *( "==" plus)
-plus = times *( "+" times )
-times = application *( "*" application )
+operator
+    = "*"
+    / "+"
+    / ">="
+    / ">"
+    / "<="
+    / "<"
+    / "!="
+    / "=="
+    / "&&"
+    / "||"
 
 application
   ; Keyword to prompt an LLM to generate a plain value (the default) or Grace

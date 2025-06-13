@@ -1,7 +1,0 @@
-# Returns `true` if the first `Real` is less than the second `Real`, and
-# `false` otherwise
-let lessThan
-      : Real -> Real -> Bool
-      = Real/lessThan
-
-in  lessThan

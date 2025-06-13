@@ -1,9 +1,0 @@
-# Returns `true` if the first `Real` is greater than or equal to the second
-# `Real`, and `false` otherwise
-let not = ../bool/not.ffg
-
-let greaterThanOrEqual
-      : Real -> Real -> Bool
-      = \l -> \r -> not (Real/lessThan l r)
-
-in  greaterThanOrEqual

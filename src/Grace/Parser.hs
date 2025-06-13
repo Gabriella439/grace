@@ -103,11 +103,14 @@ lexToken =
         , lexNumber
 
         , Combinators.choice
-            [ Grace.Parser.Or           <$ symbol "||"
-            , Grace.Parser.And          <$ symbol "&&"
-            , Grace.Parser.Plus         <$ symbol "+"
-            , Grace.Parser.Times        <$ symbol "*"
-            , Grace.Parser.DoubleEquals <$ symbol "=="
+            [ Grace.Parser.Or                 <$ symbol "||"
+            , Grace.Parser.And                <$ symbol "&&"
+            , Grace.Parser.Plus               <$ symbol "+"
+            , Grace.Parser.Times              <$ symbol "*"
+            , Grace.Parser.DoubleEquals       <$ symbol "=="
+            , Grace.Parser.NotEqual           <$ symbol "!="
+            , Grace.Parser.LessThanOrEqual    <$ symbol "<="
+            , Grace.Parser.GreaterThanOrEqual <$ symbol ">="
             ] Megaparsec.<?> "operator"
 
         , Combinators.choice
@@ -125,8 +128,7 @@ lexToken =
             ] Megaparsec.<?> "keyword"
 
         , Combinators.choice
-            [ Grace.Parser.RealLessThan   <$ symbol "Real/lessThan"
-            , Grace.Parser.RealNegate     <$ symbol "Real/negate"
+            [ Grace.Parser.RealNegate     <$ symbol "Real/negate"
             , Grace.Parser.RealShow       <$ symbol "Real/show"
             , Grace.Parser.ListDrop       <$ symbol "List/drop"
             , Grace.Parser.ListFold       <$ symbol "List/fold"
@@ -453,7 +455,6 @@ reserved =
         , "Bool"
         , "Real"
         , "Real/equal"
-        , "Real/lessThan"
         , "Real/negate"
         , "Real/show"
         , "Fields"
@@ -573,7 +574,6 @@ data Token
     | Dot
     | DoubleEquals
     | Real
-    | RealLessThan
     | RealLiteral Sign Scientific
     | RealNegate
     | RealShow
@@ -583,6 +583,7 @@ data Token
     | Fields
     | File FilePath
     | Forall
+    | GreaterThanOrEqual
     | If
     | In
     | Int Sign Int
@@ -595,6 +596,7 @@ data Token
     | JSONFold
     | Label Text
     | Lambda
+    | LessThanOrEqual
     | Let
     | List
     | ListDrop
@@ -609,6 +611,7 @@ data Token
     | Merge
     | Natural
     | NaturalFold
+    | NotEqual
     | Null
     | OpenAngle
     | OpenBrace
@@ -756,76 +759,78 @@ locatedToken expectedToken =
 --   case someone wants to modify the code to display them.
 render :: Token -> Text
 render t = case t of
-    Grace.Parser.Alternative _    -> "an alternative"
-    Grace.Parser.Alternatives     -> "Alternatives"
-    Grace.Parser.And              -> "&&"
-    Grace.Parser.Arrow            -> "->"
-    Grace.Parser.At               -> "@"
-    Grace.Parser.Bar              -> "|"
-    Grace.Parser.Bool             -> "Bool"
-    Grace.Parser.CloseAngle       -> ">"
-    Grace.Parser.CloseBrace       -> "}"
-    Grace.Parser.CloseBracket     -> "]"
-    Grace.Parser.CloseParenthesis -> ")"
-    Grace.Parser.Colon            -> ":"
-    Grace.Parser.Comma            -> ","
-    Grace.Parser.Dash             -> "-"
-    Grace.Parser.Dot              -> "."
-    Grace.Parser.DoubleEquals     -> "=="
-    Grace.Parser.Real             -> "Real"
-    Grace.Parser.RealLiteral _ _  -> "a real number literal"
-    Grace.Parser.RealLessThan     -> "Real/lessThan"
-    Grace.Parser.RealNegate       -> "Real/negate"
-    Grace.Parser.RealShow         -> "Real/show"
-    Grace.Parser.Else             -> "else"
-    Grace.Parser.Equals           -> "="
-    Grace.Parser.False_           -> "False"
-    Grace.Parser.Fields           -> "Fields"
-    Grace.Parser.File _           -> "a file"
-    Grace.Parser.Forall           -> "forall"
-    Grace.Parser.If               -> "if"
-    Grace.Parser.In               -> "in"
-    Grace.Parser.Int _ _          -> "an integer literal"
-    Grace.Parser.Integer          -> "Integer"
-    Grace.Parser.IntegerAbs       -> "Integer/clamp"
-    Grace.Parser.IntegerEven      -> "Integer/even"
-    Grace.Parser.IntegerNegate    -> "Integer/negate"
-    Grace.Parser.IntegerOdd       -> "Integer/odd"
-    Grace.Parser.JSON             -> "JSON"
-    Grace.Parser.JSONFold         -> "JSON/fold"
-    Grace.Parser.Label _          -> "a label"
-    Grace.Parser.Lambda           -> "\\"
-    Grace.Parser.Let              -> "let"
-    Grace.Parser.List             -> "list"
-    Grace.Parser.ListDrop         -> "List/drop"
-    Grace.Parser.ListFold         -> "List/fold"
-    Grace.Parser.ListHead         -> "List/head"
-    Grace.Parser.ListIndexed      -> "List/indexed"
-    Grace.Parser.ListLast         -> "List/last"
-    Grace.Parser.ListLength       -> "List/length"
-    Grace.Parser.ListMap          -> "List/map"
-    Grace.Parser.ListReverse      -> "List/reverse"
-    Grace.Parser.ListTake         -> "List/take"
-    Grace.Parser.Merge            -> "merge"
-    Grace.Parser.Natural          -> "Natural"
-    Grace.Parser.NaturalFold      -> "Natural/fold"
-    Grace.Parser.Null             -> "null"
-    Grace.Parser.OpenAngle        -> "<"
-    Grace.Parser.OpenBrace        -> "{"
-    Grace.Parser.OpenBracket      -> "<"
-    Grace.Parser.OpenParenthesis  -> "("
-    Grace.Parser.Optional         -> "List"
-    Grace.Parser.Or               -> "||"
-    Grace.Parser.Plus             -> "+"
-    Grace.Parser.Prompt           -> "prompt"
-    Grace.Parser.Some             -> "some"
-    Grace.Parser.Text             -> "Text"
-    Grace.Parser.TextLiteral _    -> "a text literal"
-    Grace.Parser.Then             -> "then"
-    Grace.Parser.Type             -> "Type"
-    Grace.Parser.Times            -> "*"
-    Grace.Parser.True_            -> "True"
-    Grace.Parser.URI _            -> "a URI"
+    Grace.Parser.Alternative _      -> "an alternative"
+    Grace.Parser.Alternatives       -> "Alternatives"
+    Grace.Parser.And                -> "&&"
+    Grace.Parser.Arrow              -> "  ->"
+    Grace.Parser.At                 -> "@"
+    Grace.Parser.Bar                -> "|"
+    Grace.Parser.Bool               -> "Bool"
+    Grace.Parser.CloseAngle         -> ">"
+    Grace.Parser.CloseBrace         -> "}"
+    Grace.Parser.CloseBracket       -> "]"
+    Grace.Parser.CloseParenthesis   -> ")"
+    Grace.Parser.Colon              -> ":"
+    Grace.Parser.Comma              -> ","
+    Grace.Parser.Dash               -> "-"
+    Grace.Parser.Dot                -> "."
+    Grace.Parser.DoubleEquals       -> "=="
+    Grace.Parser.Real               -> "Real"
+    Grace.Parser.RealLiteral _ _    -> "a real number literal"
+    Grace.Parser.RealNegate         -> "Real/negate"
+    Grace.Parser.RealShow           -> "Real/show"
+    Grace.Parser.Else               -> "else"
+    Grace.Parser.Equals             -> "="
+    Grace.Parser.False_             -> "False"
+    Grace.Parser.Fields             -> "Fields"
+    Grace.Parser.File _             -> "a file"
+    Grace.Parser.Forall             -> "forall"
+    Grace.Parser.GreaterThanOrEqual -> ">="
+    Grace.Parser.If                 -> "if"
+    Grace.Parser.In                 -> "in"
+    Grace.Parser.Int _ _            -> "an integer literal"
+    Grace.Parser.Integer            -> "Integer"
+    Grace.Parser.IntegerAbs         -> "Integer/clamp"
+    Grace.Parser.IntegerEven        -> "Integer/even"
+    Grace.Parser.IntegerNegate      -> "Integer/negate"
+    Grace.Parser.IntegerOdd         -> "Integer/odd"
+    Grace.Parser.JSON               -> "JSON"
+    Grace.Parser.JSONFold           -> "JSON/fold"
+    Grace.Parser.Label _            -> "a label"
+    Grace.Parser.Lambda             -> "\\"
+    Grace.Parser.LessThanOrEqual    -> "<="
+    Grace.Parser.Let                -> "let"
+    Grace.Parser.List               -> "list"
+    Grace.Parser.ListDrop           -> "List/drop"
+    Grace.Parser.ListFold           -> "List/fold"
+    Grace.Parser.ListHead           -> "List/head"
+    Grace.Parser.ListIndexed        -> "List/indexed"
+    Grace.Parser.ListLast           -> "List/last"
+    Grace.Parser.ListLength         -> "List/length"
+    Grace.Parser.ListMap            -> "List/map"
+    Grace.Parser.ListReverse        -> "List/reverse"
+    Grace.Parser.ListTake           -> "List/take"
+    Grace.Parser.Merge              -> "merge"
+    Grace.Parser.Natural            -> "Natural"
+    Grace.Parser.NaturalFold        -> "Natural/fold"
+    Grace.Parser.NotEqual           -> "!="
+    Grace.Parser.Null               -> "null"
+    Grace.Parser.OpenAngle          -> "<"
+    Grace.Parser.OpenBrace          -> "{"
+    Grace.Parser.OpenBracket        -> "<"
+    Grace.Parser.OpenParenthesis    -> "("
+    Grace.Parser.Optional           -> "List"
+    Grace.Parser.Or                 -> "||"
+    Grace.Parser.Plus               -> "+"
+    Grace.Parser.Prompt             -> "prompt"
+    Grace.Parser.Some               -> "some"
+    Grace.Parser.Text               -> "Text"
+    Grace.Parser.TextLiteral _      -> "a text literal"
+    Grace.Parser.Then               -> "then"
+    Grace.Parser.Type               -> "Type"
+    Grace.Parser.Times              -> "*"
+    Grace.Parser.True_              -> "True"
+    Grace.Parser.URI _              -> "a URI"
 
 grammar :: Bool -> Grammar r (Parser r (Syntax Offset Input))
 grammar endsWithBrace = mdo
@@ -918,9 +923,19 @@ grammar endsWithBrace = mdo
 
     orExpression <- rule (op Grace.Parser.Or Syntax.Or andExpression)
 
-    andExpression <- rule (op Grace.Parser.And Syntax.And equalsExpression)
+    andExpression <- rule (op Grace.Parser.And Syntax.And equalExpression)
 
-    equalsExpression <- rule (op Grace.Parser.DoubleEquals Syntax.Equals plusExpression)
+    equalExpression <- rule (op Grace.Parser.DoubleEquals Syntax.Equal notEqualExpression)
+
+    notEqualExpression <- rule (op Grace.Parser.NotEqual Syntax.NotEqual lessThanExpression)
+
+    lessThanExpression <- rule (op Grace.Parser.OpenAngle Syntax.LessThan lessThanOrEqualExpression)
+
+    lessThanOrEqualExpression <- rule (op Grace.Parser.LessThanOrEqual Syntax.LessThanOrEqual greaterThanExpression)
+
+    greaterThanExpression <- rule (op Grace.Parser.CloseAngle Syntax.GreaterThan greaterThanOrEqualExpression)
+
+    greaterThanOrEqualExpression <- rule (op Grace.Parser.GreaterThanOrEqual Syntax.GreaterThanOrEqual plusExpression)
 
     plusExpression <- rule (op Grace.Parser.Plus Syntax.Plus timesExpression)
 
@@ -1035,10 +1050,6 @@ grammar endsWithBrace = mdo
         <|> do  location <- locatedToken Grace.Parser.Some
 
                 return Syntax.Builtin{ builtin = Syntax.Some, .. }
-
-        <|> do  location <- locatedToken Grace.Parser.RealLessThan
-
-                return Syntax.Builtin{ builtin = Syntax.RealLessThan, .. }
 
         <|> do  location <- locatedToken Grace.Parser.RealNegate
 
