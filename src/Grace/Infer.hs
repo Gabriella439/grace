@@ -313,18 +313,6 @@ subtype _A₀ _B₀ = do
         (Type.List{ type_ = _A }, Type.List{ type_ = _B }) -> do
             subtype _A _B
 
-        -- This is where you need to add any non-trivial subtypes.  For example,
-        -- the following three rules specify that `Natural` is a subtype of
-        -- `Integer`, which is in turn a subtype of `Real`.
-        (Type.Scalar{ scalar = Monotype.Natural }, Type.Scalar{ scalar = Monotype.Integer }) -> do
-            return ()
-
-        (Type.Scalar{ scalar = Monotype.Natural }, Type.Scalar{ scalar = Monotype.Real }) -> do
-            return ()
-
-        (Type.Scalar{ scalar = Monotype.Integer }, Type.Scalar{ scalar = Monotype.Real }) -> do
-            return ()
-
         (Type.Scalar{ }, Type.Scalar{ scalar = Monotype.JSON }) -> do
             return ()
 
@@ -1337,7 +1325,6 @@ infer e₀ = do
 
             return (type_, Syntax.Application{ function = solveSyntax _Γ newFunction, argument = solveSyntax _Γ newArgument, .. })
 
-        -- Anno
         Syntax.Annotation{..} -> do
             _Γ <- get
 
@@ -1347,7 +1334,7 @@ infer e₀ = do
 
             _Θ <- get
 
-            return (annotation, Syntax.Annotation{ annotated = solveSyntax _Θ newAnnotated, .. })
+            return (annotation, Syntax.Annotation{ annotated = newAnnotated, .. })
 
         Syntax.Let{..} -> do
             b <- fresh
@@ -2342,22 +2329,6 @@ check e@Syntax.Record{ fieldValues } _B@Type.Record{ fields = Type.Fields fieldT
             other ->
                 return other
 
-check Syntax.Record{..} _B@Type.Scalar{ scalar = Monotype.JSON } = do
-    let process (field, value) = do
-            _Γ <- get
-
-            newValue <- check value (Context.solveType _Γ _B)
-
-            return (field, newValue)
-
-    newFieldValues <- traverse process fieldValues
-
-    return Syntax.Record{ fieldValues = newFieldValues, .. }
-check Syntax.List{..} _B@Type.Scalar{ scalar = Monotype.JSON } = do
-    newElements <- traverse (`check` _B) elements
-
-    return Syntax.List{ elements = newElements, .. }
-
 check Syntax.Text{ chunks = Syntax.Chunks text₀ rest, .. } Type.Scalar{ scalar = Monotype.Text } = do
     let process (interpolation, text) = do
             newInterpolation <- check interpolation Type.Scalar{ scalar = Monotype.Text, .. }
@@ -2367,8 +2338,6 @@ check Syntax.Text{ chunks = Syntax.Chunks text₀ rest, .. } Type.Scalar{ scalar
     newRest <- traverse process rest
 
     return Syntax.Text{ chunks = Syntax.Chunks text₀ newRest, .. }
-check e@Syntax.Text{ } Type.Scalar{ scalar = Monotype.JSON, .. } = do
-    check e Type.Scalar{ scalar = Monotype.Text, .. }
 
 check Syntax.Prompt{..} _B = do
     newArguments <- check arguments Type.Record
@@ -2385,16 +2354,139 @@ check Syntax.Prompt{..} _B = do
 
     return Syntax.Prompt{ arguments = newArguments, schema = Just _B, .. }
 
-check Syntax.Scalar{ scalar = Syntax.Natural natural, ..} Type.Scalar{ scalar = Monotype.JSON } = do
+check Syntax.List{..} annotation@Type.Scalar{ scalar = Monotype.JSON } = do
+    newElements <- traverse (`check` annotation) elements
+
+    let annotated = Syntax.List{ elements = newElements, .. }
+
+    return Syntax.Annotation
+        { annotated, annotation, location = Syntax.location annotated }
+
+check Syntax.Record{..} annotation@Type.Scalar{ scalar = Monotype.JSON } = do
+    let process (field, value) = do
+            newValue <- check value annotation
+
+            return (field, newValue)
+
+    newFieldValues <- traverse process fieldValues
+
+    return Syntax.Record{ fieldValues = newFieldValues, .. }
+
+check e@Syntax.Text{ } Type.Scalar{ scalar = Monotype.JSON, .. } = do
+    check e Type.Scalar{ scalar = Monotype.Text, .. }
+
+check Syntax.Scalar{ scalar = Syntax.Natural natural, .. } Type.Scalar{ scalar = Monotype.JSON } = do
     return Syntax.Scalar{ scalar = Syntax.Natural natural, .. }
+
 check Syntax.Scalar{ scalar = Syntax.Integer integer, .. } Type.Scalar{ scalar = Monotype.JSON } = do
     return Syntax.Scalar{ scalar = Syntax.Integer integer, .. }
+
 check Syntax.Scalar{ scalar = Syntax.Real real, .. } Type.Scalar{ scalar = Monotype.JSON } = do
     return Syntax.Scalar{ scalar = Syntax.Real real, .. }
+
 check Syntax.Scalar{ scalar = Syntax.Bool bool, .. } Type.Scalar{ scalar = Monotype.JSON } = do
     return Syntax.Scalar{ scalar = Syntax.Bool bool, .. }
+
 check Syntax.Scalar{ scalar = Syntax.Null, .. } Type.Scalar{ scalar = Monotype.JSON } = do
     return Syntax.Scalar{ scalar = Syntax.Null, .. }
+
+check Syntax.Scalar{ scalar = Syntax.Natural n, .. } Type.Scalar{ scalar = Monotype.Real } = do
+    return Syntax.Scalar{ scalar = Syntax.Real (fromIntegral n), .. }
+
+check Syntax.Scalar{ scalar = Syntax.Integer n, .. } Type.Scalar{ scalar = Monotype.Real } = do
+    return Syntax.Scalar{ scalar = Syntax.Real (fromInteger n), .. }
+
+check Syntax.Scalar{ scalar = Syntax.Real n, .. } Type.Scalar{ scalar = Monotype.Real } = do
+    return Syntax.Scalar{ scalar = Syntax.Real n, .. }
+
+check Syntax.Scalar{ scalar = Syntax.Natural n, .. } Type.Scalar{ scalar = Monotype.Integer } = do
+    return Syntax.Scalar{ scalar = Syntax.Integer (fromIntegral n), .. }
+
+check Syntax.Scalar{ scalar = Syntax.Integer n, .. } Type.Scalar{ scalar = Monotype.Integer } = do
+    return Syntax.Scalar{ scalar = Syntax.Integer n, .. }
+
+check Syntax.Scalar{ scalar = Syntax.Natural n, .. } Type.Scalar{ scalar = Monotype.Natural } = do
+    return Syntax.Scalar{ scalar = Syntax.Natural n, .. }
+
+check annotated annotation@Type.Scalar{ scalar = Monotype.Real } = do
+    (_A₀, newAnnotated) <- infer annotated
+
+    _Γ <- get
+
+    let _A₁ = Context.solveType _Γ _A₀
+
+    let real = do
+            subtype _A₁ annotation
+
+            return newAnnotated
+
+    let integer = do
+            subtype _A₁ Type.Scalar
+                { scalar = Monotype.Integer
+                , location = Syntax.location newAnnotated
+                }
+
+            return Syntax.Annotation
+                { annotated = newAnnotated
+                , annotation
+                , location = Syntax.location newAnnotated
+                }
+
+    let natural = do
+            subtype _A₁ Type.Scalar
+                { scalar = Monotype.Natural
+                , location = Syntax.location newAnnotated
+                }
+
+            return Syntax.Annotation
+                { annotated = Syntax.Annotation
+                    { annotated = newAnnotated
+                    , annotation = Type.Scalar
+                        { scalar = Monotype.Integer
+                        , location = Syntax.location newAnnotated
+                        }
+                    , location = Syntax.location newAnnotated
+                    }
+                , annotation
+                , location = Syntax.location newAnnotated
+                }
+
+    real `Exception.catch` \(_ :: TypeInferenceError) -> do
+        integer `Exception.catch` \(_ :: TypeInferenceError) -> do
+            natural `Exception.catch` \(_ :: TypeInferenceError) -> do
+                subtype _A₁ annotation
+
+                return newAnnotated
+
+check annotated annotation@Type.Scalar{ scalar = Monotype.Integer } = do
+    (_A₀, newAnnotated) <- infer annotated
+
+    _Γ <- get
+
+    let _A₁ = Context.solveType _Γ _A₀
+
+    let integer = do
+            subtype _A₁ annotation
+
+            return newAnnotated
+
+    let natural = do
+            subtype _A₁ Type.Scalar
+                { scalar = Monotype.Natural
+                , location = Syntax.location newAnnotated
+                }
+
+            return Syntax.Annotation
+                { annotated = newAnnotated
+                , annotation
+                , location = Syntax.location newAnnotated
+                }
+
+    integer `Exception.catch` \(_ :: TypeInferenceError) -> do
+        natural `Exception.catch` \(_ :: TypeInferenceError) -> do
+            subtype _A₁ annotation
+
+            return newAnnotated
 
 check Syntax.Embed{ embedded } _B = do
     _Γ <- get

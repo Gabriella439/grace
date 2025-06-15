@@ -208,7 +208,7 @@ main = do
 
             (inferred, value) <- Interpret.interpret maybeMethods input
 
-            let syntax = Normalize.quote [] value
+            let syntax = Normalize.strip (Normalize.quote [] value)
 
             let annotatedExpression
                     | annotate =

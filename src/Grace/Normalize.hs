@@ -13,6 +13,7 @@ module Grace.Normalize
     ( -- * Normalization
       evaluate
     , quote
+    , strip
 
       -- * Errors related to normalization
     , MissingCredentials(..)
@@ -26,7 +27,6 @@ import Control.Exception (Exception(..), SomeException)
 import Data.Bifunctor (first)
 import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
-import Data.Scientific (Scientific)
 import Data.Sequence (Seq(..), ViewL(..))
 import Data.Text (Text)
 import Data.Typeable (Typeable)
@@ -107,17 +107,6 @@ lookupVariable name index environment =
             else lookupVariable name index rest
         [] ->
             error "Grace.Normalize.lookupVariable: unbound variable"
-
-asInteger :: Scalar -> Maybe Integer
-asInteger (Natural n) = Just (fromIntegral n)
-asInteger (Integer n) = Just n
-asInteger  _          = Nothing
-
-asReal :: Scalar -> Maybe Scientific
-asReal (Natural n) = Just (fromIntegral n)
-asReal (Integer n) = Just (fromInteger  n)
-asReal (Real    n) = Just n
-asReal  _          = Nothing
 
 toJSONSchema :: Type a -> Either (UnsupportedModelOutput a) Aeson.Value
 toJSONSchema original = loop original
@@ -343,8 +332,19 @@ evaluate maybeMethods = loop
 
                 return (Value.Lambda (Closure (Value.FieldNames names) env body))
 
-            Syntax.Annotation{..} ->
-                loop env annotated
+            Syntax.Annotation{ annotated, annotation  } -> do
+                newAnnotated <- loop env annotated
+
+                let promote (Value.Scalar (Natural n)) Type.Scalar{ scalar = Monotype.Real } =
+                        Value.Scalar (Real (fromIntegral n))
+                    promote (Value.Scalar (Integer n)) Type.Scalar{ scalar = Monotype.Real } =
+                        Value.Scalar (Real (fromInteger n))
+                    promote (Value.Scalar (Natural n)) Type.Scalar{ scalar = Monotype.Integer } =
+                        Value.Scalar (Integer (fromIntegral n))
+                    promote _ _ =
+                        newAnnotated
+
+                return (promote newAnnotated annotation)
 
             Syntax.Let{ body = body₀, ..} -> do
                 newEnv <- Monad.foldM snoc env bindings
@@ -672,18 +672,14 @@ evaluate maybeMethods = loop
                 right' <- loop env right
 
                 case (left', right') of
-                    (Value.Scalar l, Value.Scalar r)
-                        | Natural m <- l
-                        , Natural n <- r ->
-                            return (Value.Scalar (Bool (m < n)))
-                        | Just m <- asInteger l
-                        , Just n <- asInteger r ->
-                            return (Value.Scalar (Bool (m < n)))
-                        | Just m <- asReal l
-                        , Just n <- asReal r ->
-                            return (Value.Scalar (Bool (m < n)))
+                    (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
+                        return (Value.Scalar (Bool (m < n)))
+                    (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
+                        return (Value.Scalar (Bool (m < n)))
+                    (Value.Scalar (Real m), Value.Scalar (Real n)) ->
+                        return (Value.Scalar (Bool (m < n)))
                     _ ->
-                        error "Grace.Normalize.evaluate: < arguments must be numeric values"
+                        error "Grace.Normalize.evaluate: < arguments must be numeric values of the same type"
 
 
             Syntax.Operator{ operator = Syntax.LessThanOrEqual, .. } -> do
@@ -691,94 +687,74 @@ evaluate maybeMethods = loop
                 right' <- loop env right
 
                 case (left', right') of
-                    (Value.Scalar l, Value.Scalar r)
-                        | Natural m <- l
-                        , Natural n <- r ->
-                            return (Value.Scalar (Bool (m <= n)))
-                        | Just m <- asInteger l
-                        , Just n <- asInteger r ->
-                            return (Value.Scalar (Bool (m <= n)))
-                        | Just m <- asReal l
-                        , Just n <- asReal r ->
-                            return (Value.Scalar (Bool (m <= n)))
+                    (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
+                        return (Value.Scalar (Bool (m <= n)))
+                    (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
+                        return (Value.Scalar (Bool (m <= n)))
+                    (Value.Scalar (Real m), Value.Scalar (Real n)) ->
+                        return (Value.Scalar (Bool (m <= n)))
                     _ ->
-                        error "Grace.Normalize.evaluate: <= arguments must be numeric values"
+                        error "Grace.Normalize.evaluate: <= arguments must be numeric values of the same type"
 
             Syntax.Operator{ operator = Syntax.GreaterThan, .. } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
                 case (left', right') of
-                    (Value.Scalar l, Value.Scalar r)
-                        | Natural m <- l
-                        , Natural n <- r ->
-                            return (Value.Scalar (Bool (m > n)))
-                        | Just m <- asInteger l
-                        , Just n <- asInteger r ->
-                            return (Value.Scalar (Bool (m > n)))
-                        | Just m <- asReal l
-                        , Just n <- asReal r ->
-                            return (Value.Scalar (Bool (m > n)))
+                    (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
+                        return (Value.Scalar (Bool (m > n)))
+                    (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
+                        return (Value.Scalar (Bool (m > n)))
+                    (Value.Scalar (Real m), Value.Scalar (Real n)) ->
+                        return (Value.Scalar (Bool (m > n)))
                     _ ->
-                        error "Grace.Normalize.evaluate: > arguments must be numeric values"
+                        error "Grace.Normalize.evaluate: > arguments must be numeric values of the same type"
 
             Syntax.Operator{ operator = Syntax.GreaterThanOrEqual, .. } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
                 case (left', right') of
-                    (Value.Scalar l, Value.Scalar r)
-                        | Natural m <- l
-                        , Natural n <- r ->
-                            return (Value.Scalar (Bool (m >= n)))
-                        | Just m <- asInteger l
-                        , Just n <- asInteger r ->
-                            return (Value.Scalar (Bool (m >= n)))
-                        | Just m <- asReal l
-                        , Just n <- asReal r ->
-                            return (Value.Scalar (Bool (m >= n)))
+                    (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
+                        return (Value.Scalar (Bool (m >= n)))
+                    (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
+                        return (Value.Scalar (Bool (m >= n)))
+                    (Value.Scalar (Real m), Value.Scalar (Real n)) ->
+                        return (Value.Scalar (Bool (m >= n)))
                     _ ->
-                        error "Grace.Normalize.evaluate: >= arguments must be numeric values"
+                        error "Grace.Normalize.evaluate: >= arguments must be numeric values of the same type"
 
             Syntax.Operator{ operator = Syntax.Times, .. } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
                 case (left', right') of
-                    (Value.Scalar l, Value.Scalar r)
-                        | Natural m <- l
-                        , Natural n <- r ->
-                            return (Value.Scalar (Natural (m * n)))
-                        | Just m <- asInteger l
-                        , Just n <- asInteger r ->
-                            return (Value.Scalar (Integer (m * n)))
-                        | Just m <- asReal l
-                        , Just n <- asReal r ->
-                            return (Value.Scalar (Real (m * n)))
+                    (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
+                        return (Value.Scalar (Natural (m * n)))
+                    (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
+                        return (Value.Scalar (Integer (m * n)))
+                    (Value.Scalar (Real m), Value.Scalar (Real n)) ->
+                        return (Value.Scalar (Real (m * n)))
                     _ ->
-                        error "Grace.Normalize.evaluate: * arguments must be numeric values"
+                        error "Grace.Normalize.evaluate: * arguments must be numeric values of the same type"
 
             Syntax.Operator{ operator = Syntax.Plus, .. } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
                 case (left', right') of
-                    (Value.Scalar l, Value.Scalar r)
-                        | Natural m <- l
-                        , Natural n <- r ->
-                            return (Value.Scalar (Natural (m + n)))
-                        | Just m <- asInteger l
-                        , Just n <- asInteger r ->
-                            return (Value.Scalar (Integer (m + n)))
-                        | Just m <- asReal l
-                        , Just n <- asReal r ->
-                            return (Value.Scalar (Real (m + n)))
+                    (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
+                        return (Value.Scalar (Natural (m + n)))
+                    (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
+                        return (Value.Scalar (Integer (m + n)))
+                    (Value.Scalar (Real m), Value.Scalar (Real n)) ->
+                        return (Value.Scalar (Real (m + n)))
                     (Value.Text l, Value.Text r) ->
                         return (Value.Text (l <> r))
                     (Value.List l, Value.List r) ->
                         return (Value.List (l <> r))
                     _ ->
-                        error "Grace.Normalize.evaluate: + arguments must be values"
+                        error "Grace.Normalize.evaluate: + arguments must be numeric values of the same type"
 
             Syntax.Builtin{..} ->
                 return (Value.Builtin builtin)
@@ -886,19 +862,16 @@ evaluate maybeMethods = loop
         go m !result = do
             x <- apply succ result
             go (m - 1) x
-    apply (Value.Builtin IntegerEven) (Value.Scalar x)
-        | Just n <- asInteger x = return (Value.Scalar (Bool (even n)))
-    apply (Value.Builtin IntegerOdd) (Value.Scalar x)
-        | Just n <- asInteger x = return (Value.Scalar (Bool (odd n)))
-    apply (Value.Builtin IntegerAbs) (Value.Scalar x)
-        | Just n <- asInteger x =
-            return (Value.Scalar (Natural (fromInteger (abs n))))
-    apply (Value.Builtin RealNegate) (Value.Scalar x)
-        | Just n <- asReal x =
-            return (Value.Scalar (Real (negate n)))
-    apply (Value.Builtin IntegerNegate) (Value.Scalar x)
-        | Just n <- asInteger x =
-            return (Value.Scalar (Integer (negate n)))
+    apply (Value.Builtin IntegerEven) (Value.Scalar (Integer n)) =
+        return (Value.Scalar (Bool (even n)))
+    apply (Value.Builtin IntegerOdd) (Value.Scalar (Integer n)) =
+        return (Value.Scalar (Bool (odd n)))
+    apply (Value.Builtin IntegerAbs) (Value.Scalar (Integer n)) =
+        return (Value.Scalar (Natural (fromInteger (abs n))))
+    apply (Value.Builtin RealNegate) (Value.Scalar (Real n)) =
+        return (Value.Scalar (Real (negate n)))
+    apply (Value.Builtin IntegerNegate) (Value.Scalar (Integer n)) =
+        return (Value.Scalar (Integer (negate n)))
     apply (Value.Builtin RealShow) (Value.Scalar (Natural n)) =
         return (Value.Text (Text.pack (show n)))
     apply (Value.Builtin RealShow) (Value.Scalar (Integer n)) =
@@ -958,7 +931,7 @@ quote
     --   expression)
     -> Value
     -> Syntax () Void
-quote names value₀ = Lens.transform stripSome (loop value₀)
+quote names = loop
   where
     loop value = case value of
         Value.Lambda (Closure names_ env body) ->
@@ -1037,8 +1010,13 @@ quote names value₀ = Lens.transform stripSome (loop value₀)
 
     location = ()
 
-    stripSome Syntax.Application{ function = Syntax.Builtin{ builtin = Some }, argument } = argument
-    stripSome e = e
+strip :: Syntax s a -> Syntax s a
+strip = Lens.transform transformation
+  where
+    transformation Syntax.Application{ function = Syntax.Builtin{ builtin = Some }, argument } =
+        argument
+    transformation e =
+        e
 
 -- | Missing API credentials
 data MissingCredentials = MissingCredentials
