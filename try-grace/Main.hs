@@ -1135,14 +1135,11 @@ programmingExample :: Text
 programmingExample =
     "# You can use let expressions to define reusable values or functions:\n\
     \\n\
-    \let makeUser = \\user ->\n\
+    \let makeUser user =\n\
     \      let home       = \"/home/\" + user\n\
-    \      let privateKey = home + \"/.ssh/id_ed25519\"\n\
-    \      let publicKey  = privateKey + \".pub\"\n\
-    \      in  { home: home\n\
-    \          , privateKey: privateKey\n\
-    \          , publicKey: publicKey\n\
-    \          }\n\
+    \      let privateKey = \"${home}/.ssh/id_ed25519\"\n\
+    \      let publicKey  = \"${privateKey}.pub\"\n\
+    \      in  { home, privateKey, publicKey }\n\
     \\n\
     \    # Try adding another user to this list\n\
     \in  [ makeUser \"bill\"\n\
@@ -1207,10 +1204,10 @@ preludeExample =
     \let prelude = https://raw.githubusercontent.com/Gabriella439/grace/main/prelude/package.ffg\n\
     \\n\
     \# Then you can access functions as record fields:\n\
-    \let negative = prelude.real.negative\n\
+    \let even = prelude.integer.even\n\
     \\n\
     \in  { \"not\": not\n\
-    \    , \"negative\": negative\n\
+    \    , \"even\": even\n\
     \    , \"The entire Prelude\": prelude\n\
     \    }"
 
