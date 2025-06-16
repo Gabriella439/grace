@@ -12,6 +12,7 @@
 module Grace.Normalize
     ( -- * Normalization
       evaluate
+    , apply
     , quote
     , strip
 
@@ -320,7 +321,7 @@ evaluate maybeMethods = loop
                 function' <- loop env function
                 argument' <- loop env argument
 
-                apply function' argument'
+                apply maybeMethods function' argument'
 
             Syntax.Lambda{ nameBinding = Syntax.NameBinding{ name }, ..} ->
                 return (Value.Lambda (Closure (Value.Name name) env body))
@@ -762,14 +763,23 @@ evaluate maybeMethods = loop
             Syntax.Embed{ embedded } ->
                 Void.absurd embedded
 
-    {-| This is the function that implements function application, including
-        evaluating anonymous functions and evaluating all built-in functions.
-    -}
-    apply :: Value -> Value -> IO Value
-    apply (Value.Lambda (Closure (Value.Name name) capturedEnv body)) argument =
-        loop ((name, argument) : capturedEnv) body
-    apply (Value.Lambda (Closure (Value.FieldNames fieldNames) capturedEnv body)) (Value.Record keyValues) =
-        loop (extraEnv <> capturedEnv) body
+{-| This is the function that implements function application, including
+    evaluating anonymous functions and evaluating all built-in functions.
+-}
+apply
+    :: Maybe Methods
+    -- ^ OpenAI methods
+    -> Value
+    -- ^ Function
+    -> Value
+    -- ^ Argument
+    -> IO Value
+apply maybeMethods = loop
+  where
+    loop (Value.Lambda (Closure (Value.Name name) capturedEnv body)) argument =
+        evaluate maybeMethods ((name, argument) : capturedEnv) body
+    loop (Value.Lambda (Closure (Value.FieldNames fieldNames) capturedEnv body)) (Value.Record keyValues) =
+        evaluate maybeMethods (extraEnv <> capturedEnv) body
       where
         extraEnv = do
             fieldName <- fieldNames
@@ -779,38 +789,38 @@ evaluate maybeMethods = loop
                     Just n  -> n
 
             return (fieldName, value)
-    apply
+    loop
         (Value.Merge (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("null", _), ("some", someHandler)])))
         (Value.Application (Value.Builtin Some) x) =
-            apply someHandler x
-    apply
+            loop someHandler x
+    loop
         (Value.Merge (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("null", nullHandler), ("some", _)])))
         (Value.Scalar Null)  =
             return nullHandler
-    apply
+    loop
         (Value.Merge (Value.Record alternativeHandlers))
         (Value.Application (Value.Alternative alternative) x)
         | Just f <- HashMap.lookup alternative alternativeHandlers =
-            apply f x
-    apply
+            loop f x
+    loop
         (Value.Application (Value.Builtin ListDrop) (Value.Scalar (Natural n)))
         (Value.List elements) =
             return (Value.List (Seq.drop (fromIntegral n) elements))
-    apply
+    loop
         (Value.Application (Value.Builtin ListTake) (Value.Scalar (Natural n)))
         (Value.List elements) =
             return (Value.List (Seq.take (fromIntegral n) elements))
-    apply (Value.Builtin ListHead) (Value.List []) =
+    loop (Value.Builtin ListHead) (Value.List []) =
         return (Value.Scalar Null)
-    apply (Value.Builtin ListHead) (Value.List (x :<| _)) =
+    loop (Value.Builtin ListHead) (Value.List (x :<| _)) =
         return (Value.Application (Value.Builtin Some) x)
-    apply (Value.Builtin ListLast) (Value.List []) =
+    loop (Value.Builtin ListLast) (Value.List []) =
         return (Value.Scalar Null)
-    apply (Value.Builtin ListLast) (Value.List (_ :|> x)) =
+    loop (Value.Builtin ListLast) (Value.List (_ :|> x)) =
         return (Value.Application (Value.Builtin Some) x)
-    apply (Value.Builtin ListReverse) (Value.List xs) =
+    loop (Value.Builtin ListReverse) (Value.List xs) =
         return (Value.List (Seq.reverse xs))
-    apply
+    loop
         (Value.Application
             (Value.Builtin ListFold)
             (Value.Record
@@ -828,10 +838,10 @@ evaluate maybeMethods = loop
                 EmptyL -> do
                     return result
                 y :< ys -> do
-                    a <- apply cons y
-                    b <- apply a result
+                    a <- loop cons y
+                    b <- loop a result
                     inner ys b
-    apply (Value.Builtin ListIndexed) (Value.List elements) =
+    loop (Value.Builtin ListIndexed) (Value.List elements) =
         return (Value.List (Seq.mapWithIndex adapt elements))
       where
         adapt index value =
@@ -839,14 +849,14 @@ evaluate maybeMethods = loop
                 [ ("index", Value.Scalar (Natural (fromIntegral index)))
                 , ("value", value)
                 ]
-    apply (Value.Builtin ListLength) (Value.List elements) =
+    loop (Value.Builtin ListLength) (Value.List elements) =
         return (Value.Scalar (Natural (fromIntegral (length elements))))
-    apply
+    loop
         (Value.Application (Value.Builtin ListMap) f)
         (Value.List elements) = do
-            newElements <- traverse (apply f) elements
+            newElements <- traverse (loop f) elements
             return (Value.List newElements)
-    apply
+    loop
         (Value.Application
             (Value.Application
                 (Value.Builtin NaturalFold)
@@ -860,25 +870,25 @@ evaluate maybeMethods = loop
         go 0 !result = do
             return result
         go m !result = do
-            x <- apply succ result
+            x <- loop succ result
             go (m - 1) x
-    apply (Value.Builtin IntegerEven) (Value.Scalar (Integer n)) =
+    loop (Value.Builtin IntegerEven) (Value.Scalar (Integer n)) =
         return (Value.Scalar (Bool (even n)))
-    apply (Value.Builtin IntegerOdd) (Value.Scalar (Integer n)) =
+    loop (Value.Builtin IntegerOdd) (Value.Scalar (Integer n)) =
         return (Value.Scalar (Bool (odd n)))
-    apply (Value.Builtin IntegerAbs) (Value.Scalar (Integer n)) =
+    loop (Value.Builtin IntegerAbs) (Value.Scalar (Integer n)) =
         return (Value.Scalar (Natural (fromInteger (abs n))))
-    apply (Value.Builtin RealNegate) (Value.Scalar (Real n)) =
+    loop (Value.Builtin RealNegate) (Value.Scalar (Real n)) =
         return (Value.Scalar (Real (negate n)))
-    apply (Value.Builtin IntegerNegate) (Value.Scalar (Integer n)) =
+    loop (Value.Builtin IntegerNegate) (Value.Scalar (Integer n)) =
         return (Value.Scalar (Integer (negate n)))
-    apply (Value.Builtin RealShow) (Value.Scalar (Natural n)) =
+    loop (Value.Builtin RealShow) (Value.Scalar (Natural n)) =
         return (Value.Text (Text.pack (show n)))
-    apply (Value.Builtin RealShow) (Value.Scalar (Integer n)) =
+    loop (Value.Builtin RealShow) (Value.Scalar (Integer n)) =
         return (Value.Text (Text.pack (show n)))
-    apply (Value.Builtin RealShow) (Value.Scalar (Real n)) =
+    loop (Value.Builtin RealShow) (Value.Scalar (Real n)) =
         return (Value.Text (Text.pack (show n)))
-    apply
+    loop
         (Value.Application
             (Value.Builtin JSONFold)
             (Value.Record
@@ -898,30 +908,30 @@ evaluate maybeMethods = loop
         v0 = inner v0
       where
         inner (Value.Scalar (Bool b)) =
-            apply boolHandler (Value.Scalar (Bool b))
+            loop boolHandler (Value.Scalar (Bool b))
         inner (Value.Scalar (Natural n)) =
-            apply naturalHandler (Value.Scalar (Natural n))
+            loop naturalHandler (Value.Scalar (Natural n))
         inner (Value.Scalar (Integer n)) =
-            apply integerHandler (Value.Scalar (Integer n))
+            loop integerHandler (Value.Scalar (Integer n))
         inner (Value.Scalar (Real n)) =
-            apply realHandler (Value.Scalar (Real n))
+            loop realHandler (Value.Scalar (Real n))
         inner (Value.Text t) =
-            apply stringHandler (Value.Text t)
+            loop stringHandler (Value.Text t)
         inner (Value.Scalar Null) =
             return nullHandler
         inner (Value.List elements) = do
             newElements <- traverse inner elements
-            apply arrayHandler (Value.List newElements)
+            loop arrayHandler (Value.List newElements)
         inner (Value.Record keyValues) = do
             elements <- traverse adapt (HashMap.toList keyValues)
-            apply objectHandler (Value.List (Seq.fromList elements))
+            loop objectHandler (Value.List (Seq.fromList elements))
           where
             adapt (key, value) = do
                 newValue <- inner value
                 return (Value.Record [("key", Value.Text key), ("value", newValue)])
         inner v =
             return v
-    apply function argument =
+    loop function argument =
         return (Value.Application function argument)
 
 -- | Convert a `Value` back into the surface `Syntax`

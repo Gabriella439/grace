@@ -436,16 +436,7 @@ renderValue maybeMethods ref parent Type.Function{ input, output } function = do
             let invoke = do
                     value <- get
 
-                    let expression = Syntax.Application{ Syntax.function = Normalize.quote [] function, Syntax.argument = Normalize.quote [] value, Syntax.location = () }
-
-                    let Just expressionWithoutImports = traverse (\_ -> Nothing) expression
-
-                    let location = Location.Location "" "" 0
-
-                    (_, elaboratedExpression) <- Infer.typeWith undefined undefined [] (first (\_ -> location) expressionWithoutImports)
-
-
-                    newValue <- Normalize.evaluate maybeMethods [] (first (\_ -> undefined) elaboratedExpression)
+                    newValue <- Normalize.apply maybeMethods function value
 
                     renderValue maybeMethods ref outputVal output newValue
 
