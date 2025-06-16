@@ -431,6 +431,10 @@ data Operator
     -- ^
     --   >>> pretty Plus
     --   +
+    | Minus
+    -- ^
+    --   >>> pretty Minus
+    --   -
     | Times
     -- ^
     --   >>> pretty Times
@@ -447,6 +451,7 @@ instance Pretty Operator where
     pretty GreaterThan        = Pretty.operator ">"
     pretty GreaterThanOrEqual = Pretty.operator ">="
     pretty Plus               = Pretty.operator "+"
+    pretty Minus              = Pretty.operator "-"
     pretty Times              = Pretty.operator "*"
 
 -- | A built-in function
@@ -455,10 +460,6 @@ data Builtin
     -- ^
     --   >>> pretty Some
     --   some
-    | RealNegate
-    -- ^
-    --   >>> pretty RealNegate
-    --   Real/negate
     | RealShow
     -- ^
     --   >>> pretty RealShow
@@ -503,10 +504,6 @@ data Builtin
     -- ^
     --   >>> pretty IntegerEven
     --   Integer/even
-    | IntegerNegate
-    -- ^
-    --   >>> pretty IntegerNegate
-    --   Integer/negate
     | IntegerOdd
     -- ^
     --   >>> pretty IntegerOdd
@@ -527,11 +524,9 @@ data Builtin
 
 instance Pretty Builtin where
     pretty Some           = Pretty.builtin "some"
-    pretty RealNegate     = Pretty.builtin "Real/negate"
     pretty RealShow       = Pretty.builtin "Real/show"
     pretty IntegerAbs     = Pretty.builtin "Integer/abs"
     pretty IntegerEven    = Pretty.builtin "Integer/even"
-    pretty IntegerNegate  = Pretty.builtin "Integer/negate"
     pretty IntegerOdd     = Pretty.builtin "Integer/odd"
     pretty JSONFold       = Pretty.builtin "JSON/fold"
     pretty ListDrop       = Pretty.builtin "List/drop"
@@ -739,7 +734,10 @@ prettyGreaterThanOrEqualExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
 prettyGreaterThanOrEqualExpression = prettyOperator GreaterThanOrEqual prettyPlusExpression
 
 prettyPlusExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
-prettyPlusExpression = prettyOperator Plus prettyTimesExpression
+prettyPlusExpression = prettyOperator Plus prettyMinusExpression
+
+prettyMinusExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
+prettyMinusExpression = prettyOperator Minus prettyTimesExpression
 
 prettyTimesExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
 prettyTimesExpression = prettyOperator Times prettyApplicationExpression

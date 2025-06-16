@@ -1825,7 +1825,7 @@ infer e₀ = do
             return (bool, newGreaterThanOrEqual)
 
         Syntax.Operator{ operator = Syntax.Times, .. } -> do
-            (_L, newLeft) <- infer left
+            (_L, newLeft ) <- infer left
             (_R, newRight) <- infer right
 
             _ <- check left  _R
@@ -1845,8 +1845,8 @@ infer e₀ = do
                     Exception.throwIO (InvalidOperands "multiply" (Syntax.location left) _L')
 
         Syntax.Operator{ operator = Syntax.Plus, .. } -> do
-            (_L, newLeft) <- infer left
-            (_R, newRight)  <- infer right
+            (_L, newLeft ) <- infer left
+            (_R, newRight) <- infer right
 
             _ <- check left  _R
             _ <- check right _L
@@ -1867,6 +1867,26 @@ infer e₀ = do
                 _ -> do
                     Exception.throwIO (InvalidOperands "add" (Syntax.location left) _L')
 
+        Syntax.Operator{ operator = Syntax.Minus, .. } -> do
+            (_L, newLeft ) <- infer left
+            (_R, newRight) <- infer right
+
+            _ <- check left  _R
+            _ <- check right _L
+
+            _Γ <- get
+
+            let _L' = Context.solveType _Γ _L
+
+            let newMinus = Syntax.Operator{ operator = Syntax.Minus, left = solveSyntax _Γ newLeft, right = solveSyntax _Γ newRight, .. }
+
+            case _L' of
+                Type.Scalar{ scalar = Monotype.Integer } -> return (_L, newMinus)
+                Type.Scalar{ scalar = Monotype.Real    } -> return (_L, newMinus)
+
+                _ -> do
+                    Exception.throwIO (InvalidOperands "subtract" (Syntax.location left) _L')
+
         Syntax.Builtin{ builtin = Syntax.Some, .. }-> do
             return
                 (   Type.Forall
@@ -1877,13 +1897,6 @@ infer e₀ = do
                         , ..
                         }
                 , Syntax.Builtin{ builtin = Syntax.Some, .. }
-                )
-
-        Syntax.Builtin{ builtin = Syntax.RealNegate, .. } -> do
-            return
-                (   Type.Scalar{ scalar = Monotype.Real, .. }
-                ~>  Type.Scalar{ scalar = Monotype.Real, .. }
-                , Syntax.Builtin{ builtin = Syntax.RealNegate, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.RealShow, .. } -> do
@@ -2053,13 +2066,6 @@ infer e₀ = do
                 (   Type.Scalar{ scalar = Monotype.Integer, .. }
                 ~>  Type.Scalar{ scalar = Monotype.Bool, .. }
                 , Syntax.Builtin{ builtin = Syntax.IntegerEven, .. }
-                )
-
-        Syntax.Builtin{ builtin = Syntax.IntegerNegate, .. } -> do
-            return
-                (   Type.Scalar{ scalar = Monotype.Integer, .. }
-                ~>  Type.Scalar{ scalar = Monotype.Integer, .. }
-                , Syntax.Builtin{ builtin = Syntax.IntegerNegate, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.IntegerOdd, .. } -> do
@@ -2280,6 +2286,16 @@ check Syntax.Operator{ operator = Syntax.Plus, .. } _B@Type.List{} = do
     newRight <- check right (Context.solveType _Γ _B)
 
     return Syntax.Operator{ operator = Syntax.Plus, left = newLeft, right = newRight, .. }
+
+check Syntax.Operator{ operator = Syntax.Minus, .. } _B@Type.Scalar{ scalar }
+    | scalar `elem` ([ Monotype.Integer, Monotype.Real ] :: [Monotype.Scalar]) = do
+    newLeft <- check left _B
+
+    _Γ <- get
+
+    newRight <- check right (Context.solveType _Γ _B)
+
+    return Syntax.Operator{ operator = Syntax.Minus, left = newLeft, right = newRight, .. }
 
 check Syntax.List{..} Type.List{ location = _, .. } = do
     let process element = do

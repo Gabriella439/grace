@@ -757,6 +757,18 @@ evaluate maybeMethods = loop
                     _ ->
                         error "Grace.Normalize.evaluate: + arguments must be numeric values of the same type"
 
+            Syntax.Operator{ operator = Syntax.Minus, .. } -> do
+                left'  <- loop env left
+                right' <- loop env right
+
+                case (left', right') of
+                    (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
+                        return (Value.Scalar (Integer (m - n)))
+                    (Value.Scalar (Real m), Value.Scalar (Real n)) ->
+                        return (Value.Scalar (Real (m - n)))
+                    _ ->
+                        error "Grace.Normalize.evaluate: - arguments must be numeric values of the same type"
+
             Syntax.Builtin{..} ->
                 return (Value.Builtin builtin)
 
@@ -878,10 +890,6 @@ apply maybeMethods = loop
         return (Value.Scalar (Bool (odd n)))
     loop (Value.Builtin IntegerAbs) (Value.Scalar (Integer n)) =
         return (Value.Scalar (Natural (fromInteger (abs n))))
-    loop (Value.Builtin RealNegate) (Value.Scalar (Real n)) =
-        return (Value.Scalar (Real (negate n)))
-    loop (Value.Builtin IntegerNegate) (Value.Scalar (Integer n)) =
-        return (Value.Scalar (Integer (negate n)))
     loop (Value.Builtin RealShow) (Value.Scalar (Natural n)) =
         return (Value.Text (Text.pack (show n)))
     loop (Value.Builtin RealShow) (Value.Scalar (Integer n)) =

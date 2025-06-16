@@ -128,8 +128,7 @@ lexToken =
             ] Megaparsec.<?> "keyword"
 
         , Combinators.choice
-            [ Grace.Parser.RealNegate     <$ symbol "Real/negate"
-            , Grace.Parser.RealShow       <$ symbol "Real/show"
+            [ Grace.Parser.RealShow       <$ symbol "Real/show"
             , Grace.Parser.ListDrop       <$ symbol "List/drop"
             , Grace.Parser.ListFold       <$ symbol "List/fold"
             , Grace.Parser.ListHead       <$ symbol "List/head"
@@ -141,7 +140,6 @@ lexToken =
             , Grace.Parser.ListTake       <$ symbol "List/take"
             , Grace.Parser.IntegerAbs     <$ symbol "Integer/abs"
             , Grace.Parser.IntegerEven    <$ symbol "Integer/even"
-            , Grace.Parser.IntegerNegate  <$ symbol "Integer/negate"
             , Grace.Parser.IntegerOdd     <$ symbol "Integer/odd"
             , Grace.Parser.JSONFold       <$ symbol "JSON/fold"
             , Grace.Parser.NaturalFold    <$ symbol "Natural/fold"
@@ -455,13 +453,11 @@ reserved =
         , "Bool"
         , "Real"
         , "Real/equal"
-        , "Real/negate"
         , "Real/show"
         , "Fields"
         , "Integer"
         , "Integer/abs"
         , "Integer/even"
-        , "Integer/negate"
         , "Integer/odd"
         , "JSON/fold"
         , "List"
@@ -575,7 +571,6 @@ data Token
     | DoubleEquals
     | Real
     | RealLiteral Sign Scientific
-    | RealNegate
     | RealShow
     | Else
     | Equals
@@ -590,7 +585,6 @@ data Token
     | Integer
     | IntegerAbs
     | IntegerEven
-    | IntegerNegate
     | IntegerOdd
     | JSON
     | JSONFold
@@ -777,7 +771,6 @@ render t = case t of
     Grace.Parser.DoubleEquals       -> "=="
     Grace.Parser.Real               -> "Real"
     Grace.Parser.RealLiteral _ _    -> "a real number literal"
-    Grace.Parser.RealNegate         -> "Real/negate"
     Grace.Parser.RealShow           -> "Real/show"
     Grace.Parser.Else               -> "else"
     Grace.Parser.Equals             -> "="
@@ -792,7 +785,6 @@ render t = case t of
     Grace.Parser.Integer            -> "Integer"
     Grace.Parser.IntegerAbs         -> "Integer/clamp"
     Grace.Parser.IntegerEven        -> "Integer/even"
-    Grace.Parser.IntegerNegate      -> "Integer/negate"
     Grace.Parser.IntegerOdd         -> "Integer/odd"
     Grace.Parser.JSON               -> "JSON"
     Grace.Parser.JSONFold           -> "JSON/fold"
@@ -937,7 +929,9 @@ grammar endsWithBrace = mdo
 
     greaterThanOrEqualExpression <- rule (op Grace.Parser.GreaterThanOrEqual Syntax.GreaterThanOrEqual plusExpression)
 
-    plusExpression <- rule (op Grace.Parser.Plus Syntax.Plus timesExpression)
+    plusExpression <- rule (op Grace.Parser.Plus Syntax.Plus minusExpression)
+
+    minusExpression <- rule (op Grace.Parser.Dash Syntax.Minus timesExpression)
 
     timesExpression <- rule (op Grace.Parser.Times Syntax.Times applicationExpression)
 
@@ -1051,10 +1045,6 @@ grammar endsWithBrace = mdo
 
                 return Syntax.Builtin{ builtin = Syntax.Some, .. }
 
-        <|> do  location <- locatedToken Grace.Parser.RealNegate
-
-                return Syntax.Builtin{ builtin = Syntax.RealNegate, .. }
-
         <|> do  location <- locatedToken Grace.Parser.RealShow
 
                 return Syntax.Builtin{ builtin = Syntax.RealShow, .. }
@@ -1102,10 +1092,6 @@ grammar endsWithBrace = mdo
         <|> do  location <- locatedToken Grace.Parser.IntegerEven
 
                 return Syntax.Builtin{ builtin = Syntax.IntegerEven, .. }
-
-        <|> do  location <- locatedToken Grace.Parser.IntegerNegate
-
-                return Syntax.Builtin{ builtin = Syntax.IntegerNegate, .. }
 
         <|> do  location <- locatedToken Grace.Parser.IntegerOdd
 

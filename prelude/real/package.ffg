@@ -1,5 +1,4 @@
-{ negate: ./negate.ffg
-, product: ./product.ffg
+{ product: ./product.ffg
 , show: ./show.ffg
 , sum: ./sum.ffg
 }

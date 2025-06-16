@@ -88,15 +88,12 @@ annotation = application *( operator application ) ":" type
 ;
 ; Grace does not support the following operators:
 ;
-; - subtraction (`-`)
-;
-;   Instead of `x - y`, use `x + {Natural,Integer/Real}/negate y`.
-;
 ; - division (`/`)
 ;
 ;   Grace does not support division at all.
 operator
     = "*"
+    / "-"
     / "+"
     / ">="
     / ">"
@@ -213,7 +210,6 @@ field = identifier / alternative / string
 
 builtin
     = "Real/lessThan"   ; Real -> Real -> Bool
-    / "Real/negate"     ; Real -> Real
     / "Real/show"       ; Real -> Text
     / "List/drop"       ; forall (a : Type) . Natural -> List a -> List a
     / "List/fold"       ; forall (a : Type) (b : Type) . { cons: a -> b -> b, nil: b } -> List a -> b
@@ -225,7 +221,6 @@ builtin
     / "List/reverse"    ; forall (a : Type) . List a -> List a
     / "List/take"       ; forall (a : Type) . Natural -> List a -> List a
     / "Integer/even"    ; Integer -> Bool
-    / "Integer/negate"  ; Integer -> Integer
     / "Integer/odd"     ; Integer -> Bool
     / "Integer/abs"     ; Integer -> Natural
     / "JSON/fold        ; forall (a : Type) .

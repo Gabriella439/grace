@@ -546,9 +546,6 @@ in  twice 2
 You can also use the built-in functions, including:
 
 ```dhall
-# Negate a `Real` number
-Real/negate : Real -> Real
-
 # Render a `Real` number as `Text`
 Real/show : Real -> Text
 
@@ -590,9 +587,6 @@ List/take : forall (a : Type) . Natural -> List a -> List a
 
 # Returns `true` if the `Integer` is even
 Integer/even : Integer -> Bool
-
-# Negate an `Integer`
-Integer/negate : Integer -> Integer
 
 # Returns `true` if the `Integer` is false
 Integer/odd : Integer -> Bool

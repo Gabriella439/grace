@@ -1,6 +1,0 @@
-# Negate a `Real`
-let negate
-      : Real -> Real
-      = Real/negate
-
-in  negate

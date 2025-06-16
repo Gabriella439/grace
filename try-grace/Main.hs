@@ -1171,9 +1171,10 @@ builtinsExample =
     \, \"x + y : Text\": \\input -> (input.x + input.y) : Text\n\
     \, \"x + y : List Bool\": \\input -> (input.x + input.y) : List Bool\n\
     \, \"x * y : Natural\": \\input -> (input.x * input.y) : Natural\n\
+    \, \"x - y : Integer\": \\input -> (input.x - input.y) : Integer\n\
+    \, \"x - y : Real\": \\input -> (input.x - input.y) : Real\n\
     \, \"x || y\": \\input -> input.x || input.y\n\
     \, \"x && y\": \\input -> input.x && input.y\n\
-    \, \"Real/negate\": Real/negate\n\
     \, \"Real/show\": Real/show\n\
     \, \"List/drop\": List/drop\n\
     \, \"List/fold\": List/fold\n\
@@ -1185,7 +1186,6 @@ builtinsExample =
     \, \"List/reverse\": List/reverse\n\
     \, \"List/take\": List/take\n\
     \, \"Integer/even\": Integer/even\n\
-    \, \"Integer/negate\": Integer/negate\n\
     \, \"Integer/odd\": Integer/odd\n\
     \, \"Integer/abs\": Integer/abs\n\
     \, \"JSON/fold\": JSON/fold\n\
