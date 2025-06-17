@@ -1899,11 +1899,11 @@ infer e₀ = do
                 , Syntax.Builtin{ builtin = Syntax.Some, .. }
                 )
 
-        Syntax.Builtin{ builtin = Syntax.RealShow, .. } -> do
+        Syntax.Builtin{ builtin = Syntax.Show, .. } -> do
             return
-                (   Type.Scalar{ scalar = Monotype.Real, .. }
+                (   Type.Scalar{ scalar = Monotype.JSON, .. }
                 ~>  Type.Scalar{ scalar = Monotype.Text, .. }
-                , Syntax.Builtin{ builtin = Syntax.RealShow, .. }
+                , Syntax.Builtin{ builtin = Syntax.Show, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.ListDrop, .. } -> do

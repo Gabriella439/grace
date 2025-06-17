@@ -890,12 +890,20 @@ apply maybeMethods = loop
         return (Value.Scalar (Bool (odd n)))
     loop (Value.Builtin IntegerAbs) (Value.Scalar (Integer n)) =
         return (Value.Scalar (Natural (fromInteger (abs n))))
-    loop (Value.Builtin RealShow) (Value.Scalar (Natural n)) =
-        return (Value.Text (Text.pack (show n)))
-    loop (Value.Builtin RealShow) (Value.Scalar (Integer n)) =
-        return (Value.Text (Text.pack (show n)))
-    loop (Value.Builtin RealShow) (Value.Scalar (Real n)) =
-        return (Value.Text (Text.pack (show n)))
+    loop (Value.Builtin Show) v = do
+        case Value.toJSON v of
+            Just value -> do
+                let lazyBytes = Aeson.encode value
+
+                let strictBytes = ByteString.Lazy.toStrict lazyBytes
+
+                case Encoding.decodeUtf8' strictBytes of
+                    Left _ ->
+                        error "Grace.Normalize.evaluate: show produced non-UTF8 text"
+                    Right text ->
+                        return (Value.Text text)
+            Nothing -> do
+                error "Grace.Normalize.evaluate: show argument is not valid JSON"
     loop
         (Value.Application
             (Value.Builtin JSONFold)

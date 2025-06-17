@@ -178,7 +178,7 @@ character = %x20-21 / %x23-5B / %x5D-7E
 ; interpolate a number, then use:
 ;
 ; ```
-; "… ${Real/show number} …"
+; "… ${show number} …"
 ; ```
 interpolation = "${" expression "}"
 
@@ -209,8 +209,7 @@ projection-value
 field = identifier / alternative / string
 
 builtin
-    = "Real/lessThan"   ; Real -> Real -> Bool
-    / "Real/show"       ; Real -> Text
+    = "show "           ; JSON -> Text
     / "List/drop"       ; forall (a : Type) . Natural -> List a -> List a
     / "List/fold"       ; forall (a : Type) (b : Type) . { cons: a -> b -> b, nil: b } -> List a -> b
     / "List/head"       ; forall (a : Type) . List a -> Optional a

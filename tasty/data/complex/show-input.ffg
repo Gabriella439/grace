@@ -1,0 +1,5 @@
+show
+    { bool: true
+    , list: [ 2, 3, 5 ]
+    , null: null
+    }

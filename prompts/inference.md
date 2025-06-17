@@ -94,52 +94,55 @@ let lines = concatSep "\n"
 
 let generatePoem idea =
         let structure = prompt
-                { text: lines
-                    [ "Plan the structure of a new poem based on this idea:"
-                    , ""
-                    , idea
-                    , ""
-                    , "Describe its form, stanza count, lines per stanza, and rhyme scheme."
-                    ]
+                { text: "
+                    Plan the structure of a new poem based on this idea:
+
+                    ${idea}
+
+                    Describe its form, stanza count, lines per stanza, and rhyme scheme.
+                    "
                 }
 
-        let renderedStructure = lines
-                [ "- Form: " + structure.form
-                , "- Stanzas: " + Real/show (structure.stanzaCount : Integer)
-                , "- Lines per stanza: " + Real/show (structure.linesPerStanza : Integer)
-                , "- Rhyme scheme: " + structure.rhymeScheme
-                ]
+        let renderedStructure = "
+                - Form: ${structure.form}
+                - Stanzas: ${show (structure.stanzaCount : Text)}
+                - Lines per stanza: ${show (structure.linesPerStanza : Text)}
+                - Rhyme scheme: ${structure.rhymeScheme}
+                "
 
         let style = prompt
-                { text: lines
-                    [ "Given this poem structure:"
-                    , renderedStructure
-                    , ""
-                    , "Choose a poetic style: tone, voice, and literary devices to emphasize."
-                    ]
+                { text: "
+                    Given this poem structure:
+
+                    ${renderedStructure}
+
+                    Choose a poetic style: tone, voice, and literary devices to emphasize.
+                    "
                 }
 
-        let renderedStyle = lines
-                [ "- Tone: " + style.tone
-                , "- Voice: " + style.voice
-                , "- Literary Devices: " + concatSep ", " style.literaryDevices
-                ]
+        let renderedStyle = "
+                - Tone: ${style.tone}
+                - Voice: ${style.voice}
+                - Literary Devices: ${concatSep ", " style.literaryDevices}
+                "
 
-        let poem : Text = prompt
-                { text: lines
-                    [ "Write a complete poem based on this idea:"
-                    , ""
-                    , idea
-                    , ""
-                    , "Structure:"
-                    , renderedStructure
-                    , ""
-                    , "Style:"
-                    , renderedStyle
-                    ]
+        let poem = prompt
+                { text: "
+                    Write a complete poem based on this idea:
+
+                    ${idea}
+
+                    Structure:
+
+                    ${renderedStructure}
+
+                    Style:
+
+                    ${renderedStyle}
+                    "
                 }
 
-        in { structure: structure, style: style, poem: poem }
+        in { structure, style, poem }
 
 in  generatePoem "The stillness of early morning"
 ```
@@ -281,21 +284,21 @@ However in our original example we don't need to specify intermediate types beca
 
 ```haskell
 let structure = prompt
-        { text: lines
-            [ "Plan the structure of a new poem based on this idea:"
-            , ""
-            , idea
-            , ""
-            , "Describe its form, stanza count, lines per stanza, and rhyme scheme."
-            ]
+        { text: "
+            Plan the structure of a new poem based on this idea:
+
+            ${idea}
+
+            Describe its form, stanza count, lines per stanza, and rhyme scheme.
+            "
         }
 
-let renderedStructure = lines
-        [ "- Form: " + structure.form
-        , "- Stanzas: " + Real/show (structure.stanzaCount : Integer)
-        , "- Lines per stanza: " + Real/show (structure.linesPerStanza : Integer)
-        , "- Rhyme scheme: " + structure.rhymeScheme
-        ]
+let renderedStructure = "
+        - Form: ${structure.form}
+        - Stanzas: ${show (structure.stanzaCount : Text)}
+        - Lines per stanza: ${show (structure.linesPerStanza : Text)}
+        - Rhyme scheme: ${structure.rhymeScheme}
+        "
 ```
 
 … the compiler can reason backwards from how the `structure` value is used to infer that the JSON schema for the `prompt` needs to be:

@@ -1,9 +1,36 @@
-{ "and": List/fold { "cons": \x y -> x && y, "nil": true }
-, "equal": \l ->
-             let not = \b -> if b then false else true
+{ "all": \predicate ->
+           List/fold
+             { "cons": \element result -> predicate element && result
+             , "nil": true
+             }
+, "any": \predicate ->
+           List/fold
+             { "cons": \element result -> predicate element || result
+             , "nil": false
+             }
+, "drop": List/drop
+, "fold": List/fold
+, "generate": \n ->
+                let replicate = \n x -> Natural/fold n (\xs -> [ x ] + xs) [ ]
 
-             in  \r -> l && r || not l && not r
-, "not": \b -> if b then false else true
-, "or": List/fold { "cons": \x y -> x || y, "nil": false }
-, "show": \b -> if b then "true" else "false"
+                in  \f ->
+                      List/map
+                        (\x -> f x.index)
+                        (List/indexed (replicate n { }))
+, "head": List/head
+, "index": \n xs -> List/head (List/drop n xs)
+, "indexed": List/indexed
+, "last": List/last
+, "length": List/length
+, "map": List/map
+, "null": \xs -> List/length xs == 0
+, "reject": \f ->
+              List/fold
+                { "cons": \x xs -> if f x then xs else [ x ] + xs, "nil": [ ] }
+, "replicate": \n x -> Natural/fold n (\xs -> [ x ] + xs) [ ]
+, "reverse": List/reverse
+, "select": \f ->
+              List/fold
+                { "cons": \x xs -> if f x then [ x ] + xs else xs, "nil": [ ] }
+, "take": List/take
 }

@@ -1,4 +1,3 @@
 { product: ./product.ffg
-, show: ./show.ffg
 , sum: ./sum.ffg
 }

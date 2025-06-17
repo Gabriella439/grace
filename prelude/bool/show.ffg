@@ -1,6 +1,0 @@
-# Render a `Bool` as `Text`
-let show
-      : Bool -> Text
-      = \b -> if b then "true" else "false"
-
-in  show

@@ -3,9 +3,9 @@
 # https://mustache.github.io/mustache.5.html
 let template args = "
         Hello ${args.name}
-        You have just won ${Real/show args.value} dollars!
+        You have just won ${show args.value} dollars!
         ${if args.in_ca
-          then "Well, ${Real/show args.taxed_value} dollars, after taxes."
+          then "Well, ${show args.taxed_value} dollars, after taxes."
           else ""
         }"
 

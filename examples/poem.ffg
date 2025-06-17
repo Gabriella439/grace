@@ -16,8 +16,8 @@ let generatePoem idea =
 
         let renderedStructure = "
                 - Form: ${structure.form}
-                - Stanzas: ${Real/show structure.stanzaCount}
-                - Lines per stanza: ${Real/show structure.linesPerStanza}
+                - Stanzas: ${show (structure.stanzaCount : Text)}
+                - Lines per stanza: ${show (structure.linesPerStanza : Text)}
                 - Rhyme scheme: ${structure.rhymeScheme}
                 "
 

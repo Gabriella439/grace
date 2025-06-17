@@ -1175,7 +1175,7 @@ builtinsExample =
     \, \"x - y : Real\": \\input -> (input.x - input.y) : Real\n\
     \, \"x || y\": \\input -> input.x || input.y\n\
     \, \"x && y\": \\input -> input.x && input.y\n\
-    \, \"Real/show\": Real/show\n\
+    \, \"show\": show\n\
     \, \"List/drop\": List/drop\n\
     \, \"List/fold\": List/fold\n\
     \, \"List/head\": List/head\n\

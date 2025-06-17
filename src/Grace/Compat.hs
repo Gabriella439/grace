@@ -29,9 +29,15 @@ import Language.Haskell.TH.Syntax (Lift(..))
 #if MIN_VERSION_aeson(2, 0, 0)
 fromAesonMap :: KeyMap v -> InsOrdHashMap Text v
 fromAesonMap = HashMap.fromHashMap . Aeson.toHashMapText
+
+toAesonMap :: InsOrdHashMap Text v -> KeyMap v
+toAesonMap = Aeson.fromHashMapText . HashMap.toHashMap
 #else
 fromAesonMap :: HashMap Text v -> InsOrdHashMap Text v
 fromAesonMap = HashMap.fromHashMap
+
+toAesonMap :: InsOrdHashMap Text v -> HashMap Text v
+toAesonMap = HashMap.toHashMap
 #endif
 
 #if !MIN_VERSION_containers(0, 6, 6)

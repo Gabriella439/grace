@@ -128,7 +128,7 @@ lexToken =
             ] Megaparsec.<?> "keyword"
 
         , Combinators.choice
-            [ Grace.Parser.RealShow       <$ symbol "Real/show"
+            [ Grace.Parser.Show           <$ symbol "show"
             , Grace.Parser.ListDrop       <$ symbol "List/drop"
             , Grace.Parser.ListFold       <$ symbol "List/fold"
             , Grace.Parser.ListHead       <$ symbol "List/head"
@@ -453,7 +453,6 @@ reserved =
         , "Bool"
         , "Real"
         , "Real/equal"
-        , "Real/show"
         , "Fields"
         , "Integer"
         , "Integer/abs"
@@ -486,6 +485,7 @@ reserved =
         , "some"
         , "null"
         , "prompt"
+        , "show"
         , "then"
         , "true"
         ]
@@ -571,7 +571,7 @@ data Token
     | DoubleEquals
     | Real
     | RealLiteral Sign Scientific
-    | RealShow
+    | Show
     | Else
     | Equals
     | False_
@@ -771,7 +771,7 @@ render t = case t of
     Grace.Parser.DoubleEquals       -> "=="
     Grace.Parser.Real               -> "Real"
     Grace.Parser.RealLiteral _ _    -> "a real number literal"
-    Grace.Parser.RealShow           -> "Real/show"
+    Grace.Parser.Show               -> "show"
     Grace.Parser.Else               -> "else"
     Grace.Parser.Equals             -> "="
     Grace.Parser.False_             -> "False"
@@ -1045,9 +1045,9 @@ grammar endsWithBrace = mdo
 
                 return Syntax.Builtin{ builtin = Syntax.Some, .. }
 
-        <|> do  location <- locatedToken Grace.Parser.RealShow
+        <|> do  location <- locatedToken Grace.Parser.Show
 
-                return Syntax.Builtin{ builtin = Syntax.RealShow, .. }
+                return Syntax.Builtin{ builtin = Syntax.Show, .. }
 
         <|> do  location <- locatedToken Grace.Parser.ListDrop
 

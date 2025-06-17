@@ -28,6 +28,7 @@ module Grace.Syntax
     ) where
 
 import Control.Lens (Plated(..), Traversal')
+import Data.Aeson (ToJSON(..))
 import Data.Bifunctor (Bifunctor(..))
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Scientific (Scientific)
@@ -58,6 +59,7 @@ import Prettyprinter.Internal
     )
 
 import qualified Control.Monad as Monad
+import qualified Data.Aeson as Aeson
 import qualified Data.Text as Text
 import qualified Grace.Pretty as Pretty
 import qualified Grace.Type as Type
@@ -385,6 +387,13 @@ data Scalar
     --   null
     deriving (Eq, Generic, Lift, Show)
 
+instance ToJSON Scalar where
+    toJSON (Real n) = toJSON n
+    toJSON (Integer n) = toJSON n
+    toJSON (Natural n) = toJSON n
+    toJSON (Bool b) = toJSON b
+    toJSON Null = Aeson.Null
+
 instance Pretty Scalar where
     pretty (Bool True )     = Pretty.scalar "true"
     pretty (Bool False)     = Pretty.scalar "false"
@@ -460,10 +469,10 @@ data Builtin
     -- ^
     --   >>> pretty Some
     --   some
-    | RealShow
+    | Show
     -- ^
-    --   >>> pretty RealShow
-    --   Real/show
+    --   >>> pretty Show
+    --   show
     | ListDrop
     -- ^
     --   >>> pretty ListDrop
@@ -524,7 +533,7 @@ data Builtin
 
 instance Pretty Builtin where
     pretty Some           = Pretty.builtin "some"
-    pretty RealShow       = Pretty.builtin "Real/show"
+    pretty Show           = Pretty.builtin "show"
     pretty IntegerAbs     = Pretty.builtin "Integer/abs"
     pretty IntegerEven    = Pretty.builtin "Integer/even"
     pretty IntegerOdd     = Pretty.builtin "Integer/odd"

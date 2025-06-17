@@ -1,5 +1,7 @@
 {-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 {-| This module contains the `Value` type used internally for efficient
     evaluation of expressions
@@ -9,8 +11,10 @@ module Grace.Value
       Names(..)
     , Closure(..)
     , Value(..)
+    , toJSON
     ) where
 
+import Control.Applicative (empty)
 import Data.Aeson (FromJSON(..))
 import Data.Foldable (toList)
 import Data.HashMap.Strict.InsOrd (InsOrdHashMap)
@@ -87,3 +91,20 @@ instance FromJSON Value where
         pure (Scalar (Syntax.Bool bool))
     parseJSON Aeson.Null = do
         pure (Scalar Syntax.Null)
+
+-- | Convert a `Value` to the equivalent JSON `Aeson.Value`
+toJSON :: Value -> Maybe Aeson.Value
+toJSON (List elements) = do
+    newElements <- traverse toJSON elements
+
+    return (Aeson.toJSON newElements)
+toJSON (Record fieldValues) = do
+    newFieldValues <- traverse toJSON fieldValues
+
+    return (Aeson.toJSON (Compat.toAesonMap newFieldValues))
+toJSON (Text text) = do
+    return (Aeson.toJSON text)
+toJSON (Scalar scalar) = do
+    return (Aeson.toJSON scalar)
+toJSON _ = do
+    empty

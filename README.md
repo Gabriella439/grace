@@ -527,7 +527,7 @@ record of handlers (one per alternative):
 let render
       : < Left: Real | Right: Bool > -> Text
       = merge
-          { Left: Real/show
+          { Left: show
           , Right: \b -> if b then "true" else "false"
           }
 
@@ -546,8 +546,8 @@ in  twice 2
 You can also use the built-in functions, including:
 
 ```dhall
-# Render a `Real` number as `Text`
-Real/show : Real -> Text
+# Render any `JSON`-compatible value as `Text`
+show : JSON -> Text
 
 # Drop the first N elements from a `List`
 List/drop : forall (a : Type) . Natural -> List a -> List a
