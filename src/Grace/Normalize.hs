@@ -1,3 +1,4 @@
+{-# LANGUAGE ApplicativeDo         #-}
 {-# LANGUAGE BangPatterns          #-}
 {-# LANGUAGE BlockArguments        #-}
 {-# LANGUAGE DuplicateRecordFields #-}
@@ -24,7 +25,9 @@ module Grace.Normalize
     ) where
 
 import Control.Applicative (empty)
-import Control.Exception (Exception(..), SomeException)
+import Control.Concurrent.Async (Concurrently(..))
+import Control.Exception.Safe (Exception(..), SomeException)
+import Control.Monad.IO.Class (liftIO)
 import Data.Bifunctor (first)
 import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
@@ -57,7 +60,7 @@ import OpenAI.V1.Chat.Completions
 
 import {-# SOURCE #-} qualified Grace.Interpret as Interpret
 
-import qualified Control.Exception as Exception
+import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
 import qualified Control.Monad as Monad
 import qualified Data.Aeson as Aeson
@@ -309,50 +312,53 @@ evaluate
     -- ^ Surface syntax
     -> IO Value
     -- ^ Result, free of reducible sub-expressions
-evaluate maybeMethods = loop
+evaluate maybeMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
   where
-    loop :: [(Text, Value)] -> Syntax Location Void -> IO Value
+    loop :: [(Text, Value)] -> Syntax Location Void -> Concurrently Value
     loop env syntax =
         case syntax of
-            Syntax.Variable{..} ->
-                return (lookupVariable name index env)
+            Syntax.Variable{..} -> do
+                pure (lookupVariable name index env)
 
-            Syntax.Application{..} -> do
-                function' <- loop env function
-                argument' <- loop env argument
+            Syntax.Application{..} -> Concurrently do
+                io <- runConcurrently do
+                    function' <- loop env function
+                    argument' <- loop env argument
+                    return (apply maybeMethods function' argument')
 
-                apply maybeMethods function' argument'
+                io
 
             Syntax.Lambda{ nameBinding = Syntax.NameBinding{ name }, ..} ->
-                return (Value.Lambda (Closure (Value.Name name) env body))
+                pure (Value.Lambda (Closure (Value.Name name) env body))
 
             Syntax.Lambda{ nameBinding = Syntax.FieldNamesBinding{ fieldNames }, ..} -> do
                 let names = do
                         Syntax.FieldName{ name } <- fieldNames
                         return name
 
-                return (Value.Lambda (Closure (Value.FieldNames names) env body))
+                pure (Value.Lambda (Closure (Value.FieldNames names) env body))
 
             Syntax.Annotation{ annotated, annotation  } -> do
                 newAnnotated <- loop env annotated
 
-                let promote (Value.Scalar (Natural n)) Type.Scalar{ scalar = Monotype.Real } =
-                        Value.Scalar (Real (fromIntegral n))
-                    promote (Value.Scalar (Integer n)) Type.Scalar{ scalar = Monotype.Real } =
-                        Value.Scalar (Real (fromInteger n))
-                    promote (Value.Scalar (Natural n)) Type.Scalar{ scalar = Monotype.Integer } =
-                        Value.Scalar (Integer (fromIntegral n))
-                    promote _ _ =
-                        newAnnotated
+                return do
+                    let promote (Value.Scalar (Natural n)) Type.Scalar{ scalar = Monotype.Real } =
+                            Value.Scalar (Real (fromIntegral n))
+                        promote (Value.Scalar (Integer n)) Type.Scalar{ scalar = Monotype.Real } =
+                            Value.Scalar (Real (fromInteger n))
+                        promote (Value.Scalar (Natural n)) Type.Scalar{ scalar = Monotype.Integer } =
+                            Value.Scalar (Integer (fromIntegral n))
+                        promote _ _ =
+                            newAnnotated
 
-                return (promote newAnnotated annotation)
+                    promote newAnnotated annotation
 
-            Syntax.Let{ body = body₀, ..} -> do
+            Syntax.Let{ body = body₀, ..} -> Concurrently do
                 newEnv <- Monad.foldM snoc env bindings
 
-                loop newEnv body₀
+                runConcurrently (loop newEnv body₀)
               where
-                snoc environment Syntax.Binding{ nameLocation, name, nameBindings, assignment } = do
+                snoc environment Syntax.Binding{ nameLocation, name, nameBindings, assignment } = runConcurrently do
                     let cons nameBinding body =
                             Syntax.Lambda{ location = nameLocation, ..}
 
@@ -378,11 +384,12 @@ evaluate maybeMethods = loop
             Syntax.Text{ chunks = Syntax.Chunks text rest } -> do
                 let onChunk (interpolation, text₁) = do
                         value <- loop env interpolation
-                        case value of
+
+                        return case value of
                             Value.Text text₀ ->
-                                return (text₀ <> text₁)
+                                text₀ <> text₁
                             _ ->
-                                fail "Grace.Normalize.evaluate: interpolations must be text values"
+                                error "Grace.Normalize.evaluate: interpolations must be text values"
 
                 suffix <- foldMap onChunk rest
 
@@ -391,16 +398,16 @@ evaluate maybeMethods = loop
             Syntax.Field{..} -> do
                 value <- loop env record
 
-                case value of
+                return case value of
                     Value.Record fieldValues ->
                         case HashMap.lookup field fieldValues of
-                            Just v -> return v
-                            Nothing -> return (Value.Scalar Syntax.Null)
+                            Just v -> v
+                            Nothing -> Value.Scalar Syntax.Null
                     _ ->
-                        fail "Grace.Normalize.evaluate: fields can only be accessed from record values"
+                        error "Grace.Normalize.evaluate: fields can only be accessed from record values"
 
             Syntax.Alternative{..} ->
-                return (Value.Alternative name)
+                pure (Value.Alternative name)
 
             Syntax.Merge{..} -> do
                 newHandlers <- loop env handlers
@@ -413,14 +420,14 @@ evaluate maybeMethods = loop
                 ifTrue'  <- loop env ifTrue
                 ifFalse' <- loop env ifFalse
 
-                case predicate' of
-                    Value.Scalar (Bool True) -> return ifTrue'
-                    Value.Scalar (Bool False) -> return ifFalse'
-                    _ -> fail "Grace.Normalize.evaluate: if predicate must be a boolean value"
+                return case predicate' of
+                    Value.Scalar (Bool True) -> ifTrue'
+                    Value.Scalar (Bool False) -> ifFalse'
+                    _ -> error "Grace.Normalize.evaluate: if predicate must be a boolean value"
 
             Syntax.Prompt{ schema = Nothing } -> do
-                Exception.throwIO MissingSchema
-            Syntax.Prompt{ schema = Just schema, location = _, .. } -> do
+                Concurrently (Exception.throwIO MissingSchema)
+            Syntax.Prompt{ schema = Just schema, location = _, .. } -> Concurrently do
                 let defaultToText Type.Forall{ location, name, domain = Domain.Type, type_ } =
                         Type.substituteType name 0 Type.Scalar{ location, scalar = Monotype.Text } type_
                     defaultToText Type.Forall{ name, domain = Domain.Fields, type_ } =
@@ -431,7 +438,7 @@ evaluate maybeMethods = loop
 
                 let defaultedSchema = Lens.transform defaultToText schema
 
-                value <- loop env arguments
+                value <- runConcurrently (loop env arguments)
 
                 case value of
                     Value.Record fieldValues -> case maybeMethods of
@@ -476,7 +483,7 @@ evaluate maybeMethods = loop
                                 toOutput ChatCompletionObject{ choices } = do
                                     Exception.throwIO UnexpectedModelResponse{ choices }
 
-                            manager <- HTTP.newManager
+                            manager <- liftIO HTTP.newManager
 
                             if code
                                 then do
@@ -520,11 +527,12 @@ evaluate maybeMethods = loop
                                                         \\n\
                                                         \" <> Text.concat failedAttempts
 
-                                                chatCompletionObject <- HTTP.createChatCompletion methods _CreateChatCompletion
-                                                    { messages = [ User{ content = [ Completions.Text{ text = input } ], name = Nothing } ]
-                                                    , model
-                                                    , web_search_options
-                                                    }
+                                                chatCompletionObject <- liftIO do
+                                                    HTTP.createChatCompletion methods _CreateChatCompletion
+                                                        { messages = [ User{ content = [ Completions.Text{ text = input } ], name = Nothing } ]
+                                                        , model
+                                                        , web_search_options
+                                                        }
 
                                                 output <- toOutput chatCompletionObject
 
@@ -621,11 +629,12 @@ evaluate maybeMethods = loop
                                             Type.Record{ } -> extractRecord
                                             _ -> extractNonRecord
 
-                                    chatCompletionObject <- HTTP.createChatCompletion methods _CreateChatCompletion
-                                        { messages = [ User{ content = [ Completions.Text{ text } ], name = Nothing  } ]
-                                        , model
-                                        , response_format
-                                        }
+                                    chatCompletionObject <- liftIO do
+                                        HTTP.createChatCompletion methods _CreateChatCompletion
+                                            { messages = [ User{ content = [ Completions.Text{ text } ], name = Nothing  } ]
+                                            , model
+                                            , response_format
+                                            }
 
                                     output <- toOutput chatCompletionObject
 
@@ -634,27 +643,27 @@ evaluate maybeMethods = loop
                         fail "Grace.Normalize.evaluate: prompt argument must be a record"
 
             Syntax.Scalar{..} ->
-                return (Value.Scalar scalar)
+                pure (Value.Scalar scalar)
 
             Syntax.Operator{ operator = Syntax.And, .. } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
-                case (left', right') of
+                return case (left', right') of
                     (Value.Scalar (Bool l), Value.Scalar (Bool r)) ->
-                        return (Value.Scalar (Bool (l && r)))
+                        Value.Scalar (Bool (l && r))
                     _ ->
-                        fail "Grace.Normalize.evaluate: && arguments must be boolean values"
+                        error "Grace.Normalize.evaluate: && arguments must be boolean values"
 
             Syntax.Operator{ operator = Syntax.Or, .. } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
-                case (left', right') of
+                return case (left', right') of
                     (Value.Scalar (Bool l), Value.Scalar (Bool r)) ->
-                        return (Value.Scalar (Bool (l || r)))
+                        Value.Scalar (Bool (l || r))
                     _ ->
-                        fail "Grace.Normalize.evaluate: || arguments must be boolean values"
+                        error "Grace.Normalize.evaluate: || arguments must be boolean values"
 
             Syntax.Operator{ operator = Syntax.Equal, .. } -> do
                 left'  <- loop env left
@@ -672,13 +681,13 @@ evaluate maybeMethods = loop
                 left'  <- loop env left
                 right' <- loop env right
 
-                case (left', right') of
+                return case (left', right') of
                     (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
-                        return (Value.Scalar (Bool (m < n)))
+                        Value.Scalar (Bool (m < n))
                     (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
-                        return (Value.Scalar (Bool (m < n)))
+                        Value.Scalar (Bool (m < n))
                     (Value.Scalar (Real m), Value.Scalar (Real n)) ->
-                        return (Value.Scalar (Bool (m < n)))
+                        Value.Scalar (Bool (m < n))
                     _ ->
                         error "Grace.Normalize.evaluate: < arguments must be numeric values of the same type"
 
@@ -687,13 +696,13 @@ evaluate maybeMethods = loop
                 left'  <- loop env left
                 right' <- loop env right
 
-                case (left', right') of
+                return case (left', right') of
                     (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
-                        return (Value.Scalar (Bool (m <= n)))
+                        Value.Scalar (Bool (m <= n))
                     (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
-                        return (Value.Scalar (Bool (m <= n)))
+                        Value.Scalar (Bool (m <= n))
                     (Value.Scalar (Real m), Value.Scalar (Real n)) ->
-                        return (Value.Scalar (Bool (m <= n)))
+                        Value.Scalar (Bool (m <= n))
                     _ ->
                         error "Grace.Normalize.evaluate: <= arguments must be numeric values of the same type"
 
@@ -701,13 +710,13 @@ evaluate maybeMethods = loop
                 left'  <- loop env left
                 right' <- loop env right
 
-                case (left', right') of
+                return case (left', right') of
                     (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
-                        return (Value.Scalar (Bool (m > n)))
+                        Value.Scalar (Bool (m > n))
                     (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
-                        return (Value.Scalar (Bool (m > n)))
+                        Value.Scalar (Bool (m > n))
                     (Value.Scalar (Real m), Value.Scalar (Real n)) ->
-                        return (Value.Scalar (Bool (m > n)))
+                        Value.Scalar (Bool (m > n))
                     _ ->
                         error "Grace.Normalize.evaluate: > arguments must be numeric values of the same type"
 
@@ -715,13 +724,13 @@ evaluate maybeMethods = loop
                 left'  <- loop env left
                 right' <- loop env right
 
-                case (left', right') of
+                return case (left', right') of
                     (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
-                        return (Value.Scalar (Bool (m >= n)))
+                        Value.Scalar (Bool (m >= n))
                     (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
-                        return (Value.Scalar (Bool (m >= n)))
+                        Value.Scalar (Bool (m >= n))
                     (Value.Scalar (Real m), Value.Scalar (Real n)) ->
-                        return (Value.Scalar (Bool (m >= n)))
+                        Value.Scalar (Bool (m >= n))
                     _ ->
                         error "Grace.Normalize.evaluate: >= arguments must be numeric values of the same type"
 
@@ -729,13 +738,13 @@ evaluate maybeMethods = loop
                 left'  <- loop env left
                 right' <- loop env right
 
-                case (left', right') of
+                return case (left', right') of
                     (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
-                        return (Value.Scalar (Natural (m * n)))
+                        Value.Scalar (Natural (m * n))
                     (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
-                        return (Value.Scalar (Integer (m * n)))
+                        Value.Scalar (Integer (m * n))
                     (Value.Scalar (Real m), Value.Scalar (Real n)) ->
-                        return (Value.Scalar (Real (m * n)))
+                        Value.Scalar (Real (m * n))
                     _ ->
                         error "Grace.Normalize.evaluate: * arguments must be numeric values of the same type"
 
@@ -743,17 +752,17 @@ evaluate maybeMethods = loop
                 left'  <- loop env left
                 right' <- loop env right
 
-                case (left', right') of
+                return case (left', right') of
                     (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
-                        return (Value.Scalar (Natural (m + n)))
+                        Value.Scalar (Natural (m + n))
                     (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
-                        return (Value.Scalar (Integer (m + n)))
+                        Value.Scalar (Integer (m + n))
                     (Value.Scalar (Real m), Value.Scalar (Real n)) ->
-                        return (Value.Scalar (Real (m + n)))
+                        Value.Scalar (Real (m + n))
                     (Value.Text l, Value.Text r) ->
-                        return (Value.Text (l <> r))
+                        Value.Text (l <> r)
                     (Value.List l, Value.List r) ->
-                        return (Value.List (l <> r))
+                        Value.List (l <> r)
                     _ ->
                         error "Grace.Normalize.evaluate: + arguments must be numeric values of the same type"
 
@@ -761,16 +770,16 @@ evaluate maybeMethods = loop
                 left'  <- loop env left
                 right' <- loop env right
 
-                case (left', right') of
+                return case (left', right') of
                     (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
-                        return (Value.Scalar (Integer (m - n)))
+                        Value.Scalar (Integer (m - n))
                     (Value.Scalar (Real m), Value.Scalar (Real n)) ->
-                        return (Value.Scalar (Real (m - n)))
+                        Value.Scalar (Real (m - n))
                     _ ->
                         error "Grace.Normalize.evaluate: - arguments must be numeric values of the same type"
 
             Syntax.Builtin{..} ->
-                return (Value.Builtin builtin)
+                pure (Value.Builtin builtin)
 
             Syntax.Embed{ embedded } ->
                 Void.absurd embedded
@@ -786,12 +795,12 @@ apply
     -> Value
     -- ^ Argument
     -> IO Value
-apply maybeMethods = loop
+apply maybeMethods function₀ argument₀ = runConcurrently (loop function₀ argument₀)
   where
     loop (Value.Lambda (Closure (Value.Name name) capturedEnv body)) argument =
-        evaluate maybeMethods ((name, argument) : capturedEnv) body
+        Concurrently (evaluate maybeMethods ((name, argument) : capturedEnv) body)
     loop (Value.Lambda (Closure (Value.FieldNames fieldNames) capturedEnv body)) (Value.Record keyValues) =
-        evaluate maybeMethods (extraEnv <> capturedEnv) body
+        Concurrently (evaluate maybeMethods (extraEnv <> capturedEnv) body)
       where
         extraEnv = do
             fieldName <- fieldNames
@@ -808,7 +817,7 @@ apply maybeMethods = loop
     loop
         (Value.Merge (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("null", nullHandler), ("some", _)])))
         (Value.Scalar Null)  =
-            return nullHandler
+            pure nullHandler
     loop
         (Value.Merge (Value.Record alternativeHandlers))
         (Value.Application (Value.Alternative alternative) x)
@@ -817,21 +826,21 @@ apply maybeMethods = loop
     loop
         (Value.Application (Value.Builtin ListDrop) (Value.Scalar (Natural n)))
         (Value.List elements) =
-            return (Value.List (Seq.drop (fromIntegral n) elements))
+            pure (Value.List (Seq.drop (fromIntegral n) elements))
     loop
         (Value.Application (Value.Builtin ListTake) (Value.Scalar (Natural n)))
         (Value.List elements) =
-            return (Value.List (Seq.take (fromIntegral n) elements))
+            pure (Value.List (Seq.take (fromIntegral n) elements))
     loop (Value.Builtin ListHead) (Value.List []) =
-        return (Value.Scalar Null)
+        pure (Value.Scalar Null)
     loop (Value.Builtin ListHead) (Value.List (x :<| _)) =
-        return (Value.Application (Value.Builtin Some) x)
+        pure (Value.Application (Value.Builtin Some) x)
     loop (Value.Builtin ListLast) (Value.List []) =
-        return (Value.Scalar Null)
+        pure (Value.Scalar Null)
     loop (Value.Builtin ListLast) (Value.List (_ :|> x)) =
-        return (Value.Application (Value.Builtin Some) x)
+        pure (Value.Application (Value.Builtin Some) x)
     loop (Value.Builtin ListReverse) (Value.List xs) =
-        return (Value.List (Seq.reverse xs))
+        pure (Value.List (Seq.reverse xs))
     loop
         (Value.Application
             (Value.Builtin ListFold)
@@ -843,18 +852,19 @@ apply maybeMethods = loop
                 )
             )
         )
-        (Value.List elements) = inner (Seq.reverse elements) nil
+        (Value.List elements) = Concurrently do
+            inner (Seq.reverse elements) nil
       where
         inner xs !result =
             case Seq.viewl xs of
                 EmptyL -> do
                     return result
                 y :< ys -> do
-                    a <- loop cons y
-                    b <- loop a result
+                    a <- runConcurrently (loop cons y)
+                    b <- runConcurrently (loop a result)
                     inner ys b
     loop (Value.Builtin ListIndexed) (Value.List elements) =
-        return (Value.List (Seq.mapWithIndex adapt elements))
+        pure (Value.List (Seq.mapWithIndex adapt elements))
       where
         adapt index value =
             Value.Record
@@ -862,7 +872,7 @@ apply maybeMethods = loop
                 , ("value", value)
                 ]
     loop (Value.Builtin ListLength) (Value.List elements) =
-        return (Value.Scalar (Natural (fromIntegral (length elements))))
+        pure (Value.Scalar (Natural (fromIntegral (length elements))))
     loop
         (Value.Application (Value.Builtin ListMap) f)
         (Value.List elements) = do
@@ -876,20 +886,19 @@ apply maybeMethods = loop
             )
             succ
         )
-        zero =
-            go n zero
+        zero = Concurrently (go n zero)
       where
         go 0 !result = do
             return result
         go m !result = do
-            x <- loop succ result
+            x <- runConcurrently (loop succ result)
             go (m - 1) x
     loop (Value.Builtin IntegerEven) (Value.Scalar (Integer n)) =
-        return (Value.Scalar (Bool (even n)))
+        pure (Value.Scalar (Bool (even n)))
     loop (Value.Builtin IntegerOdd) (Value.Scalar (Integer n)) =
-        return (Value.Scalar (Bool (odd n)))
+        pure (Value.Scalar (Bool (odd n)))
     loop (Value.Builtin IntegerAbs) (Value.Scalar (Integer n)) =
-        return (Value.Scalar (Natural (fromInteger (abs n))))
+        pure (Value.Scalar (Natural (fromInteger (abs n))))
     loop (Value.Builtin Show) v = do
         case Value.toJSON v of
             Just value -> do
@@ -901,7 +910,7 @@ apply maybeMethods = loop
                     Left _ ->
                         error "Grace.Normalize.evaluate: show produced non-UTF8 text"
                     Right text ->
-                        return (Value.Text text)
+                        pure (Value.Text text)
             Nothing -> do
                 error "Grace.Normalize.evaluate: show argument is not valid JSON"
     loop
@@ -934,21 +943,21 @@ apply maybeMethods = loop
         inner (Value.Text t) =
             loop stringHandler (Value.Text t)
         inner (Value.Scalar Null) =
-            return nullHandler
-        inner (Value.List elements) = do
-            newElements <- traverse inner elements
-            loop arrayHandler (Value.List newElements)
-        inner (Value.Record keyValues) = do
-            elements <- traverse adapt (HashMap.toList keyValues)
-            loop objectHandler (Value.List (Seq.fromList elements))
+            pure nullHandler
+        inner (Value.List elements) = Concurrently do
+            newElements <- runConcurrently (traverse inner elements)
+            runConcurrently (loop arrayHandler (Value.List newElements))
+        inner (Value.Record keyValues) = Concurrently do
+            elements <- runConcurrently (traverse adapt (HashMap.toList keyValues))
+            runConcurrently (loop objectHandler (Value.List (Seq.fromList elements)))
           where
             adapt (key, value) = do
                 newValue <- inner value
                 return (Value.Record [("key", Value.Text key), ("value", newValue)])
         inner v =
-            return v
+            pure v
     loop function argument =
-        return (Value.Application function argument)
+        pure (Value.Application function argument)
 
 -- | Convert a `Value` back into the surface `Syntax`
 quote

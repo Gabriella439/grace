@@ -15,6 +15,7 @@ library
   build-depends:       base
                      , Earley
                      , aeson
+                     , async
                      , bytestring
                      , containers
                      , filepath
