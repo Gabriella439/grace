@@ -630,8 +630,8 @@ evaluate maybeMethods = loop
                                     output <- toOutput chatCompletionObject
 
                                     extract output
-                    other ->
-                        return (Value.Prompt other)
+                    _ ->
+                        fail "Grace.Normalize.evaluate: prompt argument must be a record"
 
             Syntax.Scalar{..} ->
                 return (Value.Scalar scalar)
@@ -1020,13 +1020,6 @@ quote names = loop
 
         Value.Text text ->
             Syntax.Text{ chunks = Syntax.Chunks text [], .. }
-
-        Value.Prompt arguments ->
-            Syntax.Prompt
-                { arguments = quote names arguments
-                , schema = Nothing
-                , ..
-                }
 
         Value.Scalar scalar ->
             Syntax.Scalar{..}

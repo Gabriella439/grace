@@ -71,7 +71,6 @@ data Value
     | Alternative Text
     | Merge Value
     | Text Text
-    | Prompt Value
     | Builtin Builtin
     | Scalar Scalar
     deriving stock (Eq, Show)
