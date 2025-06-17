@@ -1113,7 +1113,7 @@ importExample =
     \# the following URL encodes a function for computing US federal income\n\
     \# tax for 2022:\n\
     \\n\
-    \https://gist.githubusercontent.com/Gabriella439/712d0648bbdcfcc83eadd0ee394beed3/raw/4dc98fbab25d97e1ff362f6227c96d4336a99f86/incomeTax.ffg"
+    \https://gist.githubusercontent.com/Gabriella439/712d0648bbdcfcc83eadd0ee394beed3/raw/a5e52e13f4e8abcc4b6d7178e6af94d5c17b1e22/incomeTax.ffg"
 
 jsonExample :: Text
 jsonExample =
