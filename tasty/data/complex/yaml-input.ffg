@@ -1,0 +1,6 @@
+yaml
+  { multiline: "ab\ncd\n"
+  , elements: [ 1, 2, 3 ]
+  , bool: true
+  , real: -2.3
+  }

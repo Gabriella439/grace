@@ -129,6 +129,7 @@ lexToken =
 
         , Combinators.choice
             [ Grace.Parser.Show           <$ symbol "show"
+            , Grace.Parser.YAML           <$ symbol "yaml"
             , Grace.Parser.ListDrop       <$ symbol "List/drop"
             , Grace.Parser.ListFold       <$ symbol "List/fold"
             , Grace.Parser.ListHead       <$ symbol "List/head"
@@ -488,6 +489,7 @@ reserved =
         , "show"
         , "then"
         , "true"
+        , "yaml"
         ]
 
 lexLabel :: Lexer Token
@@ -623,6 +625,7 @@ data Token
     | True_
     | Type
     | URI URI.URI
+    | YAML
     deriving stock (Eq, Show)
 
 data Sign = Unsigned | Positive | Negative
@@ -823,6 +826,7 @@ render t = case t of
     Grace.Parser.Times              -> "*"
     Grace.Parser.True_              -> "True"
     Grace.Parser.URI _              -> "a URI"
+    Grace.Parser.YAML               -> "yaml"
 
 grammar :: Bool -> Grammar r (Parser r (Syntax Offset Input))
 grammar endsWithBrace = mdo
@@ -1048,6 +1052,10 @@ grammar endsWithBrace = mdo
         <|> do  location <- locatedToken Grace.Parser.Show
 
                 return Syntax.Builtin{ builtin = Syntax.Show, .. }
+
+        <|> do  location <- locatedToken Grace.Parser.YAML
+
+                return Syntax.Builtin{ builtin = Syntax.YAML, .. }
 
         <|> do  location <- locatedToken Grace.Parser.ListDrop
 

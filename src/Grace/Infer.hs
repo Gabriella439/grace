@@ -1906,6 +1906,13 @@ infer e₀ = do
                 , Syntax.Builtin{ builtin = Syntax.Show, .. }
                 )
 
+        Syntax.Builtin{ builtin = Syntax.YAML, .. } -> do
+            return
+                (   Type.Scalar{ scalar = Monotype.JSON, .. }
+                ~>  Type.Scalar{ scalar = Monotype.Text, .. }
+                , Syntax.Builtin{ builtin = Syntax.YAML, .. }
+                )
+
         Syntax.Builtin{ builtin = Syntax.ListDrop, .. } -> do
             return
                 ( Type.Forall

@@ -473,6 +473,10 @@ data Builtin
     -- ^
     --   >>> pretty Show
     --   show
+    | YAML
+    -- ^
+    --   >>> pretty YAML
+    --   yaml
     | ListDrop
     -- ^
     --   >>> pretty ListDrop
@@ -534,6 +538,7 @@ data Builtin
 instance Pretty Builtin where
     pretty Some           = Pretty.builtin "some"
     pretty Show           = Pretty.builtin "show"
+    pretty YAML           = Pretty.builtin "yaml"
     pretty IntegerAbs     = Pretty.builtin "Integer/abs"
     pretty IntegerEven    = Pretty.builtin "Integer/even"
     pretty IntegerOdd     = Pretty.builtin "Integer/odd"

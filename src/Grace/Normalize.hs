@@ -64,6 +64,7 @@ import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
 import qualified Control.Monad as Monad
 import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Yaml as YAML
 import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.HashMap.Strict.InsOrd as HashMap
 import qualified Data.List as List
@@ -913,6 +914,20 @@ apply maybeMethods function₀ argument₀ = runConcurrently (loop function₀ a
                         pure (Value.Text text)
             Nothing -> do
                 error "Grace.Normalize.evaluate: show argument is not valid JSON"
+    loop (Value.Builtin YAML) v = do
+        case Value.toJSON v of
+            Just value -> do
+                let lazyBytes = YAML.encodeQuoted value
+
+                let strictBytes = ByteString.Lazy.toStrict lazyBytes
+
+                case Encoding.decodeUtf8' strictBytes of
+                    Left _ ->
+                        error "Grace.Normalize.evaluate: yaml produced non-UTF8 text"
+                    Right text ->
+                        pure (Value.Text text)
+            Nothing -> do
+                error "Grace.Normalize.evaluate: yaml argument is not valid JSON"
     loop
         (Value.Application
             (Value.Builtin JSONFold)
