@@ -1533,7 +1533,7 @@ infer e₀ = do
 
             _Γ <- get
 
-            return (Type.UnsolvedType{ location = fieldLocation, ..}, Syntax.Field{ record = solveSyntax _Γ newRecord, ..})
+            return (Type.UnsolvedType{ location = fieldLocation, .. }, Syntax.Field{ record = solveSyntax _Γ newRecord, .. })
 
         Syntax.If{..} -> do
             newPredicate <- check predicate Type.Scalar{ scalar = Monotype.Bool, .. }
@@ -2354,6 +2354,21 @@ check e@Syntax.Record{ fieldValues } _B@Type.Record{ fields = Type.Fields fieldT
                 return Syntax.Record{ fieldValues = newFieldValues₀ <> newFieldValues₁, .. }
             other ->
                 return other
+
+check Syntax.Field{ record, fieldLocation, field, .. } annotation = do
+    p <- fresh
+
+    push (Context.UnsolvedFields p)
+
+    newRecord <- check record Type.Record
+        { fields =
+            Type.Fields [(field, annotation)] (Monotype.UnsolvedFields p)
+        , location = fieldLocation
+        }
+
+    _Γ <- get
+
+    return Syntax.Field{ record = solveSyntax _Γ newRecord, .. }
 
 check Syntax.Text{ chunks = Syntax.Chunks text₀ rest, .. } Type.Scalar{ scalar = Monotype.Text } = do
     let process (interpolation, text) = do

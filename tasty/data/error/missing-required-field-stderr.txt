@@ -1,19 +1,23 @@
-Not a subtype
+Record type mismatch
 
-The following type:
+The following record type:
 
-  Optional d?
+  { x: Natural }
+
+tasty/data/error/missing-required-field-input.ffg:1:1: 
+  │
+1 │ { x: 1 }.y : Bool
+  │ ↑
+
+… is not a subtype of the following record type:
+
+  { y: Bool, a? }
 
 tasty/data/error/missing-required-field-input.ffg:1:10: 
   │
 1 │ { x: 1 }.y : Bool
   │          ↑
 
-… cannot be a subtype of:
+The latter record has the following extra fields:
 
-  Bool
-
-tasty/data/error/missing-required-field-input.ffg:1:14: 
-  │
-1 │ { x: 1 }.y : Bool
-  │              ↑
+• y

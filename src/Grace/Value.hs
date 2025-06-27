@@ -93,6 +93,8 @@ instance FromJSON Value where
 
 -- | Convert a `Value` to the equivalent JSON `Aeson.Value`
 toJSON :: Value -> Maybe Aeson.Value
+toJSON (Application (Builtin Syntax.Some) value) = do
+    toJSON value
 toJSON (List elements) = do
     newElements <- traverse toJSON elements
 
