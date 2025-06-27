@@ -319,6 +319,9 @@ subtype _A₀ _B₀ = do
         (Type.List{ type_ = _A }, Type.Scalar{ scalar = Monotype.JSON }) -> do
             subtype _A _B₀
 
+        (Type.Optional{ type_ = _A }, Type.Scalar{ scalar = Monotype.JSON }) -> do
+            subtype _A _B₀
+
         (Type.Record{ fields = Type.Fields kAs Monotype.EmptyFields }, Type.Scalar{ scalar = Monotype.JSON }) -> do
             let process (_, _A) = do
                     _Γ <- get
