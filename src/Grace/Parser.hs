@@ -57,7 +57,14 @@ import Text.Earley (Grammar, Prod, Report(..), rule, (<?>))
 import Text.Megaparsec (ParseErrorBundle(..), State(..), try)
 
 import Grace.Syntax
-    (Binding(..), Chunks(..), FieldName(..), NameBinding(..), Syntax(..))
+    ( Binding(..)
+    , Chunks(..)
+    , Field(..)
+    , Fields(..)
+    , FieldName(..)
+    , NameBinding(..)
+    , Syntax(..)
+    )
 
 import qualified Control.Monad as Monad
 import qualified Control.Monad.Combinators as Combinators
@@ -945,29 +952,55 @@ grammar endsWithBrace = mdo
     applicationExpression <- rule
         (   do  location <- locatedToken Grace.Parser.Prompt
 
-                ~(arguments :| es) <- some1 fieldExpression
+                ~(arguments :| es) <- some1 projectExpression
 
                 return do
                     let nil = Syntax.Prompt{ schema = Nothing, ..  }
                     foldl application nil es
-        <|> do  es <- some1 fieldExpression
+        <|> do  es <- some1 projectExpression
                 return (foldl application (NonEmpty.head es) (NonEmpty.tail es))
         <|> do  location <- locatedToken Grace.Parser.Merge
-                ~(handlers :| es) <- some1 fieldExpression
+                ~(handlers :| es) <- some1 projectExpression
 
                 return do
                     let nil = Syntax.Merge{..}
                     foldl application nil es
         )
 
-    fieldExpression <- rule do
-        let snoc record0 record (fieldLocation, field) =
-                Syntax.Field{ location = Syntax.location record0, .. }
+    projectExpression <- rule do
+        let snoc record0 record fields =
+                Syntax.Project{ location = Syntax.location record0, .. }
+
+        let parseField = do
+                ~(fieldLocation, field) <- locatedRecordLabel
+
+                return Syntax.Field{ fieldLocation, field }
+
+        let parseSingle = do
+                single <- parseField
+
+                return Single{ single }
+
+        let parseMultiple = do
+                multipleLocation <- locatedToken Grace.Parser.OpenBrace
+
+                multiple <- parseField `sepBy` parseToken Grace.Parser.Comma
+
+                parseToken Grace.Parser.CloseBrace
+
+                return Multiple{ multipleLocation, multiple }
 
         record <- primitiveExpression
-        fields <- many (do parseToken Grace.Parser.Dot; l <- locatedRecordLabel; return l)
 
-        return (foldl (snoc record) record fields)
+        projections <- many
+            (do parseToken Grace.Parser.Dot
+
+                fields <- parseSingle <|> parseMultiple
+
+                pure fields
+            )
+
+        return (foldl (snoc record) record projections)
 
     modeAnnotation <- rule do
         let textMode = do

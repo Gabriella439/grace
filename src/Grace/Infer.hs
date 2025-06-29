@@ -1516,24 +1516,52 @@ infer e₀ = do
                 _ -> do
                     Exception.throwIO (MergeRecord (Type.location _R) _R)
 
-        Syntax.Field{..} -> do
-            existential <- fresh
+        Syntax.Project{ location, record, fields } -> do
             p <- fresh
 
-            push (Context.UnsolvedType existential)
             push (Context.UnsolvedFields p)
 
-            newRecord <- check record Type.Record
-                { fields =
-                    Type.Fields
-                        [(field, Type.UnsolvedType{..})]
-                        (Monotype.UnsolvedFields p)
-                , location = fieldLocation
-                }
+            let process Syntax.Field{ fieldLocation, field } = do
+                    existential <- fresh
 
-            _Γ <- get
+                    push (Context.UnsolvedType existential)
 
-            return (Type.UnsolvedType{ location = fieldLocation, .. }, Syntax.Field{ record = solveSyntax _Γ newRecord, .. })
+                    return (field, Type.UnsolvedType{ location = fieldLocation, .. })
+
+            case fields of
+                Syntax.Single{ single } -> do
+                    let Syntax.Field{ fieldLocation } = single
+
+                    fieldType@(_, type_) <- process single
+
+                    newRecord <- check record Type.Record
+                        { fields =
+                            Type.Fields [fieldType] (Monotype.UnsolvedFields p)
+                        , location = fieldLocation
+                        }
+
+                    _Γ <- get
+
+                    return (type_, Syntax.Project{ record = solveSyntax _Γ newRecord, .. })
+
+                Syntax.Multiple{ multipleLocation, multiple } -> do
+                    fieldTypes <- traverse process multiple
+
+                    newRecord <- check record Type.Record
+                        { fields =
+                            Type.Fields fieldTypes (Monotype.UnsolvedFields p)
+                        , location = multipleLocation
+                        }
+
+                    let type_ = Type.Record
+                            { fields =
+                                Type.Fields fieldTypes Monotype.EmptyFields
+                            , location = multipleLocation
+                            }
+
+                    _Γ <- get
+
+                    return (type_, Syntax.Project{ record = solveSyntax _Γ newRecord, .. })
 
         Syntax.If{..} -> do
             newPredicate <- check predicate Type.Scalar{ scalar = Monotype.Bool, .. }
@@ -2355,7 +2383,9 @@ check e@Syntax.Record{ fieldValues } _B@Type.Record{ fields = Type.Fields fieldT
             other ->
                 return other
 
-check Syntax.Field{ record, fieldLocation, field, .. } annotation = do
+check Syntax.Project{ location, record, fields } annotation
+    | Syntax.Single{ single = Syntax.Field{ fieldLocation, field } } <- fields = do
+
     p <- fresh
 
     push (Context.UnsolvedFields p)
@@ -2368,7 +2398,7 @@ check Syntax.Field{ record, fieldLocation, field, .. } annotation = do
 
     _Γ <- get
 
-    return Syntax.Field{ record = solveSyntax _Γ newRecord, .. }
+    return Syntax.Project{ record = solveSyntax _Γ newRecord, .. }
 
 check Syntax.Text{ chunks = Syntax.Chunks text₀ rest, .. } Type.Scalar{ scalar = Monotype.Text } = do
     let process (interpolation, text) = do

@@ -46,7 +46,7 @@ import Grace.Value (Closure(..), Value)
 import Numeric.Natural (Natural)
 import OpenAI.V1.Models (Model(..))
 import OpenAI.V1.ResponseFormat (JSONSchema(..), ResponseFormat(..))
-import Prelude hiding (succ)
+import Prelude hiding (lookup, succ)
 import System.FilePath ((</>))
 
 import OpenAI.V1.Chat.Completions
@@ -84,6 +84,7 @@ import qualified Grace.Syntax as Syntax
 import qualified Grace.Type as Type
 import qualified Grace.Value as Value
 import qualified OpenAI.V1.Chat.Completions as Completions
+import qualified Prelude
 import qualified System.IO.Unsafe as Unsafe
 
 {- $setup
@@ -209,13 +210,13 @@ toJSONSchema original = loop original
 
 fromJSON :: Type a -> Aeson.Value -> Either (InvalidJSON a) Value
 fromJSON Type.Union{ alternatives = Type.Alternatives alternativeTypes _ } (Aeson.Object [("contents", contents), ("tag", Aeson.String tag)])
-    | Just alternativeType <- lookup tag alternativeTypes = do
+    | Just alternativeType <- Prelude.lookup tag alternativeTypes = do
         value <- fromJSON alternativeType contents
 
         return (Value.Application (Value.Alternative tag) value)
 fromJSON type_@Type.Record{ fields = Type.Fields fieldTypes _ } value@(Aeson.Object object) = do
     let process (key, v) = do
-            case lookup key fieldTypes of
+            case Prelude.lookup key fieldTypes of
                 Just fieldType -> do
                     expression <- fromJSON  fieldType v
 
@@ -396,14 +397,33 @@ evaluate maybeMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
 
                 return (Value.Text (text <> suffix))
 
-            Syntax.Field{..} -> do
+            Syntax.Project{ record, fields } -> do
                 value <- loop env record
 
                 return case value of
-                    Value.Record fieldValues ->
-                        case HashMap.lookup field fieldValues of
+                    Value.Record fieldValues -> do
+                        case fields of
+                            Syntax.Single{ single = Syntax.Field{ field } } ->
+                                lookup field
+
+                            Syntax.Multiple{ multiple } ->
+                                Value.Record newFieldValues
+                              where
+                                labels = do
+                                    Syntax.Field{ field } <- multiple
+
+                                    return field
+
+                                process field = (field, lookup field)
+
+                                fvs = map process labels
+
+                                newFieldValues = HashMap.fromList fvs
+                      where
+                        lookup field = case HashMap.lookup field fieldValues of
                             Just v -> v
-                            Nothing -> Value.Scalar Syntax.Null
+                            Nothing -> (Value.Scalar Syntax.Null)
+
                     _ ->
                         error "Grace.Normalize.evaluate: fields can only be accessed from record values"
 

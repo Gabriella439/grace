@@ -18,6 +18,8 @@ module Grace.Syntax
     ( -- * Syntax
       Syntax(..)
     , Chunks(..)
+    , Field(..)
+    , Fields(..)
     , types
     , Scalar(..)
     , Operator(..)
@@ -111,9 +113,9 @@ data Syntax s a
     -- ^
     --   >>> pretty @(Syntax () Void) (Record () [ ("x", "a"), ("y", "b") ])
     --   { "x": a, "y": b }
-    | Field { location :: s, record :: Syntax s a, fieldLocation :: s, field :: Text }
+    | Project { location :: s, record :: Syntax s a, fields :: Fields s }
     -- ^
-    --   >>> pretty @(Syntax () Void) (Field () "x" () "a")
+    --   >>> pretty @(Syntax () Void) (Project () "x" "a")
     --   x.a
     | Alternative { location :: s, name :: Text }
     -- ^
@@ -168,8 +170,8 @@ instance Monad (Syntax ()) where
         List{ elements = fmap (>>= f) elements, .. }
     Record{ fieldValues, .. } >>= f =
         Record{ fieldValues = fmap (fmap (>>= f)) fieldValues, .. }
-    Field{ record, .. } >>= f =
-        Field{ record = record >>= f, .. }
+    Project{ record, .. } >>= f =
+        Project{ record = record >>= f, .. }
     Alternative{..} >>= _ =
         Alternative{..}
     Merge{ handlers, .. } >>= f =
@@ -227,9 +229,9 @@ instance Plated (Syntax s a) where
 
                 newFieldValues <- traverse onPair oldFieldValues
                 return Record{ fieldValues = newFieldValues, .. }
-            Field{ record = oldRecord, .. } -> do
+            Project{ record = oldRecord, .. } -> do
                 newRecord <- onSyntax oldRecord
-                return Field{ record = newRecord, .. }
+                return Project{ record = newRecord, .. }
             Alternative{..} -> do
                 pure Alternative{..}
             Merge{ handlers = oldHandlers, .. } -> do
@@ -277,8 +279,8 @@ instance Bifunctor Syntax where
         Record{ location = f location, fieldValues = fmap adapt fieldValues, .. }
       where
         adapt (field, value) = (field, first f value)
-    first f Field{..} =
-        Field{ location = f location, record = first f record, fieldLocation = f fieldLocation, .. }
+    first f Project{..} =
+        Project{ location = f location, record = first f record, fields = fmap f fields }
     first f Alternative{..} =
         Alternative{ location = f location, .. }
     first f Merge{..} =
@@ -344,6 +346,22 @@ instance Pretty a => Pretty (Chunks s a) where
                 Pretty.scalar "${"
             <>  flatten (pretty syntax)
             <>  Pretty.scalar ("}" <> Type.prettyTextBody text)
+
+-- | A field of a record
+data Field s = Field{ fieldLocation :: s, field :: Text }
+    deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
+
+instance IsString (Field ()) where
+    fromString string = Field{ fieldLocation = (), field = fromString string }
+
+-- | A projection of one or more fields
+data Fields s
+    = Single{ single :: Field s }
+    | Multiple{ multipleLocation :: s, multiple :: [Field s] }
+    deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
+
+instance IsString (Fields ()) where
+    fromString string = Single{ single = fromString string }
 
 -- | @Traversal'@ from a `Syntax` to its immediate `Type` annotations
 types :: Traversal' (Syntax s a) (Type s)
@@ -800,26 +818,68 @@ prettyApplicationExpression expression
         prettyFieldExpression other
 
 prettyFieldExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
-prettyFieldExpression expression@Field{}  =
+prettyFieldExpression expression@Project{ }  =
     Pretty.group (Pretty.flatAlt long short)
   where
     short = prettyShort expression
 
     long = Pretty.align (prettyLong expression)
 
-    prettyShort Field{..} =
+    prettyShort Project{ record, fields = Single{ single = Field{ field } } } =
             prettyShort record
         <>  Pretty.operator "."
         <>  Type.prettyRecordLabel False field
+    prettyShort Project{ record, fields = Multiple{ multiple = [ ] } } =
+            prettyShort record
+        <>  Pretty.operator "."
+        <>  Pretty.punctuation "{"
+        <>  " "
+        <>  Pretty.punctuation "}"
+    prettyShort Project{ record, fields = Multiple{ multiple = Field{ field = f₀ }  : fs } } =
+            prettyShort record
+        <>  Pretty.operator "."
+        <>  Pretty.punctuation "{"
+        <>  " "
+        <>  Type.prettyRecordLabel False f₀
+        <>  foldMap (\Field{ field = f } -> Pretty.punctuation "," <> " " <> Type.prettyRecordLabel False f) fs
+        <>  " "
+        <>  Pretty.punctuation "}"
     prettyShort other =
         prettyPrimitiveExpression other
 
-    prettyLong Field{..} =
-            prettyLong record
-        <>  Pretty.hardline
-        <>  "  "
-        <>  Pretty.operator "."
-        <>  Type.prettyRecordLabel False field
+    prettyLong Project{ record, fields = Single{ single = Field{ field } } } =
+        Pretty.align
+            (   prettyLong record
+            <>  Pretty.hardline
+            <>  "  "
+            <>  Pretty.operator "."
+            <>  Type.prettyRecordLabel False field
+            )
+    prettyLong Project{ record, fields = Multiple{ multiple = [ ] } } =
+        Pretty.align
+            (   prettyLong record
+            <>  Pretty.hardline
+            <>  "  "
+            <>  Pretty.operator "."
+            <>  Pretty.punctuation "{"
+            <>  " "
+            <>  Pretty.punctuation "}"
+            )
+    prettyLong Project{ record, fields = Multiple{ multiple = Field{ field = f₀ } : fs  } } =
+        Pretty.align
+            (   prettyLong record
+            <>  Pretty.hardline
+            <>  "  "
+            <>  Pretty.operator "."
+            <>  " "
+            <>  Pretty.punctuation "{"
+            <>  " "
+            <>  Type.prettyRecordLabel False f₀
+            <>  foldMap (\Field{ field = f } -> Pretty.hardline <> "    " <> Pretty.punctuation "," <> " " <> Type.prettyRecordLabel False f) fs
+            <>  Pretty.hardline
+            <>  "    "
+            <>  Pretty.punctuation "}"
+            )
     prettyLong record =
         prettyPrimitiveExpression record
 prettyFieldExpression other =
@@ -846,10 +906,11 @@ prettyPrimitiveExpression List{ elements = element :<| elements } =
 
     long =
         Pretty.align
-            (    "[ "
+            (    punctuation "["
+            <>   " "
             <>   prettyLongElement element
             <>   foldMap (\e -> punctuation "," <> " " <> prettyLongElement e) elements
-            <>   "]"
+            <>   punctuation "]"
             )
 
     prettyLongElement e = prettyExpression e <> Pretty.hardline
