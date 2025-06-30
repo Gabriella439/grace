@@ -3,6 +3,6 @@ let concatSep = ./concatSep.ffg
 
 let concatMapSep
       : forall (a : Type) . Text -> (a -> Text) -> List a -> Text
-      = \separator -> \f -> \xs -> concatSep separator (List/map f xs)
+      = \separator -> \f -> \xs -> concatSep separator (map f xs)
 
 in  concatMapSep

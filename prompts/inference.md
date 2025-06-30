@@ -335,7 +335,7 @@ let call = fold
       , ShellCommand: \x -> concatSep " " ([ x.executable ] + x.arguments)
       }
 
-in  List/map call (prompt{ text: "Call some tools" })
+in  map call (prompt{ text: "Call some tools" })
 ```
 
 This doesn't actually *run* any tools (I haven't added any callable tools to my work-in-progress branch yet), but just renders the tool use as a string for now:
@@ -361,7 +361,7 @@ However, the idea is that you can model a tool as a sum type with one constructo
 call : < HttpRequest: …, ShellCommand: … > -> Text
 ```
 
-… but since we `List/map` the `call` function over the output of the `prompt` the type checker infers that the `prompt` needs to generate a `List` of tool calls:
+… but since we `map` the `call` function over the output of the `prompt` the type checker infers that the `prompt` needs to generate a `List` of tool calls:
 
 ```haskell
 prompt{ text: "Call some tools" } : List < HttpRequest: …, ShellCommand: … >

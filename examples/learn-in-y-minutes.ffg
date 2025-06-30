@@ -95,9 +95,9 @@ let renderDNA = fold
         , Thymine:  \_ -> "T"
         }
 
-# Our first built-in function: `List/map` (which transforms each element of a
+# Our first built-in function: `map` (which transforms each element of a
 # list
-let nucleotideElements : List Text = List/map renderDNA compactDNA
+let nucleotideElements : List Text = map renderDNA compactDNA
 
 # You can import a naked Grace expression by URL
 let concat =
@@ -146,9 +146,9 @@ let duplicatedNumber : List Natural = duplicate 2
 let duplicatedBool : List Bool = duplicate false
 
 # The language also has some polymorphic built-in functions.  We already saw
-# one such function, which was `List/map`:
+# one such function, which was `map`:
 #
-#     List/map : forall (a b : Type) . (a -> b) -> List a -> List b
+#     map : forall (a b : Type) . (a -> b) -> List a -> List b
 #
 # … and another polymorphic built-in function is `List/head`:
 #

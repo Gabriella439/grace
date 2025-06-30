@@ -2216,7 +2216,7 @@ infer e₀ = do
                 , Syntax.Builtin{ builtin = Syntax.ListLength, .. }
                 )
 
-        Syntax.Builtin{ builtin = Syntax.ListMap, .. } -> do
+        Syntax.Builtin{ builtin = Syntax.Map, .. } -> do
             return
                 ( Type.Forall
                     { nameLocation = Syntax.location e₀
@@ -2235,7 +2235,7 @@ infer e₀ = do
                         }
                     , ..
                     }
-                , Syntax.Builtin{ builtin = Syntax.ListMap, .. }
+                , Syntax.Builtin{ builtin = Syntax.Map, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.IntegerAbs, .. } -> do

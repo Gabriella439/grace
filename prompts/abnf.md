@@ -215,7 +215,7 @@ builtin
     / "List/indexed"    ; forall (a : Type) . List a -> List { index: Natural, value: a }
     / "List/last"       ; forall (a : Type) . List a -> Optional a
     / "List/length"     ; forall (a : Type) . List a -> Natural
-    / "List/map"        ; forall (a : Type) (b : Type) . (a -> b) -> List a -> List b
+    / "map"             ; forall (a : Type) (b : Type) . (a -> b) -> List a -> List b
     / "List/reverse"    ; forall (a : Type) . List a -> List a
     / "List/take"       ; forall (a : Type) . Natural -> List a -> List a
     / "Integer/even"    ; Integer -> Bool

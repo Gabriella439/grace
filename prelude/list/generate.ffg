@@ -4,6 +4,6 @@ let replicate = ./replicate.ffg
 
 let generate
       : forall (a : Type) . Natural -> (Natural -> a) -> List a
-      = \n -> \f -> List/map (\x -> f x.index) (List/indexed (replicate n { }))
+      = \n -> \f -> map (\x -> f x.index) (List/indexed (replicate n { }))
 
 in  generate

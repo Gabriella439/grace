@@ -941,7 +941,7 @@ apply maybeMethods function₀ argument₀ = runConcurrently (loop function₀ a
     loop (Value.Builtin ListLength) (Value.List elements) =
         pure (Value.Scalar (Natural (fromIntegral (length elements))))
     loop
-        (Value.Application (Value.Builtin ListMap) f)
+        (Value.Application (Value.Builtin Map) f)
         (Value.List elements) = do
             newElements <- traverse (loop f) elements
             return (Value.List newElements)

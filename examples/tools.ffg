@@ -5,4 +5,4 @@ let call = fold
       , ShellCommand: \x -> concatSep " " ([ x.executable ] + x.arguments)
       }
 
-in  List/map call (prompt{ text: "Call some tools" })
+in  map call (prompt{ text: "Call some tools" })
