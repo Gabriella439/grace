@@ -928,8 +928,6 @@ apply maybeMethods function₀ argument₀ = runConcurrently (loop function₀ a
         pure (Value.Scalar Null)
     loop (Value.Builtin ListLast) (Value.List (_ :|> x)) =
         pure (Value.Application (Value.Builtin Some) x)
-    loop (Value.Builtin ListReverse) (Value.List xs) =
-        pure (Value.List (Seq.reverse xs))
     loop (Value.Builtin ListIndexed) (Value.List elements) =
         pure (Value.List (Seq.mapWithIndex adapt elements))
       where

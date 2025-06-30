@@ -2259,18 +2259,6 @@ infer e₀ = do
                 , Syntax.Builtin{ builtin = Syntax.IntegerOdd, .. }
                 )
 
-        Syntax.Builtin{ builtin = Syntax.ListReverse, .. } -> do
-            return
-                ( Type.Forall
-                    { nameLocation = Syntax.location e₀
-                    , name = "a"
-                    , domain = Domain.Type
-                    , type_ = Type.List{ type_ = var "a", .. } ~> Type.List{ type_ = var "a", .. }
-                    , ..
-                    }
-                , Syntax.Builtin{ builtin = Syntax.ListReverse, .. }
-                )
-
         Syntax.Builtin{ builtin = Syntax.ListTake, .. } -> do
             return
                 ( Type.Forall

@@ -1183,7 +1183,6 @@ builtinsExample =
     \, \"List/last\": List/last\n\
     \, \"List/length\": List/length\n\
     \, \"map\": map\n\
-    \, \"List/reverse\": List/reverse\n\
     \, \"List/take\": List/take\n\
     \, \"Integer/even\": Integer/even\n\
     \, \"Integer/odd\": Integer/odd\n\

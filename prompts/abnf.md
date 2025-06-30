@@ -216,7 +216,6 @@ builtin
     / "List/last"       ; forall (a : Type) . List a -> Optional a
     / "List/length"     ; forall (a : Type) . List a -> Natural
     / "map"             ; forall (a : Type) (b : Type) . (a -> b) -> List a -> List b
-    / "List/reverse"    ; forall (a : Type) . List a -> List a
     / "List/take"       ; forall (a : Type) . Natural -> List a -> List a
     / "Integer/even"    ; Integer -> Bool
     / "Integer/odd"     ; Integer -> Bool

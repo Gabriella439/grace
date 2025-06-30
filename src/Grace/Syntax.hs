@@ -523,10 +523,6 @@ data Builtin
     -- ^
     --   >>> pretty Map
     --   map
-    | ListReverse
-    -- ^
-    --   >>> pretty ListReverse
-    --   List/reverse
     | ListTake
     -- ^
     --   >>> pretty ListTake
@@ -554,7 +550,6 @@ instance Pretty Builtin where
     pretty ListLast       = Pretty.builtin "List/last"
     pretty ListLength     = Pretty.builtin "List/length"
     pretty Map            = Pretty.builtin "map"
-    pretty ListReverse    = Pretty.builtin "List/reverse"
     pretty ListTake       = Pretty.builtin "List/take"
 
 -- | Pretty-print an expression

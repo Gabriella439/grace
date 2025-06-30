@@ -573,9 +573,6 @@ List/length : forall (a : Type) . List a -> Natural
 # Transform each element of a list
 map : forall (a : Type) . forall (b : Type) . (a -> b) -> List a -> List b
 
-# Reverse a list
-List/reverse : forall (a : Type) . List a -> List a
-
 # Take the first N elements of a list
 List/take : forall (a : Type) . Natural -> List a -> List a
 
