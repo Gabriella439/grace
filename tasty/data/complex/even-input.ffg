@@ -1,7 +1,7 @@
-# This tests that Natural/fold doesn't have a gross inefficiency by implementing
-# the even function in terms of Natural/fold
+# This tests that folding `Natural` numbers doesn't have a gross inefficiency by
+# implementing the even function as a fold
 let not (b : Bool) : Bool = if b then false else true
 
-let even (n : Natural) : Bool = Natural/fold n not true
+let even (n : Natural) : Bool = merge{ succ: not, zero: true } n
 
 in  even 1000000

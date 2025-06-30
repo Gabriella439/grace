@@ -46,7 +46,7 @@ import Grace.Value (Closure(..), Value)
 import Numeric.Natural (Natural)
 import OpenAI.V1.Models (Model(..))
 import OpenAI.V1.ResponseFormat (JSONSchema(..), ResponseFormat(..))
-import Prelude hiding (lookup, succ)
+import Prelude hiding (lookup, null, succ)
 import System.FilePath ((</>))
 
 import OpenAI.V1.Chat.Completions
@@ -832,13 +832,81 @@ apply maybeMethods function₀ argument₀ = runConcurrently (loop function₀ a
 
             return (fieldName, value)
     loop
-        (Value.Merge (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("null", _), ("some", someHandler)])))
-        (Value.Application (Value.Builtin Some) x) =
-            loop someHandler x
+        (Value.Merge (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("false", falseHandler), ("true", trueHandler)])))
+        (Value.Scalar (Bool b)) =
+            pure (if b then trueHandler else falseHandler)
     loop
-        (Value.Merge (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("null", nullHandler), ("some", _)])))
+        (Value.Merge (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("succ", succ), ("zero", zero)])))
+        (Value.Scalar (Natural n)) = Concurrently (go n zero)
+      where
+        go 0 !result = do
+            return result
+        go m !result = do
+            x <- runConcurrently (loop succ result)
+            go (m - 1) x
+    loop
+        (Value.Merge (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("null", _), ("some", some)])))
+        (Value.Application (Value.Builtin Some) x) =
+            loop some x
+    loop
+        (Value.Merge (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("null", null), ("some", _)])))
         (Value.Scalar Null)  =
-            pure nullHandler
+            pure null
+    loop
+        (Value.Merge (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("cons", cons), ("nil", nil)])))
+        (Value.List elements) = Concurrently do
+            inner (Seq.reverse elements) nil
+      where
+        inner xs !result =
+            case Seq.viewl xs of
+                EmptyL -> do
+                    return result
+                y :< ys -> do
+                    a <- runConcurrently (loop cons y)
+                    b <- runConcurrently (loop a result)
+                    inner ys b
+    loop
+        (Value.Merge
+            (Value.Record
+                (List.sortBy (Ord.comparing fst) . HashMap.toList ->
+                    [ ("array"  , array  )
+                    , ("bool"   , bool   )
+                    , ("integer", integer)
+                    , ("natural", natural)
+                    , ("null"   , null   )
+                    , ("object" , object )
+                    , ("real"   , real   )
+                    , ("string" , string )
+                    ]
+                )
+            )
+        )
+        v0 = inner v0
+      where
+        inner (Value.Scalar (Bool b)) =
+            loop bool (Value.Scalar (Bool b))
+        inner (Value.Scalar (Natural n)) =
+            loop natural (Value.Scalar (Natural n))
+        inner (Value.Scalar (Integer n)) =
+            loop integer (Value.Scalar (Integer n))
+        inner (Value.Scalar (Real n)) =
+            loop real (Value.Scalar (Real n))
+        inner (Value.Text t) =
+            loop string (Value.Text t)
+        inner (Value.Scalar Null) =
+            pure null
+        inner (Value.List elements) = Concurrently do
+            newElements <- runConcurrently (traverse inner elements)
+            runConcurrently (loop array (Value.List newElements))
+        inner (Value.Record keyValues) = Concurrently do
+            elements <- runConcurrently (traverse adapt (HashMap.toList keyValues))
+            runConcurrently (loop object (Value.List (Seq.fromList elements)))
+          where
+            adapt (key, value) = do
+                newValue <- inner value
+                return (Value.Record [("key", Value.Text key), ("value", newValue)])
+        inner v =
+            pure v
     loop
         (Value.Merge (Value.Record alternativeHandlers))
         (Value.Application (Value.Alternative alternative) x)
@@ -862,28 +930,6 @@ apply maybeMethods function₀ argument₀ = runConcurrently (loop function₀ a
         pure (Value.Application (Value.Builtin Some) x)
     loop (Value.Builtin ListReverse) (Value.List xs) =
         pure (Value.List (Seq.reverse xs))
-    loop
-        (Value.Application
-            (Value.Builtin ListFold)
-            (Value.Record
-                (List.sortBy (Ord.comparing fst) . HashMap.toList ->
-                    [ ("cons"  , cons)
-                    , ("nil"   , nil)
-                    ]
-                )
-            )
-        )
-        (Value.List elements) = Concurrently do
-            inner (Seq.reverse elements) nil
-      where
-        inner xs !result =
-            case Seq.viewl xs of
-                EmptyL -> do
-                    return result
-                y :< ys -> do
-                    a <- runConcurrently (loop cons y)
-                    b <- runConcurrently (loop a result)
-                    inner ys b
     loop (Value.Builtin ListIndexed) (Value.List elements) =
         pure (Value.List (Seq.mapWithIndex adapt elements))
       where
@@ -899,21 +945,6 @@ apply maybeMethods function₀ argument₀ = runConcurrently (loop function₀ a
         (Value.List elements) = do
             newElements <- traverse (loop f) elements
             return (Value.List newElements)
-    loop
-        (Value.Application
-            (Value.Application
-                (Value.Builtin NaturalFold)
-                (Value.Scalar (Natural n))
-            )
-            succ
-        )
-        zero = Concurrently (go n zero)
-      where
-        go 0 !result = do
-            return result
-        go m !result = do
-            x <- runConcurrently (loop succ result)
-            go (m - 1) x
     loop (Value.Builtin IntegerEven) (Value.Scalar (Integer n)) =
         pure (Value.Scalar (Bool (even n)))
     loop (Value.Builtin IntegerOdd) (Value.Scalar (Integer n)) =
@@ -948,49 +979,6 @@ apply maybeMethods function₀ argument₀ = runConcurrently (loop function₀ a
                         pure (Value.Text text)
             Nothing -> do
                 error "Grace.Normalize.evaluate: yaml argument is not valid JSON"
-    loop
-        (Value.Application
-            (Value.Builtin JSONFold)
-            (Value.Record
-                (List.sortBy (Ord.comparing fst) . HashMap.toList ->
-                    [ ("array"  , arrayHandler )
-                    , ("bool"   , boolHandler  )
-                    , ("integer", integerHandler)
-                    , ("natural", naturalHandler)
-                    , ("null"   , nullHandler   )
-                    , ("object" , objectHandler )
-                    , ("real"   , realHandler  )
-                    , ("string" , stringHandler )
-                    ]
-                )
-            )
-        )
-        v0 = inner v0
-      where
-        inner (Value.Scalar (Bool b)) =
-            loop boolHandler (Value.Scalar (Bool b))
-        inner (Value.Scalar (Natural n)) =
-            loop naturalHandler (Value.Scalar (Natural n))
-        inner (Value.Scalar (Integer n)) =
-            loop integerHandler (Value.Scalar (Integer n))
-        inner (Value.Scalar (Real n)) =
-            loop realHandler (Value.Scalar (Real n))
-        inner (Value.Text t) =
-            loop stringHandler (Value.Text t)
-        inner (Value.Scalar Null) =
-            pure nullHandler
-        inner (Value.List elements) = Concurrently do
-            newElements <- runConcurrently (traverse inner elements)
-            runConcurrently (loop arrayHandler (Value.List newElements))
-        inner (Value.Record keyValues) = Concurrently do
-            elements <- runConcurrently (traverse adapt (HashMap.toList keyValues))
-            runConcurrently (loop objectHandler (Value.List (Seq.fromList elements)))
-          where
-            adapt (key, value) = do
-                newValue <- inner value
-                return (Value.Record [("key", Value.Text key), ("value", newValue)])
-        inner v =
-            pure v
     loop function argument =
         pure (Value.Application function argument)
 

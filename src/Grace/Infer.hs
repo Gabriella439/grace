@@ -1467,25 +1467,191 @@ infer e₀ = do
             let _R' = Context.solveType _Γ _R
 
             case _R' of
-                Type.Record{ fields = Type.Fields (List.sortBy (Ord.comparing fst) -> [("null", nullHandlerType), ("some", someHandlerType)]) Monotype.EmptyFields } -> do
-                    a <- fresh
-                    b <- fresh
+                Type.Record{ fields = Type.Fields (List.sortBy (Ord.comparing fst) -> [("false", falseHandler), ("true", trueHandler)]) Monotype.EmptyFields } -> do
+                    let bool = falseHandler
 
-                    push (Context.UnsolvedType a)
-                    push (Context.UnsolvedType b)
+                    subtype trueHandler bool
 
-                    subtype nullHandlerType Type.UnsolvedType{ existential = b, .. }
-                    subtype someHandlerType Type.Function{ input = Type.UnsolvedType{ existential = a, .. }, output = Type.UnsolvedType{ existential = b, .. }, .. }
                     return
-                        (   Type.Optional
-                                { type_ =
-                                    Type.UnsolvedType{ existential = a, .. }
-                                , ..
+                        ( Type.Function
+                            { location
+                            , input = Type.Scalar
+                                { location
+                                , scalar = Monotype.Bool
                                 }
-                        ~>  Type.UnsolvedType{  existential = b, .. }
+                            , output = bool
+                            }
                         , Syntax.Merge{ handlers = solveSyntax _Γ newHandlers, .. }
                         )
 
+                Type.Record{ fields = Type.Fields (List.sortBy (Ord.comparing fst) -> [("succ", succHandler), ("zero", zeroHandler)]) Monotype.EmptyFields } -> do
+                    let natural = zeroHandler
+
+                    subtype succHandler Type.Function
+                        { location
+                        , input = natural
+                        , output = natural
+                        }
+
+                    return
+                        ( Type.Function
+                            { location
+                            , input = Type.Scalar
+                                { location
+                                , scalar = Monotype.Natural
+                                }
+                            , output = natural
+                            }
+                        , Syntax.Merge{ handlers = solveSyntax _Γ newHandlers, .. }
+                        )
+
+                Type.Record{ fields = Type.Fields (List.sortBy (Ord.comparing fst) -> [("null", nullHandler), ("some", someHandler)]) Monotype.EmptyFields } -> do
+                    existential <- fresh
+
+                    push (Context.UnsolvedType existential)
+
+                    let element = Type.UnsolvedType
+                            { location = Type.location someHandler
+                            , existential
+                            }
+
+                    let optional = nullHandler
+
+                    subtype someHandler Type.Function
+                        { location
+                        , input = element
+                        , output = optional
+                        }
+
+                    return
+                        ( Type.Function
+                              { location
+                              , input = Type.Optional
+                                  { location
+                                  , type_ = element
+                                  }
+                              , output = optional
+                              }
+                        , Syntax.Merge{ handlers = solveSyntax _Γ newHandlers, .. }
+                        )
+
+                Type.Record{ fields = Type.Fields (List.sortBy (Ord.comparing fst) -> [("cons", consHandler), ("nil", nilHandler)]) Monotype.EmptyFields } -> do
+                    existential <- fresh
+
+                    push (Context.UnsolvedType existential)
+
+                    let element = Type.UnsolvedType
+                            { location = Type.location consHandler
+                            , existential
+                            }
+
+                    let list = nilHandler
+
+                    subtype consHandler Type.Function
+                        { location
+                        , input = element
+                        , output = Type.Function
+                            { location
+                            , input = list
+                            , output = list
+                            }
+                        }
+
+                    return
+                        ( Type.Function
+                            { location
+                            , input = Type.List
+                                { location
+                                , type_ = element
+                                }
+                            , output = list
+                            }
+                        , Syntax.Merge{ handlers = solveSyntax _Γ newHandlers, .. }
+                        )
+
+                Type.Record{ fields = Type.Fields (List.sortBy (Ord.comparing fst) -> [("array", arrayHandler), ("bool", boolHandler), ("integer", integerHandler), ("natural", naturalHandler), ("null", nullHandler), ("object", objectHandler), ("real", realHandler), ("string", stringHandler)]) Monotype.EmptyFields } -> do
+                    let json = nullHandler
+
+                    subtype nullHandler json
+
+                    subtype boolHandler Type.Function
+                        { location
+                        , input = Type.Scalar
+                            { location
+                            , scalar = Monotype.Bool
+                            }
+                        , output = json
+                        }
+
+                    subtype stringHandler Type.Function
+                        { location
+                        , input = Type.Scalar
+                            { location
+                            , scalar = Monotype.Text
+                            }
+                        , output = json
+                        }
+
+                    subtype realHandler Type.Function
+                        { location
+                        , input = Type.Scalar
+                            { location
+                            , scalar = Monotype.Real
+                            }
+                        , output = json
+                        }
+
+                    subtype integerHandler Type.Function
+                        { location
+                        , input = Type.Scalar
+                            { location
+                            , scalar = Monotype.Integer
+                            }
+                        , output = json
+                        }
+
+                    subtype naturalHandler Type.Function
+                        { location
+                        , input = Type.Scalar
+                            { location
+                            , scalar = Monotype.Natural
+                            }
+                        , output = json
+                        }
+
+                    subtype arrayHandler Type.Function
+                        { location
+                        , input = Type.List{ location, type_ = json }
+                        , output = json
+                        }
+
+                    subtype objectHandler Type.Function
+                        { location
+                        , input = Type.List
+                            { location
+                            , type_ = Type.Record
+                                { location
+                                , fields = Type.Fields
+                                    [ ("key", Type.Scalar{ location, scalar = Monotype.Text })
+                                    , ("value", json)
+                                    ]
+                                    Monotype.EmptyFields
+                                }
+                            }
+                        , output = json
+                        }
+
+                    return
+                        ( Type.Function
+                            { location
+                            , input = Type.Scalar
+                                { location
+                                , scalar = Monotype.JSON
+                                }
+                            , output = json
+                            }
+                        , Syntax.Merge{ handlers = solveSyntax _Γ newHandlers, .. }
+                        )
 
                 Type.Record{ fields = Type.Fields keyTypes Monotype.EmptyFields } -> do
                     existential <- fresh
@@ -1990,35 +2156,6 @@ infer e₀ = do
                 , Syntax.Builtin{ builtin = Syntax.ListHead, .. }
                 )
 
-        Syntax.Builtin{ builtin = Syntax.ListFold, .. } -> do
-            return
-                ( Type.Forall
-                    { nameLocation = Syntax.location e₀
-                    , name = "a"
-                    , domain = Domain.Type
-                    , type_ = Type.Forall
-                        { nameLocation = Syntax.location e₀
-                        , name = "b"
-                        , domain = Domain.Type
-                        , type_ =
-                                Type.Record
-                                    { fields =
-                                        Type.Fields
-                                            [ ("cons", var "a" ~> (var "b" ~> var "b"))
-                                            , ("nil", var "b")
-                                            ]
-                                            Monotype.EmptyFields
-                                    , ..
-                                    }
-                            ~>  (Type.List{ type_= var "a", .. } ~> var "b")
-                        , ..
-                        }
-                    , ..
-                    }
-                , Syntax.Builtin{ builtin = Syntax.ListFold, .. }
-                )
-
-
         Syntax.Builtin{ builtin = Syntax.ListIndexed, .. } -> do
             return
                 ( Type.Forall
@@ -2148,63 +2285,6 @@ infer e₀ = do
                     , ..
                     }
                 , Syntax.Builtin{ builtin = Syntax.ListTake, .. }
-                )
-
-        Syntax.Builtin{ builtin = Syntax.JSONFold, .. } -> do
-            return
-                ( Type.Forall
-                    { nameLocation = Syntax.location e₀
-                    , name = "a"
-                    , domain = Domain.Type
-                    , type_ =
-                            Type.Record
-                                { fields = Type.Fields
-                                    [ ( "array", Type.List{ type_ = var "a", .. } ~> var "a")
-                                    , ("bool", Type.Scalar{ scalar = Monotype.Bool, .. } ~> var "a")
-                                    , ("real", Type.Scalar{ scalar = Monotype.Real, ..  } ~> var "a")
-                                    , ("integer", Type.Scalar{ scalar = Monotype.Integer, .. } ~> var "a")
-                                    , ("natural", Type.Scalar{ scalar = Monotype.Natural, .. } ~> var "a")
-                                    , ("null", var "a")
-                                    , ( "object"
-                                      ,     Type.List
-                                                { type_ = Type.Record
-                                                    { fields =
-                                                        Type.Fields
-                                                            [ ("key", Type.Scalar{ scalar = Monotype.Text, .. })
-                                                            , ("value", var "a")
-                                                            ]
-                                                            Monotype.EmptyFields
-                                                    , ..
-                                                    }
-                                                , ..
-                                                }
-                                        ~>  var "a"
-                                      )
-                                    , ("string", Type.Scalar{ scalar = Monotype.Text, .. } ~> var "a")
-                                    ]
-                                    Monotype.EmptyFields
-                                , ..
-                                }
-                        ~>  (   Type.Scalar{ scalar = Monotype.JSON, .. }
-                            ~>  var "a"
-                            )
-                    , ..
-                    }
-                , Syntax.Builtin{ builtin = Syntax.JSONFold, .. }
-                )
-
-        Syntax.Builtin{ builtin = Syntax.NaturalFold, .. } -> do
-            return
-                ( Type.Forall
-                    { nameLocation = Syntax.location e₀
-                    , name = "a"
-                    , domain = Domain.Type
-                    , type_ =
-                            Type.Scalar{ scalar = Monotype.Natural, .. }
-                        ~>  ((var "a" ~> var "a") ~> (var "a" ~> var "a"))
-                    , ..
-                    }
-                , Syntax.Builtin{ builtin = Syntax.NaturalFold, .. }
                 )
 
         Syntax.Embed{..} -> do

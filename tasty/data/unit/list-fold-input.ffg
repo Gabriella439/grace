@@ -1,1 +1,1 @@
-List/fold { cons: \x -> \y -> (x + y) : Natural, nil: 0 } [ 2, 3 ]
+merge { cons: \x -> \y -> (x + y) : Natural, nil: 0 } [ 2, 3 ]

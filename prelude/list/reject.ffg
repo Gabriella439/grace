@@ -2,7 +2,7 @@
 let reject
       : forall (a : Type) . (a -> Bool) -> List a -> List a
       = \f ->
-          List/fold
+          merge
             { "cons": \x -> \xs -> if f x then xs else [ x ] + xs, "nil": [ ] }
 
 in  reject

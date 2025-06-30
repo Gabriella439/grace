@@ -1,9 +1,0 @@
-# If you treat the `List` `[ x, y, z ]` as `cons x (cons y (cons z nil))`, then 
-# `fold` replaces each cons and nil with the corresponding record fields.
-let fold
-      : forall (a : Type) .
-        forall (b : Type) .
-          { cons: a -> b -> b, nil: b } -> List a -> b
-      = List/fold
-
-in  fold

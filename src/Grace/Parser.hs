@@ -138,7 +138,6 @@ lexToken =
             [ Grace.Parser.Show           <$ symbol "show"
             , Grace.Parser.YAML           <$ symbol "yaml"
             , Grace.Parser.ListDrop       <$ symbol "List/drop"
-            , Grace.Parser.ListFold       <$ symbol "List/fold"
             , Grace.Parser.ListHead       <$ symbol "List/head"
             , Grace.Parser.ListIndexed    <$ symbol "List/indexed"
             , Grace.Parser.ListLast       <$ symbol "List/last"
@@ -149,8 +148,6 @@ lexToken =
             , Grace.Parser.IntegerAbs     <$ symbol "Integer/abs"
             , Grace.Parser.IntegerEven    <$ symbol "Integer/even"
             , Grace.Parser.IntegerOdd     <$ symbol "Integer/odd"
-            , Grace.Parser.JSONFold       <$ symbol "JSON/fold"
-            , Grace.Parser.NaturalFold    <$ symbol "Natural/fold"
             , Grace.Parser.False_         <$ symbol "false"
             , Grace.Parser.True_          <$ symbol "true"
             , Grace.Parser.Some           <$ symbol "some"
@@ -441,6 +438,8 @@ validRecordLabel text_ =
                 )
             ||  text_ == "null"
             ||  text_ == "some"
+            ||  text_ == "true"
+            ||  text_ == "false"
 
 -- | Returns `True` if the given alternative label is a valid when unquoted
 validAlternativeLabel :: Text -> Bool
@@ -466,11 +465,9 @@ reserved =
         , "Integer/abs"
         , "Integer/even"
         , "Integer/odd"
-        , "JSON/fold"
         , "List"
         , "List/drop"
         , "List/equal"
-        , "List/fold"
         , "List/indexed"
         , "List/last"
         , "List/length"
@@ -478,7 +475,6 @@ reserved =
         , "List/reverse"
         , "List/take"
         , "Natural"
-        , "Natural/fold"
         , "Optional"
         , "Text"
         , "Text/equal"
@@ -596,14 +592,12 @@ data Token
     | IntegerEven
     | IntegerOdd
     | JSON
-    | JSONFold
     | Label Text
     | Lambda
     | LessThanOrEqual
     | Let
     | List
     | ListDrop
-    | ListFold
     | ListHead
     | ListIndexed
     | ListLast
@@ -613,7 +607,6 @@ data Token
     | ListTake
     | Merge
     | Natural
-    | NaturalFold
     | NotEqual
     | Null
     | OpenAngle
@@ -662,10 +655,12 @@ matchLabel :: Token -> Maybe Text
 matchLabel (Grace.Parser.Label l) = Just l
 matchLabel  _                     = Nothing
 
-matchOptionalLabel :: Token -> Maybe Text
-matchOptionalLabel Grace.Parser.Some = Just "some"
-matchOptionalLabel Grace.Parser.Null = Just "null"
-matchOptionalLabel _                 = Nothing
+matchReservedLabel :: Token -> Maybe Text
+matchReservedLabel Grace.Parser.Some   = Just "some"
+matchReservedLabel Grace.Parser.Null   = Just "null"
+matchReservedLabel Grace.Parser.True_  = Just "true"
+matchReservedLabel Grace.Parser.False_ = Just "false"
+matchReservedLabel _                   = Nothing
 
 matchAlternative :: Token -> Maybe Text
 matchAlternative (Grace.Parser.Alternative a) = Just a
@@ -703,8 +698,8 @@ terminal match = Earley.terminal match'
 label :: Parser r Text
 label = terminal matchLabel
 
-optionalLabel :: Parser r Text
-optionalLabel = terminal matchOptionalLabel
+reservedLabel :: Parser r Text
+reservedLabel = terminal matchReservedLabel
 
 alternative :: Parser r Text
 alternative = terminal matchAlternative
@@ -730,8 +725,8 @@ locatedTerminal match = Earley.terminal match'
 locatedLabel :: Parser r (Offset, Text)
 locatedLabel = locatedTerminal matchLabel
 
-locatedOptionalLabel :: Parser r (Offset, Text)
-locatedOptionalLabel = locatedTerminal matchOptionalLabel
+locatedReservedLabel :: Parser r (Offset, Text)
+locatedReservedLabel = locatedTerminal matchReservedLabel
 
 locatedAlternative :: Parser r (Offset, Text)
 locatedAlternative = locatedTerminal matchAlternative
@@ -801,14 +796,12 @@ render t = case t of
     Grace.Parser.IntegerEven        -> "Integer/even"
     Grace.Parser.IntegerOdd         -> "Integer/odd"
     Grace.Parser.JSON               -> "JSON"
-    Grace.Parser.JSONFold           -> "JSON/fold"
     Grace.Parser.Label _            -> "a label"
     Grace.Parser.Lambda             -> "\\"
     Grace.Parser.LessThanOrEqual    -> "<="
     Grace.Parser.Let                -> "let"
     Grace.Parser.List               -> "list"
     Grace.Parser.ListDrop           -> "List/drop"
-    Grace.Parser.ListFold           -> "List/fold"
     Grace.Parser.ListHead           -> "List/head"
     Grace.Parser.ListIndexed        -> "List/indexed"
     Grace.Parser.ListLast           -> "List/last"
@@ -818,7 +811,6 @@ render t = case t of
     Grace.Parser.ListTake           -> "List/take"
     Grace.Parser.Merge              -> "merge"
     Grace.Parser.Natural            -> "Natural"
-    Grace.Parser.NaturalFold        -> "Natural/fold"
     Grace.Parser.NotEqual           -> "!="
     Grace.Parser.Null               -> "null"
     Grace.Parser.OpenAngle          -> "<"
@@ -1098,10 +1090,6 @@ grammar endsWithBrace = mdo
 
                 return Syntax.Builtin{ builtin = Syntax.ListDrop, .. }
 
-        <|> do  location <- locatedToken Grace.Parser.ListFold
-
-                return Syntax.Builtin{ builtin = Syntax.ListFold, .. }
-
         <|> do  location <- locatedToken Grace.Parser.ListHead
 
                 return Syntax.Builtin{ builtin = Syntax.ListHead, .. }
@@ -1141,14 +1129,6 @@ grammar endsWithBrace = mdo
         <|> do  location <- locatedToken Grace.Parser.IntegerOdd
 
                 return Syntax.Builtin{ builtin = Syntax.IntegerOdd, .. }
-
-        <|> do  location <- locatedToken Grace.Parser.JSONFold
-
-                return Syntax.Builtin{ builtin = Syntax.JSONFold, .. }
-
-        <|> do  location <- locatedToken Grace.Parser.NaturalFold
-
-                return Syntax.Builtin{ builtin = Syntax.NaturalFold, .. }
 
         <|> do  ~(location, chunks) <- locatedChunks
 
@@ -1195,10 +1175,10 @@ grammar endsWithBrace = mdo
                 return Syntax.Binding{..}
         )
 
-    recordLabel <- rule (optionalLabel <|> label <|> alternative <|> text)
+    recordLabel <- rule (reservedLabel <|> label <|> alternative <|> text)
 
     locatedRecordLabel <- rule
-        (   locatedOptionalLabel
+        (   locatedReservedLabel
         <|> locatedLabel
         <|> locatedAlternative
         <|> locatedText

@@ -2,6 +2,6 @@
 # otherwise
 let or
       : List Bool -> Bool
-      = List/fold { cons: \x -> \y -> x || y, nil: false }
+      = merge { cons: \x -> \y -> x || y, nil: false }
 
 in  or

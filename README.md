@@ -552,12 +552,6 @@ show : JSON -> Text
 # Drop the first N elements from a `List`
 List/drop : forall (a : Type) . Natural -> List a -> List a
 
-# Fold a list
-List/fold
-  : forall (a : Type) .
-    forall (b : Type) .
-      { cons: a -> b -> b, nil: b } -> List a -> b
-
 # Get the first element of a list
 List/head
   : forall (a : Type) .
@@ -593,24 +587,6 @@ Integer/odd : Integer -> Bool
 
 # Compute the absolute value of an `Integer`
 Integer/abs : Integer -> Natural
-
-# Fold a JSON value
-JSON/fold
-  : forall (a : Type) .
-      { array: List a -> a
-      , bool: Bool -> a
-      , real: Real -> a
-      , integer: Integer -> a
-      , natural: Natural -> a
-      , "null": a
-      , object: List { key: Text, value: a } -> a
-      , string: Text -> a
-      } ->
-      JSON ->
-        a
-
-# Fold a `Natural` number
-Natural/fold : forall (a : Type) . Natural -> (a -> a) -> a -> a
 ```
 
 For an up-to-date list of builtin functions and their types, run
@@ -803,18 +779,19 @@ annotation of `JSON`:
 [ true, 1, [ -2, false, "" ], null, { foo: { } } ] : JSON
 ```
 
-… but the only way you can consume an expression of type `JSON` is to use
-`JSON/fold`, which has the following type:
+… but the only way you can consume an expression of type `JSON` is to use they
+`merge` keyword, which you can think of as having this type when given a `JSON`
+argument:
 
 ```dhall
-JSON/fold
+merge
   : forall (a : Type) .
       { array: List a -> a
       , bool: Bool -> a
       , real: Real -> a
       , integer: Integer -> a
       , natural: Natural -> a
-      , "null": a
+      , null: a
       , object: List { key: Text, value: a } -> a
       , string: Text -> a
       } ->
@@ -822,13 +799,10 @@ JSON/fold
         a
 ```
 
-This is similar in spirit to a `merge` expression where you need to specify how
-to handle every possible case that the JSON value could possibly be.
-
 For example, the following expression
 
 ```dhall
-JSON/fold
+merge
   { "bool": \b -> if b then 1 else 0
   , "natural": \x -> x
   , "integer": Integer/abs
@@ -836,7 +810,7 @@ JSON/fold
   , "string": \_ -> 2
   , "null": 3
   , "object": List/length
-  , "array": List/fold { nil: 0, cons: \x -> \y -> x + y : Natural }
+  , "array": merge { nil: 0, cons: \x -> \y -> x + y : Natural }
   }
   [ true, 1, [ -2, false, "" ], null, { foo: { } } ]
 ```

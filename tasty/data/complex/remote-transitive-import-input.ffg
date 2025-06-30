@@ -1,2 +1,2 @@
 # This test verifies that transitive relative imports work for remote imports
-https://raw.githubusercontent.com/Gabriel439/grace/2eaef24ace2151f3b4c286793d4b459383de9d71/prelude/list/package.ffg
+https://gist.githubusercontent.com/Gabriella439/c092e646209d638ba34d74f7b08c91e3/raw/de5741f2ca5a9ddd118b6e4e91f7d3f571466c52/x.ffg

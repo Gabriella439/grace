@@ -1,6 +1,6 @@
 # Transform each value in a `List` into `Text` and concatenate the result
 let concatMap
       : forall (a : Type) . (a -> Text) -> List a -> Text
-      = \f -> List/fold { cons: \x -> \y -> f x + y, nil: "" }
+      = \f -> merge { cons: \x -> \y -> f x + y, nil: "" }
 
 in  concatMap

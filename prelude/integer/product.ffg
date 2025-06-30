@@ -1,6 +1,6 @@
 # Multiply the elements of a list
 let product
       : List Integer -> Integer
-      = List/fold { cons: \x y -> x * y : Integer, nil: 1 }
+      = merge { cons: \x y -> x * y : Integer, nil: 1 : Integer }
 
 in  product

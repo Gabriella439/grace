@@ -499,10 +499,6 @@ data Builtin
     -- ^
     --   >>> pretty ListDrop
     --   List/drop
-    | ListFold
-    -- ^
-    --   >>> pretty ListFold
-    --   List/fold
     | ListHead
     -- ^
     --   >>> pretty ListHead
@@ -543,14 +539,6 @@ data Builtin
     -- ^
     --   >>> pretty IntegerAbs
     --   Integer/abs
-    | JSONFold
-    -- ^
-    --   >>> pretty JSONFold
-    --   JSON/fold
-    | NaturalFold
-    -- ^
-    --   >>> pretty NaturalFold
-    --   Natural/fold
     deriving (Bounded, Enum, Eq, Generic, Lift, Show)
 
 instance Pretty Builtin where
@@ -560,9 +548,7 @@ instance Pretty Builtin where
     pretty IntegerAbs     = Pretty.builtin "Integer/abs"
     pretty IntegerEven    = Pretty.builtin "Integer/even"
     pretty IntegerOdd     = Pretty.builtin "Integer/odd"
-    pretty JSONFold       = Pretty.builtin "JSON/fold"
     pretty ListDrop       = Pretty.builtin "List/drop"
-    pretty ListFold       = Pretty.builtin "List/fold"
     pretty ListHead       = Pretty.builtin "List/head"
     pretty ListIndexed    = Pretty.builtin "List/indexed"
     pretty ListLast       = Pretty.builtin "List/last"
@@ -570,7 +556,6 @@ instance Pretty Builtin where
     pretty ListMap        = Pretty.builtin "List/map"
     pretty ListReverse    = Pretty.builtin "List/reverse"
     pretty ListTake       = Pretty.builtin "List/take"
-    pretty NaturalFold    = Pretty.builtin "Natural/fold"
 
 -- | Pretty-print an expression
 prettyExpression :: Pretty a => Syntax s a -> Doc AnsiStyle

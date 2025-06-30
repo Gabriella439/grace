@@ -1177,7 +1177,6 @@ builtinsExample =
     \, \"x && y\": \\input -> input.x && input.y\n\
     \, \"show\": show\n\
     \, \"List/drop\": List/drop\n\
-    \, \"List/fold\": List/fold\n\
     \, \"List/head\": List/head\n\
     \, \"List/indexed\": List/indexed\n\
     \, \"List/last\": List/last\n\
@@ -1188,8 +1187,6 @@ builtinsExample =
     \, \"Integer/even\": Integer/even\n\
     \, \"Integer/odd\": Integer/odd\n\
     \, \"Integer/abs\": Integer/abs\n\
-    \, \"JSON/fold\": JSON/fold\n\
-    \, \"Natural/fold\": Natural/fold\n\
     \}"
 
 preludeExample :: Text

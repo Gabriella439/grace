@@ -1,7 +1,6 @@
 { all: ./all.ffg
 , any: ./any.ffg
 , drop: ./drop.ffg
-, fold: ./fold.ffg
 , generate: ./generate.ffg
 , head: ./head.ffg
 , index: ./index.ffg

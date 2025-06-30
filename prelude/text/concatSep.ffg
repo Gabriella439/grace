@@ -1,7 +1,7 @@
 # Concatenate a `List` of `Text` values with a separator in between each value
 let concatSep (separator : Text) (xs : List Text) : Text =
       let status
-            = List/fold
+            = merge
                 { "cons": \element ->
                             merge
                               { "null": some element

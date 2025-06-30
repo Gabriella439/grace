@@ -211,7 +211,6 @@ field = identifier / alternative / string
 builtin
     = "show "           ; JSON -> Text
     / "List/drop"       ; forall (a : Type) . Natural -> List a -> List a
-    / "List/fold"       ; forall (a : Type) (b : Type) . { cons: a -> b -> b, nil: b } -> List a -> b
     / "List/head"       ; forall (a : Type) . List a -> Optional a
     / "List/indexed"    ; forall (a : Type) . List a -> List { index: Natural, value: a }
     / "List/last"       ; forall (a : Type) . List a -> Optional a
@@ -222,19 +221,6 @@ builtin
     / "Integer/even"    ; Integer -> Bool
     / "Integer/odd"     ; Integer -> Bool
     / "Integer/abs"     ; Integer -> Natural
-    / "JSON/fold        ; forall (a : Type) .
-                        ;   { array: List a -> a
-                        ;   , bool: Bool -> a
-                        ;   , real: Real -> a
-                        ;   , integer: Integer -> a
-                        ;   , natural: Natural -> a
-                        ;   , "null": a
-                        ;   , object: List { key: Text, value: a } -> a
-                        ;   , string: Text -> a
-                        ;   } ->
-                        ;   JSON ->
-                        ;     a
-    / "Natural/fold"    ; forall (a : Type) . Natural -> (a -> a) -> a -> a
 
 type = quantified-type
 

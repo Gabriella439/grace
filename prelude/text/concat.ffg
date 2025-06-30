@@ -1,6 +1,6 @@
 # Concatenate a `List` of `Text`
 let concat
       : List Text -> Text
-      = List/fold { cons: \x -> \y -> (x + y) : Text, nil: "" }
+      = merge { cons: \x -> \y -> (x + y) : Text, nil: "" }
 
 in  concat

@@ -2,7 +2,7 @@
 let any
       : forall (a : Type) . (a -> Bool) -> List a -> Bool
       = \predicate ->
-          List/fold
+          merge
             { cons: \element -> \result -> predicate element || result
             , nil: false
             }
