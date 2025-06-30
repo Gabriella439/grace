@@ -2238,11 +2238,11 @@ infer e₀ = do
                 , Syntax.Builtin{ builtin = Syntax.Map, .. }
                 )
 
-        Syntax.Builtin{ builtin = Syntax.IntegerAbs, .. } -> do
+        Syntax.Builtin{ builtin = Syntax.Abs, .. } -> do
             return
                 (   Type.Scalar{ scalar = Monotype.Integer, .. }
                 ~>  Type.Scalar{ scalar = Monotype.Natural, .. }
-                , Syntax.Builtin{ builtin = Syntax.IntegerAbs, .. }
+                , Syntax.Builtin{ builtin = Syntax.Abs, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.IntegerEven, .. } -> do

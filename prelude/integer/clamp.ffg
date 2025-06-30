@@ -1,6 +1,4 @@
 # Convert an `Integer` to a `Natural` number, clamping negative values to `0`
-let clamp
-      : Integer -> Natural
-      = \n -> if n < 0 then 0 else Integer/abs n
+let clamp (n : Integer) : Natural = if n < 0 then 0 else abs n
 
 in  clamp

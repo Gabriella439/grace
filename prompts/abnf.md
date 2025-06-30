@@ -220,7 +220,7 @@ builtin
     / "List/take"       ; forall (a : Type) . Natural -> List a -> List a
     / "Integer/even"    ; Integer -> Bool
     / "Integer/odd"     ; Integer -> Bool
-    / "Integer/abs"     ; Integer -> Natural
+    / "abs"             ; Integer -> Natural
 
 type = quantified-type
 

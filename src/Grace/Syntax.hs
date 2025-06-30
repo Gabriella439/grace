@@ -483,7 +483,11 @@ instance Pretty Operator where
 
 -- | A built-in function
 data Builtin
-    = Some
+    = Abs
+    -- ^
+    --   >>> pretty Abs
+    --   abs
+    | Some
     -- ^
     --   >>> pretty Some
     --   some
@@ -535,17 +539,13 @@ data Builtin
     -- ^
     --   >>> pretty IntegerOdd
     --   Integer/odd
-    | IntegerAbs
-    -- ^
-    --   >>> pretty IntegerAbs
-    --   Integer/abs
     deriving (Bounded, Enum, Eq, Generic, Lift, Show)
 
 instance Pretty Builtin where
+    pretty Abs            = Pretty.builtin "abs"
     pretty Some           = Pretty.builtin "some"
     pretty Show           = Pretty.builtin "show"
     pretty YAML           = Pretty.builtin "yaml"
-    pretty IntegerAbs     = Pretty.builtin "Integer/abs"
     pretty IntegerEven    = Pretty.builtin "Integer/even"
     pretty IntegerOdd     = Pretty.builtin "Integer/odd"
     pretty ListDrop       = Pretty.builtin "List/drop"

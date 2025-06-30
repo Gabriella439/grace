@@ -586,7 +586,7 @@ Integer/even : Integer -> Bool
 Integer/odd : Integer -> Bool
 
 # Compute the absolute value of an `Integer`
-Integer/abs : Integer -> Natural
+abs : Integer -> Natural
 ```
 
 For an up-to-date list of builtin functions and their types, run
@@ -805,7 +805,7 @@ For example, the following expression
 fold
   { "bool": \b -> if b then 1 else 0
   , "natural": \x -> x
-  , "integer": Integer/abs
+  , "integer": abs
   , "real": \_ -> 1
   , "string": \_ -> 2
   , "null": 3

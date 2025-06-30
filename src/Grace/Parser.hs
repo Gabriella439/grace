@@ -135,7 +135,8 @@ lexToken =
             ] Megaparsec.<?> "keyword"
 
         , Combinators.choice
-            [ Grace.Parser.Show           <$ symbol "show"
+            [ Grace.Parser.Abs            <$ symbol "abs"
+            , Grace.Parser.Show           <$ symbol "show"
             , Grace.Parser.YAML           <$ symbol "yaml"
             , Grace.Parser.ListDrop       <$ symbol "List/drop"
             , Grace.Parser.ListHead       <$ symbol "List/head"
@@ -145,7 +146,6 @@ lexToken =
             , Grace.Parser.Map            <$ symbol "map"
             , Grace.Parser.ListReverse    <$ symbol "List/reverse"
             , Grace.Parser.ListTake       <$ symbol "List/take"
-            , Grace.Parser.IntegerAbs     <$ symbol "Integer/abs"
             , Grace.Parser.IntegerEven    <$ symbol "Integer/even"
             , Grace.Parser.IntegerOdd     <$ symbol "Integer/odd"
             , Grace.Parser.False_         <$ symbol "false"
@@ -462,7 +462,6 @@ reserved =
         , "Real/equal"
         , "Fields"
         , "Integer"
-        , "Integer/abs"
         , "Integer/even"
         , "Integer/odd"
         , "List"
@@ -479,6 +478,7 @@ reserved =
         , "Text"
         , "Text/equal"
         , "Type"
+        , "abs"
         , "else"
         , "false"
         , "forall"
@@ -558,7 +558,8 @@ lexQuotedAlternative = lexeme do
 
 -- | Tokens produced by lexing
 data Token
-    = Alternative Text
+    = Abs
+    | Alternative Text
     | Alternatives
     | And
     | Arrow
@@ -589,7 +590,6 @@ data Token
     | In
     | Int Sign Int
     | Integer
-    | IntegerAbs
     | IntegerEven
     | IntegerOdd
     | JSON
@@ -762,6 +762,7 @@ locatedToken expectedToken =
 --   case someone wants to modify the code to display them.
 render :: Token -> Text
 render t = case t of
+    Grace.Parser.Abs                -> "abs"
     Grace.Parser.Alternative _      -> "an alternative"
     Grace.Parser.Alternatives       -> "Alternatives"
     Grace.Parser.And                -> "&&"
@@ -792,7 +793,6 @@ render t = case t of
     Grace.Parser.In                 -> "in"
     Grace.Parser.Int _ _            -> "an integer literal"
     Grace.Parser.Integer            -> "Integer"
-    Grace.Parser.IntegerAbs         -> "Integer/clamp"
     Grace.Parser.IntegerEven        -> "Integer/even"
     Grace.Parser.IntegerOdd         -> "Integer/odd"
     Grace.Parser.JSON               -> "JSON"
@@ -1118,9 +1118,9 @@ grammar endsWithBrace = mdo
 
                 return Syntax.Builtin{ builtin = Syntax.ListTake, .. }
 
-        <|> do  location <- locatedToken Grace.Parser.IntegerAbs
+        <|> do  location <- locatedToken Grace.Parser.Abs
 
-                return Syntax.Builtin{ builtin = Syntax.IntegerAbs, .. }
+                return Syntax.Builtin{ builtin = Syntax.Abs, .. }
 
         <|> do  location <- locatedToken Grace.Parser.IntegerEven
 

@@ -1175,6 +1175,7 @@ builtinsExample =
     \, \"x - y : Real\": \\input -> (input.x - input.y) : Real\n\
     \, \"x || y\": \\input -> input.x || input.y\n\
     \, \"x && y\": \\input -> input.x && input.y\n\
+    \, \"abs\": abs\n\
     \, \"show\": show\n\
     \, \"List/drop\": List/drop\n\
     \, \"List/head\": List/head\n\
@@ -1186,7 +1187,6 @@ builtinsExample =
     \, \"List/take\": List/take\n\
     \, \"Integer/even\": Integer/even\n\
     \, \"Integer/odd\": Integer/odd\n\
-    \, \"Integer/abs\": Integer/abs\n\
     \}"
 
 preludeExample :: Text

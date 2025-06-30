@@ -949,7 +949,7 @@ apply maybeMethods function₀ argument₀ = runConcurrently (loop function₀ a
         pure (Value.Scalar (Bool (even n)))
     loop (Value.Builtin IntegerOdd) (Value.Scalar (Integer n)) =
         pure (Value.Scalar (Bool (odd n)))
-    loop (Value.Builtin IntegerAbs) (Value.Scalar (Integer n)) =
+    loop (Value.Builtin Abs) (Value.Scalar (Integer n)) =
         pure (Value.Scalar (Natural (fromInteger (abs n))))
     loop (Value.Builtin Show) v = do
         case Value.toJSON v of
