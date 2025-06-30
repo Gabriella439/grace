@@ -34,7 +34,7 @@ import Control.Exception.Safe (Exception(..), MonadCatch, MonadThrow)
 import Control.Monad (when)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.State.Strict (MonadState)
-import Data.Foldable (traverse_)
+import Data.Foldable (for_, traverse_)
 import Data.Sequence (ViewL(..), (<|))
 import Data.Text (Text)
 import Data.Void (Void)
@@ -52,9 +52,9 @@ import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
 import qualified Control.Monad as Monad
 import qualified Control.Monad.State as State
+import qualified Data.HashMap.Strict.InsOrd as Map
 import qualified Data.List as List
 import qualified Data.List.NonEmpty as NonEmpty
-import qualified Data.Map as Map
 import qualified Data.Ord as Ord
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
@@ -133,7 +133,7 @@ scopedUnsolvedType location k = do
     scoped (Context.MarkerType existential) do
         push (Context.UnsolvedType existential)
 
-        k Type.UnsolvedType{..}
+        k Type.UnsolvedType{ location, existential }
 
 scopedUnsolvedFields :: MonadState Status m => (Type.Record s -> m a) -> m a
 scopedUnsolvedFields k = do
@@ -158,20 +158,20 @@ scopedUnsolvedAlternatives k = do
     variables within @type@ are declared within the @context@
 -}
 wellFormed :: MonadThrow m => Context Location -> Type Location -> m ()
-wellFormed context Type.VariableType{..}
+wellFormed context Type.VariableType{ location, name }
     | Context.Variable Domain.Type name `elem` context = do
         return ()
     | otherwise = do
         Exception.throwIO (UnboundTypeVariable location name)
 
-wellFormed context Type.Function{..} = do
+wellFormed context Type.Function{ input, output } = do
     wellFormed context input
     wellFormed context output
 
-wellFormed context Type.Forall{..} = do
+wellFormed context Type.Forall{ name, domain, type_ } = do
     wellFormed (Context.Variable domain name : context) type_
 
-wellFormed context _A@Type.UnsolvedType{..}
+wellFormed context _A@Type.UnsolvedType{ location, existential }
     | all mismatch context = do
         Exception.throwIO (IllFormedType location _A context)
     | otherwise = do
@@ -181,10 +181,10 @@ wellFormed context _A@Type.UnsolvedType{..}
     mismatch (Context.SolvedType   a _) = existential /= a
     mismatch  _                         = True
 
-wellFormed context Type.Optional{..} = do
+wellFormed context Type.Optional{ type_ } = do
     wellFormed context type_
 
-wellFormed context Type.List{..} = do
+wellFormed context Type.List{ type_ } = do
     wellFormed context type_
 
 wellFormed context Type.Record{ location, fields = Type.Fields kAs remainingFields } =
@@ -226,38 +226,40 @@ wellFormed _ Type.Scalar{} = do
 subtype
     :: (MonadState Status m, MonadCatch m)
     => Type Location -> Type Location -> m ()
-subtype _A₀ _B₀ = do
-    _Γ <- get
+subtype subType₀ superType₀ = do
+    context₀ <- get
 
-    case (_A₀, _B₀) of
-        (Type.VariableType{ name = a₀ }, Type.VariableType{ name = a₁ })
-            | a₀ == a₁ -> do
-                wellFormed _Γ _A₀
+    case (subType₀, superType₀) of
+        (Type.VariableType{ name = subName }, Type.VariableType{ name = superName })
+            | subName == superName -> do
+                wellFormed context₀ subType₀
 
-        (Type.UnsolvedType{ existential = a₀ }, Type.UnsolvedType{ existential = a₁ })
-            | a₀ == a₁ && Context.UnsolvedType a₀ `elem` _Γ -> do
+        (Type.UnsolvedType{ existential = subExistential }, Type.UnsolvedType{ existential = superExistential })
+            | subExistential == superExistential
+            , Context.UnsolvedType subExistential `elem` context₀ -> do
                 return ()
 
-        (Type.UnsolvedType{ existential = a }, _)
-            -- The @not (a `Type.typeFreeIn` _B)@ is the "occurs check" which
-            -- prevents a type variable from being defined in terms of itself
-            -- (i.e. a type should not "occur" within itself).
+        (Type.UnsolvedType{ existential = subExistential }, _)
+            -- The @not (subExistential `Type.typeFreeIn` superType₀)@ is the
+            -- "occurs check" which prevents a type variable from being defined
+            -- in terms of itself (i.e. a type should not "occur" within
+            -- itself).
             --
-            -- Later on you'll see matching "occurs checks" for record types and
-            -- union types so that Fields variables and Alternatives variables
-            -- cannot refer to the record or union that they belong to,
-            -- respectively.
-            |   not (a `Type.typeFreeIn` _B₀)
-            &&  elem (Context.UnsolvedType a) _Γ -> do
-                instantiateTypeL a _B₀
+            -- Later on you'll see matching "occurs checks" for record types
+            -- and union types so that Fields variables and Alternatives
+            -- variables cannot refer to the record or union that they belong
+            -- to, respectively.
+            | not (subExistential `Type.typeFreeIn` superType₀)
+            , elem (Context.UnsolvedType subExistential) context₀ -> do
+                instantiateTypeL subExistential superType₀
 
-        (_, Type.UnsolvedType{ existential = a})
-            |   not (a `Type.typeFreeIn` _A₀)
-            &&  elem (Context.UnsolvedType a) _Γ -> do
-                instantiateTypeR _A₀ a
+        (_, Type.UnsolvedType{ existential = superExistential })
+            | not (superExistential `Type.typeFreeIn` subType₀)
+            , elem (Context.UnsolvedType superExistential) context₀ -> do
+                instantiateTypeR subType₀ superExistential
 
-        (Type.Function{ input = _A₁, output = _A₂ }, Type.Function{ input= _B₁, output = _B₂ }) -> do
-            subtype _B₁ _A₁
+        (Type.Function{ input = subInput, output = subOutput }, Type.Function{ input = superInput, output = superOutput }) -> do
+            subtype superInput subInput
 
             -- CAREFULLY NOTE: Pay really close attention to how we need to use
             -- `Context.solveType` any time we do something that either updates
@@ -270,13 +272,13 @@ subtype _A₀ _B₀ = do
             -- apply `solveType` to its inputs.  For example, this very
             -- `subtype` function could begin by doing:
             --
-            --     _Γ <- get
-            --     let _A₀' = Context.solveType _Γ _A₀
-            --     let _B₀' = Context.solveType _Γ _B₀
+            --     context <- get
+            --     let subType₀'   = Context.solveType context subType₀
+            --     let superType₀' = Context.solveType context superType₀
             --
-            -- … and then use _A₀' and _B₀' for downstream steps.  If we did
-            -- that at the beginning of each function then everything would
-            -- "just work".
+            -- … and then use subType₀' and superType₀' for downstream steps.
+            -- If we did that at the beginning of each function then everything
+            -- would "just work".
             --
             -- However, this would be more inefficient because we'd calling
             -- `solveType` wastefully over and over with the exact same context
@@ -285,74 +287,74 @@ subtype _A₀ _B₀ = do
             -- the right places.
             _Θ <- get
 
-            subtype (Context.solveType _Θ _A₂) (Context.solveType _Θ _B₂)
+            subtype (Context.solveType _Θ subOutput) (Context.solveType _Θ superOutput)
 
-        (_, Type.Forall{..}) -> do
+        (_, Type.Forall{ name, domain, type_ }) -> do
             scoped (Context.Variable domain name) do
-                subtype _A₀ type_
+                subtype subType₀ type_
 
-        (Type.Forall{ domain = Domain.Type, .. }, _) -> do
-            scopedUnsolvedType nameLocation \a -> do
-                subtype (Type.substituteType name 0 a type_) _B₀
+        (Type.Forall{ nameLocation, name, domain = Domain.Type, type_ }, _) -> do
+            scopedUnsolvedType nameLocation \unsolved -> do
+                subtype (Type.substituteType name 0 unsolved type_) superType₀
 
-        (Type.Forall{ domain = Domain.Fields, .. }, _) -> do
-            scopedUnsolvedFields \a -> do
-                subtype (Type.substituteFields name 0 a type_) _B₀
+        (Type.Forall{ name, domain = Domain.Fields, type_ }, _) -> do
+            scopedUnsolvedFields \unsolved -> do
+                subtype (Type.substituteFields name 0 unsolved type_) superType₀
 
-        (Type.Forall{ domain = Domain.Alternatives, .. }, _) -> do
-            scopedUnsolvedAlternatives \a -> do
-                subtype (Type.substituteAlternatives name 0 a type_) _B₀
+        (Type.Forall{ name, domain = Domain.Alternatives, type_ }, _) -> do
+            scopedUnsolvedAlternatives \unsolved -> do
+                subtype (Type.substituteAlternatives name 0 unsolved type_) superType₀
 
-        (Type.Scalar{ scalar = s₀ }, Type.Scalar{ scalar = s₁ })
-            | s₀ == s₁ -> do
+        (Type.Scalar{ scalar = subScalar }, Type.Scalar{ scalar = superScalar })
+            | subScalar == superScalar -> do
                 return ()
 
-        (Type.Optional{ type_ = _A }, Type.Optional{ type_ = _B }) -> do
-            subtype _A _B
+        (Type.Optional{ type_ = subType₁ }, Type.Optional{ type_ = superType₁ }) -> do
+            subtype subType₁ superType₁
 
-        (Type.List{ type_ = _A }, Type.List{ type_ = _B }) -> do
-            subtype _A _B
+        (Type.List{ type_ = subType₁ }, Type.List{ type_ = superType₁ }) -> do
+            subtype subType₁ superType₁
 
         (Type.Scalar{ }, Type.Scalar{ scalar = Monotype.JSON }) -> do
             return ()
 
-        (Type.List{ type_ = _A }, Type.Scalar{ scalar = Monotype.JSON }) -> do
-            subtype _A _B₀
+        (Type.List{ type_ = subType₁ }, Type.Scalar{ scalar = Monotype.JSON }) -> do
+            subtype subType₁ superType₀
 
-        (Type.Optional{ type_ = _A }, Type.Scalar{ scalar = Monotype.JSON }) -> do
-            subtype _A _B₀
+        (Type.Optional{ type_ = subType₁ }, Type.Scalar{ scalar = Monotype.JSON }) -> do
+            subtype subType₁ superType₀
 
-        (Type.Record{ fields = Type.Fields kAs Monotype.EmptyFields }, Type.Scalar{ scalar = Monotype.JSON }) -> do
-            let process (_, _A) = do
-                    _Γ <- get
+        (Type.Record{ fields = Type.Fields fieldTypes Monotype.EmptyFields }, Type.Scalar{ scalar = Monotype.JSON }) -> do
+            for_ fieldTypes \(_, type_) -> do
+                context <- get
 
-                    subtype _A (Context.solveType _Γ _B₀)
+                subtype type_ (Context.solveType context superType₀)
 
-            traverse_ process kAs
+        (Type.Record{ fields = Type.Fields subFieldTypesList subRemainingFields }, Type.Record{ fields = Type.Fields superFieldTypesList superRemainingFields }) -> do
+            let subFieldTypes   = Map.fromList subFieldTypesList
+            let superFieldTypes = Map.fromList superFieldTypesList
 
-        -- The type-checking code for records is the first place where we
-        -- implement a non-trivial type that wasn't already covered by the
-        -- paper, so we'll go into more detail here to explain the general
-        -- type-checking principles of the paper.
-        (Type.Record{ fields = Type.Fields kAs₀ fields₀ }, Type.Record{ fields = Type.Fields kBs₀ fields₁ }) -> do
-            let mapA = Map.fromList kAs₀
-            let mapB = Map.fromList kBs₀
+            let subExtraFieldTypes   = Map.difference subFieldTypes   superFieldTypes
+            let superExtraFieldTypes = Map.difference superFieldTypes subFieldTypes
 
-            let extraA = Map.difference mapA mapB
-            let extraB = Map.difference mapB mapA
-
-            -- If record A is a subtype of record B, then all fields in A
-            -- must be a subtype of the matching fields in record B
-            let process _A₁ _B₁ = do
-                    _Θ <- get
+            -- All fields in the record subtype must be subtypes of any
+            -- matching fields in the record supertype
+            let subtypeField subType₁ superType₁ = do
+                    context <- get
 
                     subtype
-                        (Context.solveType _Θ _A₁)
-                        (Context.solveType _Θ _B₁)
+                        (Context.solveType context subType₁)
+                        (Context.solveType context superType₁)
 
-            sequence_ (Map.intersectionWith process mapA mapB)
+            sequence_ (Map.intersectionWith subtypeField subFieldTypes superFieldTypes)
 
-            let isRequired _B₁ = do
+            -- A field is required if and only if it is a subtype of
+            -- @Optional T@ for some type @T@
+            --
+            -- The reason we don't just check if @superType₁@ is @Optional { }@
+            -- is because it might be an unsolved variable.  Checking if it is
+            -- a subtype of @Optional a?@ is the most robust way to check.
+            let isFieldRequired fieldType = do
                     context <- get
 
                     let assertOptional = do
@@ -360,13 +362,16 @@ subtype _A₀ _B₀ = do
 
                             push (Context.UnsolvedType existential)
 
-                            let optional = Type.Optional{ .. }
+                            let optional = Type.Optional{ location, type_ }
                                   where
-                                    location = Type.location _B₁
+                                    location = Type.location fieldType
 
-                                    type_ = Type.UnsolvedType{ existential, .. }
+                                    type_ = Type.UnsolvedType
+                                        { existential
+                                        , location
+                                        }
 
-                            subtype _B₁ optional
+                            subtype fieldType optional
 
                             return False
 
@@ -375,8 +380,8 @@ subtype _A₀ _B₀ = do
 
                         return True
 
-            let getRequired = do
-                    m <- traverse isRequired extraB
+            let getRequiredFields = do
+                    m <- traverse isFieldRequired superExtraFieldTypes
 
                     return (Map.keys (Map.filter id m))
 
@@ -384,37 +389,37 @@ subtype _A₀ _B₀ = do
             -- the subtype or supertype.  They still might be okay if one or
             -- both record types has an unsolved fields variable or if extra
             -- fields in the supertype are `Optional`
-            case (fields₀, fields₁) of
+            case (subRemainingFields, superRemainingFields) of
                 -- Both records type have unsolved Fields variables.  Great!
                 -- This is the most flexible case, since we can replace these
                 -- unsolved variables with whatever fields we want to make the
-                -- types match.
+                -- record types line up.
                 --
                 -- However, it's not as simple as setting each Fields variable
                 -- to the extra fields from the opposing record type.  For
                 -- example, if the two record types we're comparing are:
                 --
-                --     { x: Bool, p₀ } <: { y: Text, p₁ }
+                -- > { x: Bool, p₀ } <: { y: Text, p₁ }
                 --
                 -- … then it's not correct to say:
                 --
-                --     p₀ = y: Text
-                --     p₁ = x: Bool
+                -- > p₀ = y: Text
+                -- > p₁ = x: Bool
                 --
-                -- … because that is not the most general solution for `p₀` and
-                -- `p₁`!  The actual most general solution is:
+                -- … because that is not the most general solution for @p₀@ and
+                -- @p₁@!  The actual most general solution is:
                 --
                 --     p₀ = y: Text, p₂
                 --     p₁ = x: Bool, p₂
                 --
-                -- … where `p₂` is a fresh Fields type variable representing the
+                -- … where @p₂@ is a fresh Fields type variable representing the
                 -- fact that both records could potentially have even more
-                -- fields other than `x` and `y`.
+                -- fields other than @x@ and @y@.
                 (Monotype.UnsolvedFields p₀, Monotype.UnsolvedFields p₁)
                     | p₀ /= p₁ -> do
                         p₂ <- fresh
 
-                        _Γ₀ <- get
+                        context₁ <- get
 
                         -- We have to insert p₂ before both p₀ and p₁ within the
                         -- context because the bidirectional type-checking algorithm
@@ -422,34 +427,34 @@ subtype _A₀ _B₀ = do
                         -- within the context can only reference prior variables
                         -- within the context.
                         --
-                        -- Since `p₀` and `p₁` both have to reference `p₂`, then we
-                        -- need to insert `p₂` right before `p₀` or `p₁`, whichever
+                        -- Since @p₀@ and @p₁@ both have to reference @p₂@, then we
+                        -- need to insert @p₂@ right before @p₀@ or @p₁@, whichever
                         -- one comes first
                         let p₀First = do
-                                (_Γ', _Γ) <- Context.splitOnUnsolvedFields p₀ _Γ₀
+                                (contextAfter, contextBefore) <- Context.splitOnUnsolvedFields p₀ context₁
 
-                                Monad.guard (Context.UnsolvedFields p₁ `elem` _Γ')
+                                Monad.guard (Context.UnsolvedFields p₁ `elem` contextAfter)
 
                                 let command =
-                                        set (   _Γ'
+                                        set (   contextAfter
                                             <>  ( Context.UnsolvedFields p₀
                                                 : Context.UnsolvedFields p₂
-                                                : _Γ
+                                                : contextBefore
                                                 )
                                             )
 
                                 return command
 
                         let p₁First = do
-                                (_Γ', _Γ) <- Context.splitOnUnsolvedFields p₁ _Γ₀
+                                (contextAfter, contextBefore) <- Context.splitOnUnsolvedFields p₁ context₁
 
-                                Monad.guard (Context.UnsolvedFields p₀ `elem` _Γ')
+                                Monad.guard (Context.UnsolvedFields p₀ `elem` contextAfter)
 
                                 let command =
-                                        set (   _Γ'
+                                        set (   contextAfter
                                             <>  ( Context.UnsolvedFields p₁
                                                 : Context.UnsolvedFields p₂
-                                                : _Γ
+                                                : contextBefore
                                                 )
                                             )
 
@@ -457,126 +462,133 @@ subtype _A₀ _B₀ = do
 
                         case p₀First <|> p₁First of
                             Nothing -> do
-                                Exception.throwIO (MissingOneOfFields [Type.location _A₀, Type.location _B₀] p₀ p₁ _Γ)
+                                Exception.throwIO (MissingOneOfFields [Type.location subType₀, Type.location superType₀] p₀ p₁ context₁)
 
                             Just setContext -> do
                                 setContext
 
-                        _Θ <- get
+                        context₂ <- get
 
-                        -- Now we solve for `p₀`.  This is basically saying:
+                        -- Now we solve for @p₀@.  This is basically saying:
                         --
-                        -- p₀ = extraFieldsFromRecordB, p₂
+                        -- > p₀ = extraFieldsFromRecordB, p₂
                         instantiateFieldsL
                             p₀
-                            (Type.location _B₀)
-                            (Context.solveRecord _Θ
-                                (Type.Fields (Map.toList extraB)
+                            (Type.location superType₀)
+                            (Context.solveRecord context₂
+                                (Type.Fields (Map.toList superExtraFieldTypes)
                                     (Monotype.UnsolvedFields p₂)
                                 )
                             )
 
-                        _Δ <- get
+                        context₃ <- get
 
-                        -- Similarly, solve for `p₁`.  This is basically saying:
+                        -- Similarly, solve for @p₁@.  This is basically saying:
                         --
-                        -- p₁ = extraFieldsFromRecordA, p₂
+                        -- > p₁ = extraFieldsFromRecordA, p₂
                         instantiateFieldsR
-                            (Type.location _A₀)
-                            (Context.solveRecord _Δ
-                                (Type.Fields (Map.toList extraA)
+                            (Type.location subType₀)
+                            (Context.solveRecord context₃
+                                (Type.Fields (Map.toList subExtraFieldTypes)
                                     (Monotype.UnsolvedFields p₂)
                                 )
                             )
                             p₁
 
-                -- If only one of the records has a Fields variable then the
+                -- If only the record subtype has a Fields variable then the
                 -- solution is simpler: just set the Fields variable to the
                 -- extra fields from the opposing record.
+                --
+                -- Carefully note that it's okay if the record supertype has
+                -- extra required fields.  A record with fewer fields can be
+                -- a subtype of a record with a greater number o fields.
                 (Monotype.UnsolvedFields p₀, _) -> do
-                    _Θ <- get
+                    context₁ <- get
 
                     instantiateFieldsL
                         p₀
-                        (Type.location _B₀)
-                        (Context.solveRecord _Θ
-                            (Type.Fields (Map.toList extraB) fields₁)
+                        (Type.location superType₀)
+                        (Context.solveRecord context₁
+                            (Type.Fields (Map.toList superExtraFieldTypes) superRemainingFields)
                         )
 
+                -- If only the record supertype has a Fields variable then
+                -- things are slightly trickier because we *don't* allow the
+                -- record subtype to have extra required fields.
                 (_, Monotype.UnsolvedFields p₁) -> do
-                    requiredB <- getRequired
+                    requiredFields <- getRequiredFields
 
-                    Monad.unless (null requiredB) do
-                        Exception.throwIO (RecordTypeMismatch _A₀ _B₀ requiredB)
+                    Monad.unless (null requiredFields) do
+                        Exception.throwIO (RecordTypeMismatch subType₀ superType₀ requiredFields)
 
-                    _Θ <- get
+                    context₁ <- get
 
                     instantiateFieldsR
-                        (Type.location _A₀)
-                        (Context.solveRecord _Θ
-                            (Type.Fields (Map.toList extraA) fields₀)
+                        (Type.location subType₀)
+                        (Context.solveRecord context₁
+                            (Type.Fields (Map.toList subExtraFieldTypes) subRemainingFields)
                         )
                         p₁
 
-                _   | fields₀ == fields₁ -> do
-                        requiredB <- getRequired
+                _   | subRemainingFields == superRemainingFields -> do
+                        requiredB <- getRequiredFields
 
                         Monad.unless (null requiredB) do
-                            Exception.throwIO (RecordTypeMismatch _A₀ _B₀ requiredB)
+                            Exception.throwIO (RecordTypeMismatch subType₀ superType₀ requiredB)
 
                     | otherwise -> do
-                        requiredB <- getRequired
+                        requiredB <- getRequiredFields
 
-                        Exception.throwIO (RecordTypeMismatch _A₀ _B₀ requiredB)
+                        Exception.throwIO (RecordTypeMismatch subType₀ superType₀ requiredB)
 
-        (_A@Type.Union{ alternatives = Type.Alternatives kAs₀ alternatives₀ }, _B@Type.Union{ alternatives = Type.Alternatives kBs₀ alternatives₁ }) -> do
-            let mapA = Map.fromList kAs₀
-            let mapB = Map.fromList kBs₀
+        (_A@Type.Union{ alternatives = Type.Alternatives subAlternativeTypesList subRemainingAlternatives }, _B@Type.Union{ alternatives = Type.Alternatives superAlternativesTypesList superRemainingAlternatives }) -> do
+            let subAlternativeTypes   = Map.fromList subAlternativeTypesList
+            let superAlternativeTypes = Map.fromList superAlternativesTypesList
 
-            let extraA = Map.difference mapA mapB
-            let extraB = Map.difference mapB mapA
+            let subExtraAlternativeTypes   = Map.difference subAlternativeTypes superAlternativeTypes
+            let superExtraAlternativeTypes = Map.difference superAlternativeTypes subAlternativeTypes
 
-            let process _A₁ _B₁ = do
-                    _Θ <- get
+            let subtypeAlternative subtype₁ supertype₁ = do
+                    context <- get
 
                     subtype
-                        (Context.solveType _Θ _A₁)
-                        (Context.solveType _Θ _B₁)
+                        (Context.solveType context subtype₁)
+                        (Context.solveType context supertype₁)
 
-            sequence_ (Map.intersectionWith process mapA mapB)
+            sequence_ (Map.intersectionWith subtypeAlternative subAlternativeTypes superAlternativeTypes)
 
-            case (alternatives₀, alternatives₁) of
+            case (subRemainingAlternatives, superRemainingAlternatives) of
                 (Monotype.UnsolvedAlternatives p₀, Monotype.UnsolvedAlternatives p₁)
                     | p₀ == p₁ -> do
                         p₂ <- fresh
 
-                        _Γ₀ <- get
+                        context₁ <- get
 
                         let p₀First = do
-                                (_Γ', _Γ) <- Context.splitOnUnsolvedAlternatives p₀ _Γ₀
+                                (contextAfter, contextBefore) <- Context.splitOnUnsolvedAlternatives p₀ context₁
 
-                                Monad.guard (Context.UnsolvedAlternatives p₁ `elem` _Γ')
+                                Monad.guard (Context.UnsolvedAlternatives p₁ `elem` contextAfter)
 
                                 let command =
-                                        set (   _Γ'
+                                        set (   contextAfter
                                             <>  ( Context.UnsolvedAlternatives p₀
                                                 : Context.UnsolvedAlternatives p₂
-                                                : _Γ
+                                                : contextBefore
                                                 )
                                             )
 
                                 return command
 
                         let p₁First = do
-                                (_Γ', _Γ) <- Context.splitOnUnsolvedAlternatives p₁ _Γ₀
+                                (contextAfter, contextBefore) <- Context.splitOnUnsolvedAlternatives p₁ context₁
 
-                                Monad.guard (Context.UnsolvedAlternatives p₀ `elem` _Γ')
+                                Monad.guard (Context.UnsolvedAlternatives p₀ `elem` contextAfter)
 
                                 let command =
-                                        set (   _Γ'
+                                        set (   contextAfter
                                             <>  ( Context.UnsolvedAlternatives p₁
                                                 : Context.UnsolvedAlternatives p₂
-                                                : _Γ
+                                                : contextBefore
                                                 )
                                             )
 
@@ -584,64 +596,63 @@ subtype _A₀ _B₀ = do
 
                         case p₀First <|> p₁First of
                             Nothing -> do
-                                Exception.throwIO (MissingOneOfAlternatives [Type.location _A₀, Type.location _B₀] p₀ p₁ _Γ)
+                                Exception.throwIO (MissingOneOfAlternatives [Type.location subType₀, Type.location superType₀] p₀ p₁ context₁)
 
                             Just setContext -> do
                                 setContext
 
-                        _Θ <- get
+                        context₂ <- get
 
                         instantiateAlternativesL
                             p₀
-                            (Type.location _B₀)
-                            (Context.solveUnion _Θ
-                                (Type.Alternatives (Map.toList extraB)
+                            (Type.location superType₀)
+                            (Context.solveUnion context₂
+                                (Type.Alternatives (Map.toList superExtraAlternativeTypes)
                                     (Monotype.UnsolvedAlternatives p₂)
                                 )
                             )
 
-                        _Δ <- get
+                        context₃ <- get
 
                         instantiateAlternativesR
-                            (Type.location _A₀)
-                            (Context.solveUnion _Δ
-                                (Type.Alternatives (Map.toList extraA)
+                            (Type.location subType₀)
+                            (Context.solveUnion context₃
+                                (Type.Alternatives (Map.toList subExtraAlternativeTypes)
                                     (Monotype.UnsolvedAlternatives p₂)
                                 )
                             )
                             p₁
 
                 (Monotype.UnsolvedAlternatives p₀, _)
-                    | Map.null extraA -> do
-                        _Θ <- get
+                    | Map.null subExtraAlternativeTypes -> do
+                        context₁ <- get
 
                         instantiateAlternativesL
                             p₀
-                            (Type.location _B₀)
-                            (Context.solveUnion _Θ
-                                (Type.Alternatives (Map.toList extraB)
-                                    alternatives₁
+                            (Type.location superType₀)
+                            (Context.solveUnion context₁
+                                (Type.Alternatives (Map.toList superExtraAlternativeTypes)
+                                    superRemainingAlternatives
                                 )
                             )
 
                 (_, Monotype.UnsolvedAlternatives p₁) -> do
-                    _Θ <- get
+                    context₁ <- get
 
                     instantiateAlternativesR
-                        (Type.location _A₀)
-                        (Context.solveUnion _Θ
-                            (Type.Alternatives (Map.toList extraA)
-                                alternatives₀
+                        (Type.location subType₀)
+                        (Context.solveUnion context₁
+                            (Type.Alternatives (Map.toList subExtraAlternativeTypes)
+                                subRemainingAlternatives
                             )
                         )
                         p₁
 
-                _   | alternatives₀ == alternatives₁ && Map.null extraA -> do
+                _   | subRemainingAlternatives == superRemainingAlternatives && Map.null subExtraAlternativeTypes -> do
                         return ()
 
                     | otherwise -> do
-                        Exception.throwIO (UnionTypeMismatch _A₀ _B₀ (Map.keys extraA))
-
+                        Exception.throwIO (UnionTypeMismatch subType₀ superType₀ (Map.keys subExtraAlternativeTypes))
 
         -- Unfortunately, we need to have this wildcard match at the end,
         -- otherwise we'd have to specify a number of cases that is quadratic
@@ -660,7 +671,7 @@ subtype _A₀ _B₀ = do
         -- `subtype` function and then I'll remember to add a case for my new
         -- complex type here.
         (_A, _B) -> do
-            Exception.throwIO (NotSubtype (Type.location _A₀) _A (Type.location _B₀) _B)
+            Exception.throwIO (NotSubtype (Type.location subType₀) _A (Type.location superType₀) _B)
 
 {-| This corresponds to the judgment:
 
