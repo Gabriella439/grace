@@ -1,7 +1,5 @@
 # Exercise unsolved variables for certain unification code paths
-\r ->
-
-\s ->
+\r s x ->
 
 let a = r.x
 
@@ -12,5 +10,8 @@ let c = L 1
 let d = R true
 
 in  { example0: [ r, s ]
-    , example1: [ d, c ]
+    , example1: [ r, r ]
+    , example2: [ c, d ]
+    , example3: [ c, c ]
+    , example4: [ x, x ]
     }

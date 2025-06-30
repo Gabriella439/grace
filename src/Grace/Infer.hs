@@ -390,6 +390,12 @@ subtype subType₀ superType₀ = do
             -- both record types has an unsolved fields variable or if extra
             -- fields in the supertype are `Optional`
             case (subRemainingFields, superRemainingFields) of
+                _   | subRemainingFields == superRemainingFields -> do
+                        requiredB <- getRequiredFields
+
+                        Monad.unless (null requiredB) do
+                            Exception.throwIO (RecordTypeMismatch subType₀ superType₀ requiredB)
+
                 -- Both records type have unsolved Fields variables.  Great!
                 -- This is the most flexible case, since we can replace these
                 -- unsolved variables with whatever fields we want to make the
@@ -415,85 +421,84 @@ subtype subType₀ superType₀ = do
                 -- … where @p₂@ is a fresh Fields type variable representing the
                 -- fact that both records could potentially have even more
                 -- fields other than @x@ and @y@.
-                (Monotype.UnsolvedFields p₀, Monotype.UnsolvedFields p₁)
-                    | p₀ /= p₁ -> do
-                        p₂ <- fresh
+                (Monotype.UnsolvedFields p₀, Monotype.UnsolvedFields p₁) -> do
+                    p₂ <- fresh
 
-                        context₁ <- get
+                    context₁ <- get
 
-                        -- We have to insert p₂ before both p₀ and p₁ within the
-                        -- context because the bidirectional type-checking algorithm
-                        -- requires that the context is ordered and all variables
-                        -- within the context can only reference prior variables
-                        -- within the context.
-                        --
-                        -- Since @p₀@ and @p₁@ both have to reference @p₂@, then we
-                        -- need to insert @p₂@ right before @p₀@ or @p₁@, whichever
-                        -- one comes first
-                        let p₀First = do
-                                (contextAfter, contextBefore) <- Context.splitOnUnsolvedFields p₀ context₁
+                    -- We have to insert p₂ before both p₀ and p₁ within the
+                    -- context because the bidirectional type-checking algorithm
+                    -- requires that the context is ordered and all variables
+                    -- within the context can only reference prior variables
+                    -- within the context.
+                    --
+                    -- Since @p₀@ and @p₁@ both have to reference @p₂@, then we
+                    -- need to insert @p₂@ right before @p₀@ or @p₁@, whichever
+                    -- one comes first
+                    let p₀First = do
+                            (contextAfter, contextBefore) <- Context.splitOnUnsolvedFields p₀ context₁
 
-                                Monad.guard (Context.UnsolvedFields p₁ `elem` contextAfter)
+                            Monad.guard (Context.UnsolvedFields p₁ `elem` contextAfter)
 
-                                let command =
-                                        set (   contextAfter
-                                            <>  ( Context.UnsolvedFields p₀
-                                                : Context.UnsolvedFields p₂
-                                                : contextBefore
-                                                )
+                            let command =
+                                    set (   contextAfter
+                                        <>  ( Context.UnsolvedFields p₀
+                                            : Context.UnsolvedFields p₂
+                                            : contextBefore
                                             )
+                                        )
 
-                                return command
+                            return command
 
-                        let p₁First = do
-                                (contextAfter, contextBefore) <- Context.splitOnUnsolvedFields p₁ context₁
+                    let p₁First = do
+                            (contextAfter, contextBefore) <- Context.splitOnUnsolvedFields p₁ context₁
 
-                                Monad.guard (Context.UnsolvedFields p₀ `elem` contextAfter)
+                            Monad.guard (Context.UnsolvedFields p₀ `elem` contextAfter)
 
-                                let command =
-                                        set (   contextAfter
-                                            <>  ( Context.UnsolvedFields p₁
-                                                : Context.UnsolvedFields p₂
-                                                : contextBefore
-                                                )
+                            let command =
+                                    set (   contextAfter
+                                        <>  ( Context.UnsolvedFields p₁
+                                            : Context.UnsolvedFields p₂
+                                            : contextBefore
                                             )
+                                        )
 
-                                return command
+                            return command
 
-                        case p₀First <|> p₁First of
-                            Nothing -> do
-                                Exception.throwIO (MissingOneOfFields [Type.location subType₀, Type.location superType₀] p₀ p₁ context₁)
+                    case p₀First <|> p₁First of
+                        Nothing -> do
+                            Exception.throwIO (MissingOneOfFields [Type.location subType₀, Type.location superType₀] p₀ p₁ context₁)
 
-                            Just setContext -> do
-                                setContext
+                        Just setContext -> do
+                            setContext
 
-                        context₂ <- get
+                    context₂ <- get
 
-                        -- Now we solve for @p₀@.  This is basically saying:
-                        --
-                        -- > p₀ = extraFieldsFromRecordB, p₂
-                        instantiateFieldsL
-                            p₀
-                            (Type.location superType₀)
-                            (Context.solveRecord context₂
-                                (Type.Fields (Map.toList superExtraFieldTypes)
-                                    (Monotype.UnsolvedFields p₂)
-                                )
+                    -- Now we solve for @p₀@.  This is basically saying:
+                    --
+                    -- > p₀ = extraFieldsFromRecordB, p₂
+                    instantiateFieldsL
+                        p₀
+                        (Type.location superType₀)
+                        (Context.solveRecord context₂
+                            (Type.Fields (Map.toList superExtraFieldTypes)
+                                (Monotype.UnsolvedFields p₂)
                             )
+                        )
 
-                        context₃ <- get
+                    context₃ <- get
 
-                        -- Similarly, solve for @p₁@.  This is basically saying:
-                        --
-                        -- > p₁ = extraFieldsFromRecordA, p₂
-                        instantiateFieldsR
-                            (Type.location subType₀)
-                            (Context.solveRecord context₃
-                                (Type.Fields (Map.toList subExtraFieldTypes)
-                                    (Monotype.UnsolvedFields p₂)
-                                )
+                    -- Similarly, solve for @p₁@.  This is basically saying:
+                    --
+                    -- > p₁ = extraFieldsFromRecordA, p₂
+                    instantiateFieldsR
+                        (Type.location subType₀)
+                        (Context.solveRecord context₃
+                            (Type.Fields (Map.toList subExtraFieldTypes)
+                                (Monotype.UnsolvedFields p₂)
                             )
-                            p₁
+                        )
+                        p₁
 
                 -- If only the record subtype has a Fields variable then the
                 -- solution is simpler: just set the Fields variable to the
@@ -530,13 +535,7 @@ subtype subType₀ superType₀ = do
                         )
                         p₁
 
-                _   | subRemainingFields == superRemainingFields -> do
-                        requiredB <- getRequiredFields
-
-                        Monad.unless (null requiredB) do
-                            Exception.throwIO (RecordTypeMismatch subType₀ superType₀ requiredB)
-
-                    | otherwise -> do
+                _   | otherwise -> do
                         requiredB <- getRequiredFields
 
                         Exception.throwIO (RecordTypeMismatch subType₀ superType₀ requiredB)
@@ -558,70 +557,72 @@ subtype subType₀ superType₀ = do
             sequence_ (Map.intersectionWith subtypeAlternative subAlternativeTypes superAlternativeTypes)
 
             case (subRemainingAlternatives, superRemainingAlternatives) of
-                (Monotype.UnsolvedAlternatives p₀, Monotype.UnsolvedAlternatives p₁)
-                    | p₀ == p₁ -> do
-                        p₂ <- fresh
+                _   | subRemainingAlternatives == superRemainingAlternatives && Map.null subExtraAlternativeTypes -> do
+                        return ()
 
-                        context₁ <- get
+                (Monotype.UnsolvedAlternatives p₀, Monotype.UnsolvedAlternatives p₁) -> do
+                    p₂ <- fresh
 
-                        let p₀First = do
-                                (contextAfter, contextBefore) <- Context.splitOnUnsolvedAlternatives p₀ context₁
+                    context₁ <- get
 
-                                Monad.guard (Context.UnsolvedAlternatives p₁ `elem` contextAfter)
+                    let p₀First = do
+                            (contextAfter, contextBefore) <- Context.splitOnUnsolvedAlternatives p₀ context₁
 
-                                let command =
-                                        set (   contextAfter
-                                            <>  ( Context.UnsolvedAlternatives p₀
-                                                : Context.UnsolvedAlternatives p₂
-                                                : contextBefore
-                                                )
+                            Monad.guard (Context.UnsolvedAlternatives p₁ `elem` contextAfter)
+
+                            let command =
+                                    set (   contextAfter
+                                        <>  ( Context.UnsolvedAlternatives p₀
+                                            : Context.UnsolvedAlternatives p₂
+                                            : contextBefore
                                             )
+                                        )
 
-                                return command
+                            return command
 
-                        let p₁First = do
-                                (contextAfter, contextBefore) <- Context.splitOnUnsolvedAlternatives p₁ context₁
+                    let p₁First = do
+                            (contextAfter, contextBefore) <- Context.splitOnUnsolvedAlternatives p₁ context₁
 
-                                Monad.guard (Context.UnsolvedAlternatives p₀ `elem` contextAfter)
+                            Monad.guard (Context.UnsolvedAlternatives p₀ `elem` contextAfter)
 
-                                let command =
-                                        set (   contextAfter
-                                            <>  ( Context.UnsolvedAlternatives p₁
-                                                : Context.UnsolvedAlternatives p₂
-                                                : contextBefore
-                                                )
+                            let command =
+                                    set (   contextAfter
+                                        <>  ( Context.UnsolvedAlternatives p₁
+                                            : Context.UnsolvedAlternatives p₂
+                                            : contextBefore
                                             )
+                                        )
 
-                                return command
+                            return command
 
-                        case p₀First <|> p₁First of
-                            Nothing -> do
-                                Exception.throwIO (MissingOneOfAlternatives [Type.location subType₀, Type.location superType₀] p₀ p₁ context₁)
+                    case p₀First <|> p₁First of
+                        Nothing -> do
+                            Exception.throwIO (MissingOneOfAlternatives [Type.location subType₀, Type.location superType₀] p₀ p₁ context₁)
 
-                            Just setContext -> do
-                                setContext
+                        Just setContext -> do
+                            setContext
 
-                        context₂ <- get
+                    context₂ <- get
 
-                        instantiateAlternativesL
-                            p₀
-                            (Type.location superType₀)
-                            (Context.solveUnion context₂
-                                (Type.Alternatives (Map.toList superExtraAlternativeTypes)
-                                    (Monotype.UnsolvedAlternatives p₂)
-                                )
+                    instantiateAlternativesL
+                        p₀
+                        (Type.location superType₀)
+                        (Context.solveUnion context₂
+                            (Type.Alternatives (Map.toList superExtraAlternativeTypes)
+                                (Monotype.UnsolvedAlternatives p₂)
                             )
+                        )
 
-                        context₃ <- get
+                    context₃ <- get
 
-                        instantiateAlternativesR
-                            (Type.location subType₀)
-                            (Context.solveUnion context₃
-                                (Type.Alternatives (Map.toList subExtraAlternativeTypes)
-                                    (Monotype.UnsolvedAlternatives p₂)
-                                )
+                    instantiateAlternativesR
+                        (Type.location subType₀)
+                        (Context.solveUnion context₃
+                            (Type.Alternatives (Map.toList subExtraAlternativeTypes)
+                                (Monotype.UnsolvedAlternatives p₂)
                             )
-                            p₁
+                        )
+                        p₁
 
                 (Monotype.UnsolvedAlternatives p₀, _)
                     | Map.null subExtraAlternativeTypes -> do
@@ -648,10 +649,7 @@ subtype subType₀ superType₀ = do
                         )
                         p₁
 
-                _   | subRemainingAlternatives == superRemainingAlternatives && Map.null subExtraAlternativeTypes -> do
-                        return ()
-
-                    | otherwise -> do
+                _   | otherwise -> do
                         Exception.throwIO (UnionTypeMismatch subType₀ superType₀ (Map.keys subExtraAlternativeTypes))
 
         -- Unfortunately, we need to have this wildcard match at the end,

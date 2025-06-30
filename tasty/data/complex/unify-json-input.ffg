@@ -1,0 +1,4 @@
+# The purpose of this test is to exercise the JSON subtyping rules
+
+\(x : JSON) ->
+    [ x, "hi", [ 1, 2 ], some true, { x: "bye" } ]
