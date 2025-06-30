@@ -2519,14 +2519,7 @@ check annotated annotation@Type.Scalar{ scalar = Monotype.Real } = do
                 }
 
             return Syntax.Annotation
-                { annotated = Syntax.Annotation
-                    { annotated = newAnnotated
-                    , annotation = Type.Scalar
-                        { scalar = Monotype.Integer
-                        , location = Syntax.location newAnnotated
-                        }
-                    , location = Syntax.location newAnnotated
-                    }
+                { annotated = newAnnotated
                 , annotation
                 , location = Syntax.location newAnnotated
                 }
