@@ -1,1 +1,1 @@
-merge { "false": 0, "true": 1 }
+fold { "false": 0, "true": 1 }

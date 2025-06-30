@@ -1,1 +1,1 @@
-merge { "null": false, "some": \_ -> true }
+fold { "null": false, "some": \_ -> true }

@@ -430,10 +430,10 @@ evaluate maybeMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
             Syntax.Alternative{..} ->
                 pure (Value.Alternative name)
 
-            Syntax.Merge{..} -> do
+            Syntax.Fold{..} -> do
                 newHandlers <- loop env handlers
 
-                return (Value.Merge newHandlers)
+                return (Value.Fold newHandlers)
 
             Syntax.If{..} -> do
                 predicate' <- loop env predicate
@@ -832,11 +832,11 @@ apply maybeMethods function₀ argument₀ = runConcurrently (loop function₀ a
 
             return (fieldName, value)
     loop
-        (Value.Merge (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("false", falseHandler), ("true", trueHandler)])))
+        (Value.Fold (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("false", falseHandler), ("true", trueHandler)])))
         (Value.Scalar (Bool b)) =
             pure (if b then trueHandler else falseHandler)
     loop
-        (Value.Merge (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("succ", succ), ("zero", zero)])))
+        (Value.Fold (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("succ", succ), ("zero", zero)])))
         (Value.Scalar (Natural n)) = Concurrently (go n zero)
       where
         go 0 !result = do
@@ -845,15 +845,15 @@ apply maybeMethods function₀ argument₀ = runConcurrently (loop function₀ a
             x <- runConcurrently (loop succ result)
             go (m - 1) x
     loop
-        (Value.Merge (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("null", _), ("some", some)])))
+        (Value.Fold (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("null", _), ("some", some)])))
         (Value.Application (Value.Builtin Some) x) =
             loop some x
     loop
-        (Value.Merge (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("null", null), ("some", _)])))
+        (Value.Fold (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("null", null), ("some", _)])))
         (Value.Scalar Null)  =
             pure null
     loop
-        (Value.Merge (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("cons", cons), ("nil", nil)])))
+        (Value.Fold (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("cons", cons), ("nil", nil)])))
         (Value.List elements) = Concurrently do
             inner (Seq.reverse elements) nil
       where
@@ -866,7 +866,7 @@ apply maybeMethods function₀ argument₀ = runConcurrently (loop function₀ a
                     b <- runConcurrently (loop a result)
                     inner ys b
     loop
-        (Value.Merge
+        (Value.Fold
             (Value.Record
                 (List.sortBy (Ord.comparing fst) . HashMap.toList ->
                     [ ("array"  , array  )
@@ -908,7 +908,7 @@ apply maybeMethods function₀ argument₀ = runConcurrently (loop function₀ a
         inner v =
             pure v
     loop
-        (Value.Merge (Value.Record alternativeHandlers))
+        (Value.Fold (Value.Record alternativeHandlers))
         (Value.Application (Value.Alternative alternative) x)
         | Just f <- HashMap.lookup alternative alternativeHandlers =
             loop f x
@@ -1047,8 +1047,8 @@ quote names = loop
         Value.Alternative name ->
             Syntax.Alternative{..}
 
-        Value.Merge handlers ->
-            Syntax.Merge{ handlers = quote names handlers, .. }
+        Value.Fold handlers ->
+            Syntax.Fold{ handlers = quote names handlers, .. }
 
         Value.Text text ->
             Syntax.Text{ chunks = Syntax.Chunks text [], .. }

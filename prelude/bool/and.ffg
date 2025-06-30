@@ -2,6 +2,6 @@
 # otherwise
 let and
       : List Bool -> Bool
-      = merge { cons: \x -> \y -> x && y, nil: true }
+      = fold { cons: \x -> \y -> x && y, nil: true }
 
 in  and

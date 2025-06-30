@@ -2,6 +2,6 @@
 # implementing the even function as a fold
 let not (b : Bool) : Bool = if b then false else true
 
-let even (n : Natural) : Bool = merge{ succ: not, zero: true } n
+let even (n : Natural) : Bool = fold { succ: not, zero: true } n
 
 in  even 1000000

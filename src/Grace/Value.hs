@@ -69,7 +69,7 @@ data Value
     | List (Seq Value)
     | Record (InsOrdHashMap Text Value)
     | Alternative Text
-    | Merge Value
+    | Fold Value
     | Text Text
     | Builtin Builtin
     | Scalar Scalar

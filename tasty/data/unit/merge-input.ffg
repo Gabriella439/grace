@@ -1,1 +1,1 @@
-merge { X: \x -> x }
+fold { X: \x -> x }

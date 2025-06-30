@@ -127,7 +127,7 @@ lexToken =
             , Grace.Parser.If           <$ symbol "if"
             , Grace.Parser.Then         <$ symbol "then"
             , Grace.Parser.Else         <$ symbol "else"
-            , Grace.Parser.Merge        <$ symbol "merge"
+            , Grace.Parser.Fold         <$ symbol "fold"
             , Grace.Parser.Prompt       <$ symbol "prompt"
             , Grace.Parser.Type         <$ symbol "Type"
             , Grace.Parser.Fields       <$ symbol "Fields"
@@ -482,10 +482,10 @@ reserved =
         , "else"
         , "false"
         , "forall"
+        , "fold"
         , "if"
         , "in"
         , "let"
-        , "merge"
         , "some"
         , "null"
         , "prompt"
@@ -574,6 +574,7 @@ data Token
     | Dash
     | Dot
     | DoubleEquals
+    | Fold
     | Real
     | RealLiteral Sign Scientific
     | Show
@@ -605,7 +606,6 @@ data Token
     | ListMap
     | ListReverse
     | ListTake
-    | Merge
     | Natural
     | NotEqual
     | Null
@@ -809,7 +809,7 @@ render t = case t of
     Grace.Parser.ListMap            -> "List/map"
     Grace.Parser.ListReverse        -> "List/reverse"
     Grace.Parser.ListTake           -> "List/take"
-    Grace.Parser.Merge              -> "merge"
+    Grace.Parser.Fold               -> "fold"
     Grace.Parser.Natural            -> "Natural"
     Grace.Parser.NotEqual           -> "!="
     Grace.Parser.Null               -> "null"
@@ -955,11 +955,11 @@ grammar endsWithBrace = mdo
                     foldl application nil es
         <|> do  es <- some1 projectExpression
                 return (foldl application (NonEmpty.head es) (NonEmpty.tail es))
-        <|> do  location <- locatedToken Grace.Parser.Merge
+        <|> do  location <- locatedToken Grace.Parser.Fold
                 ~(handlers :| es) <- some1 projectExpression
 
                 return do
-                    let nil = Syntax.Merge{..}
+                    let nil = Syntax.Fold{..}
                     foldl application nil es
         )
 

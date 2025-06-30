@@ -1,1 +1,1 @@
-merge { succ: \x -> x + "a", zero: "" } 3
+fold { succ: \x -> x + "a", zero: "" } 3

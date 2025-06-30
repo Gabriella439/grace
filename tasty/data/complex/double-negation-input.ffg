@@ -6,9 +6,9 @@
 # https://www.haskellforall.com/2017/02/the-curry-howard-correspondence-between.html
 (   \noMiddle
 ->  \doubleNegation
-->  merge
+->  fold
       { Left: \x -> x
-      , Right: \x -> merge {} (doubleNegation x)
+      , Right: \x -> fold { } (doubleNegation x)
       }
       noMiddle
 ) :     (forall (b : Type) . < Left : b | Right : b -> <> >)

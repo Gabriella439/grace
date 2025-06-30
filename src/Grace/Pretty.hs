@@ -124,7 +124,7 @@ layoutOptions
 layoutOptions columns =
     LayoutOptions { layoutPageWidth = AvailablePerLine columns 1 }
 
--- | Highlight a keyword (e.g. @let@ or @merge@)
+-- | Highlight a keyword (e.g. @let@ or @fold@)
 keyword :: Doc AnsiStyle -> Doc AnsiStyle
 keyword =
     Pretty.annotate

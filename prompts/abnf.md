@@ -115,10 +115,10 @@ application
 
   ; Keyword to pattern match on a union
   ;
-  ; Just like the `prompt` keyword, the `merge` keyword
+  ; Just like the `prompt` keyword, the `fold` keyword
   ; only takes one argument and subsequent arguments are
   ; ordinary function applications
-  / "merge" 1*projection
+  / "fold" 1*projection
 
   ; Ordinary function application
   / 1*projection

@@ -1,13 +1,13 @@
-Must merge a concrete record
+Must fold a concrete record
 
-The first argument to a merge expression must be a record where all fields are
-statically known.  However, you provided an argument of type:
+The first argument to a fold must be a record where all fields are statically
+known.  However, you provided an argument of type:
 
   { c? }
 
-tasty/data/error/type/abstract-merge-input.ffg:1:13: 
+tasty/data/error/type/abstract-merge-input.ffg:1:12: 
   │
-1 │ \x -> merge x
-  │             ↑
+1 │ \x -> fold x
+  │            ↑
 
 … where not all fields could be inferred.

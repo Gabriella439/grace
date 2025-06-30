@@ -121,10 +121,10 @@ data Syntax s a
     -- ^
     --   >>> pretty @(Syntax () Void) (Alternative () "Nil")
     --   Nil
-    | Merge { location :: s, handlers :: Syntax s a }
+    | Fold { location :: s, handlers :: Syntax s a }
     -- ^
-    --   >>> pretty @(Syntax () Void) (Merge () "x")
-    --   merge x
+    --   >>> pretty @(Syntax () Void) (Fold () "x")
+    --   fold x
     | If { location :: s, predicate :: Syntax s a, ifTrue :: Syntax s a, ifFalse :: Syntax s a }
     -- ^
     --   >>> pretty @(Syntax () Void) (If () "x" "y" "z")
@@ -174,8 +174,8 @@ instance Monad (Syntax ()) where
         Project{ record = record >>= f, .. }
     Alternative{..} >>= _ =
         Alternative{..}
-    Merge{ handlers, .. } >>= f =
-        Merge{ handlers = handlers >>= f, .. }
+    Fold{ handlers, .. } >>= f =
+        Fold{ handlers = handlers >>= f, .. }
     If{ predicate, ifTrue, ifFalse, .. } >>= f =
         If  { predicate = predicate >>= f
             , ifTrue = ifTrue >>= f
@@ -234,9 +234,9 @@ instance Plated (Syntax s a) where
                 return Project{ record = newRecord, .. }
             Alternative{..} -> do
                 pure Alternative{..}
-            Merge{ handlers = oldHandlers, .. } -> do
+            Fold{ handlers = oldHandlers, .. } -> do
                 newHandlers <- onSyntax oldHandlers
-                return Merge{ handlers = newHandlers, .. }
+                return Fold{ handlers = newHandlers, .. }
             If{ predicate = oldPredicate, ifTrue = oldIfTrue, ifFalse = oldIfFalse, .. } -> do
                 newPredicate <- onSyntax oldPredicate
                 newIfTrue <- onSyntax oldIfTrue
@@ -283,8 +283,8 @@ instance Bifunctor Syntax where
         Project{ location = f location, record = first f record, fields = fmap f fields }
     first f Alternative{..} =
         Alternative{ location = f location, .. }
-    first f Merge{..} =
-        Merge{ location = f location, handlers = first f handlers, .. }
+    first f Fold{..} =
+        Fold{ location = f location, handlers = first f handlers, .. }
     first f If{..} =
         If{ location = f location, predicate = first f predicate, ifTrue = first f ifTrue, ifFalse = first f ifFalse, .. }
     first f Text{..} =
@@ -765,7 +765,7 @@ prettyApplicationExpression expression
     | otherwise                = prettyFieldExpression expression
   where
     isApplication Application{} = True
-    isApplication Merge{}       = True
+    isApplication Fold{}        = True
     isApplication Prompt{}      = True
     isApplication _             = False
 
@@ -777,8 +777,8 @@ prettyApplicationExpression expression
             prettyShort function
         <>  " "
         <>  prettyFieldExpression argument
-    prettyShort Merge{..} =
-            keyword "merge" <> " " <> prettyFieldExpression handlers
+    prettyShort Fold{..} =
+            keyword "fold" <> " " <> prettyFieldExpression handlers
     prettyShort Prompt{ schema = Nothing, .. } =
             keyword "prompt" <> " " <> prettyFieldExpression arguments
     prettyShort other =
@@ -789,8 +789,8 @@ prettyApplicationExpression expression
         <>  Pretty.hardline
         <>  "  "
         <>  prettyFieldExpression argument
-    prettyLong Merge{..} =
-            keyword "merge"
+    prettyLong Fold{..} =
+            keyword "fold"
         <>  Pretty.hardline
         <>  "  "
         <>  prettyFieldExpression handlers

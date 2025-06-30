@@ -520,13 +520,13 @@ let record = { turn: 1, health: 100 }
 in  record.turn
 ```
 
-You can pattern match on a union using the `merge` keyword by providing a
+You can pattern match on a union using the `fold` keyword by providing a
 record of handlers (one per alternative):
 
 ```dhall
 let render
       : < Left: Real | Right: Bool > -> Text
-      = merge
+      = fold
           { Left: show
           , Right: \b -> if b then "true" else "false"
           }
@@ -780,11 +780,11 @@ annotation of `JSON`:
 ```
 
 … but the only way you can consume an expression of type `JSON` is to use they
-`merge` keyword, which you can think of as having this type when given a `JSON`
+`fold` keyword, which you can think of as having this type when given a `JSON`
 argument:
 
 ```dhall
-merge
+fold
   : forall (a : Type) .
       { array: List a -> a
       , bool: Bool -> a
@@ -802,7 +802,7 @@ merge
 For example, the following expression
 
 ```dhall
-merge
+fold
   { "bool": \b -> if b then 1 else 0
   , "natural": \x -> x
   , "integer": Integer/abs
@@ -810,7 +810,7 @@ merge
   , "string": \_ -> 2
   , "null": 3
   , "object": List/length
-  , "array": merge { nil: 0, cons: \x -> \y -> x + y : Natural }
+  , "array": fold { nil: 0, cons: \x -> \y -> x + y : Natural }
   }
   [ true, 1, [ -2, false, "" ], null, { foo: { } } ]
 ```

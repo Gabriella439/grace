@@ -330,7 +330,7 @@ For example, consider this Grace program:
 ```haskell
 let concatSep = https://raw.githubusercontent.com/Gabriella439/grace/refs/heads/main/prelude/text/concatSep.ffg
 
-let call = merge
+let call = fold
       { HttpRequest: \x -> "curl " + x.url
       , ShellCommand: \x -> concatSep " " ([ x.executable ] + x.arguments)
       }

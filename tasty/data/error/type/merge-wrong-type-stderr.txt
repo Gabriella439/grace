@@ -4,16 +4,16 @@ The following type:
 
   Natural
 
-tasty/data/error/type/merge-wrong-type-input.ffg:1:7: 
+tasty/data/error/type/merge-wrong-type-input.ffg:1:6: 
   │
-1 │ merge 1
-  │       ↑
+1 │ fold 1
+  │      ↑
 
 … cannot be a subtype of:
 
   { a? }
 
-tasty/data/error/type/merge-wrong-type-input.ffg:1:7: 
+tasty/data/error/type/merge-wrong-type-input.ffg:1:6: 
   │
-1 │ merge 1
-  │       ↑
+1 │ fold 1
+  │      ↑

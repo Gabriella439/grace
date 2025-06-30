@@ -1453,7 +1453,7 @@ infer e₀ = do
                 , Syntax.Alternative{..}
                 )
 
-        Syntax.Merge{..} -> do
+        Syntax.Fold{..} -> do
             p <- fresh
 
             push (Context.UnsolvedFields p)
@@ -1481,7 +1481,7 @@ infer e₀ = do
                                 }
                             , output = bool
                             }
-                        , Syntax.Merge{ handlers = solveSyntax _Γ newHandlers, .. }
+                        , Syntax.Fold{ handlers = solveSyntax _Γ newHandlers, .. }
                         )
 
                 Type.Record{ fields = Type.Fields (List.sortBy (Ord.comparing fst) -> [("succ", succHandler), ("zero", zeroHandler)]) Monotype.EmptyFields } -> do
@@ -1502,7 +1502,7 @@ infer e₀ = do
                                 }
                             , output = natural
                             }
-                        , Syntax.Merge{ handlers = solveSyntax _Γ newHandlers, .. }
+                        , Syntax.Fold{ handlers = solveSyntax _Γ newHandlers, .. }
                         )
 
                 Type.Record{ fields = Type.Fields (List.sortBy (Ord.comparing fst) -> [("null", nullHandler), ("some", someHandler)]) Monotype.EmptyFields } -> do
@@ -1532,7 +1532,7 @@ infer e₀ = do
                                   }
                               , output = optional
                               }
-                        , Syntax.Merge{ handlers = solveSyntax _Γ newHandlers, .. }
+                        , Syntax.Fold{ handlers = solveSyntax _Γ newHandlers, .. }
                         )
 
                 Type.Record{ fields = Type.Fields (List.sortBy (Ord.comparing fst) -> [("cons", consHandler), ("nil", nilHandler)]) Monotype.EmptyFields } -> do
@@ -1566,7 +1566,7 @@ infer e₀ = do
                                 }
                             , output = list
                             }
-                        , Syntax.Merge{ handlers = solveSyntax _Γ newHandlers, .. }
+                        , Syntax.Fold{ handlers = solveSyntax _Γ newHandlers, .. }
                         )
 
                 Type.Record{ fields = Type.Fields (List.sortBy (Ord.comparing fst) -> [("array", arrayHandler), ("bool", boolHandler), ("integer", integerHandler), ("natural", naturalHandler), ("null", nullHandler), ("object", objectHandler), ("real", realHandler), ("string", stringHandler)]) Monotype.EmptyFields } -> do
@@ -1650,7 +1650,7 @@ infer e₀ = do
                                 }
                             , output = json
                             }
-                        , Syntax.Merge{ handlers = solveSyntax _Γ newHandlers, .. }
+                        , Syntax.Fold{ handlers = solveSyntax _Γ newHandlers, .. }
                         )
 
                 Type.Record{ fields = Type.Fields keyTypes Monotype.EmptyFields } -> do
@@ -1667,7 +1667,7 @@ infer e₀ = do
 
                             return (key, input)
                         process (_, _A) = do
-                            Exception.throwIO (MergeInvalidHandler (Type.location _A) _A)
+                            Exception.throwIO (FoldInvalidHandler (Type.location _A) _A)
 
                     keyTypes' <- traverse process keyTypes
 
@@ -1682,14 +1682,14 @@ infer e₀ = do
                                 , ..
                                 }
                         ~>      Type.UnsolvedType{..}
-                        , Syntax.Merge{ handlers = solveSyntax _Γ newHandlers, .. }
+                        , Syntax.Fold{ handlers = solveSyntax _Γ newHandlers, .. }
                         )
 
                 Type.Record{} -> do
-                    Exception.throwIO (MergeConcreteRecord (Type.location _R) _R)
+                    Exception.throwIO (FoldConcreteRecord (Type.location _R) _R)
 
                 _ -> do
-                    Exception.throwIO (MergeRecord (Type.location _R) _R)
+                    Exception.throwIO (FoldRecord (Type.location _R) _R)
 
         Syntax.Project{ location, record, fields } -> do
             p <- fresh
@@ -2766,9 +2766,9 @@ data TypeInferenceError
     --
     | InvalidOperands Text Location (Type Location)
     --
-    | MergeConcreteRecord Location (Type Location)
-    | MergeInvalidHandler Location (Type Location)
-    | MergeRecord Location (Type Location)
+    | FoldConcreteRecord Location (Type Location)
+    | FoldInvalidHandler Location (Type Location)
+    | FoldRecord Location (Type Location)
     --
     | MissingAllAlternatives (Existential Monotype.Union) (Context Location)
     | MissingAllFields (Existential Monotype.Record) (Context Location)
@@ -2841,11 +2841,11 @@ instance Exception TypeInferenceError where
         \\n\
         \" <> Text.unpack (Location.renderError "" location)
 
-    displayException (MergeConcreteRecord location _R) =
-        "Must merge a concrete record\n\
+    displayException (FoldConcreteRecord location _R) =
+        "Must fold a concrete record\n\
         \\n\
-        \The first argument to a merge expression must be a record where all fields are\n\
-        \statically known.  However, you provided an argument of type:\n\
+        \The first argument to a fold must be a record where all fields are statically\n\
+        \known.  However, you provided an argument of type:\n\
         \\n\
         \" <> insert _R <> "\n\
         \\n\
@@ -2853,10 +2853,10 @@ instance Exception TypeInferenceError where
         \\n\
         \… where not all fields could be inferred."
 
-    displayException (MergeInvalidHandler location _A) =
+    displayException (FoldInvalidHandler location _A) =
         "Invalid handler\n\
         \\n\
-        \The merge keyword expects a record of handlers where all handlers are functions,\n\
+        \The fold keyword expects a record of handlers where all handlers are functions,\n\
         \but you provided a handler of the following type:\n\
         \\n\
         \" <> insert _A <> "\n\
@@ -2865,11 +2865,11 @@ instance Exception TypeInferenceError where
         \\n\
         \… which is not a function type."
 
-    displayException (MergeRecord location _R) =
-        "Must merge a record\n\
+    displayException (FoldRecord location _R) =
+        "Must fold a record\n\
         \\n\
-        \The first argument to a merge expression must be a record, but you provided an\n\
-        \expression of the following type:\n\
+        \The first argument to a fold must be a record, but you provided an expression of\n\
+        \the following type:\n\
         \\n\
         \" <> insert _R <> "\n\
         \\n\

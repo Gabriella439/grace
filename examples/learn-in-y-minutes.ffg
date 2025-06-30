@@ -88,13 +88,12 @@ let compactDNA =
 # You can pattern match on a union by providing a record with one field per
 # alternative.  Once you pattern match on a union it is "closed" (meaning that
 # there may not be any other alternatives besides the ones being matched).
-let renderDNA =
-        merge
-            { Adenine:  \_ -> "A"
-            , Cytosine: \_ -> "C"
-            , Guanine:  \_ -> "G"
-            , Thymine:  \_ -> "T"
-            }
+let renderDNA = fold
+        { Adenine:  \_ -> "A"
+        , Cytosine: \_ -> "C"
+        , Guanine:  \_ -> "G"
+        , Thymine:  \_ -> "T"
+        }
 
 # Our first built-in function: `List/map` (which transforms each element of a
 # list
@@ -166,12 +165,12 @@ let presentOptionalValue : Optional Natural = some 1
 # automatically inserted wherever it's missing.
 let anotherOptionalValue : Optional Natural = 1
 
-# You can consume `Optional` values using `merge`
-let zero : Natural = merge { null: 0, some: \x -> x } absentOptionalValue
+# You can consume `Optional` values using `fold`
+let zero : Natural = fold { null: 0, some: \x -> x } absentOptionalValue
 
-let one : Natural = merge { null: 0, some: \x -> x } presentOptionalValue
+let one : Natural = fold { null: 0, some: \x -> x } presentOptionalValue
 
-let stillOne : Natural = merge { null: 0, some: \x -> x } anotherOptionalValue
+let stillOne : Natural = fold { null: 0, some: \x -> x } anotherOptionalValue
 
 let makeUser user =
       let home = "/home/${user}"

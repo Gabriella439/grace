@@ -1,6 +1,6 @@
 # Create a `List` from `n` copies of an element
 let replicate
       : forall (a : Type) . Natural -> a -> List a
-      = \n x -> merge{ succ: \xs -> [ x ] + xs, zero: [] } n
+      = \n x -> fold { succ: \xs -> [ x ] + xs, zero: [] } n
 
 in  replicate
