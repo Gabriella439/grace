@@ -1,6 +1,0 @@
-# Return the first element of a `List`
-let head
-      : forall (a : Type) (b : Alternatives) .  List a -> Optional a
-      = List/head
-
-in  head

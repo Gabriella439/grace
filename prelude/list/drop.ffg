@@ -1,6 +1,0 @@
-# Remove the first `n` elements of a list
-let drop
-      : forall (a : Type) . Natural -> List a -> List a
-      = List/drop
-
-in  drop

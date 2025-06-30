@@ -1,8 +1,0 @@
-# Return the last element of a `List`
-let last
-      : forall (a : Type) .
-        forall (b : Alternatives) .
-          List a -> Optional a
-      = List/last
-
-in  last

@@ -1,6 +1,0 @@
-# Returns `true` if the `Integer` is even, and `false` otherwise
-let even
-      : Integer -> Bool
-      = Integer/even
-
-in  even

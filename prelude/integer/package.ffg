@@ -1,7 +1,4 @@
-{ abs: ./abs.ffg
-, clamp: ./clamp.ffg
-, even: ./even.ffg
-, odd: ./odd.ffg
+{ clamp: ./clamp.ffg
 , product: ./product.ffg
 , sum: ./sum.ffg
 , toNatural: ./toNatural.ffg

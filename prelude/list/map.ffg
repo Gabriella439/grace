@@ -1,6 +1,0 @@
-# Transform each element of a `List`
-let map
-      : forall (a : Type) . forall (b : Type) . (a -> b) -> List a -> List b
-      = List/map
-
-in  map

@@ -1,6 +1,0 @@
-# Returns the absolute value of an `Integer`
-let abs
-      : Integer -> Natural
-      = Integer/abs
-
-in  abs

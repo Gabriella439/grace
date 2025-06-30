@@ -1,6 +1,0 @@
-# Reverse a `List`
-let reverse
-      : forall (a : Type) . List a -> List a
-      = List/reverse
-
-in  reverse

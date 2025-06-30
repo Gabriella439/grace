@@ -1,17 +1,9 @@
 { all: ./all.ffg
 , any: ./any.ffg
-, drop: ./drop.ffg
 , generate: ./generate.ffg
-, head: ./head.ffg
 , index: ./index.ffg
-, indexed: ./indexed.ffg
-, last: ./last.ffg
-, length: ./length.ffg
-, map: ./map.ffg
-, "null": ./null.ffg
+, null: ./null.ffg
 , reject: ./reject.ffg
 , replicate: ./replicate.ffg
-, reverse: ./reverse.ffg
 , select: ./select.ffg
-, take: ./take.ffg
 }

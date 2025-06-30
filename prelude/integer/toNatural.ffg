@@ -1,6 +1,6 @@
 # Convert an `Integer` to a `Natural` number, returning `null` if the `Natural`
 # number is negative
 let toNatural (n : Integer) : Optional Natural
-      = if n < 0 then null else some (Integer/abs n)
+      = if n < 0 then null else Integer/abs n
 
 in  toNatural

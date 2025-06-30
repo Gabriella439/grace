@@ -1201,10 +1201,10 @@ preludeExample =
     \let prelude = https://raw.githubusercontent.com/Gabriella439/grace/main/prelude/package.ffg\n\
     \\n\
     \# Then you can access functions as record fields:\n\
-    \let even = prelude.integer.even\n\
+    \let clamp = prelude.integer.clamp\n\
     \\n\
     \in  { \"not\": not\n\
-    \    , \"even\": even\n\
+    \    , \"clamp\": clamp\n\
     \    , \"The entire Prelude\": prelude\n\
     \    }"
 

@@ -1,6 +1,0 @@
-# Tag each element of a `List` with its 0-based index
-let indexed
-      : forall (a : Type) . List a -> List { index: Natural, value: a }
-      = List/indexed
-
-in  indexed
