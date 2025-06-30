@@ -662,6 +662,11 @@ matchLabel :: Token -> Maybe Text
 matchLabel (Grace.Parser.Label l) = Just l
 matchLabel  _                     = Nothing
 
+matchOptionalLabel :: Token -> Maybe Text
+matchOptionalLabel Grace.Parser.Some = Just "some"
+matchOptionalLabel Grace.Parser.Null = Just "null"
+matchOptionalLabel _                 = Nothing
+
 matchAlternative :: Token -> Maybe Text
 matchAlternative (Grace.Parser.Alternative a) = Just a
 matchAlternative  _                           = Nothing
@@ -698,6 +703,9 @@ terminal match = Earley.terminal match'
 label :: Parser r Text
 label = terminal matchLabel
 
+optionalLabel :: Parser r Text
+optionalLabel = terminal matchOptionalLabel
+
 alternative :: Parser r Text
 alternative = terminal matchAlternative
 
@@ -706,13 +714,6 @@ int = terminal matchInt
 
 text :: Parser r Text
 text = terminal matchText
-
-optionalLabel :: Parser r Text
-optionalLabel = terminal matchSome
-  where
-    matchSome Grace.Parser.Some = Just "some"
-    matchSome Grace.Parser.Null = Just "null"
-    matchSome _                 = Nothing
 
 parseToken :: Token -> Parser r ()
 parseToken t = void (Earley.satisfy predicate <?> render t)
@@ -728,6 +729,9 @@ locatedTerminal match = Earley.terminal match'
 
 locatedLabel :: Parser r (Offset, Text)
 locatedLabel = locatedTerminal matchLabel
+
+locatedOptionalLabel :: Parser r (Offset, Text)
+locatedOptionalLabel = locatedTerminal matchOptionalLabel
 
 locatedAlternative :: Parser r (Offset, Text)
 locatedAlternative = locatedTerminal matchAlternative
@@ -1193,7 +1197,12 @@ grammar endsWithBrace = mdo
 
     recordLabel <- rule (optionalLabel <|> label <|> alternative <|> text)
 
-    locatedRecordLabel <- rule (locatedLabel <|> locatedText)
+    locatedRecordLabel <- rule
+        (   locatedOptionalLabel
+        <|> locatedLabel
+        <|> locatedAlternative
+        <|> locatedText
+        )
 
     fieldValue <- rule do
         let setting = do
