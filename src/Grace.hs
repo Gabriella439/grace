@@ -13,7 +13,7 @@ module Grace
     ) where
 
 import Control.Applicative (many, optional, (<|>))
-import Control.Exception.Safe (Exception(..))
+import Control.Exception.Safe (Exception(..), SomeException)
 import Data.Foldable (traverse_)
 import Data.Functor (void)
 import Data.Text (Text)
@@ -26,6 +26,7 @@ import Options.Applicative (Parser, ParserInfo)
 import Prettyprinter (Doc)
 import Prettyprinter.Render.Terminal (AnsiStyle)
 
+import qualified Control.Exception.Safe as Exception
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text.IO
 import qualified GHC.IO.Encoding
@@ -191,7 +192,7 @@ throws (Right result) = do
 
 -- | Command-line entrypoint
 main :: IO ()
-main = do
+main = Exception.handle handler do
     GHC.IO.Encoding.setLocaleEncoding IO.utf8
 
     options <- Options.execParser parserInfo
@@ -330,3 +331,8 @@ main = do
             maybeMethods <- traverse HTTP.getMethods openAIKey
 
             REPL.repl maybeMethods
+  where
+    handler :: SomeException -> IO a
+    handler e = do
+        Text.IO.hPutStrLn IO.stderr (Text.pack (displayException e))
+        Exit.exitFailure
