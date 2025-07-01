@@ -2089,9 +2089,141 @@ infer e₀ = do
             case _L' of
                 Type.Scalar{ scalar = Monotype.Integer } -> return (_L, newMinus)
                 Type.Scalar{ scalar = Monotype.Real    } -> return (_L, newMinus)
-
                 _ -> do
                     Exception.throwIO (InvalidOperands "subtract" (Syntax.location left) _L')
+
+
+        Syntax.Operator{ operator = Syntax.Modulus, .. } -> do
+            newRight <- case right of
+                Syntax.Scalar{ scalar = Syntax.Natural 0 } -> do
+                    Exception.throwIO (ZeroDivisor (Syntax.location right))
+                Syntax.Scalar{ scalar = Syntax.Natural n, location = l } -> do
+                    return Syntax.Scalar{ scalar = Syntax.Natural n, location = l }
+                _ -> do
+                    Exception.throwIO (NeedConcreteDivisor (Syntax.location right))
+
+            _Γ <- get
+
+            let newModulus newLeft = Syntax.Operator{ operator = Syntax.Modulus, left = solveSyntax _Γ newLeft, right = solveSyntax _Γ newRight, .. }
+
+            let natural = do
+                    newLeft <- check left Type.Scalar
+                        { location = operatorLocation
+                        , scalar = Monotype.Natural
+                        }
+
+                    let type_ = Type.Record
+                            { location = operatorLocation
+                            , fields = Type.Fields
+                                [ ( "quotient"
+                                  , Type.Scalar
+                                      { location = operatorLocation
+                                      , scalar = Monotype.Natural
+                                      }
+                                  )
+                                , ( "remainder"
+                                  , Type.Scalar
+                                      { location = operatorLocation
+                                      , scalar = Monotype.Natural
+                                      }
+                                  )
+                                ]
+                                Monotype.EmptyFields
+                            }
+
+                    return (type_, newModulus newLeft)
+
+            let integer = do
+                    newLeft <- check left Type.Scalar
+                        { location = operatorLocation
+                        , scalar = Monotype.Integer
+                        }
+
+                    let type_ = Type.Record
+                            { location = operatorLocation
+                            , fields = Type.Fields
+                                [ ( "quotient"
+                                  , Type.Scalar
+                                      { location = operatorLocation
+                                      , scalar = Monotype.Integer
+                                      }
+                                  )
+                                , ( "remainder"
+                                  , Type.Scalar
+                                      { location = operatorLocation
+                                      , scalar = Monotype.Natural
+                                      }
+                                  )
+                                ]
+                                Monotype.EmptyFields
+                            }
+
+                    return (type_, newModulus newLeft)
+
+            let real = do
+                    newLeft <- check left Type.Scalar
+                        { location = operatorLocation
+                        , scalar = Monotype.Real
+                        }
+
+                    let type_ = Type.Record
+                            { location = operatorLocation
+                            , fields = Type.Fields
+                                [ ( "quotient"
+                                  , Type.Scalar
+                                      { location = operatorLocation
+                                      , scalar = Monotype.Integer
+                                      }
+                                  )
+                                , ( "remainder"
+                                  , Type.Scalar
+                                      { location = operatorLocation
+                                      , scalar = Monotype.Real
+                                      }
+                                  )
+                                ]
+                                Monotype.EmptyFields
+                            }
+
+                    return (type_, newModulus newLeft)
+
+            natural `Exception.catch` \(_ :: TypeInferenceError) -> do
+                set _Γ
+
+                integer `Exception.catch` \(_ :: TypeInferenceError) -> do
+                    set _Γ
+
+                    real
+
+        Syntax.Operator{ operator = Syntax.Divide, .. } -> do
+            newRight <- case right of
+                Syntax.Scalar{ scalar = Syntax.Natural 0 } -> do
+                    Exception.throwIO (ZeroDivisor (Syntax.location right))
+                Syntax.Scalar{ scalar = Syntax.Integer 0 } -> do
+                    Exception.throwIO (ZeroDivisor (Syntax.location right))
+                Syntax.Scalar{ scalar = Syntax.Real 0 } -> do
+                    Exception.throwIO (ZeroDivisor (Syntax.location right))
+                Syntax.Scalar{ scalar = Syntax.Natural n, location = l } -> do
+                    return Syntax.Scalar{ scalar = Syntax.Real (fromIntegral n), location = l }
+                Syntax.Scalar{ scalar = Syntax.Integer n, location = l } -> do
+                    return Syntax.Scalar{ scalar = Syntax.Real (fromInteger n), location = l }
+                Syntax.Scalar{ scalar = Syntax.Real n, location = l } -> do
+                    return Syntax.Scalar{ scalar = Syntax.Real n, location = l }
+                _ -> do
+                    Exception.throwIO (NeedConcreteDivisor (Syntax.location right))
+
+            newLeft  <- check left Type.Scalar{ location = operatorLocation, scalar = Monotype.Real }
+
+            _Γ <- get
+
+            let newDivide = Syntax.Operator{ operator = Syntax.Divide, left = solveSyntax _Γ newLeft, right = solveSyntax _Γ newRight, .. }
+
+            let type_ = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Real
+                    }
+
+            return (type_, newDivide)
 
         Syntax.Builtin{ builtin = Syntax.Some, .. }-> do
             return
@@ -2753,6 +2885,8 @@ data TypeInferenceError
     | IllFormedType Location (Type Location) (Context Location)
     --
     | InvalidOperands Text Location (Type Location)
+    | ZeroDivisor Location
+    | NeedConcreteDivisor Location
     --
     | FoldConcreteRecord Location (Type Location)
     | FoldInvalidHandler Location (Type Location)
@@ -2826,6 +2960,20 @@ instance Exception TypeInferenceError where
         \You cannot " <> Text.unpack action <> " values of type:\n\
         \\n\
         \" <> insert _L' <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" location)
+
+    displayException (ZeroDivisor location) =
+        "Zero divisor\n\
+        \\n\
+        \You cannot divide a number by zero:\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" location)
+
+    displayException (NeedConcreteDivisor location) =
+        "Divisor must be concrete\n\
+        \\n\
+        \You must divide by a concrete (non-abstract) numeric literal:\n\
         \\n\
         \" <> Text.unpack (Location.renderError "" location)
 

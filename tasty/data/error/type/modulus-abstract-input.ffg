@@ -1,0 +1,3 @@
+let f x = 3 % x
+
+in f 0

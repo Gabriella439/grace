@@ -114,6 +114,8 @@ lexToken =
             , Grace.Parser.And                <$ symbol "&&"
             , Grace.Parser.Plus               <$ symbol "+"
             , Grace.Parser.Times              <$ symbol "*"
+            , Grace.Parser.Modulus            <$ symbol "%"
+            , Grace.Parser.ForwardSlash       <$ symbol "/"
             , Grace.Parser.DoubleEquals       <$ symbol "=="
             , Grace.Parser.NotEqual           <$ symbol "!="
             , Grace.Parser.LessThanOrEqual    <$ symbol "<="
@@ -232,7 +234,7 @@ lexNumber = try lexInteger <|> try lexScientific
         return (RealLiteral sign scientific)
 
 lexFile :: Lexer Token
-lexFile = lexeme do
+lexFile = (lexeme . try) do
     prefix <- ("../" <|> ("" <$ "./") <|> "/") Megaparsec.<?> "path character"
 
     let isPath c =
@@ -574,6 +576,7 @@ data Token
     | Dot
     | DoubleEquals
     | Fold
+    | ForwardSlash
     | Real
     | RealLiteral Sign Scientific
     | Show
@@ -603,6 +606,7 @@ data Token
     | ListLength
     | ListTake
     | Map
+    | Modulus
     | Natural
     | NotEqual
     | Null
@@ -785,6 +789,7 @@ render t = case t of
     Grace.Parser.Fields             -> "Fields"
     Grace.Parser.File _             -> "a file"
     Grace.Parser.Forall             -> "forall"
+    Grace.Parser.ForwardSlash       -> "/"
     Grace.Parser.GreaterThanOrEqual -> ">="
     Grace.Parser.If                 -> "if"
     Grace.Parser.In                 -> "in"
@@ -806,6 +811,7 @@ render t = case t of
     Grace.Parser.ListTake           -> "List/take"
     Grace.Parser.Fold               -> "fold"
     Grace.Parser.Map                -> "map"
+    Grace.Parser.Modulus            -> "%"
     Grace.Parser.Natural            -> "Natural"
     Grace.Parser.NotEqual           -> "!="
     Grace.Parser.Null               -> "null"
@@ -936,7 +942,11 @@ grammar endsWithBrace = mdo
 
     minusExpression <- rule (op Grace.Parser.Dash Syntax.Minus timesExpression)
 
-    timesExpression <- rule (op Grace.Parser.Times Syntax.Times applicationExpression)
+    timesExpression <- rule (op Grace.Parser.Times Syntax.Times modulusExpression)
+
+    modulusExpression <- rule (op Grace.Parser.Modulus Syntax.Modulus divideExpression)
+
+    divideExpression <- rule (op Grace.Parser.ForwardSlash Syntax.Divide applicationExpression)
 
     let application function argument =
             Syntax.Application{ location = Syntax.location function, .. }

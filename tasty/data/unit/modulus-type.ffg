@@ -1,0 +1,1 @@
+{ quotient: Natural, remainder: Natural }

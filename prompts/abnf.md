@@ -85,14 +85,10 @@ if = "if" expression "then" expression "else" expression
 annotation = application *( operator application ) ":" type
 
 ; Operators in descending order of precedence
-;
-; Grace does not support the following operators:
-;
-; - division (`/`)
-;
-;   Grace does not support division at all.
 operator
-    = "*"
+    = "/"
+    / "%"
+    / "*"
     / "-"
     / "+"
     / ">="

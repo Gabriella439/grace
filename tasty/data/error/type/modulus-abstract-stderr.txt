@@ -1,0 +1,8 @@
+Divisor must be concrete
+
+You must divide by a concrete (non-abstract) numeric literal:
+
+tasty/data/error/type/modulus-abstract-input.ffg:1:15: 
+  │
+1 │ let f x = 3 % x
+  │               ↑

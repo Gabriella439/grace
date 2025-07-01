@@ -466,6 +466,14 @@ data Operator
     -- ^
     --   >>> pretty Times
     --   *
+    | Modulus
+    -- ^
+    --   >>> pretty Modulus
+    --   %
+    | Divide
+    -- ^
+    --   >>> pretty Divide
+    --   /
     deriving (Eq, Generic, Lift, Show)
 
 instance Pretty Operator where
@@ -480,6 +488,8 @@ instance Pretty Operator where
     pretty Plus               = Pretty.operator "+"
     pretty Minus              = Pretty.operator "-"
     pretty Times              = Pretty.operator "*"
+    pretty Modulus            = Pretty.operator "%"
+    pretty Divide             = Pretty.operator "/"
 
 -- | A built-in function
 data Builtin
@@ -752,7 +762,13 @@ prettyMinusExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
 prettyMinusExpression = prettyOperator Minus prettyTimesExpression
 
 prettyTimesExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
-prettyTimesExpression = prettyOperator Times prettyApplicationExpression
+prettyTimesExpression = prettyOperator Times prettyModulusExpression
+
+prettyModulusExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
+prettyModulusExpression = prettyOperator Modulus prettyDivideExpression
+
+prettyDivideExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
+prettyDivideExpression = prettyOperator Divide prettyApplicationExpression
 
 prettyApplicationExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
 prettyApplicationExpression expression

@@ -799,6 +799,62 @@ evaluate maybeMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                     _ ->
                         error "Grace.Normalize.evaluate: - arguments must be numeric values of the same type"
 
+            Syntax.Operator{ operator = Syntax.Modulus, .. } -> do
+                left'  <- loop env left
+                right' <- loop env right
+
+                pure do
+                    let divisor = case right' of
+                            Value.Scalar (Natural n) -> n
+                            _ -> error "Grace.Normalize.evaluate: right argument to * must be a Natural number literal"
+
+                    let (quotient, remainder) = case left' of
+                            Value.Scalar (Natural n) ->
+                                ( Value.Scalar (Natural q)
+                                , Value.Scalar (Natural r)
+                                )
+                              where
+                                (q, r) = n `divMod` divisor
+                            Value.Scalar (Integer n) ->
+                                ( Value.Scalar (Integer q)
+                                , Value.Scalar (Integer r)
+                                )
+                              where
+                                (q, r) = n `divMod` fromIntegral divisor
+                            Value.Scalar (Real x) ->
+                                ( Value.Scalar (Integer q)
+                                , Value.Scalar (Real (fromIntegral r + f'))
+                                )
+                              where
+                                (n, f) = properFraction x
+
+                                (n', f')
+                                    | f < 0     = (n - 1, f + 1)
+                                    | otherwise = (n, f)
+
+                                (q, r) =
+                                    n' `divMod` fromIntegral divisor
+                            _ ->
+                                error "Grace.Normalize.evaluate: left argument to % must be a numeric value"
+
+                    Value.Record
+                        [ ("quotient", quotient)
+                        , ("remainder", remainder)
+                        ]
+
+            Syntax.Operator{ operator = Syntax.Divide, .. } -> do
+                left'  <- loop env left
+                right' <- loop env right
+
+                return case (left', right') of
+                    (Value.Scalar (Real m), Value.Scalar (Real n)) ->
+                        Value.Scalar
+                            (Real
+                                (Scientific.fromFloatDigits (Scientific.toRealFloat m / Scientific.toRealFloat n :: Double))
+                            )
+                    _ ->
+                        error "Grace.Normalize.evaluate: * arguments must be real numbers"
+
             Syntax.Builtin{..} ->
                 pure (Value.Builtin builtin)
 

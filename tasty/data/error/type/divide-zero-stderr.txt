@@ -1,0 +1,8 @@
+Zero divisor
+
+You cannot divide a number by zero:
+
+tasty/data/error/type/divide-zero-input.ffg:1:5: 
+  │
+1 │ 1 / 0
+  │     ↑

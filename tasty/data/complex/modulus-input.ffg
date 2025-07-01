@@ -1,0 +1,4 @@
+{ naturals: map (\n -> (n : Natural) % 3) [ 0, 1, 2, 3 ]
+, integers: map (\n -> (n : Integer) % 3) [ -3, -2, -1, 0, 1, 2, 3 ]
+, reals: map (\n -> (n : Real) % 3) [ -3.1, -3, -2.9, -0.1, 0, 0.1, 2.9, 3, 3.1 ]
+}

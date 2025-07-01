@@ -1,0 +1,24 @@
+{ "naturals": [ { "quotient": 0, "remainder": 0 }
+              , { "quotient": 0, "remainder": 1 }
+              , { "quotient": 0, "remainder": 2 }
+              , { "quotient": 1, "remainder": 0 }
+              ]
+, "integers": [ { "quotient": -1, "remainder": 0 }
+              , { "quotient": -1, "remainder": 1 }
+              , { "quotient": -1, "remainder": 2 }
+              , { "quotient": 0, "remainder": 0 }
+              , { "quotient": 0, "remainder": 1 }
+              , { "quotient": 0, "remainder": 2 }
+              , { "quotient": 1, "remainder": 0 }
+              ]
+, "reals": [ { "quotient": -2, "remainder": 2.9 }
+           , { "quotient": -1, "remainder": 0.0 }
+           , { "quotient": -1, "remainder": 0.1 }
+           , { "quotient": -1, "remainder": 2.9 }
+           , { "quotient": 0, "remainder": 0.0 }
+           , { "quotient": 0, "remainder": 0.1 }
+           , { "quotient": 0, "remainder": 2.9 }
+           , { "quotient": 1, "remainder": 0.0 }
+           , { "quotient": 1, "remainder": 0.1 }
+           ]
+}
