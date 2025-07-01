@@ -1184,8 +1184,6 @@ builtinsExample =
     \, \"List/length\": List/length\n\
     \, \"map\": map\n\
     \, \"List/take\": List/take\n\
-    \, \"Integer/even\": Integer/even\n\
-    \, \"Integer/odd\": Integer/odd\n\
     \}"
 
 preludeExample :: Text

@@ -2695,20 +2695,6 @@ infer e₀ = do
                 , Syntax.Builtin{ builtin = Syntax.Abs, .. }
                 )
 
-        Syntax.Builtin{ builtin = Syntax.IntegerEven, .. } -> do
-            return
-                (   Type.Scalar{ scalar = Monotype.Integer, .. }
-                ~>  Type.Scalar{ scalar = Monotype.Bool, .. }
-                , Syntax.Builtin{ builtin = Syntax.IntegerEven, .. }
-                )
-
-        Syntax.Builtin{ builtin = Syntax.IntegerOdd, .. } -> do
-            return
-                (   Type.Scalar{ scalar = Monotype.Integer, .. }
-                ~>  Type.Scalar{ scalar = Monotype.Bool, .. }
-                , Syntax.Builtin{ builtin = Syntax.IntegerOdd, .. }
-                )
-
         Syntax.Builtin{ builtin = Syntax.ListTake, .. } -> do
             return
                 ( Type.Forall

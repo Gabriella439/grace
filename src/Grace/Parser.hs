@@ -147,8 +147,6 @@ lexToken =
             , Grace.Parser.ListLength     <$ symbol "List/length"
             , Grace.Parser.Map            <$ symbol "map"
             , Grace.Parser.ListTake       <$ symbol "List/take"
-            , Grace.Parser.IntegerEven    <$ symbol "Integer/even"
-            , Grace.Parser.IntegerOdd     <$ symbol "Integer/odd"
             , Grace.Parser.False_         <$ symbol "false"
             , Grace.Parser.True_          <$ symbol "true"
             , Grace.Parser.Some           <$ symbol "some"
@@ -463,8 +461,6 @@ reserved =
         , "Real/equal"
         , "Fields"
         , "Integer"
-        , "Integer/even"
-        , "Integer/odd"
         , "List"
         , "List/drop"
         , "List/equal"
@@ -591,8 +587,6 @@ data Token
     | In
     | Int Sign Int
     | Integer
-    | IntegerEven
-    | IntegerOdd
     | JSON
     | Label Text
     | Lambda
@@ -795,8 +789,6 @@ render t = case t of
     Grace.Parser.In                 -> "in"
     Grace.Parser.Int _ _            -> "an integer literal"
     Grace.Parser.Integer            -> "Integer"
-    Grace.Parser.IntegerEven        -> "Integer/even"
-    Grace.Parser.IntegerOdd         -> "Integer/odd"
     Grace.Parser.JSON               -> "JSON"
     Grace.Parser.Label _            -> "a label"
     Grace.Parser.Lambda             -> "\\"
@@ -1123,14 +1115,6 @@ grammar endsWithBrace = mdo
         <|> do  location <- locatedToken Grace.Parser.Abs
 
                 return Syntax.Builtin{ builtin = Syntax.Abs, .. }
-
-        <|> do  location <- locatedToken Grace.Parser.IntegerEven
-
-                return Syntax.Builtin{ builtin = Syntax.IntegerEven, .. }
-
-        <|> do  location <- locatedToken Grace.Parser.IntegerOdd
-
-                return Syntax.Builtin{ builtin = Syntax.IntegerOdd, .. }
 
         <|> do  ~(location, chunks) <- locatedChunks
 

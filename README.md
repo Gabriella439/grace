@@ -477,8 +477,6 @@ Left 1 : forall (a : Alternatives) . < Left: Natural | a >
 [ Left 1, Right true ]
   : forall (a : Alternatives) . List < Left: Natural | Right: Bool | a >
 
-Integer/even : Integer -> Bool
-
 [ 1, true ] : JSON  # Any expression that is valid JSON type-checks as `JSON`
 ```
 
@@ -575,12 +573,6 @@ map : forall (a : Type) . forall (b : Type) . (a -> b) -> List a -> List b
 
 # Take the first N elements of a list
 List/take : forall (a : Type) . Natural -> List a -> List a
-
-# Returns `true` if the `Integer` is even
-Integer/even : Integer -> Bool
-
-# Returns `true` if the `Integer` is false
-Integer/odd : Integer -> Bool
 
 # Compute the absolute value of an `Integer`
 abs : Integer -> Natural

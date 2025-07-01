@@ -1007,10 +1007,6 @@ apply maybeMethods function₀ argument₀ = runConcurrently (loop function₀ a
         (Value.List elements) = do
             newElements <- traverse (loop f) elements
             return (Value.List newElements)
-    loop (Value.Builtin IntegerEven) (Value.Scalar (Integer n)) =
-        pure (Value.Scalar (Bool (even n)))
-    loop (Value.Builtin IntegerOdd) (Value.Scalar (Integer n)) =
-        pure (Value.Scalar (Bool (odd n)))
     loop (Value.Builtin Abs) (Value.Scalar (Integer n)) =
         pure (Value.Scalar (Natural (fromInteger (abs n))))
     loop (Value.Builtin Show) v = do

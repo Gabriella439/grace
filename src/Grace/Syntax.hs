@@ -537,14 +537,6 @@ data Builtin
     -- ^
     --   >>> pretty ListTake
     --   List/take
-    | IntegerEven
-    -- ^
-    --   >>> pretty IntegerEven
-    --   Integer/even
-    | IntegerOdd
-    -- ^
-    --   >>> pretty IntegerOdd
-    --   Integer/odd
     deriving (Bounded, Enum, Eq, Generic, Lift, Show)
 
 instance Pretty Builtin where
@@ -552,8 +544,6 @@ instance Pretty Builtin where
     pretty Some           = Pretty.builtin "some"
     pretty Show           = Pretty.builtin "show"
     pretty YAML           = Pretty.builtin "yaml"
-    pretty IntegerEven    = Pretty.builtin "Integer/even"
-    pretty IntegerOdd     = Pretty.builtin "Integer/odd"
     pretty ListDrop       = Pretty.builtin "List/drop"
     pretty ListHead       = Pretty.builtin "List/head"
     pretty ListIndexed    = Pretty.builtin "List/indexed"

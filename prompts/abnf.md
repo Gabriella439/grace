@@ -213,8 +213,6 @@ builtin
     / "List/length"     ; forall (a : Type) . List a -> Natural
     / "map"             ; forall (a : Type) (b : Type) . (a -> b) -> List a -> List b
     / "List/take"       ; forall (a : Type) . Natural -> List a -> List a
-    / "Integer/even"    ; Integer -> Bool
-    / "Integer/odd"     ; Integer -> Bool
     / "abs"             ; Integer -> Natural
 
 type = quantified-type
