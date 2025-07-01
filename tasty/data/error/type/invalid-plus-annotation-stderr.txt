@@ -1,10 +1,13 @@
 Invalid operands
 
-You cannot add values of type:
-
-  Bool
+You cannot add the following operands:
 
 tasty/data/error/type/invalid-plus-annotation-input.ffg:2:2: 
   │
 2 │ (true + true) : Bool
   │  ↑
+
+tasty/data/error/type/invalid-plus-annotation-input.ffg:2:9: 
+  │
+2 │ (true + true) : Bool
+  │         ↑

@@ -1,18 +1,41 @@
-# This test exercises all of the permitted types that you can add and multiply
-{ a: 1 + 1
-, b: -1 + -1
-, c: 1.1 + 1.1
-, d: "A" + "B"
-, e: [ true ] + [ true ]
-, f: 1 * 1
-, g: -1 * -1
-, h: 1.1 * 1.1
-, i: (1 + 1) : Natural
-, j: (-1 + -1) : Integer
-, k: (1.0 + 1.0) : Real
-, l: ("A" + "B") : Text
-, m: ([ true ] + [ true ]) : List Bool
-, n: (1 * 1) : Natural
-, o: (-1 * -1) : Integer
-, p: (1.1 * 1.1) : Real
+# This test exercises all of the various arithmetic permutations to make sure
+# that they work without type annotations and produce a result of the desired
+# output type
+{ add0: 2 + 2
+, add1: 2 + -3
+, add2: 2 + 0.1
+, add3: "A" + "B"
+, add4: [ true ] + [ false ]
+
+, multiply0: 2 * 2
+, multiply1: 2 * -3
+, multiply2: 2 * 0.1
+
+, subtract0: 2 - 2
+, subtract1: 2 - -3
+, subtract2: 2 - 0.1
+
+, divide0: 2 / 2
+, divide1: 2 / -3
+, divide2: 2 / 0.1
+
+, modulus0: 2 % 2
+, modulus1: -3 % 2
+, modulus2: 0.1 % 2
+
+, lessThan0: 2 < 2
+, lessThan1: 2 < -3
+, lessThan2: 2 < 0.1
+
+, lessThanOrEqual0: 2 <= 2
+, lessThanOrEqual1: 2 <= -3
+, lessThanOrEqual2: 2 <= 0.1
+
+, greaterThan0: 2 > 2
+, greaterThan1: 2 > -3
+, greaterThan2: 2 > 0.1
+
+, greaterThanOrEqual0: 2 >= 2
+, greaterThanOrEqual1: 2 >= -3
+, greaterThanOrEqual2: 2 >= 0.1
 }

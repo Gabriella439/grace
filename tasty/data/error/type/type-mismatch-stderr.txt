@@ -1,17 +1,11 @@
-Not a subtype
+Invalid operands
 
-The following type:
-
-  Natural
+You cannot add the following operands:
 
 tasty/data/error/type/type-mismatch-input.ffg:1:1: 
   │
 1 │ 1 + true
   │ ↑
-
-… cannot be a subtype of:
-
-  Bool
 
 tasty/data/error/type/type-mismatch-input.ffg:1:5: 
   │

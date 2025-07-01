@@ -1817,34 +1817,58 @@ infer e₀ = do
             return (Type.Optional{ type_ = Type.UnsolvedType{..}, .. }, Syntax.Scalar{ scalar = Syntax.Null, .. })
 
         Syntax.Operator{ operator = Syntax.And, .. } -> do
-            newLeft <- check left  Type.Scalar{ scalar = Monotype.Bool, location = operatorLocation }
-            newRight <- check right Type.Scalar{ scalar = Monotype.Bool, location = operatorLocation }
+            let bool = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Bool
+                    }
 
-            _Γ <- get
+            newLeft  <- check left  bool
+            newRight <- check right bool
 
-            return (Type.Scalar{ scalar = Monotype.Bool, location = operatorLocation }, Syntax.Operator{ operator = Syntax.And, left = solveSyntax _Γ newLeft, right = solveSyntax _Γ newRight, .. })
+            context₁ <- get
+
+            let newOperator = Syntax.Operator
+                    { location
+                    , left = solveSyntax context₁ newLeft
+                    , operatorLocation
+                    , operator = Syntax.And
+                    , right = solveSyntax context₁ newRight
+                    }
+
+            return (bool, newOperator)
 
         Syntax.Operator{ operator = Syntax.Or, .. } -> do
-            newLeft <- check left  Type.Scalar{ scalar = Monotype.Bool, location = operatorLocation }
-            newRight <- check right Type.Scalar{ scalar = Monotype.Bool, location = operatorLocation }
+            let bool = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Bool
+                    }
 
-            _Γ <- get
+            newLeft  <- check left  bool
+            newRight <- check right bool
 
-            return (Type.Scalar{ scalar = Monotype.Bool, location = operatorLocation }, Syntax.Operator{ operator = Syntax.Or, left = solveSyntax _Γ newLeft, right = solveSyntax _Γ newRight, .. })
+            context₁ <- get
+
+            let newOperator = Syntax.Operator
+                    { location
+                    , left = solveSyntax context₁ newLeft
+                    , operatorLocation
+                    , operator = Syntax.Or
+                    , right = solveSyntax context₁ newRight
+                    }
+
+            return (bool, newOperator)
 
         Syntax.Operator{ operator = Syntax.Equal, .. } -> do
-            (_L, newLeft) <- infer left
+            (_L, newLeft ) <- infer left
             (_R, newRight) <- infer right
 
             _ <- check left  _R
             _ <- check right _L
 
-            _Γ <- get
+            context₁ <- get
 
-            let _L' = Context.solveType _Γ _L
-            let _R' = Context.solveType _Γ _R
-
-            let newEquals = Syntax.Operator{ operator = Syntax.Equal, left = solveSyntax _Γ newLeft, right = solveSyntax _Γ newRight, .. }
+            let _L' = Context.solveType context₁ _L
+            let _R' = Context.solveType context₁ _R
 
             let isEquatable Type.VariableType{ } =
                     False
@@ -1869,25 +1893,34 @@ infer e₀ = do
                 isEquatable Type.Union{ } =
                     False
 
-            let bool = Type.Scalar{ scalar = Monotype.Bool, location = operatorLocation }
+            let bool = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Bool
+                    }
+
+            let newOperator = Syntax.Operator
+                    { location
+                    , left = solveSyntax context₁ newLeft
+                    , operatorLocation
+                    , operator = Syntax.Equal
+                    , right = solveSyntax context₁ newRight
+                    }
 
             if isEquatable _L' && isEquatable _R'
-                then return (bool, newEquals)
-                else Exception.throwIO (InvalidOperands "compare" (Syntax.location left) _L')
+                then return (bool, newOperator)
+                else Exception.throwIO (InvalidOperands "compare" (Syntax.location left) (Syntax.location right))
 
         Syntax.Operator{ operator = Syntax.NotEqual, .. } -> do
-            (_L, newLeft) <- infer left
+            (_L, newLeft ) <- infer left
             (_R, newRight) <- infer right
 
             _ <- check left  _R
             _ <- check right _L
 
-            _Γ <- get
+            context₁ <- get
 
-            let _L' = Context.solveType _Γ _L
-            let _R' = Context.solveType _Γ _R
-
-            let newNotEquals = Syntax.Operator{ operator = Syntax.NotEqual, left = solveSyntax _Γ newLeft, right = solveSyntax _Γ newRight, .. }
+            let _L' = Context.solveType context₁ _L
+            let _R' = Context.solveType context₁ _R
 
             let isEquatable Type.VariableType{ } =
                     False
@@ -1912,188 +1945,425 @@ infer e₀ = do
                 isEquatable Type.Union{ } =
                     False
 
-            let bool = Type.Scalar{ scalar = Monotype.Bool, location = operatorLocation }
+            let bool = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Bool
+                    }
+
+            let newOperator = Syntax.Operator
+                    { location
+                    , left = solveSyntax context₁ newLeft
+                    , operatorLocation
+                    , operator = Syntax.NotEqual
+                    , right = solveSyntax context₁ newRight
+                    }
 
             if isEquatable _L' && isEquatable _R'
-                then return (bool, newNotEquals)
-                else Exception.throwIO (InvalidOperands "compare" (Syntax.location left) _L')
+                then return (bool, newOperator)
+                else Exception.throwIO (InvalidOperands "compare" (Syntax.location left) (Syntax.location right))
 
         Syntax.Operator{ operator = Syntax.LessThan, .. } -> do
-            let real =
-                    Type.Scalar
-                        { scalar = Monotype.Real
-                        , location = operatorLocation
-                        }
+            let real = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Real
+                    }
 
             newLeft  <- check left  real
             newRight <- check right real
 
-            let bool =
-                    Type.Scalar
-                        { scalar = Monotype.Bool
-                        , location = operatorLocation
+            let bool = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Bool
+                    }
+
+            context₁ <- get
+
+            let newOperator = Syntax.Operator
+                        { location
+                        , left = solveSyntax context₁ newLeft
+                        , operatorLocation
+                        , operator = Syntax.LessThan
+                        , right = solveSyntax context₁ newRight
                         }
 
-            _Γ <- get
-
-            let newLessThan =
-                    Syntax.Operator
-                        { operator = Syntax.LessThan
-                        , left = solveSyntax _Γ newLeft
-                        , right = solveSyntax _Γ newRight
-                        , ..
-                        }
-
-            return (bool, newLessThan)
+            return (bool, newOperator)
 
         Syntax.Operator{ operator = Syntax.LessThanOrEqual, .. } -> do
-            let real =
-                    Type.Scalar
-                        { scalar = Monotype.Real
-                        , location = operatorLocation
-                        }
+            let real = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Real
+                    }
 
             newLeft  <- check left  real
             newRight <- check right real
 
-            let bool =
-                    Type.Scalar
-                        { scalar = Monotype.Bool
-                        , location = operatorLocation
+            let bool = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Bool
+                    }
+
+            context₁ <- get
+
+            let newOperator = Syntax.Operator
+                        { location
+                        , left = solveSyntax context₁ newLeft
+                        , operatorLocation
+                        , operator = Syntax.LessThanOrEqual
+                        , right = solveSyntax context₁ newRight
                         }
 
-            _Γ <- get
-
-            let newLessThanOrEqual =
-                    Syntax.Operator
-                        { operator = Syntax.LessThanOrEqual
-                        , left = solveSyntax _Γ newLeft
-                        , right = solveSyntax _Γ newRight
-                        , ..
-                        }
-
-            return (bool, newLessThanOrEqual)
+            return (bool, newOperator)
 
         Syntax.Operator{ operator = Syntax.GreaterThan, .. } -> do
-            let real =
-                    Type.Scalar
-                        { scalar = Monotype.Real
-                        , location = operatorLocation
-                        }
+            let real = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Real
+                    }
 
             newLeft  <- check left  real
             newRight <- check right real
 
-            let bool =
-                    Type.Scalar
-                        { scalar = Monotype.Bool
-                        , location = operatorLocation
+            let bool = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Bool
+                    }
+
+            context₁ <- get
+
+            let newOperator = Syntax.Operator
+                        { location
+                        , left = solveSyntax context₁ newLeft
+                        , operatorLocation
+                        , operator = Syntax.GreaterThan
+                        , right = solveSyntax context₁ newRight
                         }
 
-            _Γ <- get
-
-            let newGreaterThan =
-                    Syntax.Operator
-                        { operator = Syntax.GreaterThan
-                        , left = solveSyntax _Γ newLeft
-                        , right = solveSyntax _Γ newRight
-                        , ..
-                        }
-
-            return (bool, newGreaterThan)
+            return (bool, newOperator)
 
         Syntax.Operator{ operator = Syntax.GreaterThanOrEqual, .. } -> do
-            let real =
-                    Type.Scalar
-                        { scalar = Monotype.Real
-                        , location = operatorLocation
-                        }
+            let real = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Real
+                    }
 
             newLeft  <- check left  real
             newRight <- check right real
 
-            let bool =
-                    Type.Scalar
-                        { scalar = Monotype.Bool
-                        , location = operatorLocation
+            let bool = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Bool
+                    }
+
+            context₁ <- get
+
+            let newOperator = Syntax.Operator
+                        { location
+                        , left = solveSyntax context₁ newLeft
+                        , operatorLocation
+                        , operator = Syntax.GreaterThanOrEqual
+                        , right = solveSyntax context₁ newRight
                         }
 
-            _Γ <- get
-
-            let newGreaterThanOrEqual =
-                    Syntax.Operator
-                        { operator = Syntax.GreaterThanOrEqual
-                        , left = solveSyntax _Γ newLeft
-                        , right = solveSyntax _Γ newRight
-                        , ..
-                        }
-
-            return (bool, newGreaterThanOrEqual)
+            return (bool, newOperator)
 
         Syntax.Operator{ operator = Syntax.Times, .. } -> do
-            (_L, newLeft ) <- infer left
-            (_R, newRight) <- infer right
+            context₁ <- get
 
-            _ <- check left  _R
-            _ <- check right _L
+            let natural = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Natural
+                    }
 
-            _Γ <- get
+            let integer = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Integer
+                    }
 
-            let _L' = Context.solveType _Γ _L
+            let real = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Real
+                    }
 
-            let newTimes = Syntax.Operator{ operator = Syntax.Times, left = solveSyntax _Γ newLeft, right = solveSyntax _Γ newRight, .. }
+            let naturalArguments = do
+                    newLeft  <- check left  natural
+                    newRight <- check right natural
 
-            case _L' of
-                Type.Scalar{ scalar = Monotype.Natural } -> return (_L, newTimes)
-                Type.Scalar{ scalar = Monotype.Integer } -> return (_L, newTimes)
-                Type.Scalar{ scalar = Monotype.Real    } -> return (_L, newTimes)
-                _ -> do
-                    Exception.throwIO (InvalidOperands "multiply" (Syntax.location left) _L')
+                    context₂ <- get
+
+                    let newOperator = Syntax.Operator
+                            { location
+                            , left = solveSyntax context₂ newLeft
+                            , operatorLocation
+                            , operator = Syntax.Times
+                            , right = solveSyntax context₂ newRight
+                            }
+
+                    return (natural, newOperator)
+
+            let integerArguments = do
+                    newLeft  <- check left  integer
+                    newRight <- check right integer
+
+                    context₂ <- get
+
+                    let newOperator = Syntax.Operator
+                            { location
+                            , left = solveSyntax context₂ newLeft
+                            , operatorLocation
+                            , operator = Syntax.Times
+                            , right = solveSyntax context₂ newRight
+                            }
+
+                    return (integer, newOperator)
+
+            let realArguments = do
+                    newLeft  <- check left  real
+                    newRight <- check right real
+
+                    context₂ <- get
+
+                    let newOperator = Syntax.Operator
+                            { location
+                            , left = solveSyntax context₂ newLeft
+                            , operatorLocation
+                            , operator = Syntax.Times
+                            , right = solveSyntax context₂ newRight
+                            }
+
+                    return (real, newOperator)
+
+            naturalArguments `Exception.catch` \(_ :: TypeInferenceError) -> do
+                set context₁
+
+                integerArguments `Exception.catch` \(_ :: TypeInferenceError) -> do
+                    set context₁
+
+                    realArguments `Exception.catch` \(_ :: TypeInferenceError) -> do
+                        Exception.throwIO (InvalidOperands "multiply" (Syntax.location left) (Syntax.location right))
 
         Syntax.Operator{ operator = Syntax.Plus, .. } -> do
-            (_L, newLeft ) <- infer left
-            (_R, newRight) <- infer right
+            context₁ <- get
 
-            _ <- check left  _R
-            _ <- check right _L
+            let natural = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Natural
+                    }
 
-            _Γ <- get
+            let integer = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Integer
+                    }
 
-            let _L' = Context.solveType _Γ _L
+            let real = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Real
+                    }
 
-            let newPlus = Syntax.Operator{ operator = Syntax.Plus, left = solveSyntax _Γ newLeft, right = solveSyntax _Γ newRight, .. }
+            let text = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Text
+                    }
 
-            case _L' of
-                Type.Scalar{ scalar = Monotype.Natural } -> return (_L, newPlus)
-                Type.Scalar{ scalar = Monotype.Integer } -> return (_L, newPlus)
-                Type.Scalar{ scalar = Monotype.Real    } -> return (_L, newPlus)
-                Type.Scalar{ scalar = Monotype.Text    } -> return (_L, newPlus)
-                Type.List{}                              -> return (_L, newPlus)
+            let naturalArguments = do
+                    newLeft  <- check left  natural
+                    newRight <- check right natural
 
-                _ -> do
-                    Exception.throwIO (InvalidOperands "add" (Syntax.location left) _L')
+                    context₂ <- get
+
+                    let newOperator = Syntax.Operator
+                            { location
+                            , left = solveSyntax context₂ newLeft
+                            , operatorLocation
+                            , operator = Syntax.Plus
+                            , right = solveSyntax context₂ newRight
+                            }
+
+                    return (natural, newOperator)
+
+            let integerArguments = do
+                    newLeft  <- check left  integer
+                    newRight <- check right integer
+
+                    context₂ <- get
+
+                    let newOperator = Syntax.Operator
+                            { location
+                            , left = solveSyntax context₂ newLeft
+                            , operatorLocation
+                            , operator = Syntax.Plus
+                            , right = solveSyntax context₂ newRight
+                            }
+
+                    return (integer, newOperator)
+
+            let realArguments = do
+                    newLeft  <- check left  real
+                    newRight <- check right real
+
+                    context₂ <- get
+
+                    let newOperator = Syntax.Operator
+                            { location
+                            , left = solveSyntax context₂ newLeft
+                            , operatorLocation
+                            , operator = Syntax.Plus
+                            , right = solveSyntax context₂ newRight
+                            }
+
+                    return (real, newOperator)
+
+            let textArguments = do
+                    newLeft  <- check left  text
+                    newRight <- check right text
+
+                    context₂ <- get
+
+                    let newOperator = Syntax.Operator
+                            { location
+                            , left = solveSyntax context₂ newLeft
+                            , operatorLocation
+                            , operator = Syntax.Plus
+                            , right = solveSyntax context₂ newRight
+                            }
+
+                    return (text, newOperator)
+
+            let listArguments = do
+                    existential <- fresh
+
+                    push (Context.UnsolvedType existential)
+
+                    let element = Type.UnsolvedType
+                            { location = operatorLocation
+                            , existential
+                            }
+
+                    let list = Type.List
+                            { location = operatorLocation
+                            , type_ = element
+                            }
+
+                    newLeft  <- check left  list
+                    newRight <- check right list
+
+                    context₂ <- get
+
+                    let newOperator = Syntax.Operator
+                            { location
+                            , left = solveSyntax context₂ newLeft
+                            , operatorLocation
+                            , operator = Syntax.Plus
+                            , right = solveSyntax context₂ newRight
+                            }
+
+                    return (list, newOperator)
+
+            listArguments `Exception.catch` \(_ :: TypeInferenceError) -> do
+                set context₁
+
+                textArguments `Exception.catch` \(_ :: TypeInferenceError) -> do
+                    set context₁
+
+                    naturalArguments `Exception.catch` \(_ :: TypeInferenceError) -> do
+                        set context₁
+
+                        integerArguments `Exception.catch` \(_ :: TypeInferenceError) -> do
+                            set context₁
+
+                            realArguments `Exception.catch` \(_ :: TypeInferenceError) -> do
+                                Exception.throwIO (InvalidOperands "add" (Syntax.location left) (Syntax.location right))
 
         Syntax.Operator{ operator = Syntax.Minus, .. } -> do
-            (_L, newLeft ) <- infer left
-            (_R, newRight) <- infer right
+            context₁ <- get
 
-            _ <- check left  _R
-            _ <- check right _L
+            let natural = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Natural
+                    }
 
-            _Γ <- get
+            let integer = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Integer
+                    }
 
-            let _L' = Context.solveType _Γ _L
+            let real = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Real
+                    }
 
-            let newMinus = Syntax.Operator{ operator = Syntax.Minus, left = solveSyntax _Γ newLeft, right = solveSyntax _Γ newRight, .. }
+            let naturalArguments = do
+                    newLeft  <- check left  natural
+                    newRight <- check right natural
 
-            case _L' of
-                Type.Scalar{ scalar = Monotype.Integer } -> return (_L, newMinus)
-                Type.Scalar{ scalar = Monotype.Real    } -> return (_L, newMinus)
-                _ -> do
-                    Exception.throwIO (InvalidOperands "subtract" (Syntax.location left) _L')
+                    context₂ <- get
 
+                    let newOperator = Syntax.Operator
+                            { location
+                            , left = solveSyntax context₂ newLeft
+                            , operatorLocation
+                            , operator = Syntax.Minus
+                            , right = solveSyntax context₂ newRight
+                            }
+
+                    return (integer, newOperator)
+
+            let integerArguments = do
+                    newLeft  <- check left  integer
+                    newRight <- check right integer
+
+                    context₂ <- get
+
+                    let newOperator = Syntax.Operator
+                            { location
+                            , left = solveSyntax context₂ newLeft
+                            , operatorLocation
+                            , operator = Syntax.Minus
+                            , right = solveSyntax context₂ newRight
+                            }
+
+                    return (integer, newOperator)
+
+            let realArguments = do
+                    newLeft  <- check left  real
+                    newRight <- check right real
+
+                    context₂ <- get
+
+                    let newOperator = Syntax.Operator
+                            { location
+                            , left = solveSyntax context₂ newLeft
+                            , operatorLocation
+                            , operator = Syntax.Minus
+                            , right = solveSyntax context₂ newRight
+                            }
+
+                    return (real, newOperator)
+
+            naturalArguments `Exception.catch` \(_ :: TypeInferenceError) -> do
+                set context₁
+
+                integerArguments `Exception.catch` \(_ :: TypeInferenceError) -> do
+                    set context₁
+
+                    realArguments `Exception.catch` \(_ :: TypeInferenceError) -> do
+                        Exception.throwIO (InvalidOperands "subtract" (Syntax.location left) (Syntax.location right))
 
         Syntax.Operator{ operator = Syntax.Modulus, .. } -> do
+            let natural = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Natural
+                    }
+
+            let integer = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Integer
+                    }
+
+            let real = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Real
+                    }
+
             newRight <- case right of
                 Syntax.Scalar{ scalar = Syntax.Natural 0 } -> do
                     Exception.throwIO (ZeroDivisor (Syntax.location right))
@@ -2102,100 +2372,105 @@ infer e₀ = do
                 _ -> do
                     Exception.throwIO (NeedConcreteDivisor (Syntax.location right))
 
-            _Γ <- get
+            context₁ <- get
 
-            let newModulus newLeft = Syntax.Operator{ operator = Syntax.Modulus, left = solveSyntax _Γ newLeft, right = solveSyntax _Γ newRight, .. }
-
-            let natural = do
-                    newLeft <- check left Type.Scalar
-                        { location = operatorLocation
-                        , scalar = Monotype.Natural
-                        }
+            let naturalArgument = do
+                    newLeft <- check left natural
 
                     let type_ = Type.Record
                             { location = operatorLocation
                             , fields = Type.Fields
-                                [ ( "quotient"
-                                  , Type.Scalar
-                                      { location = operatorLocation
-                                      , scalar = Monotype.Natural
-                                      }
-                                  )
-                                , ( "remainder"
-                                  , Type.Scalar
-                                      { location = operatorLocation
-                                      , scalar = Monotype.Natural
-                                      }
-                                  )
+                                [ ("quotient", natural)
+                                , ("remainder", natural)
                                 ]
                                 Monotype.EmptyFields
                             }
 
-                    return (type_, newModulus newLeft)
+                    context₂ <- get
 
-            let integer = do
-                    newLeft <- check left Type.Scalar
-                        { location = operatorLocation
-                        , scalar = Monotype.Integer
-                        }
+                    let newOperator = Syntax.Operator
+                            { location
+                            , left = solveSyntax context₂ newLeft
+                            , operatorLocation
+                            , operator = Syntax.Modulus
+                            , right = solveSyntax context₂ newRight
+                            }
+
+                    return (type_, newOperator)
+
+            let integerArgument = do
+                    newLeft <- check left integer
 
                     let type_ = Type.Record
                             { location = operatorLocation
                             , fields = Type.Fields
-                                [ ( "quotient"
-                                  , Type.Scalar
-                                      { location = operatorLocation
-                                      , scalar = Monotype.Integer
-                                      }
-                                  )
-                                , ( "remainder"
-                                  , Type.Scalar
-                                      { location = operatorLocation
-                                      , scalar = Monotype.Natural
-                                      }
-                                  )
+                                [ ("quotient", integer)
+                                , ("remainder", natural)
                                 ]
                                 Monotype.EmptyFields
                             }
 
-                    return (type_, newModulus newLeft)
+                    context₂ <- get
 
-            let real = do
-                    newLeft <- check left Type.Scalar
-                        { location = operatorLocation
-                        , scalar = Monotype.Real
-                        }
+                    let newOperator = Syntax.Operator
+                            { location
+                            , left = solveSyntax context₂ newLeft
+                            , operatorLocation
+                            , operator = Syntax.Modulus
+                            , right = solveSyntax context₂ newRight
+                            }
+
+                    return (type_, newOperator)
+
+            let realArgument = do
+                    newLeft <- check left real
 
                     let type_ = Type.Record
                             { location = operatorLocation
                             , fields = Type.Fields
-                                [ ( "quotient"
-                                  , Type.Scalar
-                                      { location = operatorLocation
-                                      , scalar = Monotype.Integer
-                                      }
-                                  )
-                                , ( "remainder"
-                                  , Type.Scalar
-                                      { location = operatorLocation
-                                      , scalar = Monotype.Real
-                                      }
-                                  )
+                                [ ("quotient", integer)
+                                , ("remainder", real)
                                 ]
                                 Monotype.EmptyFields
                             }
 
-                    return (type_, newModulus newLeft)
+                    context₂ <- get
 
-            natural `Exception.catch` \(_ :: TypeInferenceError) -> do
-                set _Γ
+                    let newOperator = Syntax.Operator
+                            { location
+                            , left = solveSyntax context₂ newLeft
+                            , operatorLocation
+                            , operator = Syntax.Modulus
+                            , right = solveSyntax context₂ newRight
+                            }
 
-                integer `Exception.catch` \(_ :: TypeInferenceError) -> do
-                    set _Γ
+                    return (type_, newOperator)
 
-                    real
+            naturalArgument `Exception.catch` \(_ :: TypeInferenceError) -> do
+                set context₁
+
+                integerArgument `Exception.catch` \(_ :: TypeInferenceError) -> do
+                    set context₁
+
+                    realArgument `Exception.catch` \(_ :: TypeInferenceError) -> do
+                        Exception.throwIO (InvalidOperands "divide" (Syntax.location left) (Syntax.location right))
 
         Syntax.Operator{ operator = Syntax.Divide, .. } -> do
+            let natural = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Natural
+                    }
+
+            let integer = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Integer
+                    }
+
+            let real = Type.Scalar
+                    { location = operatorLocation
+                    , scalar = Monotype.Real
+                    }
+
             newRight <- case right of
                 Syntax.Scalar{ scalar = Syntax.Natural 0 } -> do
                     Exception.throwIO (ZeroDivisor (Syntax.location right))
@@ -2212,18 +2487,61 @@ infer e₀ = do
                 _ -> do
                     Exception.throwIO (NeedConcreteDivisor (Syntax.location right))
 
-            newLeft  <- check left Type.Scalar{ location = operatorLocation, scalar = Monotype.Real }
+            context₁ <- get
 
-            _Γ <- get
+            let naturalArgument = do
+                    newLeft <- check left natural
 
-            let newDivide = Syntax.Operator{ operator = Syntax.Divide, left = solveSyntax _Γ newLeft, right = solveSyntax _Γ newRight, .. }
+                    context₂ <- get
 
-            let type_ = Type.Scalar
-                    { location = operatorLocation
-                    , scalar = Monotype.Real
-                    }
+                    let newOperator = Syntax.Operator
+                            { location
+                            , left = solveSyntax context₂ newLeft
+                            , operatorLocation
+                            , operator = Syntax.Divide
+                            , right = solveSyntax context₂ newRight
+                            }
 
-            return (type_, newDivide)
+                    return (real, newOperator)
+
+            let integerArgument = do
+                    newLeft <- check left integer
+
+                    context₂ <- get
+
+                    let newOperator = Syntax.Operator
+                            { location
+                            , left = solveSyntax context₂ newLeft
+                            , operatorLocation
+                            , operator = Syntax.Divide
+                            , right = solveSyntax context₂ newRight
+                            }
+
+                    return (real, newOperator)
+
+            let realArgument = do
+                    newLeft <- check left real
+
+                    context₂ <- get
+
+                    let newOperator = Syntax.Operator
+                            { location
+                            , left = solveSyntax context₂ newLeft
+                            , operatorLocation
+                            , operator = Syntax.Divide
+                            , right = solveSyntax context₂ newRight
+                            }
+
+                    return (real, newOperator)
+
+            naturalArgument `Exception.catch` \(_ :: TypeInferenceError) -> do
+                set context₁
+
+                integerArgument `Exception.catch` \(_ :: TypeInferenceError) -> do
+                    set context₁
+
+                    realArgument `Exception.catch` \(_ :: TypeInferenceError) -> do
+                        Exception.throwIO (InvalidOperands "divide" (Syntax.location left) (Syntax.location right))
 
         Syntax.Builtin{ builtin = Syntax.Some, .. }-> do
             return
@@ -2884,7 +3202,7 @@ data TypeInferenceError
     | IllFormedFields Location (Existential Monotype.Record) (Context Location)
     | IllFormedType Location (Type Location) (Context Location)
     --
-    | InvalidOperands Text Location (Type Location)
+    | InvalidOperands Text Location Location
     | ZeroDivisor Location
     | NeedConcreteDivisor Location
     --
@@ -2954,14 +3272,14 @@ instance Exception TypeInferenceError where
         \\n\
         \" <> Text.unpack (Location.renderError "" location)
 
-    displayException (InvalidOperands action location _L') =
+    displayException (InvalidOperands action left right) =
         "Invalid operands\n\
         \\n\
-        \You cannot " <> Text.unpack action <> " values of type:\n\
+        \You cannot " <> Text.unpack action <> " the following operands:\n\
         \\n\
-        \" <> insert _L' <> "\n\
+        \" <> Text.unpack (Location.renderError "" left) <> "\n\
         \\n\
-        \" <> Text.unpack (Location.renderError "" location)
+        \" <> Text.unpack (Location.renderError "" right)
 
     displayException (ZeroDivisor location) =
         "Zero divisor\n\

@@ -792,6 +792,8 @@ evaluate maybeMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                 right' <- loop env right
 
                 return case (left', right') of
+                    (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
+                        Value.Scalar (Integer (fromIntegral m - fromIntegral n))
                     (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
                         Value.Scalar (Integer (m - n))
                     (Value.Scalar (Real m), Value.Scalar (Real n)) ->
@@ -806,7 +808,7 @@ evaluate maybeMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                 pure do
                     let divisor = case right' of
                             Value.Scalar (Natural n) -> n
-                            _ -> error "Grace.Normalize.evaluate: right argument to * must be a Natural number literal"
+                            _ -> error "Grace.Normalize.evaluate: right argument to % must be a Natural number literal"
 
                     let (quotient, remainder) = case left' of
                             Value.Scalar (Natural n) ->
@@ -846,14 +848,20 @@ evaluate maybeMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
-                    (Value.Scalar (Real m), Value.Scalar (Real n)) ->
-                        Value.Scalar
-                            (Real
-                                (Scientific.fromFloatDigits (Scientific.toRealFloat m / Scientific.toRealFloat n :: Double))
-                            )
-                    _ ->
-                        error "Grace.Normalize.evaluate: * arguments must be real numbers"
+                pure do
+                    let numerator = case left' of
+                            Value.Scalar (Natural n) -> fromIntegral n
+                            Value.Scalar (Integer n) -> fromInteger n
+                            Value.Scalar (Real    n) -> Scientific.toRealFloat n
+                            _ -> error "Grace.Normalize.evaluate: / arguments must be real numbers"
+
+                    let denominator = case right' of
+                            Value.Scalar (Natural n) -> fromIntegral n
+                            Value.Scalar (Integer n) -> fromInteger n
+                            Value.Scalar (Real    n) -> Scientific.toRealFloat n
+                            _ -> error "Grace.Normalize.evaluate: / arguments must be real numbers"
+
+                    Value.Scalar (Real (Scientific.fromFloatDigits (numerator / denominator :: Double)))
 
             Syntax.Builtin{..} ->
                 pure (Value.Builtin builtin)

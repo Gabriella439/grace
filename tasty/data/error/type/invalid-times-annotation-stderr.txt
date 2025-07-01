@@ -1,10 +1,13 @@
 Invalid operands
 
-You cannot multiply values of type:
-
-  Bool
+You cannot multiply the following operands:
 
 tasty/data/error/type/invalid-times-annotation-input.ffg:2:2: 
   │
 2 │ (true * true) : Bool
   │  ↑
+
+tasty/data/error/type/invalid-times-annotation-input.ffg:2:9: 
+  │
+2 │ (true * true) : Bool
+  │         ↑
