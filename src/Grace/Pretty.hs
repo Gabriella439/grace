@@ -148,7 +148,7 @@ label = Pretty.annotate mempty
 scalar :: Doc AnsiStyle -> Doc AnsiStyle
 scalar = Pretty.annotate (Pretty.Terminal.colorDull Pretty.Terminal.Magenta)
 
--- | Highlight a built-in (e.g. @List/length@)
+-- | Highlight a built-in (e.g. @length@)
 builtin :: Doc AnsiStyle -> Doc AnsiStyle
 builtin = Pretty.annotate Pretty.Terminal.underlined
 

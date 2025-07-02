@@ -2652,7 +2652,7 @@ infer e₀ = do
                 , Syntax.Builtin{ builtin = Syntax.ListLast, .. }
                 )
 
-        Syntax.Builtin{ builtin = Syntax.ListLength, .. } -> do
+        Syntax.Builtin{ builtin = Syntax.Length, .. } -> do
             return
                 ( Type.Forall
                     { nameLocation = Syntax.location e₀
@@ -2663,7 +2663,7 @@ infer e₀ = do
                         ~>  Type.Scalar{ scalar = Monotype.Natural, .. }
                     , ..
                     }
-                , Syntax.Builtin{ builtin = Syntax.ListLength, .. }
+                , Syntax.Builtin{ builtin = Syntax.Length, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.Map, .. } -> do

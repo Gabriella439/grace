@@ -1181,7 +1181,7 @@ builtinsExample =
     \, \"List/head\": List/head\n\
     \, \"List/indexed\": List/indexed\n\
     \, \"List/last\": List/last\n\
-    \, \"List/length\": List/length\n\
+    \, \"length\": length\n\
     \, \"map\": map\n\
     \, \"List/take\": List/take\n\
     \}"

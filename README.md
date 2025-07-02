@@ -566,7 +566,7 @@ List/last
       List a -> Optional a
 
 # Compute the length of a list
-List/length : forall (a : Type) . List a -> Natural
+length : forall (a : Type) . List a -> Natural
 
 # Transform each element of a list
 map : forall (a : Type) . forall (b : Type) . (a -> b) -> List a -> List b
@@ -798,7 +798,7 @@ fold
   , "real": \_ -> 1
   , "string": \_ -> 2
   , "null": 3
-  , "object": List/length
+  , "object": length
   , "array": fold { nil: 0, cons: \x -> \y -> x + y : Natural }
   }
   [ true, 1, [ -2, false, "" ], null, { foo: { } } ]

@@ -5,7 +5,7 @@ fold
   , "real": \_ -> 1
   , "string": \_ -> 2
   , "null": 3
-  , "object": List/length
+  , "object": length
   , "array": fold { cons: \x -> \y -> x + y : Natural, nil: 0 : Natural }
   }
   [ true, 1, [ -2, false, "" ], null, { foo: { } } ]

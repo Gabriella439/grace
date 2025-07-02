@@ -210,7 +210,7 @@ builtin
     / "List/head"       ; forall (a : Type) . List a -> Optional a
     / "List/indexed"    ; forall (a : Type) . List a -> List { index: Natural, value: a }
     / "List/last"       ; forall (a : Type) . List a -> Optional a
-    / "List/length"     ; forall (a : Type) . List a -> Natural
+    / "length"          ; forall (a : Type) . List a -> Natural
     / "map"             ; forall (a : Type) (b : Type) . (a -> b) -> List a -> List b
     / "List/take"       ; forall (a : Type) . Natural -> List a -> List a
     / "abs"             ; Integer -> Natural

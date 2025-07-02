@@ -1000,7 +1000,7 @@ apply maybeMethods function₀ argument₀ = runConcurrently (loop function₀ a
                 [ ("index", Value.Scalar (Natural (fromIntegral index)))
                 , ("value", value)
                 ]
-    loop (Value.Builtin ListLength) (Value.List elements) =
+    loop (Value.Builtin Length) (Value.List elements) =
         pure (Value.Scalar (Natural (fromIntegral (length elements))))
     loop
         (Value.Application (Value.Builtin Map) f)
