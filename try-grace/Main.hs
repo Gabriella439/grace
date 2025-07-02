@@ -1113,7 +1113,7 @@ importExample =
     \# the following URL encodes a function for computing US federal income\n\
     \# tax for 2022:\n\
     \\n\
-    \https://gist.githubusercontent.com/Gabriella439/712d0648bbdcfcc83eadd0ee394beed3/raw/a5e52e13f4e8abcc4b6d7178e6af94d5c17b1e22/incomeTax.ffg"
+    \https://gist.githubusercontent.com/Gabriella439/712d0648bbdcfcc83eadd0ee394beed3/raw/694198a2d114278c42e4981ed6af67b8e3229cea/incomeTax.ffg"
 
 jsonExample :: Text
 jsonExample =
@@ -1136,7 +1136,7 @@ programmingExample =
     "# You can use let expressions to define reusable values or functions:\n\
     \\n\
     \let makeUser user =\n\
-    \      let home       = \"/home/\" + user\n\
+    \      let home       = \"/home/${user}\"\n\
     \      let privateKey = \"${home}/.ssh/id_ed25519\"\n\
     \      let publicKey  = \"${privateKey}.pub\"\n\
     \      in  { home, privateKey, publicKey }\n\

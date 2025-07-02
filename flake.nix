@@ -60,6 +60,10 @@
                                 pkgsNew.haskell.lib.dontCheck
                                   haskellPackagesOld.bsb-http-chunked;
 
+                              conduit =
+                                pkgsNew.haskell.lib.dontCheck
+                                  haskellPackagesOld.conduit;
+
                               cryptonite =
                                 pkgsNew.haskell.lib.dontCheck
                                   haskellPackagesOld.cryptonite;
@@ -100,6 +104,10 @@
                               memory =
                                 pkgsNew.haskell.lib.dontCheck
                                   haskellPackagesOld.memory;
+
+                              mono-traversable =
+                                pkgsNew.haskell.lib.dontCheck
+                                  haskellPackagesOld.mono-traversable;
 
                               network =
                                   haskellPackagesOld.network.overrideAttrs (old: {
@@ -156,6 +164,10 @@
                               x509-store =
                                 pkgsNew.haskell.lib.dontCheck
                                   haskellPackagesOld.x509-store;
+
+                              yaml =
+                                pkgsNew.haskell.lib.dontCheck
+                                  haskellPackagesOld.yaml;
 
                               zlib =
                                 pkgsNew.haskell.lib.dontCheck
