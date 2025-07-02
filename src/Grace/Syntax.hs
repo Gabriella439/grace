@@ -77,7 +77,7 @@ import qualified Prettyprinter as Pretty
 
 -- | The surface syntax for the language
 data Syntax s a
-    = Variable { location :: s, name :: Text, index :: Int }
+    = Variable { location :: s, name :: Text }
     -- ^
     --   >>> pretty @(Syntax () Void) (Variable () "x" 0)
     --   x
@@ -304,7 +304,7 @@ instance Bifunctor Syntax where
 
 instance IsString (Syntax () a) where
     fromString string =
-        Variable{ location = (), name = fromString string, index = 0 }
+        Variable{ location = (), name = fromString string }
 
 instance Pretty a => Pretty (Syntax s a) where
     pretty = prettyExpression
@@ -872,9 +872,8 @@ prettyFieldExpression other =
     prettyPrimitiveExpression other
 
 prettyPrimitiveExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
-prettyPrimitiveExpression Variable{..}
-    | index == 0 = label (pretty name)
-    | otherwise  = label (pretty name) <> "@" <> Pretty.scalar (pretty index)
+prettyPrimitiveExpression Variable{..} =
+    label (pretty name)
 prettyPrimitiveExpression Alternative{..} =
     Type.prettyAlternativeLabel name
 prettyPrimitiveExpression List{ elements = [] } =

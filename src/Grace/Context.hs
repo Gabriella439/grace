@@ -462,21 +462,11 @@ splitOnUnsolvedAlternatives _ [] = Nothing
 lookup
     :: Text
     -- ^ Variable label
-    -> Int
-    -- ^ Variable index (See the documentation of `Value.Variable`)
     -> Context s
     -> Maybe (Type s)
-lookup _ _ [] =
-    Nothing
-lookup x0 n (Annotation x1 _A : _Γ) =
-    if x0 == x1
-    then
-       if n <= 0
-       then Just _A
-       else lookup x0 (n - 1) _Γ
-    else lookup x0 n _Γ
-lookup x n (_ : _Γ) =
-    lookup x n _Γ
+lookup _                      []  = Nothing
+lookup x0 (Annotation x1 _A : _Γ) = if x0 == x1 then Just _A else lookup x0 _Γ
+lookup x  (_                : _Γ) = lookup x _Γ
 
 {-| Discard all entries from a `Context` up to and including the given `Entry`
 

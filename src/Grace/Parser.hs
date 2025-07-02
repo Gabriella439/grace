@@ -699,9 +699,6 @@ reservedLabel = terminal matchReservedLabel
 alternative :: Parser r Text
 alternative = terminal matchAlternative
 
-int :: Parser r (Sign, Int)
-int = terminal matchInt
-
 text :: Parser r Text
 text = terminal matchText
 
@@ -1009,17 +1006,7 @@ grammar endsWithBrace = mdo
     primitiveExpression <- rule
         (   do  ~(location, name) <- locatedLabel
 
-                return Syntax.Variable{ index = 0, .. }
-
-        <|> do  let withSign Unsigned index = index
-                    withSign Positive index = index
-                    withSign Negative index = negate index
-
-                ~(location, name) <- locatedLabel
-                parseToken Grace.Parser.At
-                ~(sign, index) <- int
-
-                return Syntax.Variable{ index = withSign sign index, ..}
+                return Syntax.Variable{..}
 
         <|> do  ~(location, name) <- locatedAlternative
 
@@ -1179,7 +1166,7 @@ grammar endsWithBrace = mdo
 
         let pun = do
                 ~(location, name) <- locatedRecordLabel
-                pure (name, Syntax.Variable{ index = 0, ..})
+                pure (name, Syntax.Variable{..})
 
         setting <|> pun
 

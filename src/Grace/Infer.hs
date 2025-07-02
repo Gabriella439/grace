@@ -1250,7 +1250,7 @@ infer e₀ = do
         Syntax.Variable{..} -> do
             _Γ <- get
 
-            type_ <- Context.lookup name index _Γ `orDie` UnboundVariable location name index
+            type_ <- Context.lookup name _Γ `orDie` UnboundVariable location name
             return (type_, Syntax.Variable{..})
 
         -- →I⇒
@@ -3212,7 +3212,7 @@ data TypeInferenceError
     | UnboundAlternatives Location Text
     | UnboundFields Location Text
     | UnboundTypeVariable Location Text
-    | UnboundVariable Location Text Int
+    | UnboundVariable Location Text
     --
     | RecordTypeMismatch (Type Location) (Type Location) [Text]
     | UnionTypeMismatch (Type Location) (Type Location) [Text]
@@ -3467,7 +3467,7 @@ instance Exception TypeInferenceError where
         \\n\
         \" <> Text.unpack (Location.renderError "" location)
 
-    displayException (UnboundVariable location name index) =
+    displayException (UnboundVariable location name) =
         "Unbound variable: " <> Text.unpack var <> "\n\
         \\n\
         \" <> Text.unpack (Location.renderError "" location)

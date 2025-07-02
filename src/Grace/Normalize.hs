@@ -98,21 +98,12 @@ import qualified System.IO.Unsafe as Unsafe
 lookupVariable
     :: Text
     -- ^ Variable name
-    -> Int
-    -- ^ Variable index
     -> [(Text, Value)]
     -- ^ Evaluation environment
     -> Value
-lookupVariable name index environment =
-    case environment of
-        (key, value) : rest ->
-            if name == key
-            then if index == 0
-                 then value
-                 else lookupVariable name (index - 1) rest
-            else lookupVariable name index rest
-        [] ->
-            error "Grace.Normalize.lookupVariable: unbound variable"
+lookupVariable name environment = case Prelude.lookup name environment of
+    Just value -> value
+    Nothing    -> error "Grace.Normalize.lookupVariable: unbound variable"
 
 toJSONSchema :: Type a -> Either (UnsupportedModelOutput a) Aeson.Value
 toJSONSchema original = loop original
@@ -320,7 +311,7 @@ evaluate maybeMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
     loop env syntax =
         case syntax of
             Syntax.Variable{..} -> do
-                pure (lookupVariable name index env)
+                pure (lookupVariable name env)
 
             Syntax.Application{..} -> Concurrently do
                 io <- runConcurrently do
