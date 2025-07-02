@@ -1179,7 +1179,7 @@ builtinsExample =
     \, \"show\": show\n\
     \, \"List/drop\": List/drop\n\
     \, \"List/head\": List/head\n\
-    \, \"List/indexed\": List/indexed\n\
+    \, \"indexed\": indexed\n\
     \, \"List/last\": List/last\n\
     \, \"length\": length\n\
     \, \"map\": map\n\

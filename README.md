@@ -557,7 +557,7 @@ List/head
       List a -> Optional a
 
 # Annotate each element of a list with its index
-List/indexed : forall (a : Type) . List a -> List { index: Natural, value: a }
+indexed : forall (a : Type) . List a -> List { index: Natural, value: a }
 
 # Get the last element of a list
 List/last

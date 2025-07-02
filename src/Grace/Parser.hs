@@ -123,6 +123,23 @@ lexToken =
             ] Megaparsec.<?> "operator"
 
         , Combinators.choice
+            [ Grace.Parser.Abs            <$ symbol "abs"
+            , Grace.Parser.Show           <$ symbol "show"
+            , Grace.Parser.YAML           <$ symbol "yaml"
+            , Grace.Parser.ListDrop       <$ symbol "List/drop"
+            , Grace.Parser.ListHead       <$ symbol "List/head"
+            , Grace.Parser.Indexed        <$ symbol "indexed"
+            , Grace.Parser.ListLast       <$ symbol "List/last"
+            , Grace.Parser.Length         <$ symbol "length"
+            , Grace.Parser.Map            <$ symbol "map"
+            , Grace.Parser.ListTake       <$ symbol "List/take"
+            , Grace.Parser.False_         <$ symbol "false"
+            , Grace.Parser.True_          <$ symbol "true"
+            , Grace.Parser.Some           <$ symbol "some"
+            , Grace.Parser.Null           <$ symbol "null"
+            ] Megaparsec.<?> "built-in value"
+
+        , Combinators.choice
             [ Grace.Parser.Forall       <$ symbol "forall"
             , Grace.Parser.Let          <$ symbol "let"
             , Grace.Parser.In           <$ symbol "in"
@@ -135,23 +152,6 @@ lexToken =
             , Grace.Parser.Fields       <$ symbol "Fields"
             , Grace.Parser.Alternatives <$ symbol "Alternatives"
             ] Megaparsec.<?> "keyword"
-
-        , Combinators.choice
-            [ Grace.Parser.Abs            <$ symbol "abs"
-            , Grace.Parser.Show           <$ symbol "show"
-            , Grace.Parser.YAML           <$ symbol "yaml"
-            , Grace.Parser.ListDrop       <$ symbol "List/drop"
-            , Grace.Parser.ListHead       <$ symbol "List/head"
-            , Grace.Parser.ListIndexed    <$ symbol "List/indexed"
-            , Grace.Parser.ListLast       <$ symbol "List/last"
-            , Grace.Parser.Length         <$ symbol "length"
-            , Grace.Parser.Map            <$ symbol "map"
-            , Grace.Parser.ListTake       <$ symbol "List/take"
-            , Grace.Parser.False_         <$ symbol "false"
-            , Grace.Parser.True_          <$ symbol "true"
-            , Grace.Parser.Some           <$ symbol "some"
-            , Grace.Parser.Null           <$ symbol "null"
-            ] Megaparsec.<?> "built-in value"
 
         , Combinators.choice
             [ Grace.Parser.List     <$ symbol "List"
@@ -464,7 +464,7 @@ reserved =
         , "List"
         , "List/drop"
         , "List/equal"
-        , "List/indexed"
+        , "indexed"
         , "List/last"
         , "length"
         , "map"
@@ -595,7 +595,7 @@ data Token
     | List
     | ListDrop
     | ListHead
-    | ListIndexed
+    | Indexed
     | ListLast
     | Length
     | ListTake
@@ -797,7 +797,7 @@ render t = case t of
     Grace.Parser.List               -> "list"
     Grace.Parser.ListDrop           -> "List/drop"
     Grace.Parser.ListHead           -> "List/head"
-    Grace.Parser.ListIndexed        -> "List/indexed"
+    Grace.Parser.Indexed            -> "indexed"
     Grace.Parser.ListLast           -> "List/last"
     Grace.Parser.Length             -> "length"
     Grace.Parser.ListTake           -> "List/take"
@@ -1092,9 +1092,9 @@ grammar endsWithBrace = mdo
 
                 return Syntax.Builtin{ builtin = Syntax.ListHead, .. }
 
-        <|> do  location <- locatedToken Grace.Parser.ListIndexed
+        <|> do  location <- locatedToken Grace.Parser.Indexed
 
-                return Syntax.Builtin{ builtin = Syntax.ListIndexed, .. }
+                return Syntax.Builtin{ builtin = Syntax.Indexed, .. }
 
         <|> do  location <- locatedToken Grace.Parser.ListLast
 

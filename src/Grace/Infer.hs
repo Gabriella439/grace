@@ -2606,7 +2606,7 @@ infer e₀ = do
                 , Syntax.Builtin{ builtin = Syntax.ListHead, .. }
                 )
 
-        Syntax.Builtin{ builtin = Syntax.ListIndexed, .. } -> do
+        Syntax.Builtin{ builtin = Syntax.Indexed, .. } -> do
             return
                 ( Type.Forall
                     { nameLocation = Syntax.location e₀
@@ -2629,7 +2629,7 @@ infer e₀ = do
                                 }
                     , ..
                     }
-                , Syntax.Builtin{ builtin = Syntax.ListIndexed, .. }
+                , Syntax.Builtin{ builtin = Syntax.Indexed, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.ListLast, .. } -> do

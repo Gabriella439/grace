@@ -517,10 +517,10 @@ data Builtin
     -- ^
     --   >>> pretty ListHead
     --   List/head
-    | ListIndexed
+    | Indexed
     -- ^
-    --   >>> pretty ListIndexed
-    --   List/indexed
+    --   >>> pretty Indexed
+    --   indexed
     | ListLast
     -- ^
     --   >>> pretty ListLast
@@ -546,7 +546,7 @@ instance Pretty Builtin where
     pretty YAML           = Pretty.builtin "yaml"
     pretty ListDrop       = Pretty.builtin "List/drop"
     pretty ListHead       = Pretty.builtin "List/head"
-    pretty ListIndexed    = Pretty.builtin "List/indexed"
+    pretty Indexed        = Pretty.builtin "indexed"
     pretty ListLast       = Pretty.builtin "List/last"
     pretty Length         = Pretty.builtin "length"
     pretty Map            = Pretty.builtin "map"

@@ -992,7 +992,7 @@ apply maybeMethods function₀ argument₀ = runConcurrently (loop function₀ a
         pure (Value.Scalar Null)
     loop (Value.Builtin ListLast) (Value.List (_ :|> x)) =
         pure (Value.Application (Value.Builtin Some) x)
-    loop (Value.Builtin ListIndexed) (Value.List elements) =
+    loop (Value.Builtin Indexed) (Value.List elements) =
         pure (Value.List (Seq.mapWithIndex adapt elements))
       where
         adapt index value =

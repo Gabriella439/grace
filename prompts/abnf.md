@@ -208,7 +208,7 @@ builtin
     = "show "           ; JSON -> Text
     / "List/drop"       ; forall (a : Type) . Natural -> List a -> List a
     / "List/head"       ; forall (a : Type) . List a -> Optional a
-    / "List/indexed"    ; forall (a : Type) . List a -> List { index: Natural, value: a }
+    / "indexed"         ; forall (a : Type) . List a -> List { index: Natural, value: a }
     / "List/last"       ; forall (a : Type) . List a -> Optional a
     / "length"          ; forall (a : Type) . List a -> Natural
     / "map"             ; forall (a : Type) (b : Type) . (a -> b) -> List a -> List b
