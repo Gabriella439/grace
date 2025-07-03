@@ -1178,9 +1178,7 @@ builtinsExample =
     \, \"abs\": abs\n\
     \, \"show\": show\n\
     \, \"List/drop\": List/drop\n\
-    \, \"List/head\": List/head\n\
     \, \"indexed\": indexed\n\
-    \, \"List/last\": List/last\n\
     \, \"length\": length\n\
     \, \"map\": map\n\
     \, \"List/take\": List/take\n\

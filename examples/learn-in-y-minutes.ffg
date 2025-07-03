@@ -145,15 +145,10 @@ let duplicatedNumber : List Natural = duplicate 2
 
 let duplicatedBool : List Bool = duplicate false
 
-# The language also has some polymorphic built-in functions.  We already saw
-# one such function, which was `map`:
+# You can index into a list using `list.index`
 #
-#     map : forall (a b : Type) . (a -> b) -> List a -> List b
-#
-# … and another polymorphic built-in function is `List/head`:
-#
-#     List/head : forall (a : Type) . List a -> Optional a
-let firstPrime = List/head somePrimes
+# This returns an `Optional` value (a value which may be present or absent)
+let firstPrime : Optional Natural = somePrimes.0
 
 # `null` is an absent `Optional` value of any type
 let absentOptionalValue : Optional Natural = null

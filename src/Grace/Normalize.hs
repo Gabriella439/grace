@@ -31,7 +31,7 @@ import Control.Monad.IO.Class (liftIO)
 import Data.Bifunctor (first)
 import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
-import Data.Sequence (Seq(..), ViewL(..))
+import Data.Sequence (ViewL(..))
 import Data.Text (Text)
 import Data.Typeable (Typeable)
 import Data.Vector (Vector)
@@ -979,14 +979,6 @@ apply maybeMethods function₀ argument₀ = runConcurrently (loop function₀ a
         (Value.Application (Value.Builtin ListTake) (Value.Scalar (Natural n)))
         (Value.List elements) =
             pure (Value.List (Seq.take (fromIntegral n) elements))
-    loop (Value.Builtin ListHead) (Value.List []) =
-        pure (Value.Scalar Null)
-    loop (Value.Builtin ListHead) (Value.List (x :<| _)) =
-        pure (Value.Application (Value.Builtin Some) x)
-    loop (Value.Builtin ListLast) (Value.List []) =
-        pure (Value.Scalar Null)
-    loop (Value.Builtin ListLast) (Value.List (_ :|> x)) =
-        pure (Value.Application (Value.Builtin Some) x)
     loop (Value.Builtin Indexed) (Value.List elements) =
         pure (Value.List (Seq.mapWithIndex adapt elements))
       where

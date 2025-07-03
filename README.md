@@ -550,20 +550,8 @@ show : JSON -> Text
 # Drop the first N elements from a `List`
 List/drop : forall (a : Type) . Natural -> List a -> List a
 
-# Get the first element of a list
-List/head
-  : forall (a : Type) .
-    forall (b : Alternatives) .
-      List a -> Optional a
-
 # Annotate each element of a list with its index
 indexed : forall (a : Type) . List a -> List { index: Natural, value: a }
-
-# Get the last element of a list
-List/last
-  : forall (a : Type) .
-    forall (b : Alternatives) .
-      List a -> Optional a
 
 # Compute the length of a list
 length : forall (a : Type) . List a -> Natural

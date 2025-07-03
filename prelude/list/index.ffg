@@ -1,8 +1,0 @@
-# Retrieve an element from a `List` using its 0-based index
-let index
-      : forall (a : Type) .
-        forall (b : Alternatives) .
-          Natural -> List a -> Optional a
-      = \n -> \xs -> List/head (List/drop n xs)
-
-in  index

@@ -2604,27 +2604,6 @@ infer e₀ = do
                 , Syntax.Builtin{ builtin = Syntax.ListDrop, .. }
                 )
 
-        Syntax.Builtin{ builtin = Syntax.ListHead, .. } -> do
-            return
-                ( Type.Forall
-                    { nameLocation = Syntax.location e₀
-                    , name = "a"
-                    , domain = Domain.Type
-                    , type_ =
-                        Type.Forall
-                            { nameLocation = Syntax.location e₀
-                            , name = "b"
-                            , domain = Domain.Alternatives
-                            , type_ =
-                                    Type.List { type_ = var "a", .. }
-                                ~>  Type.Optional{ type_ = var "a", .. }
-                            , ..
-                            }
-                    , ..
-                    }
-                , Syntax.Builtin{ builtin = Syntax.ListHead, .. }
-                )
-
         Syntax.Builtin{ builtin = Syntax.Indexed, .. } -> do
             return
                 ( Type.Forall
@@ -2649,26 +2628,6 @@ infer e₀ = do
                     , ..
                     }
                 , Syntax.Builtin{ builtin = Syntax.Indexed, .. }
-                )
-
-        Syntax.Builtin{ builtin = Syntax.ListLast, .. } -> do
-            return
-                ( Type.Forall
-                    { nameLocation = Syntax.location e₀
-                    , name = "a"
-                    , domain = Domain.Type
-                    , type_ = Type.Forall
-                        { nameLocation = Syntax.location e₀
-                        , name = "b"
-                        , domain  = Domain.Alternatives
-                        , type_ =
-                                Type.List{ type_ = var "a", .. }
-                            ~>  Type.Optional{ type_ = var "a", .. }
-                        , ..
-                        }
-                    , ..
-                    }
-                , Syntax.Builtin{ builtin = Syntax.ListLast, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.Length, .. } -> do

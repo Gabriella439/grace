@@ -127,9 +127,7 @@ lexToken =
             , Grace.Parser.Show           <$ symbol "show"
             , Grace.Parser.YAML           <$ symbol "yaml"
             , Grace.Parser.ListDrop       <$ symbol "List/drop"
-            , Grace.Parser.ListHead       <$ symbol "List/head"
             , Grace.Parser.Indexed        <$ symbol "indexed"
-            , Grace.Parser.ListLast       <$ symbol "List/last"
             , Grace.Parser.Length         <$ symbol "length"
             , Grace.Parser.Map            <$ symbol "map"
             , Grace.Parser.ListTake       <$ symbol "List/take"
@@ -465,7 +463,6 @@ reserved =
         , "List/drop"
         , "List/equal"
         , "indexed"
-        , "List/last"
         , "length"
         , "map"
         , "List/take"
@@ -594,9 +591,7 @@ data Token
     | Let
     | List
     | ListDrop
-    | ListHead
     | Indexed
-    | ListLast
     | Length
     | ListTake
     | Map
@@ -796,9 +791,7 @@ render t = case t of
     Grace.Parser.Let                -> "let"
     Grace.Parser.List               -> "list"
     Grace.Parser.ListDrop           -> "List/drop"
-    Grace.Parser.ListHead           -> "List/head"
     Grace.Parser.Indexed            -> "indexed"
-    Grace.Parser.ListLast           -> "List/last"
     Grace.Parser.Length             -> "length"
     Grace.Parser.ListTake           -> "List/take"
     Grace.Parser.Fold               -> "fold"
@@ -1090,17 +1083,9 @@ grammar endsWithBrace = mdo
 
                 return Syntax.Builtin{ builtin = Syntax.ListDrop, .. }
 
-        <|> do  location <- locatedToken Grace.Parser.ListHead
-
-                return Syntax.Builtin{ builtin = Syntax.ListHead, .. }
-
         <|> do  location <- locatedToken Grace.Parser.Indexed
 
                 return Syntax.Builtin{ builtin = Syntax.Indexed, .. }
-
-        <|> do  location <- locatedToken Grace.Parser.ListLast
-
-                return Syntax.Builtin{ builtin = Syntax.ListLast, .. }
 
         <|> do  location <- locatedToken Grace.Parser.Length
 

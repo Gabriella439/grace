@@ -2,6 +2,6 @@ let toNatural
       : Optional Natural -> Natural
       = fold { some: \x -> x, null: 0 }
 
-in  { example0: toNatural (List/head [ ])
-    , example1: toNatural (List/head [ 1 ])
+in  { example0: toNatural [ ].0
+    , example1: toNatural [ 1 ].0
     }

@@ -1,7 +1,6 @@
 { all: ./all.ffg
 , any: ./any.ffg
 , generate: ./generate.ffg
-, index: ./index.ffg
 , null: ./null.ffg
 , reject: ./reject.ffg
 , replicate: ./replicate.ffg

@@ -202,14 +202,29 @@ projection-value
   ; Field punning.  In other words, `{ x }` is the same thing as `{ x: x }`
   / field
 
-field = identifier / alternative / string
+field
+    ; Ordinary field access (e.g. `record.x`)
+    = identifier
+
+    ; Field names can be alternative names, too.  This is necessary so that you
+    ; can `fold` unions (since the field names need to match the union's
+    ; alternative names)
+    / alternative
+
+    ; You can quote field names, too, which comes in handy if a field has
+    ; characters that would otherwise be forbidden (e.g. spaces or punctuation)
+    ; (e.g. `record."A field name with capitalization and spacing"`)
+    / string
+
+    ; You can allso index into a list using dot notation (e.g. `list.index`).
+    ; Just like Python, you can index from the end of the list using negative
+    ; numbers (e.g. `list.-1` to get the last element of the list)
+    / integer
 
 builtin
     = "show "           ; JSON -> Text
     / "List/drop"       ; forall (a : Type) . Natural -> List a -> List a
-    / "List/head"       ; forall (a : Type) . List a -> Optional a
     / "indexed"         ; forall (a : Type) . List a -> List { index: Natural, value: a }
-    / "List/last"       ; forall (a : Type) . List a -> Optional a
     / "length"          ; forall (a : Type) . List a -> Natural
     / "map"             ; forall (a : Type) (b : Type) . (a -> b) -> List a -> List b
     / "List/take"       ; forall (a : Type) . Natural -> List a -> List a
