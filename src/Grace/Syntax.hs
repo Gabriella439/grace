@@ -19,7 +19,7 @@ module Grace.Syntax
       Syntax(..)
     , Chunks(..)
     , Field(..)
-    , Fields(..)
+    , Smaller(..)
     , types
     , Scalar(..)
     , Operator(..)
@@ -79,10 +79,8 @@ import qualified Prettyprinter as Pretty
 data Syntax s a
     = Variable { location :: s, name :: Text }
     -- ^
-    --   >>> pretty @(Syntax () Void) (Variable () "x" 0)
+    --   >>> pretty @(Syntax () Void) (Variable () "x")
     --   x
-    --   >>> pretty @(Syntax () Void) (Variable () "x" 1)
-    --   x@1
     | Lambda { location :: s, nameBinding :: NameBinding s, body :: Syntax s a }
     -- ^
     --   >>> pretty @(Syntax () Void) (Lambda () "x" "x")
@@ -113,7 +111,7 @@ data Syntax s a
     -- ^
     --   >>> pretty @(Syntax () Void) (Record () [ ("x", "a"), ("y", "b") ])
     --   { "x": a, "y": b }
-    | Project { location :: s, record :: Syntax s a, fields :: Fields s }
+    | Project { location :: s, larger :: Syntax s a, smaller :: Smaller s }
     -- ^
     --   >>> pretty @(Syntax () Void) (Project () "x" "a")
     --   x.a
@@ -170,8 +168,8 @@ instance Monad (Syntax ()) where
         List{ elements = fmap (>>= f) elements, .. }
     Record{ fieldValues, .. } >>= f =
         Record{ fieldValues = fmap (fmap (>>= f)) fieldValues, .. }
-    Project{ record, .. } >>= f =
-        Project{ record = record >>= f, .. }
+    Project{ larger, .. } >>= f =
+        Project{ larger = larger >>= f, .. }
     Alternative{..} >>= _ =
         Alternative{..}
     Fold{ handlers, .. } >>= f =
@@ -229,9 +227,9 @@ instance Plated (Syntax s a) where
 
                 newFieldValues <- traverse onPair oldFieldValues
                 return Record{ fieldValues = newFieldValues, .. }
-            Project{ record = oldRecord, .. } -> do
-                newRecord <- onSyntax oldRecord
-                return Project{ record = newRecord, .. }
+            Project{ larger = oldLarger, .. } -> do
+                newLarger <- onSyntax oldLarger
+                return Project{ larger = newLarger, .. }
             Alternative{..} -> do
                 pure Alternative{..}
             Fold{ handlers = oldHandlers, .. } -> do
@@ -280,7 +278,7 @@ instance Bifunctor Syntax where
       where
         adapt (field, value) = (field, first f value)
     first f Project{..} =
-        Project{ location = f location, record = first f record, fields = fmap f fields }
+        Project{ location = f location, larger = first f larger, smaller = fmap f smaller }
     first f Alternative{..} =
         Alternative{ location = f location, .. }
     first f Fold{..} =
@@ -355,12 +353,13 @@ instance IsString (Field ()) where
     fromString string = Field{ fieldLocation = (), field = fromString string }
 
 -- | A projection of one or more fields
-data Fields s
+data Smaller s
     = Single{ single :: Field s }
     | Multiple{ multipleLocation :: s, multiple :: [Field s] }
+    | Index{ index :: Integer }
     deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
 
-instance IsString (Fields ()) where
+instance IsString (Smaller ()) where
     fromString string = Single{ single = fromString string }
 
 -- | @Traversal'@ from a `Syntax` to its immediate `Type` annotations
@@ -633,7 +632,7 @@ prettyExpression Prompt{ schema = Just schema, ..} = Pretty.group (Pretty.flatAl
     short =
             keyword "prompt"
         <>  " "
-        <>  prettyFieldExpression arguments
+        <>  prettyProjectExpression arguments
         <>  " "
         <>  Pretty.operator ":"
         <>  " "
@@ -644,7 +643,7 @@ prettyExpression Prompt{ schema = Just schema, ..} = Pretty.group (Pretty.flatAl
             (   keyword "prompt"
             <>  Pretty.hardline
             <>  "  "
-            <>  prettyFieldExpression arguments
+            <>  prettyProjectExpression arguments
             <>  Pretty.hardline
             <>  "  "
             <>  Pretty.operator ":"
@@ -763,7 +762,7 @@ prettyDivideExpression = prettyOperator Divide prettyApplicationExpression
 prettyApplicationExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
 prettyApplicationExpression expression
     | isApplication expression = Pretty.group (Pretty.flatAlt long short)
-    | otherwise                = prettyFieldExpression expression
+    | otherwise                = prettyProjectExpression expression
   where
     isApplication Application{} = True
     isApplication Fold{}        = True
@@ -777,52 +776,53 @@ prettyApplicationExpression expression
     prettyShort Application{..} =
             prettyShort function
         <>  " "
-        <>  prettyFieldExpression argument
+        <>  prettyProjectExpression argument
     prettyShort Fold{..} =
-            keyword "fold" <> " " <> prettyFieldExpression handlers
+            keyword "fold" <> " " <> prettyProjectExpression handlers
     prettyShort Prompt{ schema = Nothing, .. } =
-            keyword "prompt" <> " " <> prettyFieldExpression arguments
+            keyword "prompt" <> " " <> prettyProjectExpression arguments
     prettyShort other =
-        prettyFieldExpression other
+        prettyProjectExpression other
 
     prettyLong Application{..} =
             prettyLong function
         <>  Pretty.hardline
         <>  "  "
-        <>  prettyFieldExpression argument
+        <>  prettyProjectExpression argument
     prettyLong Fold{..} =
             keyword "fold"
         <>  Pretty.hardline
         <>  "  "
-        <>  prettyFieldExpression handlers
+        <>  prettyProjectExpression handlers
     prettyLong Prompt{..} =
             keyword "prompt"
         <>  Pretty.hardline
         <>  "  "
-        <>  prettyFieldExpression arguments
+        <>  prettyProjectExpression arguments
     prettyLong other =
-        prettyFieldExpression other
+        prettyProjectExpression other
 
-prettyFieldExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
-prettyFieldExpression expression@Project{ }  =
-    Pretty.group (Pretty.flatAlt long short)
+prettyProjectExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
+prettyProjectExpression expression = case expression of
+    Project{ } -> Pretty.group (Pretty.flatAlt long short)
+    _          -> prettyPrimitiveExpression expression
   where
     short = prettyShort expression
 
     long = Pretty.align (prettyLong expression)
 
-    prettyShort Project{ record, fields = Single{ single = Field{ field } } } =
-            prettyShort record
+    prettyShort Project{ larger, smaller = Single{ single = Field{ field } } } =
+            prettyShort larger
         <>  Pretty.operator "."
         <>  Type.prettyRecordLabel False field
-    prettyShort Project{ record, fields = Multiple{ multiple = [ ] } } =
-            prettyShort record
+    prettyShort Project{ larger, smaller = Multiple{ multiple = [ ] } } =
+            prettyShort larger
         <>  Pretty.operator "."
         <>  Pretty.punctuation "{"
         <>  " "
         <>  Pretty.punctuation "}"
-    prettyShort Project{ record, fields = Multiple{ multiple = Field{ field = f₀ }  : fs } } =
-            prettyShort record
+    prettyShort Project{ larger, smaller = Multiple{ multiple = Field{ field = f₀ }  : fs } } =
+            prettyShort larger
         <>  Pretty.operator "."
         <>  Pretty.punctuation "{"
         <>  " "
@@ -830,46 +830,48 @@ prettyFieldExpression expression@Project{ }  =
         <>  foldMap (\Field{ field = f } -> Pretty.punctuation "," <> " " <> Type.prettyRecordLabel False f) fs
         <>  " "
         <>  Pretty.punctuation "}"
+    prettyShort Project{ larger, smaller = Index{ index } } =
+            prettyShort larger
+        <>  Pretty.operator "."
+        <>  Pretty.scalar (pretty index)
     prettyShort other =
         prettyPrimitiveExpression other
 
-    prettyLong Project{ record, fields = Single{ single = Field{ field } } } =
-        Pretty.align
-            (   prettyLong record
-            <>  Pretty.hardline
-            <>  "  "
-            <>  Pretty.operator "."
-            <>  Type.prettyRecordLabel False field
-            )
-    prettyLong Project{ record, fields = Multiple{ multiple = [ ] } } =
-        Pretty.align
-            (   prettyLong record
-            <>  Pretty.hardline
-            <>  "  "
-            <>  Pretty.operator "."
-            <>  Pretty.punctuation "{"
-            <>  " "
-            <>  Pretty.punctuation "}"
-            )
-    prettyLong Project{ record, fields = Multiple{ multiple = Field{ field = f₀ } : fs  } } =
-        Pretty.align
-            (   prettyLong record
-            <>  Pretty.hardline
-            <>  "  "
-            <>  Pretty.operator "."
-            <>  " "
-            <>  Pretty.punctuation "{"
-            <>  " "
-            <>  Type.prettyRecordLabel False f₀
-            <>  foldMap (\Field{ field = f } -> Pretty.hardline <> "    " <> Pretty.punctuation "," <> " " <> Type.prettyRecordLabel False f) fs
-            <>  Pretty.hardline
-            <>  "    "
-            <>  Pretty.punctuation "}"
-            )
+    prettyLong Project{ larger, smaller = Single{ single = Field{ field } } } =
+            prettyLong larger
+        <>  Pretty.hardline
+        <>  "  "
+        <>  Pretty.operator "."
+        <>  Type.prettyRecordLabel False field
+    prettyLong Project{ larger, smaller = Multiple{ multiple = [ ] } } =
+            prettyLong larger
+        <>  Pretty.hardline
+        <>  "  "
+        <>  Pretty.operator "."
+        <>  Pretty.punctuation "{"
+        <>  " "
+        <>  Pretty.punctuation "}"
+    prettyLong Project{ larger, smaller = Multiple{ multiple = Field{ field = f₀ } : fs  } } =
+            prettyLong larger
+        <>  Pretty.hardline
+        <>  "  "
+        <>  Pretty.operator "."
+        <>  " "
+        <>  Pretty.punctuation "{"
+        <>  " "
+        <>  Type.prettyRecordLabel False f₀
+        <>  foldMap (\Field{ field = f } -> Pretty.hardline <> "    " <> Pretty.punctuation "," <> " " <> Type.prettyRecordLabel False f) fs
+        <>  Pretty.hardline
+        <>  "    "
+        <>  Pretty.punctuation "}"
+    prettyLong Project{ larger, smaller = Index{ index } } =
+            prettyLong larger
+        <>  Pretty.hardline
+        <>  "  "
+        <>  Pretty.operator "."
+        <>  Pretty.scalar (pretty index)
     prettyLong record =
         prettyPrimitiveExpression record
-prettyFieldExpression other =
-    prettyPrimitiveExpression other
 
 prettyPrimitiveExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
 prettyPrimitiveExpression Variable{..} =

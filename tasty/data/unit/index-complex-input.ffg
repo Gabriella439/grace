@@ -1,0 +1,6 @@
+{ example0: [ 2, 3, 5 ].0
+, example1: [ 2, 3, 5 ].-1
+, example2: [ 2, 3, 5 ].3
+, example3: [ 2, 3, 5 ].-4
+, example4: [].0
+}

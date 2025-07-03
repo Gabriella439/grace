@@ -60,9 +60,9 @@ import Grace.Syntax
     ( Binding(..)
     , Chunks(..)
     , Field(..)
-    , Fields(..)
     , FieldName(..)
     , NameBinding(..)
+    , Smaller(..)
     , Syntax(..)
     )
 
@@ -699,6 +699,9 @@ reservedLabel = terminal matchReservedLabel
 alternative :: Parser r Text
 alternative = terminal matchAlternative
 
+int :: Parser r (Sign, Int)
+int = terminal matchInt
+
 text :: Parser r Text
 text = terminal matchText
 
@@ -959,8 +962,8 @@ grammar endsWithBrace = mdo
         )
 
     projectExpression <- rule do
-        let snoc record0 record fields =
-                Syntax.Project{ location = Syntax.location record0, .. }
+        let snoc location record f =
+                f location record
 
         let parseField = do
                 ~(fieldLocation, field) <- locatedRecordLabel
@@ -970,7 +973,8 @@ grammar endsWithBrace = mdo
         let parseSingle = do
                 single <- parseField
 
-                return Single{ single }
+                return \location larger ->
+                    Syntax.Project{ location, larger, smaller = Syntax.Single{ single } }
 
         let parseMultiple = do
                 multipleLocation <- locatedToken Grace.Parser.OpenBrace
@@ -979,19 +983,30 @@ grammar endsWithBrace = mdo
 
                 parseToken Grace.Parser.CloseBrace
 
-                return Multiple{ multipleLocation, multiple }
+                return \location larger ->
+                    Syntax.Project{ location, larger, smaller = Multiple{ multipleLocation, multiple } }
 
+        let parseIndex = do
+                let withSign sign n = case sign of
+                        Unsigned -> fromIntegral n
+                        Positive -> fromIntegral n
+                        Negative -> negate (fromIntegral n)
+
+                ~(sign, n) <- int
+
+                return \location larger ->
+                    Syntax.Project{ location, larger, smaller = Index { index = withSign sign n } }
         record <- primitiveExpression
 
         projections <- many
             (do parseToken Grace.Parser.Dot
 
-                fields <- parseSingle <|> parseMultiple
+                fields <- parseSingle <|> parseIndex <|> parseMultiple
 
                 pure fields
             )
 
-        return (foldl (snoc record) record projections)
+        return (foldl (snoc (Syntax.location record)) record projections)
 
     modeAnnotation <- rule do
         let textMode = do

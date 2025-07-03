@@ -456,7 +456,7 @@ splitOnUnsolvedAlternatives _ [] = Nothing
 {-| Retrieve a variable's annotated type from a `Context`, given the variable's
     label and index
 
-    >>> lookup "x" 0 [ Annotation "x" (Type.Scalar () Monotype.Bool), Annotation "y" (Type.Scalar () Monotype.Natural) ]
+    >>> lookup "x" [ Annotation "x" (Type.Scalar () Monotype.Bool), Annotation "y" (Type.Scalar () Monotype.Natural) ]
     Just (Scalar {location = (), scalar = Bool})
 -}
 lookup

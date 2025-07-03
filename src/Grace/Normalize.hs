@@ -388,35 +388,39 @@ evaluate maybeMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
 
                 return (Value.Text (text <> suffix))
 
-            Syntax.Project{ record, fields } -> do
-                value <- loop env record
+            Syntax.Project{ larger, smaller } -> do
+                let lookup field fieldValues = case HashMap.lookup field fieldValues of
+                        Just v -> v
+                        Nothing -> (Value.Scalar Syntax.Null)
 
-                return case value of
-                    Value.Record fieldValues -> do
-                        case fields of
-                            Syntax.Single{ single = Syntax.Field{ field } } ->
-                                lookup field
+                larger' <- loop env larger
 
-                            Syntax.Multiple{ multiple } ->
-                                Value.Record newFieldValues
-                              where
-                                labels = do
-                                    Syntax.Field{ field } <- multiple
+                return case (larger', smaller) of
+                    (Value.Record fieldValues, Syntax.Single{ single = Syntax.Field{ field } }) ->
+                        lookup field fieldValues
 
-                                    return field
-
-                                process field = (field, lookup field)
-
-                                fvs = map process labels
-
-                                newFieldValues = HashMap.fromList fvs
+                    (Value.Record fieldValues, Syntax.Multiple{ multiple }) ->
+                        Value.Record newFieldValues
                       where
-                        lookup field = case HashMap.lookup field fieldValues of
-                            Just v -> v
-                            Nothing -> (Value.Scalar Syntax.Null)
+                        labels = do
+                            Syntax.Field{ field } <- multiple
 
+                            return field
+
+                        process field = (field, lookup field fieldValues)
+
+                        fvs = map process labels
+
+                        newFieldValues = HashMap.fromList fvs
+
+                    (Value.List xs, Syntax.Index index)
+                        | Seq.null xs -> Value.Scalar Null
+                        | otherwise ->
+                            Value.Application
+                                (Value.Builtin Some)
+                                (Seq.index xs (fromInteger index `mod` Seq.length xs))
                     _ ->
-                        error "Grace.Normalize.evaluate: fields can only be accessed from record values"
+                        error "Grace.Normalize.evaluate: invalid projection"
 
             Syntax.Alternative{..} ->
                 pure (Value.Alternative name)

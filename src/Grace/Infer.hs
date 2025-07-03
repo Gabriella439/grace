@@ -1691,25 +1691,25 @@ infer e₀ = do
                 _ -> do
                     Exception.throwIO (FoldRecord (Type.location _R) _R)
 
-        Syntax.Project{ location, record, fields } -> do
-            p <- fresh
-
-            push (Context.UnsolvedFields p)
-
-            let process Syntax.Field{ fieldLocation, field } = do
+        Syntax.Project{ location, larger, smaller } -> do
+            let processField Syntax.Field{ fieldLocation, field } = do
                     existential <- fresh
 
                     push (Context.UnsolvedType existential)
 
                     return (field, Type.UnsolvedType{ location = fieldLocation, .. })
 
-            case fields of
+            case smaller of
                 Syntax.Single{ single } -> do
+                    p <- fresh
+
+                    push (Context.UnsolvedFields p)
+
                     let Syntax.Field{ fieldLocation } = single
 
-                    fieldType@(_, type_) <- process single
+                    fieldType@(_, type_) <- processField single
 
-                    newRecord <- check record Type.Record
+                    newLarger <- check larger Type.Record
                         { fields =
                             Type.Fields [fieldType] (Monotype.UnsolvedFields p)
                         , location = fieldLocation
@@ -1717,12 +1717,16 @@ infer e₀ = do
 
                     _Γ <- get
 
-                    return (type_, Syntax.Project{ record = solveSyntax _Γ newRecord, .. })
+                    return (type_, Syntax.Project{ larger = solveSyntax _Γ newLarger, .. })
 
                 Syntax.Multiple{ multipleLocation, multiple } -> do
-                    fieldTypes <- traverse process multiple
+                    p <- fresh
 
-                    newRecord <- check record Type.Record
+                    push (Context.UnsolvedFields p)
+
+                    fieldTypes <- traverse processField multiple
+
+                    newLarger <- check larger Type.Record
                         { fields =
                             Type.Fields fieldTypes (Monotype.UnsolvedFields p)
                         , location = multipleLocation
@@ -1736,7 +1740,22 @@ infer e₀ = do
 
                     _Γ <- get
 
-                    return (type_, Syntax.Project{ record = solveSyntax _Γ newRecord, .. })
+                    return (type_, Syntax.Project{ larger = solveSyntax _Γ newLarger, .. })
+
+                Syntax.Index{ } -> do
+                    existential <- fresh
+
+                    push (Context.UnsolvedType existential)
+
+                    let element = Type.UnsolvedType{ location, existential }
+
+                    let listType = Type.List{ location, type_ = element }
+
+                    newLarger <- check larger listType
+
+                    let optional = Type.Optional{ location, type_ = element }
+
+                    return (optional, Syntax.Project{ location, larger = newLarger, .. })
 
         Syntax.If{..} -> do
             newPredicate <- check predicate Type.Scalar{ scalar = Monotype.Bool, .. }
@@ -2896,22 +2915,21 @@ check e@Syntax.Record{ fieldValues } _B@Type.Record{ fields = Type.Fields fieldT
             other ->
                 return other
 
-check Syntax.Project{ location, record, fields } annotation
-    | Syntax.Single{ single = Syntax.Field{ fieldLocation, field } } <- fields = do
+check Syntax.Project{ location, larger, smaller } annotation
+    | Syntax.Single{ single = Syntax.Field{ fieldLocation, field } } <- smaller = do
+        p <- fresh
 
-    p <- fresh
+        push (Context.UnsolvedFields p)
 
-    push (Context.UnsolvedFields p)
+        newLarger <- check larger Type.Record
+            { fields =
+                Type.Fields [(field, annotation)] (Monotype.UnsolvedFields p)
+            , location = fieldLocation
+            }
 
-    newRecord <- check record Type.Record
-        { fields =
-            Type.Fields [(field, annotation)] (Monotype.UnsolvedFields p)
-        , location = fieldLocation
-        }
+        _Γ <- get
 
-    _Γ <- get
-
-    return Syntax.Project{ record = solveSyntax _Γ newRecord, .. }
+        return Syntax.Project{ larger = solveSyntax _Γ newLarger, .. }
 
 check Syntax.Text{ chunks = Syntax.Chunks text₀ rest, .. } Type.Scalar{ scalar = Monotype.Text } = do
     let process (interpolation, text) = do
