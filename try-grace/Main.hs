@@ -1177,11 +1177,9 @@ builtinsExample =
     \, \"x && y\": \\input -> input.x && input.y\n\
     \, \"abs\": abs\n\
     \, \"show\": show\n\
-    \, \"List/drop\": List/drop\n\
     \, \"indexed\": indexed\n\
     \, \"length\": length\n\
     \, \"map\": map\n\
-    \, \"List/take\": List/take\n\
     \}"
 
 preludeExample :: Text

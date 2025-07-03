@@ -126,11 +126,9 @@ lexToken =
             [ Grace.Parser.Abs            <$ symbol "abs"
             , Grace.Parser.Show           <$ symbol "show"
             , Grace.Parser.YAML           <$ symbol "yaml"
-            , Grace.Parser.ListDrop       <$ symbol "List/drop"
             , Grace.Parser.Indexed        <$ symbol "indexed"
             , Grace.Parser.Length         <$ symbol "length"
             , Grace.Parser.Map            <$ symbol "map"
-            , Grace.Parser.ListTake       <$ symbol "List/take"
             , Grace.Parser.False_         <$ symbol "false"
             , Grace.Parser.True_          <$ symbol "true"
             , Grace.Parser.Some           <$ symbol "some"
@@ -460,12 +458,10 @@ reserved =
         , "Fields"
         , "Integer"
         , "List"
-        , "List/drop"
         , "List/equal"
         , "indexed"
         , "length"
         , "map"
-        , "List/take"
         , "Natural"
         , "Optional"
         , "Text"
@@ -590,10 +586,8 @@ data Token
     | LessThanOrEqual
     | Let
     | List
-    | ListDrop
     | Indexed
     | Length
-    | ListTake
     | Map
     | Modulus
     | Natural
@@ -790,10 +784,8 @@ render t = case t of
     Grace.Parser.LessThanOrEqual    -> "<="
     Grace.Parser.Let                -> "let"
     Grace.Parser.List               -> "list"
-    Grace.Parser.ListDrop           -> "List/drop"
     Grace.Parser.Indexed            -> "indexed"
     Grace.Parser.Length             -> "length"
-    Grace.Parser.ListTake           -> "List/take"
     Grace.Parser.Fold               -> "fold"
     Grace.Parser.Map                -> "map"
     Grace.Parser.Modulus            -> "%"
@@ -1104,10 +1096,6 @@ grammar endsWithBrace = mdo
 
                 return Syntax.Builtin{ builtin = Syntax.YAML, .. }
 
-        <|> do  location <- locatedToken Grace.Parser.ListDrop
-
-                return Syntax.Builtin{ builtin = Syntax.ListDrop, .. }
-
         <|> do  location <- locatedToken Grace.Parser.Indexed
 
                 return Syntax.Builtin{ builtin = Syntax.Indexed, .. }
@@ -1119,10 +1107,6 @@ grammar endsWithBrace = mdo
         <|> do  location <- locatedToken Grace.Parser.Map
 
                 return Syntax.Builtin{ builtin = Syntax.Map, .. }
-
-        <|> do  location <- locatedToken Grace.Parser.ListTake
-
-                return Syntax.Builtin{ builtin = Syntax.ListTake, .. }
 
         <|> do  location <- locatedToken Grace.Parser.Abs
 

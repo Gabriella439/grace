@@ -509,10 +509,6 @@ data Builtin
     -- ^
     --   >>> pretty YAML
     --   yaml
-    | ListDrop
-    -- ^
-    --   >>> pretty ListDrop
-    --   List/drop
     | Indexed
     -- ^
     --   >>> pretty Indexed
@@ -525,10 +521,6 @@ data Builtin
     -- ^
     --   >>> pretty Map
     --   map
-    | ListTake
-    -- ^
-    --   >>> pretty ListTake
-    --   List/take
     deriving (Bounded, Enum, Eq, Generic, Lift, Show)
 
 instance Pretty Builtin where
@@ -536,11 +528,9 @@ instance Pretty Builtin where
     pretty Some           = Pretty.builtin "some"
     pretty Show           = Pretty.builtin "show"
     pretty YAML           = Pretty.builtin "yaml"
-    pretty ListDrop       = Pretty.builtin "List/drop"
     pretty Indexed        = Pretty.builtin "indexed"
     pretty Length         = Pretty.builtin "length"
     pretty Map            = Pretty.builtin "map"
-    pretty ListTake       = Pretty.builtin "List/take"
 
 -- | Pretty-print an expression
 prettyExpression :: Pretty a => Syntax s a -> Doc AnsiStyle

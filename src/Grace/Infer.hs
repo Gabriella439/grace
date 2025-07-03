@@ -2600,22 +2600,6 @@ infer e₀ = do
                 , Syntax.Builtin{ builtin = Syntax.YAML, .. }
                 )
 
-        Syntax.Builtin{ builtin = Syntax.ListDrop, .. } -> do
-            return
-                ( Type.Forall
-                    { nameLocation = Syntax.location e₀
-                    , name = "a"
-                    , domain = Domain.Type
-                    , type_ =
-                           Type.Scalar{ scalar = Monotype.Natural, .. }
-                        ~>  (   Type.List{ type_ = var "a", .. }
-                            ~>  Type.List{ type_ = var "a", .. }
-                            )
-                    , ..
-                    }
-                , Syntax.Builtin{ builtin = Syntax.ListDrop, .. }
-                )
-
         Syntax.Builtin{ builtin = Syntax.Indexed, .. } -> do
             return
                 ( Type.Forall
@@ -2683,22 +2667,6 @@ infer e₀ = do
                 (   Type.Scalar{ scalar = Monotype.Integer, .. }
                 ~>  Type.Scalar{ scalar = Monotype.Natural, .. }
                 , Syntax.Builtin{ builtin = Syntax.Abs, .. }
-                )
-
-        Syntax.Builtin{ builtin = Syntax.ListTake, .. } -> do
-            return
-                ( Type.Forall
-                    { nameLocation = Syntax.location e₀
-                    , name = "a"
-                    , domain = Domain.Type
-                    , type_ =
-                            Type.Scalar{ scalar = Monotype.Natural, .. }
-                        ~>  (   Type.List{ type_ = var "a", .. }
-                            ~>  Type.List{ type_ = var "a", .. }
-                            )
-                    , ..
-                    }
-                , Syntax.Builtin{ builtin = Syntax.ListTake, .. }
                 )
 
         Syntax.Embed{..} -> do

@@ -119,7 +119,19 @@ application
   ; Ordinary function application
   / 1*projection
 
-projection = primitive *( "." field )
+projection = primitive *smaller
+
+smaller
+  = "." field
+
+  ; You can also index into a list using dot notation (e.g. `list.index`).  Just
+  ; like Python, you can index from the end of the list using negative numbers
+  ; (e.g. `list.-1` to get the last element of the list)
+  / "." integer
+
+  ; You can slice into a list using `xs[m:n]` just like in Python
+  / "[" [ integer ] ":" [ integer ] "]"
+
 
 primitive
   = variable
@@ -203,31 +215,23 @@ projection-value
   / field
 
 field
-    ; Ordinary field access (e.g. `record.x`)
-    = identifier
+  = identifier
 
-    ; Field names can be alternative names, too.  This is necessary so that you
-    ; can `fold` unions (since the field names need to match the union's
-    ; alternative names)
-    / alternative
+  ; Field names can be alternative names, too.  This is necessary so that you
+  ; can `fold` unions (since the field names need to match the union's
+  ; alternative names)
+  / alternative
 
-    ; You can quote field names, too, which comes in handy if a field has
-    ; characters that would otherwise be forbidden (e.g. spaces or punctuation)
-    ; (e.g. `record."A field name with capitalization and spacing"`)
-    / string
-
-    ; You can allso index into a list using dot notation (e.g. `list.index`).
-    ; Just like Python, you can index from the end of the list using negative
-    ; numbers (e.g. `list.-1` to get the last element of the list)
-    / integer
+  ; You can quote field names, too, which comes in handy if a field has
+  ; characters that would otherwise be forbidden (e.g. spaces or punctuation)
+  ; (e.g. `record."Example field"` or `{ "Example field": true }`)
+  / string
 
 builtin
     = "show "           ; JSON -> Text
-    / "List/drop"       ; forall (a : Type) . Natural -> List a -> List a
     / "indexed"         ; forall (a : Type) . List a -> List { index: Natural, value: a }
     / "length"          ; forall (a : Type) . List a -> Natural
     / "map"             ; forall (a : Type) (b : Type) . (a -> b) -> List a -> List b
-    / "List/take"       ; forall (a : Type) . Natural -> List a -> List a
     / "abs"             ; Integer -> Natural
 
 type = quantified-type

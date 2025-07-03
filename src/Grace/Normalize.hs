@@ -997,14 +997,6 @@ apply maybeMethods function₀ argument₀ = runConcurrently (loop function₀ a
         (Value.Application (Value.Alternative alternative) x)
         | Just f <- HashMap.lookup alternative alternativeHandlers =
             loop f x
-    loop
-        (Value.Application (Value.Builtin ListDrop) (Value.Scalar (Natural n)))
-        (Value.List elements) =
-            pure (Value.List (Seq.drop (fromIntegral n) elements))
-    loop
-        (Value.Application (Value.Builtin ListTake) (Value.Scalar (Natural n)))
-        (Value.List elements) =
-            pure (Value.List (Seq.take (fromIntegral n) elements))
     loop (Value.Builtin Indexed) (Value.List elements) =
         pure (Value.List (Seq.mapWithIndex adapt elements))
       where

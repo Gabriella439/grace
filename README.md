@@ -547,9 +547,6 @@ You can also use the built-in functions, including:
 # Render any `JSON`-compatible value as `Text`
 show : JSON -> Text
 
-# Drop the first N elements from a `List`
-List/drop : forall (a : Type) . Natural -> List a -> List a
-
 # Annotate each element of a list with its index
 indexed : forall (a : Type) . List a -> List { index: Natural, value: a }
 
@@ -558,9 +555,6 @@ length : forall (a : Type) . List a -> Natural
 
 # Transform each element of a list
 map : forall (a : Type) . forall (b : Type) . (a -> b) -> List a -> List b
-
-# Take the first N elements of a list
-List/take : forall (a : Type) . Natural -> List a -> List a
 
 # Compute the absolute value of an `Integer`
 abs : Integer -> Natural
