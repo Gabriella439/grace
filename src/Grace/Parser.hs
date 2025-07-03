@@ -980,23 +980,48 @@ grammar endsWithBrace = mdo
                     Syntax.Project{ location, larger, smaller = Multiple{ multipleLocation, multiple } }
 
         let parseIndex = do
-                let withSign sign n = case sign of
+                let withSign (sign, n) = case sign of
                         Unsigned -> fromIntegral n
                         Positive -> fromIntegral n
                         Negative -> negate (fromIntegral n)
 
-                ~(sign, n) <- int
+                index <- fmap withSign int
 
                 return \location larger ->
-                    Syntax.Project{ location, larger, smaller = Index { index = withSign sign n } }
+                    Syntax.Project{ location, larger, smaller = Index { index } }
+
+        let parseSlice = do
+                let withSign (sign, n) = case sign of
+                        Unsigned -> fromIntegral n
+                        Positive -> fromIntegral n
+                        Negative -> negate (fromIntegral n)
+
+                parseToken Grace.Parser.OpenBracket
+
+                begin <- fmap (fmap withSign) (optional int)
+
+                parseToken Grace.Parser.Colon
+
+                end <- fmap (fmap withSign) (optional int)
+
+                parseToken Grace.Parser.CloseBracket
+
+                return \location larger ->
+                    Syntax.Project{ location, larger, smaller = Slice{ begin, end } }
+
+        let parseDotAccess = do
+                parseToken Grace.Parser.Dot
+
+                smaller <- parseSingle <|> parseIndex <|> parseMultiple
+
+                pure smaller
+
         record <- primitiveExpression
 
         projections <- many
-            (do parseToken Grace.Parser.Dot
+            (do smaller <- parseSlice <|> parseDotAccess
 
-                fields <- parseSingle <|> parseIndex <|> parseMultiple
-
-                pure fields
+                pure smaller
             )
 
         return (foldl (snoc (Syntax.location record)) record projections)

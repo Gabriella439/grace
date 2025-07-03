@@ -1756,6 +1756,18 @@ infer e₀ = do
                     let optional = Type.Optional{ location, type_ = element }
 
                     return (optional, Syntax.Project{ location, larger = newLarger, .. })
+                Syntax.Slice{ } -> do
+                    existential <- fresh
+
+                    push (Context.UnsolvedType existential)
+
+                    let element = Type.UnsolvedType{ location, existential }
+
+                    let listType = Type.List{ location, type_ = element }
+
+                    newLarger <- check larger listType
+
+                    return (listType, Syntax.Project{ location, larger = newLarger, .. })
 
         Syntax.If{..} -> do
             newPredicate <- check predicate Type.Scalar{ scalar = Monotype.Bool, .. }

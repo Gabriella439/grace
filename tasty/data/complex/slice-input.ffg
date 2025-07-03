@@ -1,0 +1,27 @@
+let list = [ 2, 3, 5, 7, 11, 13, 17 ]
+
+in  { "slicing an empty list always return null":
+        [][:]
+    , "otherwise, [:] returns the entire list":
+        list[:]
+    , "[:] is equivalent to [0:0]":
+        list[0:0]
+    , "[n:n] returns the entire list starting and ending at element n":
+        list[3:3]
+    , "[m:n] returns the mth element up to and not including the mth element":
+        list[3:5]
+    , "[n:] drops the first n elements of the list":
+        list[3:]
+    , "[n:] is equivalent to [n:0]":
+        list[3:0]
+    , "[:-n] drops the last n elements of the list":
+        list[:-3]
+    , "[:n] is equivalent to [0:n]":
+        list[0:-3]
+    , "slice indices do not need to be in order":
+        list[5:3]
+    , "both slice indices can be negative":
+        list[-3:-1]
+    , "both slice indices can be past the end of the list":
+        list[8:10]
+    }

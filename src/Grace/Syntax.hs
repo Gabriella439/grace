@@ -357,6 +357,7 @@ data Smaller s
     = Single{ single :: Field s }
     | Multiple{ multipleLocation :: s, multiple :: [Field s] }
     | Index{ index :: Integer }
+    | Slice{ begin :: Maybe Integer, end :: Maybe Integer }
     deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
 
 instance IsString (Smaller ()) where

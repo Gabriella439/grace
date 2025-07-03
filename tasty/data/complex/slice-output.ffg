@@ -1,0 +1,22 @@
+{ "slicing an empty list always return null": null
+, "otherwise, [:] returns the entire list": [ 2, 3, 5, 7, 11, 13, 17 ]
+, "[:] is equivalent to [0:0]": [ 2, 3, 5, 7, 11, 13, 17 ]
+, "[n:n] returns the entire list starting and ending at element n": [ 7
+                                                                    , 11
+                                                                    , 13
+                                                                    , 17
+                                                                    , 2
+                                                                    , 3
+                                                                    , 5
+                                                                    ]
+, "[m:n] returns the mth element up to and not including the mth element": [ 7
+                                                                           , 11
+                                                                           ]
+, "[n:] drops the first n elements of the list": [ 7, 11, 13, 17 ]
+, "[n:] is equivalent to [n:0]": [ 7, 11, 13, 17 ]
+, "[:-n] drops the last n elements of the list": [ 2, 3, 5, 7 ]
+, "[:n] is equivalent to [0:n]": [ 2, 3, 5, 7 ]
+, "slice indices do not need to be in order": [ 13, 17, 2, 3, 5 ]
+, "both slice indices can be negative": [ 11, 13 ]
+, "both slice indices can be past the end of the list": [ 3, 5 ]
+}

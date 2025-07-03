@@ -413,12 +413,38 @@ evaluate maybeMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
 
                         newFieldValues = HashMap.fromList fvs
 
-                    (Value.List xs, Syntax.Index index)
+                    (Value.List xs, Syntax.Index{ index })
                         | Seq.null xs -> Value.Scalar Null
                         | otherwise ->
                             Value.Application
                                 (Value.Builtin Some)
                                 (Seq.index xs (fromInteger index `mod` Seq.length xs))
+                    (Value.List xs, Syntax.Slice{ begin, end })
+                        | Seq.null xs ->
+                            Value.Scalar Null
+                        | otherwise ->
+                            Value.Application
+                                (Value.Builtin Some)
+                                (Value.List elements₂)
+                      where
+                        b = case begin of
+                            Just x -> x
+                            Nothing -> 0
+
+                        e = case end of
+                            Just x -> x
+                            Nothing -> 0
+
+                        n = Seq.length xs
+
+                        elements₀ = Seq.cycleTaking (2 * n) xs
+
+                        elements₁ = Seq.drop (fromInteger b `mod` n) elements₀
+
+                        elements₂ =
+                            Seq.take
+                                ((fromInteger (e - b - 1) `mod` n) + 1)
+                                elements₁
                     _ ->
                         error "Grace.Normalize.evaluate: invalid projection"
 

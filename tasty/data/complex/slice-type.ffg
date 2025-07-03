@@ -1,0 +1,16 @@
+forall (a : Type) .
+  { "slicing an empty list always return null": List a
+  , "otherwise, [:] returns the entire list": List Natural
+  , "[:] is equivalent to [0:0]": List Natural
+  , "[n:n] returns the entire list starting and ending at element n": List
+                                                                        Natural
+  , "[m:n] returns the mth element up to and not including the mth element":
+      List Natural
+  , "[n:] drops the first n elements of the list": List Natural
+  , "[n:] is equivalent to [n:0]": List Natural
+  , "[:-n] drops the last n elements of the list": List Natural
+  , "[:n] is equivalent to [0:n]": List Natural
+  , "slice indices do not need to be in order": List Natural
+  , "both slice indices can be negative": List Natural
+  , "both slice indices can be past the end of the list": List Natural
+  }
