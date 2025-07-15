@@ -43,6 +43,10 @@ li .btn {
   margin-left: 0.75em;
 }
 
+#form {
+  margin-top: 1em;
+}
+
 .CodeMirror {
   height: auto;
 }
