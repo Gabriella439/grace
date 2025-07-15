@@ -290,7 +290,8 @@ fromText :: Text -> JSString
 fromText = JSString.pack . Text.unpack
 
 valueToText :: Value -> Text
-valueToText = Pretty.renderStrict False 80 . Normalize.quote []
+valueToText =
+    Pretty.renderStrict False 80 . Normalize.strip . Normalize.quote []
 
 renderValue :: Maybe Methods -> IORef Natural -> JSVal -> Type s -> Value -> IO ()
 renderValue maybeMethods ref parent Type.Forall{ name, nameLocation, domain = Type, type_ } value = do
