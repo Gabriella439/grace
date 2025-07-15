@@ -2746,8 +2746,9 @@ check e Type.Forall{..} = do
 check Syntax.Scalar{ scalar = Syntax.Null, .. } Type.Optional{ } = do
     return Syntax.Scalar{ scalar = Syntax.Null, .. }
 
-check Syntax.Application{ function = Syntax.Builtin{ builtin = Syntax.Some }, argument = e } Type.Optional{ type_ } = do
-    check e type_
+check Syntax.Application{ location = location₀, function = Syntax.Builtin{ location = location₁, builtin = Syntax.Some }, argument = e } Type.Optional{ type_ } = do
+    newE <- check e type_
+    return Syntax.Application{ location = location₀, function = Syntax.Builtin{ location = location₁, builtin = Syntax.Some }, argument = newE }
 
 check e _B@Type.Optional{ type_ } = do
     let normal = do
