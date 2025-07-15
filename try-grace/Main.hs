@@ -357,7 +357,7 @@ renderValue maybeMethods ref parent outer (Value.List values) = do
                 return outer
 
             _ -> do
-                fail "renderValue maybeMethods: Missing element type"
+                fail "renderValue: Missing element type"
 
     lis <- forM values \value -> do
         li <- createElement "li"
@@ -385,7 +385,7 @@ renderValue maybeMethods ref parent outer (Value.Record keyValues) = do
 
     let process key value = do
             type_ <- case lookupKey key of
-                Nothing    -> fail "renderValue maybeMethods: Missing field type"
+                Nothing    -> fail "renderValue: Missing field type"
                 Just type_ -> return type_
 
             dt <- createElement "dt"
@@ -425,11 +425,11 @@ renderValue maybeMethods ref parent outer (Application (Value.Alternative altern
     inner <- case outer of
             Type.Union{ alternatives = Type.Alternatives keyTypes _ } ->
                 case lookup alternative keyTypes of
-                    Nothing    -> fail "renderValue maybeMethods: Missing alternative type"
+                    Nothing    -> fail "renderValue: Missing alternative type"
                     Just type_ -> return type_
 
             _ -> do
-                fail "renderValue maybeMethods: Missing alternative type"
+                fail "renderValue: Missing alternative type"
 
     -- Render unions the same as a record with one field
     let recordType = Type.Record
