@@ -8,6 +8,11 @@
     utils.lib.eachDefaultSystem (system:
       let withCompiler = compiler:
             let overlay = pkgsNew: pkgsOld: {
+                  codemirror = pkgsNew.fetchzip {
+                    url = "https://codemirror.net/5/codemirror.zip";
+                    sha256 = "sha256-G8m2Ba+wSkk0u4Ux7dokA3TuP/SIfgN/TLiqUNLW8e0=";
+                  };
+
                   haskell = pkgsOld.haskell // {
                     packages = pkgsOld.haskell.packages // {
                       "${compiler}" = pkgsOld.haskell.packages."${compiler}".override (old: {
@@ -193,14 +198,16 @@
                     };
                   };
 
-                  website = pkgsNew.runCommand "try-grace" { } ''
-                    mkdir -p $out/{prelude,prompts,examples}
-                    ${pkgsNew.rsync}/bin/rsync --archive ${./website}/ $out
-                    ${pkgsNew.rsync}/bin/rsync --archive ${./prelude}/ $out/prelude
-                    ${pkgsNew.rsync}/bin/rsync --archive ${./prompts}/ $out/prompts
-                    ${pkgsNew.rsync}/bin/rsync --archive ${./examples}/ $out/examples
-                    chmod -R u+w $out
-                    cp ${pkgsNew.haskell.packages."${compiler}".grace}/bin/try-grace.jsexe/all.js $out/js
+                  website = pkgsNew.runCommand "try-grace" { nativeBuildInputs = [ pkgsNew.rsync ]; } ''
+                    mkdir -p $out/{css,js,prelude,prompts,examples}
+                    rsync --recursive ${./website}/ $out
+                    rsync --recursive ${./prelude}/ $out/prelude
+                    rsync --recursive ${./prompts}/ $out/prompts
+                    rsync --recursive ${./examples}/ $out/examples
+                    ln --symbolic ${pkgsNew.codemirror}/lib/codemirror.css --target-directory=$out/css
+                    ln --symbolic ${pkgsNew.codemirror}/lib/codemirror.js --target-directory=$out/js
+                    ln --symbolic ${pkgsNew.codemirror}/mode/python/python.js --target-directory=$out/js
+                    ln --symbolic ${pkgsNew.haskell.packages."${compiler}".grace}/bin/try-grace.jsexe/all.js --target-directory=$out/js
                   '';
                 };
                 config.allowBroken = true;

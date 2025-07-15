@@ -18,7 +18,7 @@
 <h1 class="display-4">Grace browser</h1>
 </header>
 <main>
-<textarea style="display: none" id="input"></textarea>
+<textarea style="display: none;" id="input"></textarea>
 <br/>
 <button id="start-tutorial" type="button" class="btn btn-primary" style="display: none;">Try the tutorial</button>
 <br/>
@@ -27,7 +27,18 @@
 <input type="password" class="form-control" placeholder="sk-proj-…" id="api-key" />
 <button id="run" type="button" class="btn btn-primary">Run</button>
 </div>
-<div id="output"></div>
+<div id="output" style="display: none;">
+  <ul class="nav nav-tabs">
+    <li class="nav-item">
+      <a id="form-tab" class="nav-link mode-tab active" href="#">Form</a>
+    </li>
+    <li class="nav-item">
+      <a id="code-tab" class="nav-link mode-tab" href="#">Code</a>
+    </li>
+  </ul>
+  <div class="display" id="form"></div>
+  <textarea class="display" style="display: none;" id="code"></textarea>
+</div>
 <pre id="error"></pre>
 </main>
 </div>
@@ -40,6 +51,12 @@ function replaceChildrenWorkaround(x, y) {
 }
 function deleteSearchParamWorkaround(x, y) {
     x.delete(y)
+}
+function select(tabId) {
+  Array.from(document.getElementsByClassName("mode-tab")).forEach(element => {
+    element.classList.remove("active");
+  });
+  document.getElementById(tabId).classList.toggle("active");
 }
 </script>
 <script defer language="javascript" src="js/all.js"></script>

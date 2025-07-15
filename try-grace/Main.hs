@@ -12,7 +12,6 @@ import Control.Concurrent.Async (Async)
 import Control.Exception (Exception(..), SomeException)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Maybe (MaybeT)
-import Data.Bifunctor (first)
 import Data.Foldable (toList)
 import Data.Generics.Sum (_As)
 import Data.IORef (IORef)
@@ -54,7 +53,6 @@ import qualified GHCJS.Foreign.Callback as Callback
 import qualified Grace.HTTP as HTTP
 import qualified Grace.Import as Import
 import qualified Grace.Infer as Infer
-import qualified Grace.Location as Location
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Normalize as Normalize
 import qualified Grace.Pretty as Pretty
@@ -215,11 +213,32 @@ foreign import javascript unsafe "$1.remove()"
 remove :: MonadIO io => JSVal -> io ()
 remove a = liftIO (remove_ a)
 
-foreign import javascript unsafe "CodeMirror.fromTextArea($1, { lineNumbers: true, viewportMargin: Infinity, extraKeys: { Tab: false } })"
-    setupCodemirror_ :: JSVal -> IO JSVal
+foreign import javascript unsafe "CodeMirror.fromTextArea($1, { mode: 'python', lineNumbers: true, viewportMargin: Infinity, extraKeys: { Tab: false } })"
+    setupCodemirrorInput_ :: JSVal -> IO JSVal
 
-setupCodemirror :: MonadIO io => JSVal -> io JSVal
-setupCodemirror a = liftIO (setupCodemirror_ a)
+setupCodemirrorInput :: MonadIO io => JSVal -> io JSVal
+setupCodemirrorInput a = liftIO (setupCodemirrorInput_ a)
+
+foreign import javascript unsafe "CodeMirror.fromTextArea($1, { mode: 'python', lineNumbers: false, viewportMargin: Infinity, readOnly: true })"
+    setupCodemirrorOutput_ :: JSVal -> IO JSVal
+
+setupCodemirrorOutput :: MonadIO io => JSVal -> io JSVal
+setupCodemirrorOutput a = liftIO (setupCodemirrorOutput_ a)
+
+foreign import javascript unsafe "$1.refresh()"
+    refresh_ :: JSVal -> IO ()
+
+refresh :: MonadIO io => JSVal -> io ()
+refresh a = liftIO (refresh_ a)
+
+foreign import javascript unsafe "select($1)"
+    select_ :: JSString -> IO ()
+
+foreign import javascript unsafe "$1.getWrapperElement()"
+    getWrapperElement :: JSVal -> JSVal
+
+select :: MonadIO io => Text -> io ()
+select a = liftIO (select_ (fromText a))
 
 foreign import javascript unsafe "$1.on('change', $2)"
     onChange_ :: JSVal -> Callback (IO ()) -> IO ()
@@ -808,16 +827,22 @@ debounce io = do
 main :: IO ()
 main = do
     input         <- getElementById "input"
-    output        <- getElementById "output"
     error         <- getElementById "error"
+    output        <- getElementById "output"
+    code          <- getElementById "code"
+    form          <- getElementById "form"
     startTutorial <- getElementById "start-tutorial"
     prompt        <- getElementById "prompt"
     apiKeyInput   <- getElementById "api-key"
     runButton     <- getElementById "run"
 
-    codeInput <- setupCodemirror input
+    codeInput  <- setupCodemirrorInput input
+    codeOutput <- setupCodemirrorOutput code
 
     focus codeInput
+
+    setDisplay form "block"
+    setDisplay (getWrapperElement codeOutput) "none"
 
     spinner <- createElement "div"
 
@@ -843,10 +868,14 @@ main = do
     let setOutput type_ value = do
             maybeMethods <- IORef.readIORef maybeMethodsRef
 
-            renderValue maybeMethods counter output type_ value
+            setValue codeOutput (valueToText value)
+
+            renderValue maybeMethods counter form type_ value
 
             setDisplay error  "none"
             setDisplay output "block"
+
+            refresh codeOutput
 
     let interpret shouldRun = do
             text <- getValue codeInput
@@ -1064,6 +1093,24 @@ main = do
     addEventListener runButton "click" runCallback
 
     interpret False
+
+    let registerTabCallback tabID action = do
+            tabElement <- getElementById tabID
+
+            callback <- Callback.asyncCallback action
+
+            addEventListener tabElement "click" callback
+
+    registerTabCallback "form-tab" do
+        select "form-tab"
+        setDisplay form "block"
+        setDisplay (getWrapperElement codeOutput) "none"
+
+    registerTabCallback "code-tab" do
+        select "code-tab"
+        setDisplay form "none"
+        setDisplay (getWrapperElement codeOutput) "block"
+        refresh codeOutput
 
 helloWorldExample :: Text
 helloWorldExample =
