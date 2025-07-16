@@ -17,6 +17,7 @@
 module Grace.Syntax
     ( -- * Syntax
       Syntax(..)
+    , usedIn
     , Chunks(..)
     , Field(..)
     , Smaller(..)
@@ -306,6 +307,49 @@ instance IsString (Syntax () a) where
 
 instance Pretty a => Pretty (Syntax s a) where
     pretty = prettyExpression
+
+-- | Returns whether the given variable is used within the expression
+usedIn :: Text -> Syntax s a -> Bool
+usedIn name₀ Variable{ name = name₁ } =
+     name₀ == name₁
+usedIn name₀ Lambda{ nameBinding = NameBinding{ name = name₁ }, body } =
+    (name₀ /= name₁) && usedIn name₀ body
+usedIn name₀ Lambda{ nameBinding = FieldNamesBinding{ fieldNames }, body } =
+    (name₀ `notElem` fmap toName fieldNames) && usedIn name₀ body
+  where
+    toName FieldName{ name = name₁ } = name₁
+usedIn name₀ Application{ function, argument } =
+    usedIn name₀ function || usedIn name₀ argument
+usedIn name₀ Annotation{ annotated } =
+    usedIn name₀ annotated
+usedIn name₀ Let{ bindings = Binding{ name = name₁, assignment } :| [], body } =
+    usedIn name₀ assignment || (name₀ /= name₁ && usedIn name₀ body)
+usedIn name₀ Let{ location, bindings = Binding{ name = name₁, assignment } :| (b : bs), body } =
+    usedIn name₀ assignment || (name₀ /= name₁ && usedIn name₀ Let{ location, bindings = b :| bs, body })
+usedIn name₀ List{ elements } =
+    any (usedIn name₀) elements
+usedIn name₀ Record{ fieldValues } =
+    any (usedIn name₀ . snd) fieldValues
+usedIn name₀ Project{ larger } =
+    usedIn name₀ larger
+usedIn _ Alternative{ } =
+    False
+usedIn name₀ Fold{ handlers } =
+    usedIn name₀ handlers
+usedIn name₀ If{ predicate, ifTrue, ifFalse } =
+    usedIn name₀ predicate && usedIn name₀ ifTrue && usedIn name₀ ifFalse
+usedIn name₀ Text{ chunks = Chunks _ pairs } =
+    any (usedIn name₀ . fst) pairs
+usedIn _ Scalar{ } =
+    False
+usedIn name₀ Prompt{ arguments } =
+    usedIn name₀ arguments
+usedIn name₀ Operator{ left, right } =
+    usedIn name₀ left && usedIn name₀ right
+usedIn _ Builtin{ } =
+    False
+usedIn _ Embed{ } =
+    False
 
 -- | A text literal with interpolated expressions
 data Chunks s a = Chunks Text [(Syntax s a, Text)]

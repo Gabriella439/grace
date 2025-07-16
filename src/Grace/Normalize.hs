@@ -1055,8 +1055,8 @@ quote
 quote names = loop
   where
     loop value = case value of
-        Value.Lambda (Closure names_ env body) ->
-            Syntax.Lambda{ nameBinding, body = withEnv, ..  }
+        Value.Lambda (Closure names_ env body₀) ->
+            foldl snoc newLambda env
           where
             nameBinding = case names_ of
                 Value.Name name ->
@@ -1073,9 +1073,13 @@ quote names = loop
                             return Syntax.FieldName{ name = fieldName, fieldNameLocation = location, annotation = Nothing }
                         }
 
-            newBody = first (\_ -> location) body
+            newLambda = Syntax.Lambda
+                { nameBinding
+                , body = first (\_ -> location) body₀
+                , ..
+                }
 
-            toBinding (n, v) = Syntax.Binding
+            toBinding n v = Syntax.Binding
                 { name = n
                 , nameLocation = location
                 , nameBindings = []
@@ -1083,11 +1087,20 @@ quote names = loop
                 , assignment = quote names v
                 }
 
-            withEnv = case env of
-                [] -> newBody
-                e : es -> Syntax.Let{ body = newBody, .. }
-                  where
-                    bindings = fmap toBinding (e :| es)
+            snoc e@Syntax.Let{ bindings = b :| bs, body = body₁ } (n, v)
+                | Syntax.usedIn n e = Syntax.Let
+                    { location
+                    , bindings = toBinding n v :| (b : bs)
+                    , body = body₁
+                    }
+                | otherwise = e
+            snoc e (n, v)
+                | Syntax.usedIn n e = Syntax.Let
+                    { location
+                    , bindings = toBinding n v :| []
+                    , body = e
+                    }
+                | otherwise = e
 
         Value.Application function argument ->
             Syntax.Application

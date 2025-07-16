@@ -1,1 +1,1 @@
-\x -> let f = \g -> g in x
+\x -> x
