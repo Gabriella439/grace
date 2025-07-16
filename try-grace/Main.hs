@@ -973,7 +973,7 @@ main = do
                     setAttribute a "onclick"      "return false;"
 
                     setAttribute a "class"
-                        (if active then "nav-link active" else "nav-link")
+                        (if active then "nav-link example-tab active" else "example-tab nav-link")
 
                     setTextContent a name
 
@@ -986,7 +986,7 @@ main = do
                     callback <- (liftIO . Callback.asyncCallback) do
                         setValue codeInput code
 
-                        elements <- getElementsByClassName "nav-link"
+                        elements <- getElementsByClassName "example-tab"
 
                         Monad.forM_ elements \element -> do
                             removeClass element "active"
