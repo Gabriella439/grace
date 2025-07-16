@@ -52,6 +52,7 @@ import Data.Void (Void)
 import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..), Offset(..))
 import Grace.Type (Type(..))
+import Numeric.Natural (Natural)
 import Prelude hiding (lex, lines, unlines)
 import Text.Earley (Grammar, Prod, Report(..), rule, (<?>))
 import Text.Megaparsec (ParseErrorBundle(..), State(..), try)
@@ -108,6 +109,7 @@ lexToken =
         , lexUri
         , lexLabel
         , lexNumber
+        , lexDotNumber
 
         , Combinators.choice
             [ Grace.Parser.Or                 <$ symbol "||"
@@ -212,20 +214,34 @@ lex name code =
         Right tokens -> do
             return tokens
 
+lexSign :: Lexer Sign
+lexSign = (Positive <$ "+") <|> (Negative <$ "-") <|> pure Unsigned
+
 lexNumber :: Lexer Token
 lexNumber = try lexInteger <|> try lexScientific
   where
-    lexSign = (Positive <$ "+") <|> (Negative <$ "-") <|> pure Unsigned
-
     lexInteger = do
         sign <- lexSign
-        n <- lexeme Lexer.decimal <*  Megaparsec.notFollowedBy (Megaparsec.Char.char '.')
+        n <- lexeme Lexer.decimal <* Megaparsec.notFollowedBy (Megaparsec.Char.char '.')
         return (Int sign n)
 
     lexScientific = do
         sign <- lexSign
         scientific <- lexeme Lexer.scientific
         return (RealLiteral sign scientific)
+
+lexDotNumber :: Lexer Token
+lexDotNumber = try do
+    symbol "."
+
+    sign <- lexSign
+
+    n <- lexeme Lexer.decimal
+
+    return case sign of
+        Unsigned -> DotNumber (fromInteger n)
+        Positive -> DotNumber (fromInteger n)
+        Negative -> DotNumber (negate (fromInteger n))
 
 lexFile :: Lexer Token
 lexFile = (lexeme . try) do
@@ -563,6 +579,7 @@ data Token
     | Comma
     | Dash
     | Dot
+    | DotNumber Integer
     | DoubleEquals
     | Fold
     | ForwardSlash
@@ -578,7 +595,7 @@ data Token
     | GreaterThanOrEqual
     | If
     | In
-    | Int Sign Int
+    | Int Sign Natural
     | Integer
     | JSON
     | Label Text
@@ -654,9 +671,13 @@ matchReal :: Token -> Maybe (Sign, Scientific)
 matchReal (Grace.Parser.RealLiteral sign n) = Just (sign, n)
 matchReal  _                                = Nothing
 
-matchInt :: Token -> Maybe (Sign, Int)
+matchInt :: Token -> Maybe (Sign, Natural)
 matchInt (Grace.Parser.Int sign n) = Just (sign, n)
 matchInt  _                        = Nothing
+
+matchDotNumber :: Token -> Maybe Integer
+matchDotNumber (Grace.Parser.DotNumber n) = Just n
+matchDotNumber  _                         = Nothing
 
 matchChunks :: Token -> Maybe (Chunks Offset Input)
 matchChunks (Grace.Parser.TextLiteral c) = Just c
@@ -688,8 +709,11 @@ reservedLabel = terminal matchReservedLabel
 alternative :: Parser r Text
 alternative = terminal matchAlternative
 
-int :: Parser r (Sign, Int)
+int :: Parser r (Sign, Natural)
 int = terminal matchInt
+
+dotNumber :: Parser r Integer
+dotNumber = terminal matchDotNumber
 
 text :: Parser r Text
 text = terminal matchText
@@ -718,7 +742,7 @@ locatedAlternative = locatedTerminal matchAlternative
 locatedReal :: Parser r (Offset, (Sign, Scientific))
 locatedReal = locatedTerminal matchReal
 
-locatedInt :: Parser r (Offset, (Sign, Int))
+locatedInt :: Parser r (Offset, (Sign, Natural))
 locatedInt = locatedTerminal matchInt
 
 locatedChunks :: Parser r (Offset, Chunks Offset Input)
@@ -762,6 +786,7 @@ render t = case t of
     Grace.Parser.Comma              -> ","
     Grace.Parser.Dash               -> "-"
     Grace.Parser.Dot                -> "."
+    Grace.Parser.DotNumber _        -> ".n"
     Grace.Parser.DoubleEquals       -> "=="
     Grace.Parser.Real               -> "Real"
     Grace.Parser.RealLiteral _ _    -> "a real number literal"
@@ -972,12 +997,7 @@ grammar endsWithBrace = mdo
                     Syntax.Project{ location, larger, smaller = Multiple{ multipleLocation, multiple } }
 
         let parseIndex = do
-                let withSign (sign, n) = case sign of
-                        Unsigned -> fromIntegral n
-                        Positive -> fromIntegral n
-                        Negative -> negate (fromIntegral n)
-
-                index <- fmap withSign int
+                index <- dotNumber
 
                 return \location larger ->
                     Syntax.Project{ location, larger, smaller = Index { index } }
@@ -1002,9 +1022,7 @@ grammar endsWithBrace = mdo
                     Syntax.Project{ location, larger, smaller = Slice{ begin, end } }
 
         let parseDotAccess = do
-                parseToken Grace.Parser.Dot
-
-                smaller <- parseSingle <|> parseIndex <|> parseMultiple
+                smaller <- parseIndex <|> (parseToken Grace.Parser.Dot *> (parseSingle <|> parseMultiple))
 
                 pure smaller
 
@@ -1075,7 +1093,7 @@ grammar endsWithBrace = mdo
 
         <|> do  let withSign Unsigned n = Syntax.Natural (fromIntegral n)
                     withSign Positive n = Syntax.Integer (fromIntegral n)
-                    withSign Negative n = Syntax.Integer (fromIntegral (negate n))
+                    withSign Negative n = Syntax.Integer (negate (fromIntegral n))
 
                 ~(location, (sign, n)) <- locatedInt
 
