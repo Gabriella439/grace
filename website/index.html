@@ -62,6 +62,12 @@ function select(tabId) {
   });
   document.getElementById(tabId).classList.toggle("active");
 }
+function autoResize(element) {
+  element.addEventListener('input', () => {
+    element.style.height = 'auto';
+    element.style.height = element.scrollHeight + 'px';
+  });
+}
 </script>
 <script defer language="javascript" src="js/all.js"></script>
 </html>

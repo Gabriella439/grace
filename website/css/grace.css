@@ -37,6 +37,11 @@ li .btn {
   font-family: 'FiraMono', monospace !important;
 }
 
+textarea {
+  overflow: hidden;
+  resize: none !important;
+}
+
 .form-check-label {
   vertical-align: top;
   font-weight: bold;

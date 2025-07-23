@@ -113,6 +113,12 @@ foreign import javascript unsafe "$1.addEventListener($2, $3)"
 addEventListener :: MonadIO io => JSVal -> Text -> Callback (IO ()) -> io ()
 addEventListener a b c = liftIO (addEventListener_ a (fromText b) c)
 
+foreign import javascript unsafe "autoResize($1)"
+    autoResize_ :: JSVal -> IO ()
+
+autoResize :: MonadIO io => JSVal -> io ()
+autoResize a = liftIO (autoResize_ a)
+
 foreign import javascript unsafe "document.createElement($1)"
     createElement_ :: JSString -> IO JSVal
 
@@ -592,10 +598,12 @@ renderInput _ Type.Scalar{ scalar = Monotype.JSON } = do
     return (input, get)
 
 renderInput _ Type.Scalar{ scalar = Monotype.Text } = do
-    input <- createElement "input"
+    input <- createElement "textarea"
 
     setAttribute input "class" "form-control"
-    setAttribute input "type" "text"
+    setAttribute input "rows" "1"
+
+    autoResize input
 
     let get = do
             text <- toValue input
