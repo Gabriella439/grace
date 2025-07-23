@@ -12,7 +12,7 @@ import Control.Concurrent.Async (Async)
 import Control.Exception (Exception(..), SomeException)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Maybe (MaybeT)
-import Data.Foldable (toList)
+import Data.Foldable (toList, traverse_)
 import Data.Generics.Sum (_As)
 import Data.IORef (IORef)
 import Data.JSString (JSString)
@@ -456,12 +456,24 @@ renderValue maybeMethods ref parent Type.Function{ input, output } function = do
 
             outputVal <- createElement "div"
 
-            let invoke = do
-                    value <- get
+            let render value = do
+                    spinner <- createElement "div"
+
+                    setAttribute spinner "class" "spinner-border text-primary"
+                    setAttribute spinner "role"  "status"
+
+                    replaceChild outputVal spinner
 
                     newValue <- Normalize.apply maybeMethods function value
 
                     renderValue maybeMethods ref outputVal output newValue
+
+            debouncedRender <- debounce render
+
+            let invoke = do
+                    value <- get
+
+                    debouncedRender value
 
             callback <- Callback.asyncCallback invoke
 
@@ -799,34 +811,32 @@ renderInput _ _ = do
 
 data DebounceStatus = Ready | Lock | Running (Async ())
 
-debounce :: IO () -> IO (IO ())
-debounce io = do
+debounce :: (a -> IO ()) -> IO (a -> IO ())
+debounce f = do
     tvar <- TVar.newTVarIO Ready
 
-    return do
-        let open = do
-                STM.atomically do
-                    status <- TVar.readTVar tvar
+    return \args -> do
+        m <- STM.atomically do
+            status <- TVar.readTVar tvar
 
-                    case status of
-                        Ready -> do
-                            TVar.writeTVar tvar Lock
-                            return Nothing
-                        Lock -> do
-                            empty
-                        Running async -> do
-                            return (Just async)
+            case status of
+                Ready -> do
+                    TVar.writeTVar tvar Lock
+                    return Nothing
+                Lock -> do
+                    empty
+                Running async -> do
+                    return (Just async)
 
-        let close _ = STM.atomically (TVar.writeTVar tvar Ready)
+        traverse_ Async.cancel m
 
-        Exception.bracket open close \m -> do
-            case m of
-                Nothing    -> mempty
-                Just async -> Async.cancel async
+        async <- Async.async (f args)
 
-            async <- Async.async io
+        STM.atomically (TVar.writeTVar tvar (Running async))
 
-            STM.atomically (TVar.writeTVar tvar (Running async))
+        Async.wait async
+
+        STM.atomically (TVar.writeTVar tvar Ready)
 
 main :: IO ()
 main = do
@@ -951,9 +961,9 @@ main = do
                         Right () -> do
                             return ()
 
-    debouncedInterpret <- debounce (interpret False)
+    debouncedInterpret <- debounce interpret
 
-    inputCallback <- Callback.asyncCallback debouncedInterpret
+    inputCallback <- Callback.asyncCallback (debouncedInterpret False)
 
     onChange codeInput inputCallback
 
@@ -1058,7 +1068,7 @@ main = do
 
                 IORef.writeIORef tutorialRef False
 
-                interpret False
+                debouncedInterpret False
 
                 remove stopTutorial
 
@@ -1098,11 +1108,11 @@ main = do
 
     addEventListener apiKeyInput "input" updateAPIKeyCallback
 
-    runCallback <- Callback.asyncCallback (interpret True)
+    runCallback <- Callback.asyncCallback (debouncedInterpret True)
 
     addEventListener runButton "click" runCallback
 
-    interpret False
+    debouncedInterpret False
 
     let registerTabCallback tabID action = do
             tabElement <- getElementById tabID
