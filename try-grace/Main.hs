@@ -319,6 +319,7 @@ renderValue maybeMethods ref parent Type.Optional{ type_ } value =
 renderValue _ _ parent _ (Value.Text text) = do
     span <- createElement "span"
 
+    setAttribute span "class" "fira"
     setAttribute span "style" "whitespace: pre"
 
     setInnerText span text
@@ -339,6 +340,8 @@ renderValue _ _ parent _ (Value.Scalar (Bool bool)) = do
 renderValue _ _ parent _ (Value.Scalar Null) = do
     span <- createElement "span"
 
+    setAttribute span "class" "fira"
+
     setTextContent span "∅"
 
     replaceChild parent span
@@ -348,6 +351,7 @@ renderValue _ _ parent _ value@Value.Scalar{} = do
 
     setTextContent span (valueToText value)
 
+    setAttribute span "class" "fira"
     setAttribute span "style" "whitespace: pre"
 
     replaceChild parent span
@@ -522,6 +526,7 @@ renderInput _ Type.Scalar{ scalar = Monotype.Bool } = do
 renderInput _ Type.Scalar{ scalar = Monotype.Real } = do
     input <- createElement "input"
 
+    setAttribute input "class" "form-control"
     setAttribute input "type"  "number"
     setAttribute input "step"  "any"
     setAttribute input "value" "0"
@@ -536,6 +541,7 @@ renderInput _ Type.Scalar{ scalar = Monotype.Real } = do
 renderInput _ Type.Scalar{ scalar = Monotype.Integer } = do
     input <- createElement "input"
 
+    setAttribute input "class" "form-control"
     setAttribute input "type"  "number"
     setAttribute input "value" "0"
 
@@ -549,6 +555,7 @@ renderInput _ Type.Scalar{ scalar = Monotype.Integer } = do
 renderInput _ Type.Scalar{ scalar = Monotype.Natural } = do
     input <- createElement "input"
 
+    setAttribute input "class" "form-control"
     setAttribute input "type"  "number"
     setAttribute input "value" "0"
     setAttribute input "min"   "0"
@@ -563,6 +570,7 @@ renderInput _ Type.Scalar{ scalar = Monotype.Natural } = do
 renderInput _ Type.Scalar{ scalar = Monotype.JSON } = do
     input <- createElement "input"
 
+    setAttribute input "class" "form-control"
     setAttribute input "value" "null"
 
     let get = do
@@ -584,14 +592,17 @@ renderInput _ Type.Scalar{ scalar = Monotype.JSON } = do
     return (input, get)
 
 renderInput _ Type.Scalar{ scalar = Monotype.Text } = do
-    textarea <- createElement "textarea"
+    input <- createElement "input"
+
+    setAttribute input "class" "form-control"
+    setAttribute input "type" "text"
 
     let get = do
-            text <- toValue textarea
+            text <- toValue input
 
             return (Value.Text text)
 
-    return (textarea, get)
+    return (input, get)
 
 renderInput ref Type.Record{ fields = Type.Fields keyTypes _ } = do
     let process (key, type_) = do
