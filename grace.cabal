@@ -103,7 +103,6 @@ executable try-grace
                      , async
                      , ghcjs-base
                      , containers
-                     , generic-lens
                      , grace
                      , insert-ordered-containers
                      , lens

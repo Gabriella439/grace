@@ -1,4 +1,5 @@
 {-# LANGUAGE ApplicativeDo         #-}
+{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE DeriveLift            #-}
 {-# LANGUAGE DeriveTraversable     #-}
@@ -9,6 +10,7 @@
 {-# LANGUAGE OverloadedLists       #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE TypeApplications      #-}
 
 {-| This module contains the syntax tree used for the surface syntax (i.e. the
     result of parsing), representing the code as the user wrote it.
@@ -18,6 +20,7 @@ module Grace.Syntax
     ( -- * Syntax
       Syntax(..)
     , usedIn
+    , effects
     , Chunks(..)
     , Field(..)
     , Smaller(..)
@@ -30,9 +33,10 @@ module Grace.Syntax
     , Binding(..)
     ) where
 
-import Control.Lens (Plated(..), Traversal')
+import Control.Lens (Fold, Plated(..), Traversal')
 import Data.Aeson (ToJSON(..))
 import Data.Bifunctor (Bifunctor(..))
+import Data.Generics.Sum (_As)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Scientific (Scientific)
 import Data.Sequence (Seq((:<|)))
@@ -61,6 +65,7 @@ import Prettyprinter.Internal
         )
     )
 
+import qualified Control.Lens as Lens
 import qualified Control.Monad as Monad
 import qualified Data.Aeson as Aeson
 import qualified Data.Text as Text
@@ -350,6 +355,9 @@ usedIn _ Builtin{ } =
     False
 usedIn _ Embed{ } =
     False
+
+effects :: Fold (Syntax s a) ()
+effects = Lens.cosmos . _As @"Prompt" . Lens.to (\_ -> ())
 
 -- | A text literal with interpolated expressions
 data Chunks s a = Chunks Text [(Syntax s a, Text)]

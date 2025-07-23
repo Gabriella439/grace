@@ -1,7 +1,9 @@
 {-# LANGUAGE ApplicativeDo #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE OverloadedLists #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 
 {-| This module contains the `Value` type used internally for efficient
     evaluation of expressions
@@ -12,18 +14,24 @@ module Grace.Value
     , Closure(..)
     , Value(..)
     , toJSON
+    , effects
     ) where
 
 import Control.Applicative (empty)
+import Control.Lens (Fold, Plated(..))
 import Data.Aeson (FromJSON(..))
 import Data.Foldable (toList)
+import Data.Generics.Sum (_As)
+import Data.Generics.Product (the)
 import Data.HashMap.Strict.InsOrd (InsOrdHashMap)
 import Data.Sequence (Seq)
 import Data.Text (Text)
 import Data.Void (Void)
+import GHC.Generics (Generic)
 import Grace.Location (Location)
 import Grace.Syntax (Builtin, Scalar, Syntax)
 
+import qualified Control.Lens as Lens
 import qualified Data.Aeson as Aeson
 import qualified Data.Sequence as Seq
 import qualified Grace.Compat as Compat
@@ -47,7 +55,7 @@ data Names = Name Text | FieldNames [Text]
     tree, except using a first-order representation.
 -}
 data Closure = Closure Names [(Text, Value)] (Syntax Location Void)
-    deriving stock (Eq, Show)
+    deriving stock (Eq, Generic, Show)
 
 {-| This type represents a fully evaluated expression with no reducible
     sub-expressions
@@ -73,7 +81,33 @@ data Value
     | Text Text
     | Builtin Builtin
     | Scalar Scalar
-    deriving stock (Eq, Show)
+    deriving stock (Eq, Generic, Show)
+
+instance Plated Value where
+    plate onValue value = case value of
+        Lambda closure -> do
+            pure (Lambda closure)
+        Application function argument -> do
+            newFunction <- onValue function
+            newArgument <- onValue argument
+            return (Application newFunction newArgument)
+        List elements -> do
+            newElements <- traverse onValue elements
+            return (List newElements)
+        Record fieldValues -> do
+            newFieldValues <- traverse onValue fieldValues
+            return (Record newFieldValues)
+        Alternative text -> do
+            pure (Alternative text)
+        Fold handlers -> do
+            newHandlers <- onValue handlers
+            return (Fold newHandlers)
+        Text text -> do
+            pure (Text text)
+        Builtin builtin -> do
+            pure (Builtin builtin)
+        Scalar scalar -> do
+            pure (Scalar scalar)
 
 instance FromJSON Value where
     parseJSON (Aeson.Object object) = do
@@ -109,3 +143,7 @@ toJSON (Scalar scalar) = do
     return (Aeson.toJSON scalar)
 toJSON _ = do
     empty
+
+-- | Determines whether the `Value` has an effect
+effects :: Fold Value ()
+effects = Lens.cosmos . _As @"Lambda" . the @3 . Syntax.effects

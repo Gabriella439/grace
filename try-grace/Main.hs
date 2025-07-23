@@ -13,7 +13,6 @@ import Control.Exception (Exception(..), SomeException)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Maybe (MaybeT)
 import Data.Foldable (toList, traverse_)
-import Data.Generics.Sum (_As)
 import Data.IORef (IORef)
 import Data.JSString (JSString)
 import Data.Text (Text)
@@ -487,15 +486,28 @@ renderValue maybeMethods ref parent Type.Function{ input, output } function = do
 
             callback <- Callback.asyncCallback invoke
 
-            observer <- newObserver callback
+            if Lens.has Value.effects function
+                then do
+                    button <- createElement "button"
 
-            observe observer inputVal
+                    setAttribute button "type"  "button"
+                    setAttribute button "class" "btn btn-primary"
 
-            addEventListener inputVal "input" callback
+                    setTextContent button "Run"
 
-            invoke
+                    addEventListener button "click" callback
 
-            replaceChildren parent (Array.fromList [ inputVal, hr, outputVal ])
+                    replaceChildren parent (Array.fromList [ inputVal, button, hr, outputVal ])
+                else do
+                    observer <- newObserver callback
+
+                    observe observer inputVal
+
+                    addEventListener inputVal "input" callback
+
+                    invoke
+
+                    replaceChildren parent (Array.fromList [ inputVal, hr, outputVal ])
 
 renderValue _ _ parent _ value = do
     renderDefault parent value
@@ -960,7 +972,7 @@ main = do
 
                                 setOutput inferred value
 
-                        if Lens.has (Lens.cosmos . _As @"Prompt") expression
+                        if Lens.has Syntax.effects expression
                             then do
                                 setDisplay prompt "block"
 
