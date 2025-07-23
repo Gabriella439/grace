@@ -1,7 +1,12 @@
 forall (a : Type) .
-  { example0: Optional Natural
-  , example1: Optional Natural
-  , example2: Optional Natural
-  , example3: Optional Natural
-  , example4: Optional a
+  { example0:
+      Optional Natural
+  , example1:
+      Optional Natural
+  , example2:
+      Optional Natural
+  , example3:
+      Optional Natural
+  , example4:
+      Optional a
   }

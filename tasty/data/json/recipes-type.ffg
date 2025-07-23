@@ -1,8 +1,14 @@
 List
-  { id: Text
-  , type: Text
-  , name: Text
-  , ppu: Real
-  , batters: { batter: List { id: Text, type: Text } }
-  , topping: List { id: Text, type: Text }
+  { id:
+      Text
+  , type:
+      Text
+  , name:
+      Text
+  , ppu:
+      Real
+  , batters:
+      { batter: List { id: Text, type: Text } }
+  , topping:
+      List { id: Text, type: Text }
   }

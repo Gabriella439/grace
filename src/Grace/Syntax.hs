@@ -595,14 +595,15 @@ prettyExpression expression@Lambda{} =
   where
     short = punctuation "\\" <> prettyShort expression
 
-    long = Pretty.align (prettyLong expression)
+    long = prettyLong expression
 
     prettyShort Lambda{..} =
             pretty nameBinding
         <>  " "
         <>  prettyShort body
     prettyShort body =
-            punctuation "-> "
+            punctuation "->"
+        <>  " "
         <>  prettyExpression body
 
     prettyLong Lambda{..} =
@@ -613,28 +614,23 @@ prettyExpression expression@Lambda{} =
         <>  Pretty.hardline
         <>  prettyLong body
     prettyLong body =
-        "  " <> prettyExpression body
+        "  " <> Pretty.nest 2 (prettyExpression body)
 
 prettyExpression Let{..} = Pretty.group (Pretty.flatAlt long short)
   where
-    short =
-            foldMap (\binding -> pretty binding <> " ") bindings
+    short = foldMap (\binding -> pretty binding <> " ") bindings
         <>  keyword "in"
         <>  " "
         <>  prettyExpression body
 
-    long =
-        Pretty.align
-            (   foldMap (\binding -> pretty binding <> Pretty.hardline <> Pretty.hardline) bindings
-            <>  keyword "in"
-            <>  "  "
-            <>  prettyExpression body
-            )
+    long =  foldMap (\binding -> pretty binding <> Pretty.hardline <> Pretty.hardline) bindings
+        <>  keyword "in"
+        <>  "  "
+        <>  Pretty.nest 4 (prettyExpression body)
 prettyExpression If{..} =
     Pretty.group (Pretty.flatAlt long short)
   where
-    short =
-            keyword "if"
+    short = keyword "if"
         <>  " "
         <>  prettyExpression predicate
         <>  " "
@@ -646,24 +642,22 @@ prettyExpression If{..} =
         <>  " "
         <> prettyExpression ifFalse
 
-    long =
-        Pretty.align
-            (   keyword "if"
-            <>  " "
-            <>  prettyExpression predicate
-            <>  Pretty.hardline
-            <>  keyword "then"
-            <>  " "
-            <>  prettyExpression ifTrue
-            <>  Pretty.hardline
-            <>  keyword "else"
-            <>  " "
-            <> prettyExpression ifFalse
-            )
+    long =  keyword "if"
+        <>  "  "
+        <>  Pretty.nest 4 (prettyExpression predicate)
+        <>  Pretty.hardline
+        <>  keyword "then"
+        <>  Pretty.hardline
+        <>  "  "
+        <>  Pretty.nest 2 (prettyExpression ifTrue)
+        <>  Pretty.hardline
+        <>  keyword "else"
+        <>  Pretty.hardline
+        <>  "  "
+        <>  Pretty.nest 2 (prettyExpression ifFalse)
 prettyExpression Prompt{ schema = Just schema, ..} = Pretty.group (Pretty.flatAlt long short)
   where
-    short =
-            keyword "prompt"
+    short = keyword "prompt"
         <>  " "
         <>  prettyProjectExpression arguments
         <>  " "
@@ -671,37 +665,30 @@ prettyExpression Prompt{ schema = Just schema, ..} = Pretty.group (Pretty.flatAl
         <>  " "
         <>  pretty schema
 
-    long =
-        Pretty.align
-            (   keyword "prompt"
-            <>  Pretty.hardline
-            <>  "  "
-            <>  prettyProjectExpression arguments
-            <>  Pretty.hardline
-            <>  "  "
-            <>  Pretty.operator ":"
-            <>  " "
-            <>  pretty schema
-            )
+    long =  keyword "prompt"
+        <>  Pretty.hardline
+        <>  "  "
+        <>  Pretty.nest 2 (prettyProjectExpression arguments)
+        <>  Pretty.hardline
+        <>  "  "
+        <>  Pretty.operator ":"
+        <>  " "
+        <>  Pretty.nest 4 (pretty schema)
 prettyExpression Annotation{..} =
     Pretty.group (Pretty.flatAlt long short)
   where
-    short =
-            prettyOperatorExpression annotated
+    short = prettyOperatorExpression annotated
         <>  " "
         <>  Pretty.operator ":"
         <>  " "
         <>  pretty annotation
 
-    long =
-        Pretty.align
-            (   prettyOperatorExpression annotated
-            <>  Pretty.hardline
-            <>  "  "
-            <>  Pretty.operator ":"
-            <>  " "
-            <>  pretty annotation
-            )
+    long =  prettyOperatorExpression annotated
+        <>  Pretty.hardline
+        <>  "  "
+        <>  Pretty.operator ":"
+        <>  " "
+        <>  Pretty.nest 4 (pretty annotation)
 prettyExpression other =
     prettyOperatorExpression other
 
@@ -715,7 +702,7 @@ prettyOperator operator0 prettyNext expression@Operator{ operator = operator1 }
   where
     short = prettyShort expression
 
-    long = Pretty.align (prettyLong expression)
+    long = pretty (Text.replicate indent " ") <> prettyLong expression
 
     prettyShort Operator{..}
         | operator0 == operator =
@@ -723,20 +710,20 @@ prettyOperator operator0 prettyNext expression@Operator{ operator = operator1 }
             <>  " "
             <>  pretty operator
             <>  " "
-            <>  prettyNext right
+            <>  prettyShort right
     prettyShort other =
         prettyNext other
 
     prettyLong Operator{..}
         | operator0 == operator =
-                prettyLong left
+                Pretty.nest indent (prettyLong left)
             <>  Pretty.hardline
             <>  pretty operator
             <>  pretty (Text.replicate spacing " ")
-            <>  prettyNext right
+            <>  prettyLong right
     prettyLong other =
             pretty (Text.replicate indent " ")
-        <>  prettyNext other
+        <>  Pretty.nest indent (prettyNext other)
 
     operatorWidth = Text.length (Pretty.toText operator0)
 
@@ -804,7 +791,7 @@ prettyApplicationExpression expression
 
     short = prettyShort expression
 
-    long = Pretty.align (prettyLong expression)
+    long = prettyLong expression
 
     prettyShort Application{..} =
             prettyShort function
@@ -821,17 +808,17 @@ prettyApplicationExpression expression
             prettyLong function
         <>  Pretty.hardline
         <>  "  "
-        <>  prettyProjectExpression argument
+        <>  Pretty.nest 2 (prettyProjectExpression argument)
     prettyLong Fold{..} =
             keyword "fold"
         <>  Pretty.hardline
         <>  "  "
-        <>  prettyProjectExpression handlers
+        <>  Pretty.nest 2 (prettyProjectExpression handlers)
     prettyLong Prompt{..} =
             keyword "prompt"
         <>  Pretty.hardline
         <>  "  "
-        <>  prettyProjectExpression arguments
+        <>  Pretty.nest 2 (prettyProjectExpression arguments)
     prettyLong other =
         prettyProjectExpression other
 
@@ -842,7 +829,7 @@ prettyProjectExpression expression = case expression of
   where
     short = prettyShort expression
 
-    long = Pretty.align (prettyLong expression)
+    long = prettyLong expression
 
     prettyShort Project{ larger, smaller = Single{ single = Field{ field } } } =
             prettyShort larger
@@ -890,13 +877,14 @@ prettyProjectExpression expression = case expression of
         <>  "  "
         <>  Pretty.operator "."
         <>  " "
-        <>  Pretty.punctuation "{"
-        <>  " "
-        <>  Type.prettyRecordLabel False f₀
-        <>  foldMap (\Field{ field = f } -> Pretty.hardline <> "    " <> Pretty.punctuation "," <> " " <> Type.prettyRecordLabel False f) fs
-        <>  Pretty.hardline
-        <>  "    "
-        <>  Pretty.punctuation "}"
+        <>  Pretty.nest 4
+            (   Pretty.punctuation "{"
+            <>  " "
+            <>  Type.prettyRecordLabel False f₀
+            <>  foldMap (\Field{ field = f } -> Pretty.hardline <> Pretty.punctuation "," <> " " <> Type.prettyRecordLabel False f) fs
+            <>  Pretty.hardline
+            <>  Pretty.punctuation "}"
+            )
     prettyLong Project{ larger, smaller = Index{ index } } =
             prettyLong larger
         <>  Pretty.hardline
@@ -916,45 +904,37 @@ prettyPrimitiveExpression List{ elements = [] } =
 prettyPrimitiveExpression List{ elements = element :<| elements } =
     Pretty.group (Pretty.flatAlt long short)
   where
-    short =
-            punctuation "["
+    short = punctuation "["
         <>  " "
         <>  prettyExpression element
         <>  foldMap (\e -> punctuation "," <> " " <> prettyExpression e) elements
         <>  " "
         <>  punctuation "]"
 
-    long =
-        Pretty.align
-            (    punctuation "["
-            <>   " "
-            <>   prettyLongElement element
-            <>   foldMap (\e -> punctuation "," <> " " <> prettyLongElement e) elements
-            <>   punctuation "]"
-            )
+    long =   punctuation "["
+        <>   " "
+        <>   prettyLongElement element
+        <>   foldMap (\e -> punctuation "," <> " " <> prettyLongElement e) elements
+        <>   punctuation "]"
 
-    prettyLongElement e = prettyExpression e <> Pretty.hardline
+    prettyLongElement e = Pretty.nest 2 (prettyExpression e) <> Pretty.hardline
 prettyPrimitiveExpression Record{ fieldValues = [] } =
     punctuation "{" <> " " <> punctuation "}"
 prettyPrimitiveExpression Record { fieldValues = fieldValue : fieldValues } =
     Pretty.group (Pretty.flatAlt long short)
   where
-    short =
-            punctuation "{"
+    short = punctuation "{"
         <>  " "
         <>  prettyShortFieldValue fieldValue
         <>  foldMap (\fv -> punctuation "," <> " " <> prettyShortFieldValue fv) fieldValues
         <>  " "
         <>  punctuation "}"
 
-    long =
-        Pretty.align
-            (   punctuation "{"
-            <>  " "
-            <>  prettyLongFieldValue fieldValue
-            <>  foldMap (\fv -> punctuation "," <> " " <> prettyLongFieldValue fv) fieldValues
-            <>  punctuation "}"
-            )
+    long =  punctuation "{"
+        <>  " "
+        <>  prettyLongFieldValue fieldValue
+        <>  foldMap (\fv -> punctuation "," <> " " <> prettyLongFieldValue fv) fieldValues
+        <>  punctuation "}"
 
     prettyShortFieldValue (field, value) =
             Type.prettyRecordLabel True field
@@ -965,8 +945,9 @@ prettyPrimitiveExpression Record { fieldValues = fieldValue : fieldValues } =
     prettyLongFieldValue (field, value) =
             Type.prettyRecordLabel True field
         <>  Pretty.operator ":"
-        <>  Pretty.group (Pretty.flatAlt (Pretty.hardline <> "    ") " ")
-        <>  prettyExpression value
+        <>  Pretty.hardline
+        <>  "    "
+        <>  Pretty.nest 4 (prettyExpression value)
         <>  Pretty.hardline
 prettyPrimitiveExpression Builtin{..} =
     pretty builtin
@@ -979,14 +960,11 @@ prettyPrimitiveExpression other = Pretty.group (Pretty.flatAlt long short)
   where
     short = punctuation "(" <> prettyExpression other <> punctuation ")"
 
-    long =
-        Pretty.align
-            (   punctuation "("
-            <>  " "
-            <>  prettyExpression other
-            <>  Pretty.hardline
-            <>  punctuation ")"
-            )
+    long =  punctuation "("
+        <>  " "
+        <>  Pretty.nest 2 (prettyExpression other)
+        <>  Pretty.hardline
+        <>  punctuation ")"
 
 {-| A bound field name
 
@@ -1098,18 +1076,15 @@ instance Pretty a => Pretty (Binding s a) where
     pretty Binding{ annotation = Nothing, .. } =
         Pretty.group (Pretty.flatAlt long short)
       where
-        long =
-            Pretty.align
-                (   keyword "let"
-                <>  " "
-                <>  label (pretty name)
-                <>  Pretty.hardline
-                <>  foldMap (\nameBinding -> "      " <> pretty nameBinding <> Pretty.hardline) nameBindings
-                <>  "      "
-                <>  punctuation "="
-                <>  " "
-                <>  pretty assignment
-                )
+        long =  keyword "let"
+            <>  " "
+            <>  label (pretty name)
+            <>  Pretty.hardline
+            <>  foldMap (\nameBinding -> "      " <> Pretty.nest 6 (pretty nameBinding) <> Pretty.hardline) nameBindings
+            <>  "      "
+            <>  punctuation "="
+            <>  " "
+            <>  Pretty.nest 8 (pretty assignment)
 
         short = keyword "let"
             <>  " "
@@ -1122,25 +1097,22 @@ instance Pretty a => Pretty (Binding s a) where
     pretty Binding{ annotation = Just type_, .. } =
         Pretty.group (Pretty.flatAlt long short)
       where
-        long =
-            Pretty.align
-                (   keyword "let"
-                <>  " "
-                <>  label (pretty name)
-                <>  Pretty.hardline
-                <>  foldMap (\nameBinding -> "      " <> pretty nameBinding <> Pretty.hardline) nameBindings
-                <>  "      "
-                <>  Pretty.operator ":"
-                <>  " "
-                <>  pretty type_
-                <>  Pretty.hardline
-                <>  "      "
-                <>  punctuation "="
-                <>  " "
-                <>  pretty assignment
-                )
-        short =
-                keyword "let"
+        long =  keyword "let"
+            <>  " "
+            <>  label (pretty name)
+            <>  Pretty.hardline
+            <>  foldMap (\nameBinding -> "      " <> Pretty.nest 6 (pretty nameBinding) <> Pretty.hardline) nameBindings
+            <>  "      "
+            <>  Pretty.operator ":"
+            <>  " "
+            <>  Pretty.nest 8 (pretty type_)
+            <>  Pretty.hardline
+            <>  "      "
+            <>  punctuation "="
+            <>  " "
+            <>  Pretty.nest 8 (pretty assignment)
+
+        short = keyword "let"
             <>  " "
             <>  label (pretty name)
             <>  " "

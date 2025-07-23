@@ -6,9 +6,14 @@ forall (e : Alternatives) .
   { x: a, y: c, b } ->
   { y: c, x: a, b } ->
   d ->
-    { example0: List { x: a, y: c, b }
-    , example1: List { x: a, y: c, b }
-    , example2: List < L: Natural | R: Bool | e >
-    , example3: List < L: Natural | R: Bool | e >
-    , example4: List d
+    { example0:
+        List { x: a, y: c, b }
+    , example1:
+        List { x: a, y: c, b }
+    , example2:
+        List < L: Natural | R: Bool | e >
+    , example3:
+        List < L: Natural | R: Bool | e >
+    , example4:
+        List d
     }

@@ -468,8 +468,9 @@ renderValue maybeMethods ref parent Type.Function{ input, output } function = do
             let render value = do
                     spinner <- createElement "div"
 
-                    setAttribute spinner "class" "spinner-border text-primary"
-                    setAttribute spinner "role"  "status"
+                    setAttribute spinner "class"    "spinner-border text-primary"
+                    setAttribute spinner "role"     "status"
+                    setAttribute spinner "overflow" "hidden"
 
                     replaceChild outputVal spinner
 
@@ -493,7 +494,7 @@ renderValue maybeMethods ref parent Type.Function{ input, output } function = do
                     setAttribute button "type"  "button"
                     setAttribute button "class" "btn btn-primary"
 
-                    setTextContent button "Run"
+                    setTextContent button "Submit"
 
                     addEventListener button "click" callback
 
@@ -1195,15 +1196,12 @@ checkboxesExample =
     \\n\
     \[ true, false, true ]\n\
     \\n\
-    \# Try adding another false value to the above list.\n\
-    \#\n\
-    \# Afer that, try switching to the \"Code\" tab below to view the underlying Grace\n\
-    \# expression.  Then switch back to the \"Form\" tab and continue to the\n\
-    \# \"Data\" example."
+    \# Try adding another false value to the above list."
 
 dataExample :: Text
 dataExample =
     "# A record will render as a definition list when converted to HTML\n\
+    \\n\
     \{ \"An example string\": \"Mercury\"\n\
     \, \"An example string with a type annotation\": \"cosmic\" : Text\n\
     \, \"A boolean value\": true\n\
@@ -1229,6 +1227,7 @@ dataExample =
     \      }\n\
     \    ]\n\
     \}\n\
+    \\n\
     \# What type do you think the last field has?  Switch to the \"Type\" tab below\n\
     \# to check your guess, then switch back to the \"Form\" tab before proceeding to\n\
     \# the next example."
@@ -1236,7 +1235,9 @@ dataExample =
 promptingExample :: Text
 promptingExample =
     "# Grace provides built-in language support for LLMs using the `prompt` function.\n\
-    \# To run these examples you will need to provide an OpenAI API key below.\n\
+    \# To run these examples you will need to provide an OpenAI API key below and.\n\
+    \# and then click \"Run\".\n\
+    \\n\
     \{ # You can prompt a model with `Text`, which will (by default) return `Text`:\n\
     \  names: prompt{ text: \"Give me a list of names\" }\n\
     \\n\
@@ -1257,7 +1258,9 @@ promptingExample =
     \  differentModel:\n\
     \    prompt{ model: \"gpt-4o\" } : List { firstName: Text, lastName: Text }\n\
     \}\n\
-    \# Change the last example to also prompt the model for a middle initial"
+    \\n\
+    \# Try switching to the \"Code\" tab below to view the code for the result, then\n\
+    \# switch back to the \"Form\" tab and continue to the next example."
 
 variablesExample :: Text
 variablesExample =
@@ -1283,8 +1286,8 @@ functionsExample =
     \\n\
     \let greeting = greet{ name: \"world\" }\n\
     \\n\
-    \# You can add optional type annotations to a function's argument and its output:\n\
-    \let greet{ name: Text }: Text = \"Hello, ${name}!\"\n\
+    \# You can add optional type annotations to a function's arguments and output:\n\
+    \let greet{ name: Text } : Text = \"Hello, ${name}!\"\n\
     \# The type of the `greet` function is `{ name: Text } -> Text` which you can\n\
     \# read as \"a function whose input is a record (with a `name` field) and whose\n\
     \# output is `Text`\n\
@@ -1305,7 +1308,8 @@ functionsExample =
     \\n\
     \# We include the functions we defined (i.e. `greet` and `makeUser`) in the\n\
     \# output because the Grace browser can render functions as interactive forms.\n\
-    \# Try entering your name into the generated interactive forms:\n\
+    \# Switch back to the \"Form\" tab and try entering your name into the generated\n\
+    \# interactive forms.\n\
     \in  { greet\n\
     \    , greeting\n\
     \    , makeUser\n\
@@ -1330,11 +1334,11 @@ listsExample =
     "# Now let's cover the basic list operations.\n\
     \\n\
     \let somePrimes = [ 2, 3, 5, 7, 11 ]\n\
+    \\n\
     \# You can access list elements using dot notation.  `x.n` returns the\n\
     \# (0-indexed) nth element of the list:\n\
-    \let two = somePrimes.0 : Optional Natural\n\
+    \let two = somePrimes.0\n\
     \let three = somePrimes.1\n\
-    \# The type is `Optional` because it can fail (with `null`) if the list is empty.\n\
     \\n\
     \# Just like Python, negative numbers index from the end of the list:\n\
     \let eleven = somePrimes.-1\n\
@@ -1366,7 +1370,7 @@ codingExample =
     "# What do you think this code will do?  Run it to test your guess:\n\
     \prompt{ code: true }\n\
     \    : { jobDescription: Text } -> { isFinance : Bool, rationale : Text }\n\
-    \# You can read the above type as \" a function whose input is a record (with a\n\
+    \# You can read the above type as \"a function whose input is a record (with a\n\
     \# `jobDescription` field) and whose output is a record (with `isFinance` and\n\
     \# `rationale` fields)\n\
     \\n\

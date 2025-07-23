@@ -1,6 +1,10 @@
-{ markers: List
-             { name: Text
-             , location: Optional (List Real)
-             , position: Optional (List Real)
-             }
+{ markers:
+    List
+      { name:
+          Text
+      , location:
+          Optional (List Real)
+      , position:
+          Optional (List Real)
+      }
 }

@@ -1,30 +1,59 @@
-{ "add0": 4
-, "add1": -1
-, "add2": 2.1
-, "add3": "AB"
-, "add4": [ true, false ]
-, "multiply0": 4
-, "multiply1": -6
-, "multiply2": 0.2
-, "subtract0": 0
-, "subtract1": 5
-, "subtract2": 1.9
-, "divide0": 1.0
-, "divide1": -0.6666666666666666
-, "divide2": 20.0
-, "modulus0": { "quotient": 1, "remainder": 0 }
-, "modulus1": { "quotient": -2, "remainder": 1 }
-, "modulus2": { "quotient": 0, "remainder": 0.1 }
-, "lessThan0": false
-, "lessThan1": false
-, "lessThan2": false
-, "lessThanOrEqual0": true
-, "lessThanOrEqual1": false
-, "lessThanOrEqual2": false
-, "greaterThan0": false
-, "greaterThan1": true
-, "greaterThan2": true
-, "greaterThanOrEqual0": true
-, "greaterThanOrEqual1": true
-, "greaterThanOrEqual2": true
+{ "add0":
+    4
+, "add1":
+    -1
+, "add2":
+    2.1
+, "add3":
+    "AB"
+, "add4":
+    [ true, false ]
+, "multiply0":
+    4
+, "multiply1":
+    -6
+, "multiply2":
+    0.2
+, "subtract0":
+    0
+, "subtract1":
+    5
+, "subtract2":
+    1.9
+, "divide0":
+    1.0
+, "divide1":
+    -0.6666666666666666
+, "divide2":
+    20.0
+, "modulus0":
+    { "quotient": 1, "remainder": 0 }
+, "modulus1":
+    { "quotient": -2, "remainder": 1 }
+, "modulus2":
+    { "quotient": 0, "remainder": 0.1 }
+, "lessThan0":
+    false
+, "lessThan1":
+    false
+, "lessThan2":
+    false
+, "lessThanOrEqual0":
+    true
+, "lessThanOrEqual1":
+    false
+, "lessThanOrEqual2":
+    false
+, "greaterThan0":
+    false
+, "greaterThan1":
+    true
+, "greaterThan2":
+    true
+, "greaterThanOrEqual0":
+    true
+, "greaterThanOrEqual1":
+    true
+, "greaterThanOrEqual2":
+    true
 }

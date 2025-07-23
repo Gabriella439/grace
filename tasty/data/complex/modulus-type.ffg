@@ -1,4 +1,7 @@
-{ naturals: List { quotient: Natural, remainder: Natural }
-, integers: List { quotient: Integer, remainder: Natural }
-, reals: List { quotient: Integer, remainder: Real }
+{ naturals:
+    List { quotient: Natural, remainder: Natural }
+, integers:
+    List { quotient: Integer, remainder: Natural }
+, reals:
+    List { quotient: Integer, remainder: Real }
 }
