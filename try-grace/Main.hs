@@ -1073,8 +1073,8 @@ main = do
                         , prompting
                         , variables
                         , functions
-                        , lists
                         , import_
+                        , lists
                         , coding
                         , prelude
                         ]
@@ -1259,31 +1259,46 @@ variablesExample =
     \let nine = let three = 3\n\
     \           in  three * three\n\
     \\n\
-    \# `let` expressions are also how you introduce named functions\n\
-    \let increment n = n + 1\n\
-    \\n\
-    \# Every sequence of `let`s ends with an `in` followed by the final result:\n\
-    \in  increment nine * twentyFour\n\
-    \\n\
+    \in  nine * twentyFour\n\
     \# Grace is whitespace-insensitive (with the exception of comments, which extend\n\
     \# to the next newline character), so try deleting all of the above comments and\n\
     \# modifying the above code to fit on one line."
 
-functionExample :: Text
-functionExample =
-    "# This Grace browser attempts to faithfully render *any* Grace expression,\n\
-    \# including functions.  For example, the following function takes an integer (n)\n\
-    \# as input and returns the next integer (n + 1) as the function's output:\n\
+functionsExample :: Text
+functionsExample =
+    "# You can also define functions using `let` expressions:\n\
+    \let greet{ name } = \"Hello, ${name}!\"\n\
     \\n\
-    \let increment n = n + 1\n\
+    \let greeting = greet{ name: \"world\" }\n\
     \\n\
-    \in  increment  # Yes, it is legal to return a function as the final result\n\
+    \# You can add optional type annotations to a function's argument and its output:\n\
+    \let greet{ name: Text }: Text = \"Hello, ${name}!\"\n\
+    \# The type of the `greet` function is `{ name: Text } -> Text` which you can\n\
+    \# read as \"a function whose input is a record (with a `name` field) and whose\n\
+    \# output is `Text`\n\
     \\n\
-    \# The Grace browser is intelligent and renders that function as a form with a\n\
-    \# numeric input and a numeric output.\n\
-    \#\n\
-    \# Do not edit the code this time.  Instead, enter a number into the\n\
-    \# input field below and watch the output update in response."
+    \# Function definitions can define intermediate variables:\n\
+    \let makeUser{ user } =\n\
+    \        let home = \"/home/${user}\"\n\
+    \        let privateKey = \"${home}/.ssh/id_ed25519\"\n\
+    \        let publicKey = \"${privateKey}.pub\"\n\
+    \        in  { home, privateKey, publicKey }\n\
+    \# What do you think the type of the `makeUser` function is?  Check the \"Type\"\n\
+    \# tab below to check your guess.\n\
+    \\n\
+    \let users =\n\
+    \        [ makeUser{ user: \"bill\" }\n\
+    \        , makeUser{ user: \"jane\" }\n\
+    \        ]\n\
+    \\n\
+    \# We include the functions we defined (i.e. `greet` and `makeUser`) in the\n\
+    \# output because the Grace browser can render functions as interactive forms.\n\
+    \# Try entering your name into the generated interactive forms:\n\
+    \in  { greet\n\
+    \    , greeting\n\
+    \    , makeUser\n\
+    \    , users\n\
+    \    }"
 
 importExample :: Text
 importExample =
@@ -1332,42 +1347,6 @@ listsExample =
     \    , middleThreeElements\n\
     \    , firstThreeElements\n\
     \    , lastThreeElements\n\
-    \    }"
-
-functionsExample :: Text
-functionsExample =
-    "# You can also define functions using `let` expressions:\n\
-    \let greet{ name } = \"Hello, ${name}!\"\n\
-    \\n\
-    \let greeting = greet{ name: \"world\" }\n\
-    \\n\
-    \# You can add optional type annotations to a function's argument and its output:\n\
-    \let greet{ name: Text }: Text = \"Hello, ${name}!\"\n\
-    \# The type of the `greet` function is `{ name: Text } -> Text` which you can\n\
-    \# read as \"a function whose input is a record (with a `name` field) and whose\n\
-    \# output is `Text`\n\
-    \\n\
-    \# Function definitions can define intermediate variables:\n\
-    \let makeUser{ user } =\n\
-    \        let home = \"/home/${user}\"\n\
-    \        let privateKey = \"${home}/.ssh/id_ed25519\"\n\
-    \        let publicKey = \"${privateKey}.pub\"\n\
-    \        in  { home, privateKey, publicKey }\n\
-    \# What do you think the type of the `makeUser` function is?  Check the \"Type\"\n\
-    \# tab below to check your guess.\n\
-    \\n\
-    \let users =\n\
-    \        [ makeUser{ user: \"bill\" }\n\
-    \        , makeUser{ user: \"jane\" }\n\
-    \        ]\n\
-    \\n\
-    \# We include the functions we defined (i.e. `greet` and `makeUser`) in the\n\
-    \# output because the Grace browser can render functions as interactive forms.\n\
-    \# Try entering your name into the generated interactive forms:\n\
-    \in  { greet\n\
-    \    , greeting\n\
-    \    , makeUser\n\
-    \    , users\n\
     \    }"
 
 codingExample :: Text
