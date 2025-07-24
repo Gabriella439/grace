@@ -23,6 +23,7 @@ import GHCJS.Types (JSVal)
 import Grace.Domain (Domain(..))
 import Grace.HTTP (Methods)
 import Grace.Input (Input(..))
+import Grace.Location (Location)
 import Grace.Monotype (RemainingAlternatives(..), RemainingFields(..))
 import Grace.Syntax (Scalar(..))
 import Grace.Value (Value(..))
@@ -52,6 +53,7 @@ import qualified GHCJS.Foreign.Callback as Callback
 import qualified Grace.HTTP as HTTP
 import qualified Grace.Import as Import
 import qualified Grace.Infer as Infer
+import qualified Grace.Interpret as Interpret
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Normalize as Normalize
 import qualified Grace.Pretty as Pretty
@@ -301,7 +303,13 @@ valueToText :: Value -> Text
 valueToText =
     Pretty.renderStrict False 80 . Normalize.strip . Normalize.quote []
 
-renderValue :: Maybe Methods -> IORef Natural -> JSVal -> Type s -> Value -> IO ()
+renderValue
+    :: Maybe Methods
+    -> IORef Natural
+    -> JSVal
+    -> Type Location
+    -> Value
+    -> IO (IO ())
 renderValue maybeMethods ref parent Type.Forall{ name, nameLocation, domain = Type, type_ } value = do
     -- If an expression has a polymorphic type, specialize the type to JSON
     let json = Type.Scalar{ location = nameLocation, scalar = Monotype.JSON }
@@ -331,6 +339,8 @@ renderValue _ _ parent _ (Value.Text text) = do
 
     replaceChild parent span
 
+    mempty
+
 renderValue _ _ parent _ (Value.Scalar (Bool bool)) = do
     input <- createElement "input"
 
@@ -342,6 +352,8 @@ renderValue _ _ parent _ (Value.Scalar (Bool bool)) = do
 
     replaceChild parent input
 
+    mempty
+
 renderValue _ _ parent _ (Value.Scalar Null) = do
     span <- createElement "span"
 
@@ -350,6 +362,8 @@ renderValue _ _ parent _ (Value.Scalar Null) = do
     setTextContent span "∅"
 
     replaceChild parent span
+
+    mempty
 
 renderValue _ _ parent _ value@Value.Scalar{} = do
     span <- createElement "span"
@@ -360,6 +374,8 @@ renderValue _ _ parent _ value@Value.Scalar{} = do
     setAttribute span "style" "whitespace: pre"
 
     replaceChild parent span
+
+    mempty
 
 renderValue maybeMethods ref parent outer (Value.List values) = do
     inner <- case outer of
@@ -372,18 +388,24 @@ renderValue maybeMethods ref parent outer (Value.List values) = do
             _ -> do
                 fail "renderValue: Missing element type"
 
-    lis <- forM values \value -> do
+    pairs <- forM values \value -> do
         li <- createElement "li"
 
-        renderValue maybeMethods ref li inner value
+        refreshInner <- renderValue maybeMethods ref li inner value
 
-        return li
+        return (li, refreshInner)
+
+    let lis = fmap fst pairs
+
+    let refreshInput = sequence_ (fmap snd pairs)
 
     ul <- createElement "ul"
 
     replaceChildren ul (Array.fromList (toList lis))
 
     replaceChild parent ul
+
+    return refreshInput
 
 renderValue maybeMethods ref parent outer (Value.Record keyValues) = do
     let lookupKey = case outer of
@@ -417,7 +439,7 @@ renderValue maybeMethods ref parent outer (Value.Record keyValues) = do
 
             setAttribute dd "class" "col"
 
-            renderValue maybeMethods ref dd type_ value
+            refreshInner <- renderValue maybeMethods ref dd type_ value
 
             dl <- createElement "dl"
 
@@ -425,11 +447,17 @@ renderValue maybeMethods ref parent outer (Value.Record keyValues) = do
 
             replaceChildren dl (Array.fromList [ dt, dd ])
 
-            return dl
+            return (dl, refreshInner)
 
-    dls <- HashMap.traverseWithKey process keyValues
+    pairs <- HashMap.traverseWithKey process keyValues
+
+    let dls = fmap fst pairs
+
+    let refreshInput = sequence_ (fmap snd pairs)
 
     replaceChildren parent (Array.fromList (HashMap.elems dls))
+
+    return refreshInput
 
 renderValue maybeMethods ref parent outer (Application (Value.Builtin Syntax.Some) value) = do
     renderValue maybeMethods ref parent outer value
@@ -455,12 +483,12 @@ renderValue maybeMethods ref parent outer (Application (Value.Alternative altern
     renderValue maybeMethods ref parent recordType recordValue
 
 renderValue maybeMethods ref parent Type.Function{ input, output } function = do
-    result <- Maybe.runMaybeT (renderInput ref input)
+    result <- Maybe.runMaybeT (renderInput maybeMethods ref input)
 
     case result of
         Nothing -> do
             renderDefault parent function
-        Just (inputVal, get) -> do
+        Just (inputVal, get, refreshInput) -> do
             hr <- createElement "hr"
 
             outputVal <- createElement "div"
@@ -476,14 +504,16 @@ renderValue maybeMethods ref parent Type.Function{ input, output } function = do
 
                     newValue <- Normalize.apply maybeMethods function value
 
-                    renderValue maybeMethods ref outputVal output newValue
+                    refreshInput <- renderValue maybeMethods ref outputVal output newValue
+
+                    refreshInput
 
             debouncedRender <- debounce render
 
             let invoke = do
-                    value <- get
+                    maybeValue <- Maybe.runMaybeT get
 
-                    debouncedRender value
+                    traverse_ debouncedRender maybeValue
 
             callback <- Callback.asyncCallback invoke
 
@@ -499,6 +529,7 @@ renderValue maybeMethods ref parent Type.Function{ input, output } function = do
                     addEventListener button "click" callback
 
                     replaceChildren parent (Array.fromList [ inputVal, button, hr, outputVal ])
+
                 else do
                     observer <- newObserver callback
 
@@ -506,14 +537,20 @@ renderValue maybeMethods ref parent Type.Function{ input, output } function = do
 
                     addEventListener inputVal "input" callback
 
-                    invoke
-
                     replaceChildren parent (Array.fromList [ inputVal, hr, outputVal ])
 
+                    invoke
+
+            return refreshInput
+
+-- At the time of this writing this case should (in theory) never be hit,
+-- because all of the `Value` constructors are either explicitly handled (e.g.
+-- `Text` / `Scalar`) or handled by the case for `Type.Function` (e.g. `Builtin`
+-- / `Alternative`)
 renderValue _ _ parent _ value = do
     renderDefault parent value
 
-renderDefault :: JSVal -> Value -> IO ()
+renderDefault :: JSVal -> Value -> IO (IO ())
 renderDefault parent value = do
     code <- createElement "code"
 
@@ -521,8 +558,14 @@ renderDefault parent value = do
 
     replaceChild parent code
 
-renderInput :: IORef Natural -> Type s -> MaybeT IO (JSVal, IO Value)
-renderInput _ Type.Scalar{ scalar = Monotype.Bool } = do
+    mempty
+
+renderInput
+    :: Maybe Methods
+    -> IORef Natural
+    -> Type Location
+    -> MaybeT IO (JSVal, MaybeT IO Value, IO ())
+renderInput _ _ Type.Scalar{ scalar = Monotype.Bool } = do
     input <- createElement "input"
 
     setAttribute input "type"  "checkbox"
@@ -540,9 +583,9 @@ renderInput _ Type.Scalar{ scalar = Monotype.Bool } = do
 
             return (Value.Scalar (Bool bool))
 
-    return (span, get)
+    return (span, get, mempty)
 
-renderInput _ Type.Scalar{ scalar = Monotype.Real } = do
+renderInput _ _ Type.Scalar{ scalar = Monotype.Real } = do
     input <- createElement "input"
 
     setAttribute input "class" "form-control"
@@ -555,9 +598,9 @@ renderInput _ Type.Scalar{ scalar = Monotype.Real } = do
 
             return (Value.Scalar (Real (Scientific.fromFloatDigits double)))
 
-    return (input, get)
+    return (input, get, mempty)
 
-renderInput _ Type.Scalar{ scalar = Monotype.Integer } = do
+renderInput _ _ Type.Scalar{ scalar = Monotype.Integer } = do
     input <- createElement "input"
 
     setAttribute input "class" "form-control"
@@ -569,9 +612,9 @@ renderInput _ Type.Scalar{ scalar = Monotype.Integer } = do
 
             return (Value.Scalar (Integer integer))
 
-    return (input, get)
+    return (input, get, mempty)
 
-renderInput _ Type.Scalar{ scalar = Monotype.Natural } = do
+renderInput _ _ Type.Scalar{ scalar = Monotype.Natural } = do
     input <- createElement "input"
 
     setAttribute input "class" "form-control"
@@ -584,9 +627,9 @@ renderInput _ Type.Scalar{ scalar = Monotype.Natural } = do
 
             return (Value.Scalar (Natural (fromInteger integer)))
 
-    return (input, get)
+    return (input, get, mempty)
 
-renderInput _ Type.Scalar{ scalar = Monotype.JSON } = do
+renderInput _ _ Type.Scalar{ scalar = Monotype.JSON } = do
     input <- createElement "input"
 
     setAttribute input "class" "form-control"
@@ -601,16 +644,16 @@ renderInput _ Type.Scalar{ scalar = Monotype.JSON } = do
                 Left _ -> do
                     setAttribute input "class" "form-control is-invalid"
 
-                    return (Value.Scalar Null)
+                    empty
 
                 Right value -> do
                     setAttribute input "class" "form-control is-valid"
 
                     return value
 
-    return (input, get)
+    return (input, get, mempty)
 
-renderInput _ Type.Scalar{ scalar = Monotype.Text } = do
+renderInput _ _ Type.Scalar{ scalar = Monotype.Text } = do
     input <- createElement "textarea"
 
     setAttribute input "class" "form-control"
@@ -623,11 +666,11 @@ renderInput _ Type.Scalar{ scalar = Monotype.Text } = do
 
             return (Value.Text text)
 
-    return (input, get)
+    return (input, get, mempty)
 
-renderInput ref Type.Record{ fields = Type.Fields keyTypes _ } = do
+renderInput maybeMethods ref Type.Record{ fields = Type.Fields keyTypes _ } = do
     let process (key, type_) = do
-            (fieldVal, get) <- renderInput ref type_
+            (fieldVal, get, refreshInner) <- renderInput maybeMethods ref type_
 
             dt <- createElement "dt"
 
@@ -647,12 +690,12 @@ renderInput ref Type.Record{ fields = Type.Fields keyTypes _ } = do
 
             replaceChildren dl (Array.fromList [ dt, dd ])
 
-            return (dl, key, get)
+            return (dl, key, get, refreshInner)
 
-    triples <- traverse process keyTypes
+    quartets <- traverse process keyTypes
 
     let children = do
-            (dl, _, _) <- triples
+            (dl, _, _, _) <- quartets
 
             return dl
 
@@ -661,23 +704,28 @@ renderInput ref Type.Record{ fields = Type.Fields keyTypes _ } = do
     replaceChildren div (Array.fromList children)
 
     let get = do
-            let getWithKey (_, key, getInner) = do
+            let getWithKey (_, key, getInner, _) = do
                     value <- getInner
 
                     return (key, value)
 
-            keyValues <- traverse getWithKey triples
+            keyValues <- traverse getWithKey quartets
 
             return (Value.Record (HashMap.fromList keyValues))
 
-    return (div, get)
+    let refreshInput = sequence_ do
+            (_, _, _, refreshInner) <- quartets
 
-renderInput ref Type.Union{ alternatives = Type.Alternatives keyTypes _ }
+            return refreshInner
+
+    return (div, get, refreshInput)
+
+renderInput maybeMethods ref Type.Union{ alternatives = Type.Alternatives keyTypes _ }
     | not (null keyTypes) = do
         n <- liftIO (IORef.atomicModifyIORef ref (\a -> (a + 1, a)))
 
         let process (checked, (key, type_)) = do
-                (nestedVal, nestedGet) <- renderInput ref type_
+                (nestedVal, nestedGet, refreshInner) <- renderInput maybeMethods ref type_
 
                 input <- createElement "input"
 
@@ -718,34 +766,39 @@ renderInput ref Type.Union{ alternatives = Type.Alternatives keyTypes _ }
 
                         return (Application (Alternative key) value)
 
-                return (div, getChecked input, get)
+                return (div, getChecked input, get, refreshInner)
 
-        triples <- traverse process (zip (True : repeat False) keyTypes)
+        quartets <- traverse process (zip (True : repeat False) keyTypes)
 
         div <- createElement "div"
 
         let children = do
-                (node, _, _) <- triples
+                (node, _, _, _) <- quartets
 
                 return node
 
         replaceChildren div (Array.fromList children)
 
         let loop [] = do
-                fail "renderInput: No radio button is enabled"
-            loop ((_, checkEnabled, getNested) : rest) = do
+                empty
+            loop ((_, checkEnabled, getNested, _) : rest) = do
                 enabled <- checkEnabled
                 if  | enabled -> do
                         getNested
                     | otherwise -> do
                         loop rest
 
-        let get = loop triples
+        let get = loop quartets
 
-        return (div, get)
+        let refreshInput = sequence_ do
+                (_, _, _, refreshInner) <- quartets
 
-renderInput ref Type.Optional{ type_ } = do
-    (nestedVal, getInner) <- renderInput ref type_
+                return refreshInner
+
+        return (div, get, refreshInput)
+
+renderInput maybeMethods ref Type.Optional{ type_ } = do
+    (nestedVal, getInner, refreshInner) <- renderInput maybeMethods ref type_
 
     input <- createElement "input"
 
@@ -766,12 +819,12 @@ renderInput ref Type.Optional{ type_ } = do
             if  | bool      -> getInner
                 | otherwise -> return (Value.Scalar Null)
 
-    return (div, get)
+    return (div, get, refreshInner)
 
-renderInput ref Type.List{ type_ } = do
+renderInput maybeMethods ref Type.List{ type_ } = do
     -- Do a test renderInput to verify that it won't fail later on within the
     -- async callback
-    _ <- renderInput ref type_
+    _ <- renderInput maybeMethods ref type_
 
     plus <- createElement "button"
 
@@ -787,7 +840,8 @@ renderInput ref Type.List{ type_ } = do
     childrenRef <- liftIO (IORef.newIORef IntMap.empty)
 
     insert <- (liftIO . Callback.asyncCallback) do
-        Just (elementVal, getInner) <- Maybe.runMaybeT (renderInput ref type_)
+        Just (elementVal, getInner, refreshInner) <- Maybe.runMaybeT (renderInput maybeMethods ref type_)
+
         minus <- createElement "button"
 
         setAttribute minus "type"    "button"
@@ -802,7 +856,7 @@ renderInput ref Type.List{ type_ } = do
 
         li <- createElement "li"
 
-        let adapt m = (IntMap.insert n getInner m, n) 
+        let adapt m = (IntMap.insert n (getInner, refreshInner)  m, n)
               where
                 n = case IntMap.lookupMax m of
                     Nothing -> 0
@@ -830,16 +884,70 @@ renderInput ref Type.List{ type_ } = do
     replaceChild ul add
 
     let get = do
-            m <- IORef.readIORef childrenRef
+            m <- liftIO (IORef.readIORef childrenRef)
 
-            values <- sequence (IntMap.elems m)
+            values <- sequence do
+                (getInner, _) <- IntMap.elems m
+
+                return getInner
 
             return (Value.List (Seq.fromList values))
 
-    return (ul, get)
+    let refreshInput = do
+            m <- liftIO (IORef.readIORef childrenRef)
 
-renderInput _ _ = do
-    empty
+            sequence_ do
+                (_, refreshInner) <- IntMap.elems m
+
+                return refreshInner
+
+    return (ul, get, refreshInput)
+
+renderInput maybeMethods _ type_ = do
+    textarea <- createElement "textarea"
+
+    setDisplay textarea "none"
+
+    error <- createElement "pre"
+
+    setDisplay error "none"
+
+    div <- createElement "div"
+
+    replaceChildren div (Array.fromList [ textarea, error ])
+
+    codeInput <- setupCodemirrorInput textarea
+
+    let get = do
+            text <- getValue codeInput
+
+            let input_ = Code "(input)" text
+
+            result <- (liftIO . Exception.try) do
+                (_, value) <- Interpret.interpretWith maybeMethods [] (Just type_) () input_
+
+                return value
+
+            case result of
+                Left interpretError -> do
+                    if (text == "")
+                        then do
+                            setDisplay error "none"
+                        else do
+                            setTextContent error (Text.pack (displayException (interpretError :: SomeException)))
+
+                            setDisplay error "block"
+
+                    empty
+
+                Right value -> do
+                    setDisplay error "none"
+
+                    setTextContent error ""
+
+                    return value
+
+    return (div, get, refresh codeInput)
 
 data DebounceStatus = Ready | Lock | Running (Async ())
 
@@ -920,13 +1028,15 @@ main = do
             setValue codeOutput (valueToText value)
             setValue typeOutput (typeToText type_)
 
-            renderValue maybeMethods counter form type_ value
+            refreshInput <- renderValue maybeMethods counter form type_ value
 
             setDisplay error  "none"
             setDisplay output "block"
 
             refresh codeOutput
             refresh typeOutput
+
+            refreshInput
 
     let interpret shouldRun = do
             text <- getValue codeInput
