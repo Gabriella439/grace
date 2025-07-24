@@ -387,15 +387,35 @@ instance IsString (Chunks s a) where
     fromString string = Chunks (fromString string) []
 
 instance Pretty a => Pretty (Chunks s a) where
-    pretty (Chunks text₀ rest) =
-            Pretty.scalar ("\"" <> Type.prettyTextBody text₀)
-        <>  foldMap prettyInterpolation rest
-        <>  Pretty.scalar "\""
+    pretty (Chunks text₀ rest) = Pretty.flatAlt long short
       where
-        prettyInterpolation (syntax, text) =
-                Pretty.scalar "${"
+        short =
+            (   Pretty.punctuation "\""
+            <>  Pretty.scalar (Type.prettyTextBody False text₀)
+            <>  foldMap (prettyInterpolation False) rest
+            <>  Pretty.punctuation "\""
+            )
+
+        long =
+            (if multiline then Pretty.align else id)
+                (   Pretty.punctuation prefix
+                <>  Pretty.scalar (Type.prettyTextBody multiline text₀)
+                <>  foldMap (prettyInterpolation multiline) rest
+                <>  Pretty.punctuation "\""
+                )
+
+        prefix
+            | multiline = "\"\n"
+            | otherwise = "\""
+
+        multiline =
+            Text.any (== '\n') text₀ || any (Text.any (== '\n') . snd) rest
+
+        prettyInterpolation m (syntax, text) =
+                Pretty.punctuation "${"
             <>  flatten (pretty syntax)
-            <>  Pretty.scalar ("}" <> Type.prettyTextBody text)
+            <>  Pretty.punctuation "}"
+            <>  Pretty.scalar (Type.prettyTextBody m text)
 
 -- | A field of a record
 data Field s = Field{ fieldLocation :: s, field :: Text }

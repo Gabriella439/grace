@@ -48,6 +48,7 @@ import Grace.Domain (Domain)
 import Grace.Existential (Existential)
 import Grace.Pretty (Pretty(..), builtin, keyword, label, operator, punctuation)
 import Language.Haskell.TH.Syntax (Lift)
+import Prelude hiding (lines)
 import Prettyprinter (Doc)
 import Prettyprinter.Render.Terminal (AnsiStyle)
 
@@ -55,6 +56,7 @@ import Grace.Monotype
     (Monotype, RemainingAlternatives(..), RemainingFields(..), Scalar(..))
 
 import qualified Control.Lens as Lens
+import qualified Data.List as List
 import qualified Data.Text as Text
 import qualified Grace.Domain as Domain
 import qualified Grace.Monotype as Monotype
@@ -680,11 +682,15 @@ prettyUnionType (Alternatives (keyType : keyTypes) alternatives) =
 
 -- | Pretty-print a @Text@ literal
 prettyTextLiteral :: Text -> Doc AnsiStyle
-prettyTextLiteral text = "\"" <> prettyTextBody text <> "\""
+prettyTextLiteral text = "\"" <> prettyTextBody False text <> "\""
 
 -- | Pretty-print the body of a @Text@ literal
-prettyTextBody :: Text -> Doc AnsiStyle
-prettyTextBody text =
+prettyTextBody
+    :: Bool
+    -- ^ Is this a multiline string literal
+    -> Text
+    -> Doc AnsiStyle
+prettyTextBody False text =
     ( pretty
     . Text.replace "\"" "\\\""
     . Text.replace "\b" "\\b"
@@ -694,8 +700,25 @@ prettyTextBody text =
     . Text.replace "\t" "\\t"
     . Text.replace "\\" "\\\\"
     ) text
+prettyTextBody True text =
+    mconcat
+        (List.intersperse
+            Pretty.hardline
+            (map
+                ( pretty
+                . Text.replace "\"" "\\\""
+                . Text.replace "\b" "\\b"
+                . Text.replace "\f" "\\f"
+                . Text.replace "\r" "\\r"
+                . Text.replace "\\" "\\\\"
+                )
+                lines
+            )
+        )
+  where
+    lines = Text.splitOn "\n" text
 
--- | Pretty-print a @Text@ literal
+-- | Pretty-print a quoted alternative
 prettyQuotedAlternative :: Text -> Doc AnsiStyle
 prettyQuotedAlternative text =
         "'"
