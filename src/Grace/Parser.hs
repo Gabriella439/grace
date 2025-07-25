@@ -157,6 +157,7 @@ lexToken =
             , Grace.Parser.Real     <$ symbol "Real"
             , Grace.Parser.Integer  <$ symbol "Integer"
             , Grace.Parser.JSON     <$ symbol "JSON"
+            , Grace.Parser.Key      <$ symbol "Key"
             , Grace.Parser.Natural  <$ symbol "Natural"
             , Grace.Parser.Bool     <$ symbol "Bool"
             , Grace.Parser.Text     <$ symbol "Text"
@@ -598,6 +599,7 @@ data Token
     | Int Sign Natural
     | Integer
     | JSON
+    | Key
     | Label Text
     | Lambda
     | LessThanOrEqual
@@ -804,6 +806,7 @@ render t = case t of
     Grace.Parser.Int _ _            -> "an integer literal"
     Grace.Parser.Integer            -> "Integer"
     Grace.Parser.JSON               -> "JSON"
+    Grace.Parser.Key                -> "Key"
     Grace.Parser.Label _            -> "a label"
     Grace.Parser.Lambda             -> "\\"
     Grace.Parser.LessThanOrEqual    -> "<="
@@ -1256,6 +1259,8 @@ grammar endsWithBrace = mdo
                 return Type.Scalar{ scalar = Monotype.Natural, .. }
         <|> do  location <- locatedToken Grace.Parser.Text
                 return Type.Scalar{ scalar = Monotype.Text, .. }
+        <|> do  location <- locatedToken Grace.Parser.Key
+                return Type.Scalar{ scalar = Monotype.Key, .. }
         <|> do  ~(location, name) <- locatedLabel
                 return Type.VariableType{..}
         <|> do  let record location fields = Type.Record{..}

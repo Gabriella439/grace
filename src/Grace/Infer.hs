@@ -1337,16 +1337,18 @@ infer e₀ = do
 
             return (type_, Syntax.Application{ function = solveSyntax _Γ newFunction, argument = solveSyntax _Γ newArgument, .. })
 
-        Syntax.Annotation{..} -> do
+        Syntax.Annotation{ annotated = annotated₀, annotation, location } -> do
             _Γ <- get
 
             wellFormed _Γ annotation
 
-            newAnnotated <- check annotated annotation
+            annotated₁ <- check annotated₀ annotation
 
-            _Θ <- get
-
-            return (annotation, Syntax.Annotation{ annotated = newAnnotated, .. })
+            case annotated₁ of
+                Syntax.Annotation{ annotated = annotated₂ } -> do
+                    return (annotation, Syntax.Annotation{ annotated = annotated₂, annotation, location })
+                _ -> do
+                    return (annotation, Syntax.Annotation{ annotated = annotated₁, annotation, location })
 
         Syntax.Let{..} -> do
             b <- fresh
@@ -1846,6 +1848,9 @@ infer e₀ = do
             push (Context.UnsolvedType existential)
 
             return (Type.Optional{ type_ = Type.UnsolvedType{..}, .. }, Syntax.Scalar{ scalar = Syntax.Null, .. })
+
+        Syntax.Scalar{ scalar = Syntax.Key key, .. } -> do
+            return (Type.Scalar{ scalar = Monotype.Key, .. }, Syntax.Scalar{ scalar = Syntax.Key key, .. })
 
         Syntax.Operator{ operator = Syntax.And, .. } -> do
             let bool = Type.Scalar
@@ -3041,6 +3046,39 @@ check Syntax.Embed{ embedded } _B = do
     State.modify (\s -> s{ Grace.Infer.input = input })
 
     return result
+
+check Syntax.Text{ chunks = Syntax.Chunks text₀ [], .. } Type.Scalar{ scalar = Monotype.Key } = do
+    return Syntax.Scalar{ scalar = Syntax.Key text₀, .. }
+
+check annotated annotation@Type.Scalar{ scalar = Monotype.Key } = do
+    (_A₀, newAnnotated) <- infer annotated
+
+    _Γ <- get
+
+    let _A₁ = Context.solveType _Γ _A₀
+
+    let key = do
+            subtype _A₁ annotation
+
+            return newAnnotated
+
+    let text = do
+            subtype _A₁ Type.Scalar
+                { scalar = Monotype.Text
+                , location = Syntax.location newAnnotated
+                }
+
+            return Syntax.Annotation
+                { annotated = newAnnotated
+                , annotation
+                , location = Syntax.location newAnnotated
+                }
+
+    key `Exception.catch` \(_ :: TypeInferenceError) -> do
+        text `Exception.catch` \(_ :: TypeInferenceError) -> do
+            subtype _A₁ annotation
+
+            return newAnnotated
 
 -- Sub
 check e _B = do

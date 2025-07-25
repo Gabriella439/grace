@@ -341,6 +341,8 @@ evaluate maybeMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                             Value.Scalar (Real (fromInteger n))
                         promote (Value.Scalar (Natural n)) Type.Scalar{ scalar = Monotype.Integer } =
                             Value.Scalar (Integer (fromIntegral n))
+                        promote (Value.Text t) Type.Scalar{ scalar = Monotype.Key } =
+                            Value.Scalar (Key t)
                         promote _ _ =
                             newAnnotated
 

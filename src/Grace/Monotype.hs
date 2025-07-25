@@ -75,6 +75,11 @@ data Scalar
     --
     -- >>> pretty Text
     -- Text
+    | Key
+    -- ^ Key type
+    --
+    -- >>> pretty Key
+    -- Key
     deriving stock (Eq, Generic, Lift, Show)
 
 instance Pretty Scalar where
@@ -84,6 +89,7 @@ instance Pretty Scalar where
     pretty Natural = builtin "Natural"
     pretty Integer = builtin "Integer"
     pretty Text    = builtin "Text"
+    pretty Key     = builtin "Key"
 
 -- | A monomorphic record type
 data Record = Fields [(Text, Monotype)] RemainingFields

@@ -668,6 +668,20 @@ renderInput _ _ Type.Scalar{ scalar = Monotype.Text } = do
 
     return (input, get, mempty)
 
+renderInput _ _ Type.Scalar{ scalar = Monotype.Key } = do
+    input <- createElement "input"
+
+    setAttribute input "type" "password"
+    setAttribute input "class" "form-control"
+    setAttribute input "rows" "1"
+
+    let get = do
+            key <- toValue input
+
+            return (Value.Scalar (Key key))
+
+    return (input, get, mempty)
+
 renderInput maybeMethods ref Type.Record{ fields = Type.Fields keyTypes _ } = do
     let process (key, type_) = do
             (fieldVal, get, refreshInner) <- renderInput maybeMethods ref type_

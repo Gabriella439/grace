@@ -475,6 +475,9 @@ data Scalar
     -- ^
     --   >>> pretty Null
     --   null
+    | Key Text
+    -- ^ >>> pretty (Key "sk-proj-…")
+    --   🔒
     deriving (Eq, Generic, Lift, Show)
 
 instance ToJSON Scalar where
@@ -483,6 +486,7 @@ instance ToJSON Scalar where
     toJSON (Natural n) = toJSON n
     toJSON (Bool b) = toJSON b
     toJSON Null = Aeson.Null
+    toJSON (Key _) = Aeson.Null
 
 instance Pretty Scalar where
     pretty (Bool True )     = Pretty.scalar "true"
@@ -491,6 +495,7 @@ instance Pretty Scalar where
     pretty (Integer number) = Pretty.scalar (pretty number)
     pretty (Natural number) = Pretty.scalar (pretty number)
     pretty  Null            = Pretty.scalar "null"
+    pretty (Key _)          = Pretty.scalar "🔒"
 
 -- | A binary infix operator
 data Operator
