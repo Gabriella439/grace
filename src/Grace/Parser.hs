@@ -900,14 +900,39 @@ grammar endsWithBrace = mdo
 
                 return Syntax.If{..}
 
-        <|> do  annotated <- operatorExpression
+        <|> do  let annotatedFile = do
+                        ~(location, file) <- locatedFile
+                        return Syntax.Embed{ embedded = Path file AsCode, .. }
+
+                let annotatedURI = do
+                        ~(location, uri) <- locatedURI
+                        return Syntax.Embed{ embedded = Grace.Input.URI uri AsText, .. }
+                let annotatedPrompt = do
+                        location <- locatedToken Grace.Parser.Prompt
+
+                        arguments <- projectExpression
+
+                        return Syntax.Prompt{ schema = Nothing, ..}
+
+                let adapt Syntax.Embed{ embedded = Path file AsCode, .. } Type.Scalar{ scalar = Monotype.Text } =
+                        Syntax.Embed{ embedded = Path file AsText, .. }
+                    adapt Syntax.Embed{ embedded = Grace.Input.URI uri AsCode, .. } Type.Scalar{ scalar = Monotype.Text } =
+                        Syntax.Embed{ embedded = Grace.Input.URI uri AsText, .. }
+                    adapt Syntax.Prompt{ schema = Nothing, .. } annotation =
+                        Syntax.Prompt{ schema = Just annotation, .. }
+                    adapt annotated annotation =
+                        Syntax.Annotation
+                            { location = Syntax.location annotated
+                            , ..
+                            }
+
+                annotated <- annotatedFile <|> annotatedURI <|> annotatedPrompt <|> operatorExpression
+
                 parseToken Grace.Parser.Colon
+
                 annotation <- quantifiedType
 
-                return Syntax.Annotation
-                    { location = Syntax.location annotated
-                    , ..
-                    }
+                return (adapt annotated annotation)
 
         <|> do  operatorExpression
         )
@@ -1039,16 +1064,6 @@ grammar endsWithBrace = mdo
 
         return (foldl (snoc (Syntax.location record)) record projections)
 
-    modeAnnotation <- rule do
-        let textMode = do
-                parseToken Grace.Parser.Colon
-                parseToken Grace.Parser.Text
-                pure AsText
-
-        let codeMode = pure AsCode
-
-        textMode <|> codeMode
-
     primitiveExpression <- rule
         (   do  ~(location, name) <- locatedLabel
 
@@ -1139,15 +1154,11 @@ grammar endsWithBrace = mdo
 
         <|> do  ~(location, file) <- locatedFile
 
-                mode <- modeAnnotation
-
-                return Syntax.Embed{ embedded = Path file mode, .. }
+                return Syntax.Embed{ embedded = Path file AsCode, .. }
 
         <|> do  ~(location, uri) <- locatedURI
 
-                mode <- modeAnnotation
-
-                return Syntax.Embed{ embedded = Grace.Input.URI uri mode, .. }
+                return Syntax.Embed{ embedded = Grace.Input.URI uri AsCode, .. }
 
         <|> do  parseToken Grace.Parser.OpenParenthesis
                 e <- expression

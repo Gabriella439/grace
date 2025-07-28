@@ -2883,7 +2883,7 @@ check Syntax.Text{ chunks = Syntax.Chunks text₀ rest, .. } Type.Scalar{ scalar
 
     return Syntax.Text{ chunks = Syntax.Chunks text₀ newRest, .. }
 
-check Syntax.Prompt{..} _B = do
+check Syntax.Prompt{ schema = Nothing, .. } _B = do
     newArguments <- check arguments Type.Record
         { fields =
             Type.Fields
