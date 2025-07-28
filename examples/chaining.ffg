@@ -1,7 +1,13 @@
-let question = prompt{ text: "Give me a question that I can ask another model" }
+\{ key } ->
+
+let question = prompt
+        { key
+        , text: "Give me a question that I can ask another model"
+        }
 
 let answer = prompt
-        { text: "
+        { key
+        , text: "
             ${question}
 
             Keep your answer short

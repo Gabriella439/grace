@@ -38,16 +38,16 @@ import qualified Grace.Syntax as Syntax
 -}
 interpret
     :: (MonadCatch m, MonadIO m)
-    => Maybe Methods -> Input -> m (Type Location, Value)
-interpret maybeMethods input = do
+    => (Text -> Methods) -> Input -> m (Type Location, Value)
+interpret keyToMethods input = do
     manager <- liftIO HTTP.newManager
 
-    interpretWith maybeMethods [] Nothing manager input
+    interpretWith keyToMethods [] Nothing manager input
 
 -- | Like `interpret`, but accepts a custom list of bindings
 interpretWith
     :: (MonadCatch m, MonadIO m)
-    => Maybe Methods
+    => (Text -> Methods)
     -- ^ OpenAI methods
     -> [(Text, Type Location, Value)]
     -- ^ @(name, type, value)@ for each custom binding
@@ -56,7 +56,7 @@ interpretWith
     -> Manager
     -> Input
     -> m (Type Location, Value)
-interpretWith maybeMethods bindings maybeAnnotation manager input = do
+interpretWith keyToMethods bindings maybeAnnotation manager input = do
     expression <- liftIO (Import.resolve manager input)
 
     let annotatedExpression = case maybeAnnotation of
@@ -81,6 +81,6 @@ interpretWith maybeMethods bindings maybeAnnotation manager input = do
 
             return (variable, value)
 
-    value <- liftIO (Normalize.evaluate maybeMethods evaluationContext elaboratedExpression)
+    value <- liftIO (Normalize.evaluate keyToMethods evaluationContext elaboratedExpression)
 
     return (inferred, value)

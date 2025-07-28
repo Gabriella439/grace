@@ -17,6 +17,7 @@ import Test.Tasty (TestTree)
 
 import qualified Control.Exception.Safe as Exception
 import qualified Data.Text as Text
+import qualified Grace.HTTP as HTTP
 import qualified Grace.Interpret as Interpret
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Normalize as Normalize
@@ -39,7 +40,10 @@ pretty_ x =
         (pretty x <> Pretty.hardline)
 
 interpret :: Input -> IO (Either SomeException (Type Location, Value.Value))
-interpret input = Exception.try (Interpret.interpret Nothing input)
+interpret input = do
+    keyToMethods <- HTTP.getMethods
+
+    Exception.try (Interpret.interpret keyToMethods input)
 
 throws :: Exception e => IO (Either e a) -> IO a
 throws io = do

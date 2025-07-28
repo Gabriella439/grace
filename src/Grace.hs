@@ -12,11 +12,10 @@ module Grace
       main
     ) where
 
-import Control.Applicative (many, optional, (<|>))
+import Control.Applicative (many, (<|>))
 import Control.Exception.Safe (Exception(..), SomeException)
 import Data.Foldable (traverse_)
 import Data.Functor (void)
-import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
@@ -62,12 +61,11 @@ data Options
         { annotate :: Bool
         , highlight :: Highlight
         , file :: FilePath
-        , openAIKey :: Maybe Text
         }
-    | Text { file :: FilePath, openAIKey :: Maybe Text }
+    | Text { file :: FilePath }
     | Format { highlight :: Highlight, files :: [FilePath] }
     | Builtins { highlight :: Highlight }
-    | REPL { openAIKey :: Maybe Text }
+    | REPL
 
 parserInfo :: ParserInfo Options
 parserInfo =
@@ -89,8 +87,6 @@ parser = do
 
             highlight <- parseHighlight
 
-            openAIKey <- optional parseOpenAIKey
-
             return Interpret{..}
 
     let text = do
@@ -98,8 +94,6 @@ parser = do
                 (   Options.help "File to interpret"
                 <>  Options.metavar "FILE"
                 )
-
-            openAIKey <- optional parseOpenAIKey
 
             return Grace.Text{..}
 
@@ -122,9 +116,7 @@ parser = do
             return Builtins{..}
 
     let repl = do
-            openAIKey <- optional parseOpenAIKey
-
-            pure REPL{..}
+            pure REPL{ }
 
     Options.hsubparser
         (   Options.command "interpret"
@@ -163,14 +155,6 @@ parser = do
                 )
         <|> pure Auto
 
-    parseOpenAIKey =
-        Options.strOption
-            (   Options.long "openAIKey"
-            <>  Options.help "OpenAI key"
-            <>  Options.metavar "KEY"
-            )
-
-
 detectColor :: Highlight -> IO Bool
 detectColor Color = do return True
 detectColor Plain = do return False
@@ -199,7 +183,7 @@ main = Exception.handle handler do
 
     case options of
         Interpret{..} -> do
-            maybeMethods <- traverse HTTP.getMethods openAIKey
+            keyToMethods <- HTTP.getMethods
 
             input <- case file of
                 "-" -> do
@@ -207,7 +191,7 @@ main = Exception.handle handler do
                 _ -> do
                     return (Path file AsCode)
 
-            (inferred, value) <- Interpret.interpret maybeMethods input
+            (inferred, value) <- Interpret.interpret keyToMethods input
 
             let syntax = Normalize.strip (Normalize.quote [] value)
 
@@ -226,7 +210,7 @@ main = Exception.handle handler do
             render (Grace.Pretty.pretty annotatedExpression <> Pretty.hardline)
 
         Grace.Text{..} -> do
-            maybeMethods <- traverse HTTP.getMethods openAIKey
+            keyToMethods <- HTTP.getMethods
 
             input <- case file of
                 "-" -> do
@@ -245,7 +229,7 @@ main = Exception.handle handler do
 
             let expected = Type.Scalar{ scalar = Monotype.Text, location }
 
-            (_, value) <- Interpret.interpretWith maybeMethods [] (Just expected) manager input
+            (_, value) <- Interpret.interpretWith keyToMethods [] (Just expected) manager input
 
             case value of
                 Value.Text text -> Text.IO.putStr text
@@ -327,10 +311,10 @@ main = Exception.handle handler do
 
                     traverse_ (\b -> Text.IO.putStrLn "" >> displayBuiltin b) bs
 
-        REPL{..} -> do
-            maybeMethods <- traverse HTTP.getMethods openAIKey
+        REPL{ } -> do
+            keyToMethods <- HTTP.getMethods
 
-            REPL.repl maybeMethods
+            REPL.repl keyToMethods
   where
     handler :: SomeException -> IO a
     handler e = do

@@ -1,11 +1,12 @@
+\{ key } ->
+
 let concatSep =
       https://raw.githubusercontent.com/Gabriella439/grace/refs/heads/main/prelude/text/concatSep.ffg
 
-let lines = concatSep "\n"
-
 let generatePoem idea =
         let structure = prompt
-                { text: "
+                { key
+                , text: "
                     Plan the structure of a new poem based on this idea:
 
                     ${idea}
@@ -22,7 +23,8 @@ let generatePoem idea =
                 "
 
         let style = prompt
-                { text: "
+                { key
+                , text: "
                     Given this poem structure:
 
                     ${renderedStructure}
@@ -38,7 +40,8 @@ let generatePoem idea =
                 "
 
         let poem = prompt
-                { text: "
+                { key
+                , text: "
                     Write a complete poem based on this idea:
 
                     ${idea}

@@ -13,7 +13,7 @@ import Grace.Value (Value)
 
 interpretWith
     :: (MonadCatch m, MonadIO m)
-    => Maybe Methods
+    => (Text -> Methods)
     -- ^ OpenAI methods
     -> [(Text, Type Location, Value)]
     -- ^ @(name, type, value)@ for each custom binding

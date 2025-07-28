@@ -304,30 +304,30 @@ valueToText =
     Pretty.renderStrict False 80 . Normalize.strip . Normalize.quote []
 
 renderValue
-    :: Maybe Methods
+    :: (Text -> Methods)
     -> IORef Natural
     -> JSVal
     -> Type Location
     -> Value
     -> IO (IO ())
-renderValue maybeMethods ref parent Type.Forall{ name, nameLocation, domain = Type, type_ } value = do
-    -- If an expression has a polymorphic type, specialize the type to JSON
-    let json = Type.Scalar{ location = nameLocation, scalar = Monotype.JSON }
+renderValue keyToMethods ref parent Type.Forall{ name, nameLocation, domain = Type, type_ } value = do
+    -- If an expression has a polymorphic type, specialize the type to Text
+    let json = Type.Scalar{ location = nameLocation, scalar = Monotype.Text }
 
-    renderValue maybeMethods ref parent (Type.substituteType name 0 json type_) value
+    renderValue keyToMethods ref parent (Type.substituteType name 0 json type_) value
 
-renderValue maybeMethods ref parent Type.Forall{ name, domain = Fields, type_ } value = do
+renderValue keyToMethods ref parent Type.Forall{ name, domain = Fields, type_ } value = do
     let empty_ = Type.Fields [] EmptyFields
 
-    renderValue maybeMethods ref parent (Type.substituteFields name 0 empty_ type_) value
+    renderValue keyToMethods ref parent (Type.substituteFields name 0 empty_ type_) value
 
-renderValue maybeMethods ref parent Type.Forall{ name, domain = Alternatives, type_ } value = do
+renderValue keyToMethods ref parent Type.Forall{ name, domain = Alternatives, type_ } value = do
     let empty_ = Type.Alternatives [] EmptyAlternatives
 
-    renderValue maybeMethods ref parent (Type.substituteAlternatives name 0 empty_ type_) value
+    renderValue keyToMethods ref parent (Type.substituteAlternatives name 0 empty_ type_) value
 
-renderValue maybeMethods ref parent Type.Optional{ type_ } value =
-    renderValue maybeMethods ref parent type_ value
+renderValue keyToMethods ref parent Type.Optional{ type_ } value =
+    renderValue keyToMethods ref parent type_ value
 
 renderValue _ _ parent _ (Value.Text text) = do
     span <- createElement "span"
@@ -377,7 +377,7 @@ renderValue _ _ parent _ value@Value.Scalar{} = do
 
     mempty
 
-renderValue maybeMethods ref parent outer (Value.List values) = do
+renderValue keyToMethods ref parent outer (Value.List values) = do
     inner <- case outer of
             Type.List{ type_ } -> do
                 return type_
@@ -391,7 +391,7 @@ renderValue maybeMethods ref parent outer (Value.List values) = do
     pairs <- forM values \value -> do
         li <- createElement "li"
 
-        refreshInner <- renderValue maybeMethods ref li inner value
+        refreshInner <- renderValue keyToMethods ref li inner value
 
         return (li, refreshInner)
 
@@ -407,7 +407,7 @@ renderValue maybeMethods ref parent outer (Value.List values) = do
 
     return refreshInput
 
-renderValue maybeMethods ref parent outer (Value.Record keyValues) = do
+renderValue keyToMethods ref parent outer (Value.Record keyValues) = do
     let lookupKey = case outer of
             Type.Record{ fields = Type.Fields keyTypes _ } ->
                 \key -> lookup key keyTypes
@@ -439,7 +439,7 @@ renderValue maybeMethods ref parent outer (Value.Record keyValues) = do
 
             setAttribute dd "class" "col"
 
-            refreshInner <- renderValue maybeMethods ref dd type_ value
+            refreshInner <- renderValue keyToMethods ref dd type_ value
 
             dl <- createElement "dl"
 
@@ -459,10 +459,10 @@ renderValue maybeMethods ref parent outer (Value.Record keyValues) = do
 
     return refreshInput
 
-renderValue maybeMethods ref parent outer (Application (Value.Builtin Syntax.Some) value) = do
-    renderValue maybeMethods ref parent outer value
+renderValue keyToMethods ref parent outer (Application (Value.Builtin Syntax.Some) value) = do
+    renderValue keyToMethods ref parent outer value
 
-renderValue maybeMethods ref parent outer (Application (Value.Alternative alternative) value) = do
+renderValue keyToMethods ref parent outer (Application (Value.Alternative alternative) value) = do
     inner <- case outer of
             Type.Union{ alternatives = Type.Alternatives keyTypes _ } ->
                 case lookup alternative keyTypes of
@@ -480,10 +480,10 @@ renderValue maybeMethods ref parent outer (Application (Value.Alternative altern
 
     let recordValue = Value.Record (HashMap.singleton alternative value)
 
-    renderValue maybeMethods ref parent recordType recordValue
+    renderValue keyToMethods ref parent recordType recordValue
 
-renderValue maybeMethods ref parent Type.Function{ input, output } function = do
-    result <- Maybe.runMaybeT (renderInput maybeMethods ref input)
+renderValue keyToMethods ref parent Type.Function{ input, output } function = do
+    result <- Maybe.runMaybeT (renderInput keyToMethods ref input)
 
     case result of
         Nothing -> do
@@ -502,9 +502,9 @@ renderValue maybeMethods ref parent Type.Function{ input, output } function = do
 
                     replaceChild outputVal spinner
 
-                    newValue <- Normalize.apply maybeMethods function value
+                    newValue <- Normalize.apply keyToMethods function value
 
-                    refreshInput <- renderValue maybeMethods ref outputVal output newValue
+                    refreshInput <- renderValue keyToMethods ref outputVal output newValue
 
                     refreshInput
 
@@ -561,7 +561,7 @@ renderDefault parent value = do
     mempty
 
 renderInput
-    :: Maybe Methods
+    :: (Text -> Methods)
     -> IORef Natural
     -> Type Location
     -> MaybeT IO (JSVal, MaybeT IO Value, IO ())
@@ -682,9 +682,9 @@ renderInput _ _ Type.Scalar{ scalar = Monotype.Key } = do
 
     return (input, get, mempty)
 
-renderInput maybeMethods ref Type.Record{ fields = Type.Fields keyTypes _ } = do
+renderInput keyToMethods ref Type.Record{ fields = Type.Fields keyTypes _ } = do
     let process (key, type_) = do
-            (fieldVal, get, refreshInner) <- renderInput maybeMethods ref type_
+            (fieldVal, get, refreshInner) <- renderInput keyToMethods ref type_
 
             dt <- createElement "dt"
 
@@ -734,12 +734,12 @@ renderInput maybeMethods ref Type.Record{ fields = Type.Fields keyTypes _ } = do
 
     return (div, get, refreshInput)
 
-renderInput maybeMethods ref Type.Union{ alternatives = Type.Alternatives keyTypes _ }
+renderInput keyToMethods ref Type.Union{ alternatives = Type.Alternatives keyTypes _ }
     | not (null keyTypes) = do
         n <- liftIO (IORef.atomicModifyIORef ref (\a -> (a + 1, a)))
 
         let process (checked, (key, type_)) = do
-                (nestedVal, nestedGet, refreshInner) <- renderInput maybeMethods ref type_
+                (nestedVal, nestedGet, refreshInner) <- renderInput keyToMethods ref type_
 
                 input <- createElement "input"
 
@@ -811,8 +811,8 @@ renderInput maybeMethods ref Type.Union{ alternatives = Type.Alternatives keyTyp
 
         return (div, get, refreshInput)
 
-renderInput maybeMethods ref Type.Optional{ type_ } = do
-    (nestedVal, getInner, refreshInner) <- renderInput maybeMethods ref type_
+renderInput keyToMethods ref Type.Optional{ type_ } = do
+    (nestedVal, getInner, refreshInner) <- renderInput keyToMethods ref type_
 
     input <- createElement "input"
 
@@ -835,10 +835,10 @@ renderInput maybeMethods ref Type.Optional{ type_ } = do
 
     return (div, get, refreshInner)
 
-renderInput maybeMethods ref Type.List{ type_ } = do
+renderInput keyToMethods ref Type.List{ type_ } = do
     -- Do a test renderInput to verify that it won't fail later on within the
     -- async callback
-    _ <- renderInput maybeMethods ref type_
+    _ <- renderInput keyToMethods ref type_
 
     plus <- createElement "button"
 
@@ -854,7 +854,7 @@ renderInput maybeMethods ref Type.List{ type_ } = do
     childrenRef <- liftIO (IORef.newIORef IntMap.empty)
 
     insert <- (liftIO . Callback.asyncCallback) do
-        Just (elementVal, getInner, refreshInner) <- Maybe.runMaybeT (renderInput maybeMethods ref type_)
+        Just (elementVal, getInner, refreshInner) <- Maybe.runMaybeT (renderInput keyToMethods ref type_)
 
         minus <- createElement "button"
 
@@ -917,7 +917,7 @@ renderInput maybeMethods ref Type.List{ type_ } = do
 
     return (ul, get, refreshInput)
 
-renderInput maybeMethods _ type_ = do
+renderInput keyToMethods _ type_ = do
     textarea <- createElement "textarea"
 
     setDisplay textarea "none"
@@ -938,7 +938,7 @@ renderInput maybeMethods _ type_ = do
             let input_ = Code "(input)" text
 
             result <- (liftIO . Exception.try) do
-                (_, value) <- Interpret.interpretWith maybeMethods [] (Just type_) () input_
+                (_, value) <- Interpret.interpretWith keyToMethods [] (Just type_) () input_
 
                 return value
 
@@ -1001,9 +1001,6 @@ main = do
     typeArea      <- getElementById "type"
     form          <- getElementById "form"
     startTutorial <- getElementById "start-tutorial"
-    prompt        <- getElementById "prompt"
-    apiKeyInput   <- getElementById "api-key"
-    runButton     <- getElementById "run"
 
     codeInput  <- setupCodemirrorInput inputArea
     codeOutput <- setupCodemirrorOutput codeArea
@@ -1028,7 +1025,7 @@ main = do
 
     tutorialRef <- IORef.newIORef hasTutorial
 
-    maybeMethodsRef <- IORef.newIORef Nothing
+    keyToMethods <- HTTP.getMethods
 
     let setError text = do
             setTextContent error text
@@ -1037,12 +1034,10 @@ main = do
             setDisplay error  "block"
 
     let setOutput type_ value = do
-            maybeMethods <- IORef.readIORef maybeMethodsRef
-
             setValue codeOutput (valueToText value)
             setValue typeOutput (typeToText type_)
 
-            refreshInput <- renderValue maybeMethods counter form type_ value
+            refreshInput <- renderValue keyToMethods counter form type_ value
 
             setDisplay error  "none"
             setDisplay output "block"
@@ -1052,7 +1047,7 @@ main = do
 
             refreshInput
 
-    let interpret shouldRun = do
+    let interpret () = do
             text <- getValue codeInput
 
             if text == ""
@@ -1073,8 +1068,6 @@ main = do
 
                     setError ""
 
-                    setDisplay prompt "none"
-
                 | otherwise -> do
                     setDisplay startTutorial "none"
 
@@ -1085,30 +1078,22 @@ main = do
                     setDisplay output "none"
                     setDisplay error  "block"
 
-                    maybeMethods <- IORef.readIORef maybeMethodsRef
-
                     result <- Exception.try do
                         expression <- Import.resolve () input_
 
                         let run = do
                                 (inferred, elaboratedExpression) <- Infer.typeWith input_ () [] expression
 
-                                value <- Normalize.evaluate maybeMethods [] elaboratedExpression
+                                value <- Normalize.evaluate keyToMethods [] elaboratedExpression
 
                                 setOutput inferred value
 
                         if Lens.has Syntax.effects expression
                             then do
-                                setDisplay prompt "block"
-
                                 setDisplay output "none"
 
-                                if shouldRun
-                                    then run
-                                    else setDisplay error "none"
+                                run
                             else do
-                                setDisplay prompt "none"
-
                                 run
 
                     case result of
@@ -1119,7 +1104,7 @@ main = do
 
     debouncedInterpret <- debounce interpret
 
-    inputCallback <- Callback.asyncCallback (debouncedInterpret False)
+    inputCallback <- Callback.asyncCallback (debouncedInterpret ())
 
     onChange codeInput inputCallback
 
@@ -1224,7 +1209,7 @@ main = do
 
                 IORef.writeIORef tutorialRef False
 
-                debouncedInterpret False
+                debouncedInterpret ()
 
                 remove stopTutorial
 
@@ -1255,20 +1240,7 @@ main = do
 
         setValue codeInput (URI.Encode.decodeText expression)
 
-    updateAPIKeyCallback <- Callback.asyncCallback do
-            apiKey <- toValue apiKeyInput
-
-            methods <- HTTP.getMethods apiKey
-
-            IORef.writeIORef maybeMethodsRef (Just methods)
-
-    addEventListener apiKeyInput "input" updateAPIKeyCallback
-
-    runCallback <- Callback.asyncCallback (debouncedInterpret True)
-
-    addEventListener runButton "click" runCallback
-
-    debouncedInterpret False
+    debouncedInterpret ()
 
     let registerTabCallback tabID action = do
             tabElement <- getElementById tabID
@@ -1360,27 +1332,30 @@ promptingExample :: Text
 promptingExample =
     "# Grace provides built-in language support for LLMs using the `prompt` function.\n\
     \# To run these examples you will need to provide an OpenAI API key below and.\n\
-    \# and then click \"Run\".\n\
+    \# and then click \"Submit\".\n\
+    \\\arguments ->\n\
+    \\n\
+    \let key = arguments.\"OpenAI key\" in\n\
     \\n\
     \{ # You can prompt a model with `Text`, which will (by default) return `Text`:\n\
-    \  names: prompt{ text: \"Give me a list of names\" }\n\
+    \  names: prompt{ key, text: \"Give me a list of names\" }\n\
     \\n\
     \, # You can request structured output with a type annotation, like this:\n\
-    \  structuredNames: prompt{ text: \"Give me a list of names\" } : List Text\n\
+    \  structuredNames: prompt{ key, text: \"Give me a list of names\" } : List Text\n\
     \\n\
     \, # If you request a record with first and last name fields then the model will\n\
     \  # adjust its output to match:\n\
     \  fullNames:\n\
-    \    prompt{ text: \"Give me a list of names\" }\n\
+    \    prompt{ key, text: \"Give me a list of names\" }\n\
     \      : List { firstName: Text, lastName: Text }\n\
     \\n\
     \, # In fact, that type is descriptive enough that we can just omit the prompt:\n\
-    \  tacitFullNames: prompt{ } : List { firstName: Text, lastName: Text }\n\
+    \  tacitFullNames: prompt{ key } : List { firstName: Text, lastName: Text }\n\
     \\n\
     \, # By default the `prompt` keyword selects the `o4-mini` model, but you can\n\
     \  # specify other models using the `model` argument:\n\
     \  differentModel:\n\
-    \    prompt{ model: \"gpt-4o\" } : List { firstName: Text, lastName: Text }\n\
+    \    prompt{ key, model: \"gpt-4o\" } : List { firstName: Text, lastName: Text }\n\
     \}\n\
     \\n\
     \# Try switching to the \"Code\" tab below to view the code for the result, then\n\
@@ -1491,8 +1466,12 @@ listsExample =
 
 codingExample :: Text
 codingExample =
-    "# What do you think this code will do?  Run it to test your guess:\n\
-    \prompt{ code: true }\n\
+    "\\arguments ->\n\
+    \\n\
+    \let key = arguments.\"OpenAI key\" in\n\
+    \\n\
+    \# What do you think this code will do?  Run it to test your guess:\n\
+    \prompt{ key, code: true }\n\
     \    : { jobDescription: Text } -> { isFinance : Bool, rationale : Text }\n\
     \# You can read the above type as \"a function whose input is a record (with a\n\
     \# `jobDescription` field) and whose output is a record (with `isFinance` and\n\

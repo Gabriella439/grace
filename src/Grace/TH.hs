@@ -27,6 +27,7 @@ import Language.Haskell.TH.Quote (QuasiQuoter(..))
 import Language.Haskell.TH.Syntax (Code(examineCode), Lift, Q, TExp(..))
 
 import qualified Data.Text as Text
+import qualified Grace.HTTP as HTTP
 import qualified Grace.Interpret as Interpret
 import qualified Grace.Normalize as Normalize
 import qualified Language.Haskell.TH as TH
@@ -97,7 +98,9 @@ typeOfInput = helperFunction fst
 helperFunction
     :: Lift r => ((Type (), Syntax () Void) -> r) -> Input -> Code Q r
 helperFunction f input = TH.Code do
-    (inferred, value) <- liftIO (Interpret.interpret Nothing input)
+    keyToMethods <- liftIO (HTTP.getMethods)
+
+    (inferred, value) <- liftIO (Interpret.interpret keyToMethods input)
 
     let type_ = void inferred
         syntax = Normalize.quote [] value

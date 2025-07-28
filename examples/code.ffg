@@ -1,1 +1,3 @@
-prompt{ code: some true, text: "Uppercase the input" } "abc" : Text
+\{ key } ->
+
+prompt{ key, code: some true, text: "Uppercase the input" } "abc" : Text

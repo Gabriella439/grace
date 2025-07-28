@@ -297,7 +297,7 @@ staticAssets = Unsafe.unsafePerformIO do
     sub-expression multiple times.
 -}
 evaluate
-    :: Maybe Methods
+    :: (Text -> Methods)
     -- ^ OpenAI methods
     -> [(Text, Value)]
     -- ^ Evaluation environment (starting at @[]@ for a top-level expression)
@@ -305,9 +305,12 @@ evaluate
     -- ^ Surface syntax
     -> IO Value
     -- ^ Result, free of reducible sub-expressions
-evaluate maybeMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
+evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
   where
-    loop :: [(Text, Value)] -> Syntax Location Void -> Concurrently Value
+    loop
+        :: [(Text, Value)]
+        -> Syntax Location Void
+        -> Concurrently Value
     loop env syntax =
         case syntax of
             Syntax.Variable{..} -> do
@@ -317,7 +320,7 @@ evaluate maybeMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                 io <- runConcurrently do
                     function' <- loop env function
                     argument' <- loop env argument
-                    return (apply maybeMethods function' argument')
+                    return (apply keyToMethods function' argument')
 
                 io
 
@@ -485,204 +488,206 @@ evaluate maybeMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                 value <- runConcurrently (loop env arguments)
 
                 case value of
-                    Value.Record fieldValues -> case maybeMethods of
-                        Nothing -> do
-                            Exception.throwIO MissingCredentials
-                        Just methods -> do
-                            let prompt = do
-                                    Value.Application (Value.Builtin Some) (Value.Text p) <- HashMap.lookup "text" fieldValues
-                                    return p
+                    Value.Record fieldValues -> do
+                        let Just (Value.Scalar (Syntax.Key key)) =
+                                HashMap.lookup "key" fieldValues
 
-                            let search = case HashMap.lookup "search" fieldValues of
-                                    Just (Value.Application (Value.Builtin Some) (Value.Scalar (Syntax.Bool c))) -> c
-                                    _ -> False
+                        let methods = keyToMethods (Text.strip key)
 
-                            let model = case HashMap.lookup "model" fieldValues of
-                                    Just (Value.Application (Value.Builtin Some) (Value.Text m)) -> Model m
-                                    _ | search -> "gpt-4o-search-preview"
-                                      | otherwise -> "o4-mini"
+                        let prompt = do
+                                Value.Application (Value.Builtin Some) (Value.Text p) <- HashMap.lookup "text" fieldValues
+                                return p
 
-                            let code = case HashMap.lookup "code" fieldValues of
-                                    Just (Value.Application (Value.Builtin Some) (Value.Scalar (Syntax.Bool c))) -> c
-                                    _ -> False
+                        let search = case HashMap.lookup "search" fieldValues of
+                                Just (Value.Application (Value.Builtin Some) (Value.Scalar (Syntax.Bool c))) -> c
+                                _ -> False
 
-                            let web_search_options
-                                    | search = Just WebSearchOptions
-                                        { search_context_size = Nothing
-                                        , user_location = Nothing
-                                        }
-                                    | otherwise = Nothing
+                        let model = case HashMap.lookup "model" fieldValues of
+                                Just (Value.Application (Value.Builtin Some) (Value.Text m)) -> Model m
+                                _ | search -> "gpt-4o-search-preview"
+                                  | otherwise -> "o4-mini"
 
-                            let toResponseFormat s = JSON_Schema
-                                    { json_schema = JSONSchema
-                                        { description = Nothing
-                                        , name = "result"
-                                        , schema = Just s
-                                        , strict = Just True
-                                        }
+                        let code = case HashMap.lookup "code" fieldValues of
+                                Just (Value.Application (Value.Builtin Some) (Value.Scalar (Syntax.Bool c))) -> c
+                                _ -> False
+
+                        let web_search_options
+                                | search = Just WebSearchOptions
+                                    { search_context_size = Nothing
+                                    , user_location = Nothing
                                     }
+                                | otherwise = Nothing
 
-                            let toOutput ChatCompletionObject{ choices = [ Choice{ message = Assistant{ assistant_content = Just output } } ] } = do
-                                    return output
-                                toOutput ChatCompletionObject{ choices } = do
-                                    Exception.throwIO UnexpectedModelResponse{ choices }
+                        let toResponseFormat s = JSON_Schema
+                                { json_schema = JSONSchema
+                                    { description = Nothing
+                                    , name = "result"
+                                    , schema = Just s
+                                    , strict = Just True
+                                    }
+                                }
 
-                            manager <- liftIO HTTP.newManager
+                        let toOutput ChatCompletionObject{ choices = [ Choice{ message = Assistant{ assistant_content = Just output } } ] } = do
+                                return output
+                            toOutput ChatCompletionObject{ choices } = do
+                                Exception.throwIO UnexpectedModelResponse{ choices }
 
-                            if code
-                                then do
-                                    let retry :: [(Text, SomeException)] -> IO (Type Location, Value)
-                                        retry errors
-                                            | (_, interpretError) : rest <- errors
-                                            , length rest == 3 = do
-                                                Exception.throwIO interpretError
-                                            | otherwise = do
-                                                let failedAttempts = do
-                                                        (index, (program, interpretError)) <- zip [ 0 .. ] (reverse errors)
-                                                        return
-                                                            ( "Your failed attempt " <> Text.pack (show (index :: Natural)) <> ":\n\
-                                                              \\n\
-                                                              \" <> program <> "\n\
-                                                              \\n\
-                                                              \Error:\n\
-                                                              \" <> Text.pack (displayException interpretError) <> "\n\
-                                                              \\n"
-                                                            )
+                        manager <- liftIO HTTP.newManager
 
-                                                let instructions = case prompt of
-                                                        Nothing ->
-                                                            ""
-                                                        Just p ->
-                                                            "… according to these instructions:\n\
-                                                            \\n\
-                                                            \" <> p
-
-                                                let input =
-                                                        staticAssets <> "\n\
-                                                        \\n\
-                                                        \Now generate a standalone Grace expression matching the following type:\n\
-                                                        \\n\
-                                                        \" <> Pretty.toSmart schema <> "\n\
-                                                        \\n\
-                                                        \" <> instructions <> "\n\
-                                                        \\n\
-                                                        \Output a naked Grace expression without any code fence or explanation.\n\
-                                                        \Your response in its entirety should be a valid input to the Grace interpreter.\n\
-                                                        \\n\
-                                                        \" <> Text.concat failedAttempts
-
-                                                chatCompletionObject <- liftIO do
-                                                    HTTP.createChatCompletion methods _CreateChatCompletion
-                                                        { messages = [ User{ content = [ Completions.Text{ text = input } ], name = Nothing } ]
-                                                        , model
-                                                        , web_search_options
-                                                        }
-
-                                                output <- toOutput chatCompletionObject
-
-                                                Interpret.interpretWith maybeMethods [] (Just schema) manager (Code "(generated)" output)
-                                                    `Exception.catch` \interpretError -> do
-                                                        retry ((output, interpretError) : errors)
-
-                                    (_, e) <- retry []
-
-                                    return e
-                                else do
-                                    let decode text = do
-                                            let bytes = Encoding.encodeUtf8 text
-
-                                            let lazyBytes = ByteString.Lazy.fromStrict bytes
-
-                                            case Aeson.eitherDecode lazyBytes of
-                                                Left message_ -> Exception.throwIO JSONDecodingFailed{ message = message_, text }
-                                                Right v -> return v
-
-                                    let requestJSON =
-                                            instructions <> "Generate JSON output matching the following type:\n\
-                                            \\n\
-                                            \" <> Pretty.toSmart defaultedSchema
-                                          where
-                                            instructions = case prompt of
-                                                Nothing ->
-                                                    ""
-                                                Just p ->
-                                                    p <> "\n\
-                                                    \\n"
-
-                                    let extractText = do
-                                            let extract text = do
-                                                    return (Value.Text text)
+                        if code
+                            then do
+                                let retry :: [(Text, SomeException)] -> IO (Type Location, Value)
+                                    retry errors
+                                        | (_, interpretError) : rest <- errors
+                                        , length rest == 3 = do
+                                            Exception.throwIO interpretError
+                                        | otherwise = do
+                                            let failedAttempts = do
+                                                    (index, (program, interpretError)) <- zip [ 0 .. ] (reverse errors)
+                                                    return
+                                                        ( "Your failed attempt " <> Text.pack (show (index :: Natural)) <> ":\n\
+                                                          \\n\
+                                                          \" <> program <> "\n\
+                                                          \\n\
+                                                          \Error:\n\
+                                                          \" <> Text.pack (displayException interpretError) <> "\n\
+                                                          \\n"
+                                                        )
 
                                             let instructions = case prompt of
-                                                    Nothing -> ""
-                                                    Just p  -> p
+                                                    Nothing ->
+                                                        ""
+                                                    Just p ->
+                                                        "… according to these instructions:\n\
+                                                        \\n\
+                                                        \" <> p
 
-                                            return
-                                                ( instructions
-                                                , Nothing
-                                                , extract
-                                                )
+                                            let input =
+                                                    staticAssets <> "\n\
+                                                    \\n\
+                                                    \Now generate a standalone Grace expression matching the following type:\n\
+                                                    \\n\
+                                                    \" <> Pretty.toSmart schema <> "\n\
+                                                    \\n\
+                                                    \" <> instructions <> "\n\
+                                                    \\n\
+                                                    \Output a naked Grace expression without any code fence or explanation.\n\
+                                                    \Your response in its entirety should be a valid input to the Grace interpreter.\n\
+                                                    \\n\
+                                                    \" <> Text.concat failedAttempts
 
-                                    let extractRecord = do
-                                            jsonSchema <- case toJSONSchema defaultedSchema of
-                                                Left exception -> Exception.throwIO exception
-                                                Right result -> return result
+                                            chatCompletionObject <- liftIO do
+                                                HTTP.createChatCompletion methods _CreateChatCompletion
+                                                    { messages = [ User{ content = [ Completions.Text{ text = input } ], name = Nothing } ]
+                                                    , model
+                                                    , web_search_options
+                                                    }
 
-                                            let extract text = do
-                                                    v <- decode text
+                                            output <- toOutput chatCompletionObject
 
-                                                    case fromJSON defaultedSchema v of
-                                                        Left invalidJSON -> Exception.throwIO invalidJSON
-                                                        Right e -> return e
+                                            Interpret.interpretWith keyToMethods [] (Just schema) manager (Code "(generated)" output)
+                                                `Exception.catch` \interpretError -> do
+                                                    retry ((output, interpretError) : errors)
 
-                                            return
-                                                ( requestJSON
-                                                , Just (toResponseFormat jsonSchema)
-                                                , extract
-                                                )
+                                (_, e) <- retry []
 
-                                    let extractNonRecord = do
-                                            let adjustedSchema =
-                                                    Type.Record (Type.location defaultedSchema) (Type.Fields [("response", defaultedSchema)] Monotype.EmptyFields)
+                                return e
+                            else do
+                                let decode text = do
+                                        let bytes = Encoding.encodeUtf8 text
 
-                                            jsonSchema <- case toJSONSchema adjustedSchema of
-                                                Left exception -> Exception.throwIO exception
-                                                Right result -> return result
+                                        let lazyBytes = ByteString.Lazy.fromStrict bytes
 
-                                            let extract text = do
-                                                    v <- decode text
+                                        case Aeson.eitherDecode lazyBytes of
+                                            Left message_ -> Exception.throwIO JSONDecodingFailed{ message = message_, text }
+                                            Right v -> return v
 
-                                                    expression <- case fromJSON adjustedSchema v of
-                                                        Left invalidJSON -> Exception.throwIO invalidJSON
-                                                        Right expression -> return expression
+                                let requestJSON =
+                                        instructions <> "Generate JSON output matching the following type:\n\
+                                        \\n\
+                                        \" <> Pretty.toSmart defaultedSchema
+                                      where
+                                        instructions = case prompt of
+                                            Nothing ->
+                                                ""
+                                            Just p ->
+                                                p <> "\n\
+                                                \\n"
 
-                                                    case expression of
-                                                        Value.Record [("response", response)] -> do
-                                                            return response
-                                                        other -> do
-                                                            return other
+                                let extractText = do
+                                        let extract text = do
+                                                return (Value.Text text)
 
-                                            return
-                                                ( requestJSON
-                                                , Just (toResponseFormat jsonSchema)
-                                                , extract
-                                                )
+                                        let instructions = case prompt of
+                                                Nothing -> ""
+                                                Just p  -> p
 
-                                    (text, response_format, extract) <- case defaultedSchema of
-                                            Type.Scalar{ scalar = Monotype.Text } -> extractText
-                                            Type.Record{ } -> extractRecord
-                                            _ -> extractNonRecord
+                                        return
+                                            ( instructions
+                                            , Nothing
+                                            , extract
+                                            )
 
-                                    chatCompletionObject <- liftIO do
-                                        HTTP.createChatCompletion methods _CreateChatCompletion
-                                            { messages = [ User{ content = [ Completions.Text{ text } ], name = Nothing  } ]
-                                            , model
-                                            , response_format
-                                            }
+                                let extractRecord = do
+                                        jsonSchema <- case toJSONSchema defaultedSchema of
+                                            Left exception -> Exception.throwIO exception
+                                            Right result -> return result
 
-                                    output <- toOutput chatCompletionObject
+                                        let extract text = do
+                                                v <- decode text
 
-                                    extract output
+                                                case fromJSON defaultedSchema v of
+                                                    Left invalidJSON -> Exception.throwIO invalidJSON
+                                                    Right e -> return e
+
+                                        return
+                                            ( requestJSON
+                                            , Just (toResponseFormat jsonSchema)
+                                            , extract
+                                            )
+
+                                let extractNonRecord = do
+                                        let adjustedSchema =
+                                                Type.Record (Type.location defaultedSchema) (Type.Fields [("response", defaultedSchema)] Monotype.EmptyFields)
+
+                                        jsonSchema <- case toJSONSchema adjustedSchema of
+                                            Left exception -> Exception.throwIO exception
+                                            Right result -> return result
+
+                                        let extract text = do
+                                                v <- decode text
+
+                                                expression <- case fromJSON adjustedSchema v of
+                                                    Left invalidJSON -> Exception.throwIO invalidJSON
+                                                    Right expression -> return expression
+
+                                                case expression of
+                                                    Value.Record [("response", response)] -> do
+                                                        return response
+                                                    other -> do
+                                                        return other
+
+                                        return
+                                            ( requestJSON
+                                            , Just (toResponseFormat jsonSchema)
+                                            , extract
+                                            )
+
+                                (text, response_format, extract) <- case defaultedSchema of
+                                        Type.Scalar{ scalar = Monotype.Text } -> extractText
+                                        Type.Record{ } -> extractRecord
+                                        _ -> extractNonRecord
+
+                                chatCompletionObject <- liftIO do
+                                    HTTP.createChatCompletion methods _CreateChatCompletion
+                                        { messages = [ User{ content = [ Completions.Text{ text } ], name = Nothing  } ]
+                                        , model
+                                        , response_format
+                                        }
+
+                                output <- toOutput chatCompletionObject
+
+                                extract output
                     _ ->
                         fail "Grace.Normalize.evaluate: prompt argument must be a record"
 
@@ -896,19 +901,19 @@ evaluate maybeMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
     evaluating anonymous functions and evaluating all built-in functions.
 -}
 apply
-    :: Maybe Methods
+    :: (Text -> Methods)
     -- ^ OpenAI methods
     -> Value
     -- ^ Function
     -> Value
     -- ^ Argument
     -> IO Value
-apply maybeMethods function₀ argument₀ = runConcurrently (loop function₀ argument₀)
+apply keyToMethods function₀ argument₀ = runConcurrently (loop function₀ argument₀)
   where
     loop (Value.Lambda (Closure (Value.Name name) capturedEnv body)) argument =
-        Concurrently (evaluate maybeMethods ((name, argument) : capturedEnv) body)
+        Concurrently (evaluate keyToMethods ((name, argument) : capturedEnv) body)
     loop (Value.Lambda (Closure (Value.FieldNames fieldNames) capturedEnv body)) (Value.Record keyValues) =
-        Concurrently (evaluate maybeMethods (extraEnv <> capturedEnv) body)
+        Concurrently (evaluate keyToMethods (extraEnv <> capturedEnv) body)
       where
         extraEnv = do
             fieldName <- fieldNames

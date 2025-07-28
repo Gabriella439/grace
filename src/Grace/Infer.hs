@@ -1315,13 +1315,9 @@ infer e₀ = do
             let done = do
                     newBody <- check body output
 
-                    let newNameBinding = case nameBinding of
-                            Syntax.NameBinding{..} -> Syntax.NameBinding{ annotation = Nothing, .. }
-                            Syntax.FieldNamesBinding{..} -> Syntax.FieldNamesBinding{..}
-
                     _Γ <- get
 
-                    return (Type.Function{..}, Syntax.Lambda{ nameBinding = newNameBinding, body = solveSyntax _Γ newBody, .. })
+                    return (Type.Function{..}, Syntax.Lambda{ body = solveSyntax _Γ newBody, .. })
 
             foldr scoped done entries
 
@@ -1372,7 +1368,7 @@ infer e₀ = do
                     (_A, newAssignment) <- infer (toLambda nameBindings₀)
 
                     let newBinding = Syntax.Binding
-                            { annotation = Nothing
+                            { annotation
                             , nameBindings = []
                             , assignment = newAssignment
                             , nameLocation = nameLocation₀
@@ -1800,7 +1796,8 @@ infer e₀ = do
             newArguments <- check arguments Type.Record
                 { fields =
                     Type.Fields
-                        [ ("text", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Text, .. }, .. })
+                        [ ("key", Type.Scalar{ scalar = Monotype.Key, .. })
+                        , ("text", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Text, .. }, .. })
                         , ("model", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Text, .. }, .. })
                         , ("code", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Bool, .. }, .. })
                         , ("search", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Bool, .. }, .. })
@@ -2890,7 +2887,8 @@ check Syntax.Prompt{..} _B = do
     newArguments <- check arguments Type.Record
         { fields =
             Type.Fields
-                [ ("text", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Text, .. }, .. })
+                [ ("key", Type.Scalar{ scalar = Monotype.Key, .. })
+                , ("text", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Text, .. }, .. })
                 , ("model", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Text, .. }, .. })
                 , ("code", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Bool, .. }, .. })
                 , ("search", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Bool, .. }, .. })

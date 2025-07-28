@@ -70,11 +70,8 @@ renderError = Text.pack . displayException
 type Methods = Text
 
 -- | Initialize API for prompting
-getMethods
-    :: Text
-    -- ^ API key
-    -> IO Methods
-getMethods = return
+getMethods :: IO (Text -> Methods)
+getMethods = return id
 
 -- | This powers the @prompt@ keyword
 createChatCompletion

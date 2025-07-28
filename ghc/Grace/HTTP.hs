@@ -143,14 +143,11 @@ renderError (NotUTF8 unicodeException) =
     \" <> Text.pack (displayException unicodeException)
 
 -- | Initialize API for prompting
-getMethods
-    :: Text
-    -- ^ API key
-    -> IO Methods
-getMethods key = do
+getMethods :: IO (Text -> Methods)
+getMethods = do
     clientEnv <- OpenAI.getClientEnv "https://api.openai.com"
 
-    return (OpenAI.makeMethods clientEnv key)
+    return (OpenAI.makeMethods clientEnv)
 
 -- | This powers the @prompt@ keyword
 createChatCompletion
