@@ -13,6 +13,7 @@ import Grace.Pretty (Pretty(..))
 import System.FilePath ((</>))
 
 import qualified Data.Text as Text
+import qualified Grace.Pretty as Pretty
 import qualified System.FilePath as FilePath
 import qualified Text.URI as URI
 
@@ -74,4 +75,5 @@ data Mode
 
 instance Pretty Mode where
     pretty AsCode = mempty
-    pretty AsText = " : Text"
+    pretty AsText =
+        " " <> Pretty.punctuation ":" <> " " <> Pretty.builtin "Text"
