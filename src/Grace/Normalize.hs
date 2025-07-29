@@ -40,6 +40,7 @@ import Grace.DataFile as DataFile
 import Grace.HTTP (Methods)
 import Grace.Input (Input(..))
 import Grace.Location (Location)
+import Grace.Pretty (Pretty(..))
 import Grace.Syntax (Builtin(..), Scalar(..), Syntax)
 import Grace.Type (Type)
 import Grace.Value (Value)
@@ -66,6 +67,7 @@ import qualified Control.Monad as Monad
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Yaml as YAML
 import qualified Data.ByteString.Lazy as ByteString.Lazy
+import qualified Data.Foldable as Foldable
 import qualified Data.HashMap.Strict.InsOrd as HashMap
 import qualified Data.List as List
 import qualified Data.Map as Map
@@ -78,6 +80,7 @@ import qualified Data.Void as Void
 import qualified Grace.Compat as Compat
 import qualified Grace.Domain as Domain
 import qualified Grace.HTTP as HTTP
+import qualified Grace.Infer as Infer
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Pretty as Pretty
 import qualified Grace.Syntax as Syntax
@@ -85,6 +88,7 @@ import qualified Grace.Type as Type
 import qualified Grace.Value as Value
 import qualified OpenAI.V1.Chat.Completions as Completions
 import qualified Prelude
+import qualified Prettyprinter as Pretty
 import qualified System.IO.Unsafe as Unsafe
 
 {- $setup
@@ -554,23 +558,59 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                                                           \\n"
                                                         )
 
+                                            let infer (name, assignment) = do
+                                                    let expression :: Syntax Location Input
+                                                        expression = first (\_ -> undefined) (fmap Void.absurd (quote assignment))
+
+                                                    let input = Code "(intermediate value)" (Pretty.toSmart expression)
+
+                                                    (type_, _) <- Infer.typeOf input manager expression
+
+                                                    return (name, type_, assignment)
+
+                                            context <- traverse infer env
+
+                                            let renderAssignment (name, type_, _) =
+                                                    Pretty.toSmart (Pretty.group (Pretty.flatAlt long short)) <> "\n\n"
+                                                  where
+                                                    long =  Pretty.label (pretty name)
+                                                        <>  " "
+                                                        <>  Pretty.punctuation ":"
+                                                        <>  Pretty.hardline
+                                                        <>  "  "
+                                                        <>  Pretty.nest 2 (pretty type_)
+
+                                                    short = Pretty.label (pretty name)
+                                                        <>  " "
+                                                        <>  Pretty.punctuation ":"
+                                                        <>  " "
+                                                        <>  pretty type_
+
+                                            let environment
+                                                    | Foldable.null env = ""
+                                                    | otherwise =
+                                                        "Given the following variables:\n\
+                                                        \\n\
+                                                        \" <> foldMap renderAssignment context
+
                                             let instructions = case prompt of
                                                     Nothing ->
                                                         ""
                                                     Just p ->
                                                         "… according to these instructions:\n\
                                                         \\n\
-                                                        \" <> p
+                                                        \" <> p <> "\n\
+                                                        \\n"
 
                                             let input =
                                                     staticAssets <> "\n\
                                                     \\n\
-                                                    \Now generate a standalone Grace expression matching the following type:\n\
+                                                    \" <> environment <> "\
+                                                    \Generate a standalone Grace expression matching the following type:\n\
                                                     \\n\
                                                     \" <> Pretty.toSmart schema <> "\n\
                                                     \\n\
-                                                    \" <> instructions <> "\n\
-                                                    \\n\
+                                                    \" <> instructions <> "\
                                                     \Output a naked Grace expression without any code fence or explanation.\n\
                                                     \Your response in its entirety should be a valid input to the Grace interpreter.\n\
                                                     \\n\
@@ -585,7 +625,7 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
 
                                             output <- toOutput chatCompletionObject
 
-                                            Interpret.interpretWith keyToMethods [] (Just schema) manager (Code "(generated)" output)
+                                            Interpret.interpretWith keyToMethods context (Just schema) manager (Code "(generated)" output)
                                                 `Exception.catch` \interpretError -> do
                                                     retry ((output, interpretError) : errors)
 
