@@ -42,7 +42,7 @@ import Grace.Input (Input(..))
 import Grace.Location (Location)
 import Grace.Syntax (Builtin(..), Scalar(..), Syntax)
 import Grace.Type (Type)
-import Grace.Value (Closure(..), Value)
+import Grace.Value (Value)
 import Numeric.Natural (Natural)
 import OpenAI.V1.Models (Model(..))
 import OpenAI.V1.ResponseFormat (JSONSchema(..), ResponseFormat(..))
@@ -325,14 +325,14 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                 io
 
             Syntax.Lambda{ nameBinding = Syntax.NameBinding{ name }, ..} ->
-                pure (Value.Lambda (Closure (Value.Name name) env body))
+                pure (Value.Lambda env (Value.Name name) body)
 
             Syntax.Lambda{ nameBinding = Syntax.FieldNamesBinding{ fieldNames }, ..} -> do
                 let names = do
                         Syntax.FieldName{ name } <- fieldNames
                         return name
 
-                pure (Value.Lambda (Closure (Value.FieldNames names) env body))
+                pure (Value.Lambda env (Value.FieldNames names) body)
 
             Syntax.Annotation{ annotated, annotation  } -> do
                 newAnnotated <- loop env annotated
@@ -910,9 +910,9 @@ apply
     -> IO Value
 apply keyToMethods function₀ argument₀ = runConcurrently (loop function₀ argument₀)
   where
-    loop (Value.Lambda (Closure (Value.Name name) capturedEnv body)) argument =
+    loop (Value.Lambda capturedEnv (Value.Name name) body) argument =
         Concurrently (evaluate keyToMethods ((name, argument) : capturedEnv) body)
-    loop (Value.Lambda (Closure (Value.FieldNames fieldNames) capturedEnv body)) (Value.Record keyValues) =
+    loop (Value.Lambda capturedEnv (Value.FieldNames fieldNames) body) (Value.Record keyValues) =
         Concurrently (evaluate keyToMethods (extraEnv <> capturedEnv) body)
       where
         extraEnv = do
@@ -1055,7 +1055,7 @@ apply keyToMethods function₀ argument₀ = runConcurrently (loop function₀ a
 -- | Convert a `Value` back into the surface `Syntax`
 quote :: Value -> Syntax () Void
 quote value = case value of
-    Value.Lambda (Closure names_ env body₀) ->
+    Value.Lambda env names_ body₀ ->
         foldl snoc newLambda env
       where
         nameBinding = case names_ of

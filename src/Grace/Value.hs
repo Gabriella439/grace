@@ -11,7 +11,6 @@
 module Grace.Value
     ( -- * Value
       Names(..)
-    , Closure(..)
     , Value(..)
     , toJSON
     , effects
@@ -43,20 +42,6 @@ import qualified Grace.Syntax as Syntax
 data Names = Name Text | FieldNames [Text]
     deriving stock (Eq, Show)
 
-{-| A `Closure` captures the current evaluation environment in order to defer
-    evaluation until the value of some bound variable is known
-
-    You can think of @Closure name env expression@ as essentially the same thing
-    as @\\value -> evaluate ((name, value) : env) e@, except stored using a
-    first-order representation.  In fact, you convert to the latter
-    representation using `Grace.Normalize.instantiate`.
-
-    This provides efficiency comparable to a higher-order abstract syntax
-    tree, except using a first-order representation.
--}
-data Closure = Closure Names [(Text, Value)] (Syntax Location Void)
-    deriving stock (Eq, Generic, Show)
-
 {-| This type represents a fully evaluated expression with no reducible
     sub-expressions
 
@@ -68,7 +53,7 @@ data Closure = Closure Names [(Text, Value)] (Syntax Location Void)
     * To use a more efficient representation for reduction purposes
 -}
 data Value
-    = Lambda Closure
+    = Lambda [(Text, Value)] Names (Syntax Location Void)
       -- The `Lambda` constructor captures the environment at the time it is
       -- evaluated, so that evaluation can be lazily deferred until the function
       -- input is known.  This is essentially the key optimization that powers
@@ -85,8 +70,8 @@ data Value
 
 instance Plated Value where
     plate onValue value = case value of
-        Lambda closure -> do
-            pure (Lambda closure)
+        Lambda environment names body -> do
+            pure (Lambda environment names body)
         Application function argument -> do
             newFunction <- onValue function
             newArgument <- onValue argument
