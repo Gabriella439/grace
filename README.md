@@ -20,7 +20,9 @@ Grace.
   generate a list of names and then greets each one:
 
   ```haskell
-  let names = prompt{ }
+  let key = ./openai-key.txt
+
+  let names = prompt{ key }
 
   let greet{ name } = "Hello, ${name}!"
 
@@ -79,7 +81,9 @@ Grace.
   For example, if we ask the model to generate the following function
 
   ```haskell
-  >>> prompt{ code: true, text: "Greet every name" } : List { name : Text } -> List Text
+  >>> :let key = ./openai-key.txt
+
+  >>> prompt{ key, code: true, text: "Greet every name" } : List { name : Text } -> List Text
   ```
 
   … then the model generates code equivalent to what we wrote:
@@ -91,10 +95,12 @@ Grace.
   … which means that we could have written our original example as:
 
   ```haskell
-  let names = prompt{ }
+  let key = ./openai-key.txt
+
+  let names = prompt{ key }
 
   let process{ names: List{ name: Text } } : List Text =
-          prompt{ code: true, text: "Greet every name" } names
+          prompt{ key, code: true, text: "Greet every name" } names
 
   in  process{ names }
   ```
@@ -153,7 +159,9 @@ You can use the `interpret` subcommand for interpreting a single file:
 ```haskell
 # ./greet.ffg
 
-let names = prompt{ }
+let key = ./openai-key.txt
+
+let names = prompt{ key }
 
 let greet{ name } = "Hello, ${name}!"
 
@@ -180,10 +188,11 @@ $ grace interpret - <<< '2 + 2'
 You can also use the `repl` subcommand for interactive usage:
 
 ```bash
-$ grace repl --openAIKey "$(< openai-key.txt)"
+$ grace repl
 ```
 ```haskell
->>> prompt{ } : List { "First Name": Text, "Last Name": Text }
+>>> :let key = ./openai-key.txt
+>>> prompt{ key } : List { "First Name": Text, "Last Name": Text }
 [ { "First Name": "John", "Last Name": "Doe" }
 , { "First Name": "Jane", "Last Name": "Smith" }
 , { "First Name": "Alice", "Last Name": "Johnson" }
