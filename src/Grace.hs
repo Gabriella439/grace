@@ -193,7 +193,7 @@ main = Exception.handle handler do
 
             (inferred, value) <- Interpret.interpret keyToMethods input
 
-            let syntax = Normalize.strip (Normalize.quote [] value)
+            let syntax = Normalize.strip (Normalize.quote value)
 
             let annotatedExpression
                     | annotate =

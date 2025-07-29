@@ -1053,95 +1053,88 @@ apply keyToMethods function₀ argument₀ = runConcurrently (loop function₀ a
         pure (Value.Application function argument)
 
 -- | Convert a `Value` back into the surface `Syntax`
-quote
-    :: [Text]
-    -- ^ Variable names currently in scope (starting at @[]@ for a top-level
-    --   expression)
-    -> Value
-    -> Syntax () Void
-quote names = loop
+quote :: Value -> Syntax () Void
+quote value = case value of
+    Value.Lambda (Closure names_ env body₀) ->
+        foldl snoc newLambda env
+      where
+        nameBinding = case names_ of
+            Value.Name name ->
+                Syntax.NameBinding
+                    { nameLocation = location
+                    , annotation = Nothing
+                    , name
+                    }
+            Value.FieldNames fieldNames ->
+                Syntax.FieldNamesBinding
+                    { fieldNamesLocation = location
+                    , fieldNames = do
+                        fieldName <- fieldNames
+                        return Syntax.FieldName{ name = fieldName, fieldNameLocation = location, annotation = Nothing }
+                    }
+
+        newLambda = Syntax.Lambda
+            { nameBinding
+            , body = first (\_ -> location) body₀
+            , ..
+            }
+
+        toBinding n v = Syntax.Binding
+            { name = n
+            , nameLocation = location
+            , nameBindings = []
+            , annotation = Nothing
+            , assignment = quote v
+            }
+
+        snoc e@Syntax.Let{ bindings = b :| bs, body = body₁ } (n, v)
+            | Syntax.usedIn n e = Syntax.Let
+                { location
+                , bindings = toBinding n v :| (b : bs)
+                , body = body₁
+                }
+            | otherwise = e
+        snoc e (n, v)
+            | Syntax.usedIn n e = Syntax.Let
+                { location
+                , bindings = toBinding n v :| []
+                , body = e
+                }
+            | otherwise = e
+
+    Value.Application function argument ->
+        Syntax.Application
+            { function = quote function
+            , argument = quote argument
+            , ..
+            }
+
+    Value.List elements ->
+        Syntax.List{ elements = fmap quote elements, .. }
+
+    Value.Record fieldValues ->
+        Syntax.Record
+            { fieldValues = map adapt (HashMap.toList fieldValues)
+            , ..
+            }
+      where
+        adapt (field, value_) = (field, quote value_)
+
+    Value.Alternative name ->
+        Syntax.Alternative{..}
+
+    Value.Fold handlers ->
+        Syntax.Fold{ handlers = quote handlers, .. }
+
+    Value.Text text ->
+        Syntax.Text{ chunks = Syntax.Chunks text [], .. }
+
+    Value.Scalar scalar ->
+        Syntax.Scalar{..}
+
+    Value.Builtin builtin ->
+        Syntax.Builtin{..}
   where
-    loop value = case value of
-        Value.Lambda (Closure names_ env body₀) ->
-            foldl snoc newLambda env
-          where
-            nameBinding = case names_ of
-                Value.Name name ->
-                    Syntax.NameBinding
-                        { nameLocation = location
-                        , annotation = Nothing
-                        , name
-                        }
-                Value.FieldNames fieldNames ->
-                    Syntax.FieldNamesBinding
-                        { fieldNamesLocation = location
-                        , fieldNames = do
-                            fieldName <- fieldNames
-                            return Syntax.FieldName{ name = fieldName, fieldNameLocation = location, annotation = Nothing }
-                        }
-
-            newLambda = Syntax.Lambda
-                { nameBinding
-                , body = first (\_ -> location) body₀
-                , ..
-                }
-
-            toBinding n v = Syntax.Binding
-                { name = n
-                , nameLocation = location
-                , nameBindings = []
-                , annotation = Nothing
-                , assignment = quote names v
-                }
-
-            snoc e@Syntax.Let{ bindings = b :| bs, body = body₁ } (n, v)
-                | Syntax.usedIn n e = Syntax.Let
-                    { location
-                    , bindings = toBinding n v :| (b : bs)
-                    , body = body₁
-                    }
-                | otherwise = e
-            snoc e (n, v)
-                | Syntax.usedIn n e = Syntax.Let
-                    { location
-                    , bindings = toBinding n v :| []
-                    , body = e
-                    }
-                | otherwise = e
-
-        Value.Application function argument ->
-            Syntax.Application
-                { function = quote names function
-                , argument = quote names argument
-                , ..
-                }
-
-        Value.List elements ->
-            Syntax.List{ elements = fmap (quote names) elements, .. }
-
-        Value.Record fieldValues ->
-            Syntax.Record
-                { fieldValues = map adapt (HashMap.toList fieldValues)
-                , ..
-                }
-          where
-            adapt (field, value_) = (field, quote names value_)
-
-        Value.Alternative name ->
-            Syntax.Alternative{..}
-
-        Value.Fold handlers ->
-            Syntax.Fold{ handlers = quote names handlers, .. }
-
-        Value.Text text ->
-            Syntax.Text{ chunks = Syntax.Chunks text [], .. }
-
-        Value.Scalar scalar ->
-            Syntax.Scalar{..}
-
-        Value.Builtin builtin ->
-            Syntax.Builtin{..}
-
     location = ()
 
 strip :: Syntax s a -> Syntax s a

@@ -79,7 +79,7 @@ fileToTestTree prefix = do
             let generateTypeFile = return (pretty_ inferred)
 
             let generateOutputFile =
-                    return (pretty_ (Normalize.strip (Normalize.quote [] value)))
+                    return (pretty_ (Normalize.strip (Normalize.quote value)))
 
             return
                 (Tasty.testGroup name

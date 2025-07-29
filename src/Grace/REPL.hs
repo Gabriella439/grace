@@ -62,7 +62,7 @@ repl keyToMethods = do
                     err e
 
                 Right (_inferred, value) -> do
-                    let syntax = Normalize.strip (Normalize.quote [] value)
+                    let syntax = Normalize.strip (Normalize.quote value)
 
                     width <- liftIO Width.getWidth
 

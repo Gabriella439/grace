@@ -300,8 +300,7 @@ typeToText :: Type s -> Text
 typeToText = Pretty.renderStrict False 80
 
 valueToText :: Value -> Text
-valueToText =
-    Pretty.renderStrict False 80 . Normalize.strip . Normalize.quote []
+valueToText = Pretty.renderStrict False 80 . Normalize.strip . Normalize.quote
 
 renderValue
     :: (Text -> Methods)

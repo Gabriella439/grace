@@ -103,6 +103,6 @@ helperFunction f input = TH.Code do
     (inferred, value) <- liftIO (Interpret.interpret keyToMethods input)
 
     let type_ = void inferred
-        syntax = Normalize.quote [] value
+        syntax = Normalize.quote value
 
     TExp <$> TH.lift (f (type_, syntax))
