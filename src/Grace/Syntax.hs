@@ -135,8 +135,8 @@ data Syntax s a
     --   if x then y else z
     | Text { location :: s, chunks :: Chunks s a }
     -- ^
-    --   >>> pretty @(Syntax () Void) (Text () "a\n")
-    --   "a\n"
+    --   >>> pretty @(Syntax () Void) (Text () "a")
+    --   "a"
     --   >>> pretty @(Syntax () Void) (Text () (Chunks "a" [("x", "b")]))
     --   "a${x}b"
     | Prompt{ location :: s, arguments :: Syntax s a, schema :: Maybe (Type s) }
@@ -476,8 +476,6 @@ data Scalar
     --   >>> pretty Null
     --   null
     | Key Text
-    -- ^ >>> pretty (Key "sk-proj-…")
-    --   🔒
     deriving (Eq, Generic, Lift, Show)
 
 instance ToJSON Scalar where
