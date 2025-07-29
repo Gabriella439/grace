@@ -35,7 +35,6 @@ import Prelude hiding (lookup)
 import Prettyprinter (Doc)
 import Prettyprinter.Render.Terminal (AnsiStyle)
 
-import qualified Control.Monad as Monad
 import qualified Control.Monad.State.Strict as State
 import qualified Grace.Domain as Domain
 import qualified Grace.Existential as Existential
@@ -321,68 +320,83 @@ solveUnion context oldAlternatives = newAlternatives
 -}
 complete :: Context s -> Type s -> Type s
 complete context type0 = do
-    State.evalState (Monad.foldM snoc type0 context) 0
+    State.evalState (foldl snoc nil context) 0
   where
-    numUnsolved = fromIntegral (length (filter predicate context)) - 1
-      where
-        predicate (UnsolvedType         _) = True
-        predicate (UnsolvedFields       _) = True
-        predicate (UnsolvedAlternatives _) = True
-        predicate  _                       = False
+    snoc action (SolvedType name solution) = do
+        type_ <- action
 
-    snoc t (SolvedType         a τ) = do return (Type.solveType         a τ t)
-    snoc t (SolvedFields       a r) = do return (Type.solveFields       a r t)
-    snoc t (SolvedAlternatives a r) = do return (Type.solveAlternatives a r t)
-    snoc t (UnsolvedType a) | a `Type.typeFreeIn` t = do
+        return (Type.solveType name solution type_)
+    snoc action (SolvedFields name solution) = do
+        type_ <- action
+
+        return (Type.solveFields name solution type_)
+    snoc action (SolvedAlternatives name solution) = do
+        type_ <- action
+        return (Type.solveAlternatives name solution type_)
+    snoc action (UnsolvedType name₀) = do
         n <- State.get
 
         State.put $! n + 1
 
-        let name = Existential.toVariable (numUnsolved - n)
+        type_ <- action
+
+        let location = Type.location type_
+
+        let name = Existential.toVariable n
+
+        let nameLocation = location
 
         let domain = Domain.Type
 
-        let type_ = Type.solveType a (Monotype.VariableType name) t
+        let solution = Monotype.VariableType name
 
-        let location = Type.location t
-
-        let nameLocation = location
-
-        return Type.Forall{..}
-    snoc t (UnsolvedFields p) | p `Type.fieldsFreeIn` t = do
+        if Type.typeFreeIn name₀ type_
+            then return Type.Forall{ type_ = Type.solveType name₀ solution type_, .. }
+            else return type_
+    snoc action (UnsolvedFields name₀) = do
         n <- State.get
 
         State.put $! n + 1
 
-        let name = Existential.toVariable (numUnsolved - n)
+        type_ <- action
+
+        let location = Type.location type_
+
+        let name = Existential.toVariable n
+
+        let nameLocation = location
 
         let domain = Domain.Fields
 
-        let type_ = Type.solveFields p (Monotype.Fields [] (Monotype.VariableFields name)) t
+        let solution = Monotype.Fields [] (Monotype.VariableFields name)
 
-        let location = Type.location t
-
-        let nameLocation = location
-
-        return Type.Forall{..}
-    snoc t (UnsolvedAlternatives p) | p `Type.alternativesFreeIn` t = do
+        if Type.fieldsFreeIn name₀ type_
+            then return Type.Forall{ type_ = Type.solveFields name₀ solution type_, .. }
+            else return type_
+    snoc action (UnsolvedAlternatives name₀) = do
         n <- State.get
 
         State.put $! n + 1
 
-        let name = Existential.toVariable (numUnsolved - n)
+        type_ <- action
 
-        let domain = Domain.Alternatives
+        let location = Type.location type_
 
-        let type_ = Type.solveAlternatives p (Monotype.Alternatives [] (Monotype.VariableAlternatives name)) t
-
-        let location = Type.location t
+        let name = Existential.toVariable n
 
         let nameLocation = location
 
-        return Type.Forall{..}
-    snoc t _ = do
-        return t
+        let domain = Domain.Alternatives
+
+        let solution = Monotype.Alternatives [] (Monotype.VariableAlternatives name)
+
+        if Type.alternativesFreeIn name₀ type_
+            then return Type.Forall{ type_ = Type.solveAlternatives name₀ solution type_, .. }
+            else return type_
+    snoc action _ = do
+        action
+
+    nil = return type0
 
 {-| Split a `Context` into two `Context`s before and after the given
     `UnsolvedType` variable.  Neither `Context` contains the variable
