@@ -1089,6 +1089,8 @@ apply keyToMethods function₀ argument₀ = runConcurrently (loop function₀ a
                         pure (Value.Text text)
             Nothing -> do
                 error "Grace.Normalize.evaluate: yaml argument is not valid JSON"
+    loop (Value.Builtin Reveal) (Value.Scalar (Key text)) =
+        pure (Value.Text text)
     loop function argument =
         pure (Value.Application function argument)
 

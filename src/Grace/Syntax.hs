@@ -572,18 +572,6 @@ data Builtin
     -- ^
     --   >>> pretty Abs
     --   abs
-    | Some
-    -- ^
-    --   >>> pretty Some
-    --   some
-    | Show
-    -- ^
-    --   >>> pretty Show
-    --   show
-    | YAML
-    -- ^
-    --   >>> pretty YAML
-    --   yaml
     | Indexed
     -- ^
     --   >>> pretty Indexed
@@ -596,16 +584,33 @@ data Builtin
     -- ^
     --   >>> pretty Map
     --   map
+    | Reveal
+    -- ^
+    --   >>> pretty Reveal
+    --   reveal
+    | Show
+    -- ^
+    --   >>> pretty Show
+    --   show
+    | Some
+    -- ^
+    --   >>> pretty Some
+    --   some
+    | YAML
+    -- ^
+    --   >>> pretty YAML
+    --   yaml
     deriving (Bounded, Enum, Eq, Generic, Lift, Show)
 
 instance Pretty Builtin where
-    pretty Abs            = Pretty.builtin "abs"
-    pretty Some           = Pretty.builtin "some"
-    pretty Show           = Pretty.builtin "show"
-    pretty YAML           = Pretty.builtin "yaml"
-    pretty Indexed        = Pretty.builtin "indexed"
-    pretty Length         = Pretty.builtin "length"
-    pretty Map            = Pretty.builtin "map"
+    pretty Abs     = Pretty.builtin "abs"
+    pretty Indexed = Pretty.builtin "indexed"
+    pretty Length  = Pretty.builtin "length"
+    pretty Map     = Pretty.builtin "map"
+    pretty Reveal  = Pretty.builtin "reveal"
+    pretty Show    = Pretty.builtin "show"
+    pretty Some    = Pretty.builtin "some"
+    pretty YAML    = Pretty.builtin "yaml"
 
 -- | Pretty-print an expression
 prettyExpression :: Pretty a => Syntax s a -> Doc AnsiStyle

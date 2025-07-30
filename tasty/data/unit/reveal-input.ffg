@@ -1,0 +1,3 @@
+let key = "abc" : Key
+
+in  reveal key

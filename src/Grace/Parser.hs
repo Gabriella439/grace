@@ -126,15 +126,16 @@ lexToken =
 
         , Combinators.choice
             [ Grace.Parser.Abs            <$ symbol "abs"
-            , Grace.Parser.Show           <$ symbol "show"
-            , Grace.Parser.YAML           <$ symbol "yaml"
+            , Grace.Parser.False_         <$ symbol "false"
             , Grace.Parser.Indexed        <$ symbol "indexed"
             , Grace.Parser.Length         <$ symbol "length"
             , Grace.Parser.Map            <$ symbol "map"
-            , Grace.Parser.False_         <$ symbol "false"
-            , Grace.Parser.True_          <$ symbol "true"
-            , Grace.Parser.Some           <$ symbol "some"
             , Grace.Parser.Null           <$ symbol "null"
+            , Grace.Parser.Reveal         <$ symbol "reveal"
+            , Grace.Parser.Show           <$ symbol "show"
+            , Grace.Parser.Some           <$ symbol "some"
+            , Grace.Parser.True_          <$ symbol "true"
+            , Grace.Parser.YAML           <$ symbol "yaml"
             ] Megaparsec.<?> "built-in value"
 
         , Combinators.choice
@@ -470,32 +471,33 @@ reserved =
     HashSet.fromList
         [ "Alternatives"
         , "Bool"
-        , "Real"
-        , "Real/equal"
         , "Fields"
         , "Integer"
         , "List"
         , "List/equal"
-        , "indexed"
-        , "length"
-        , "map"
         , "Natural"
         , "Optional"
+        , "Real"
+        , "Real/equal"
         , "Text"
         , "Text/equal"
         , "Type"
         , "abs"
         , "else"
         , "false"
-        , "forall"
         , "fold"
+        , "forall"
         , "if"
         , "in"
+        , "indexed"
+        , "length"
         , "let"
-        , "some"
+        , "map"
         , "null"
         , "prompt"
+        , "reveal"
         , "show"
+        , "some"
         , "then"
         , "true"
         , "yaml"
@@ -582,31 +584,28 @@ data Token
     | Dot
     | DotNumber Integer
     | DoubleEquals
-    | Fold
-    | ForwardSlash
-    | Real
-    | RealLiteral Sign Scientific
-    | Show
     | Else
     | Equals
     | False_
     | Fields
     | File FilePath
+    | Fold
     | Forall
+    | ForwardSlash
     | GreaterThanOrEqual
     | If
     | In
+    | Indexed
     | Int Sign Natural
     | Integer
     | JSON
     | Key
     | Label Text
     | Lambda
+    | Length
     | LessThanOrEqual
     | Let
     | List
-    | Indexed
-    | Length
     | Map
     | Modulus
     | Natural
@@ -620,6 +619,10 @@ data Token
     | Or
     | Plus
     | Prompt
+    | Real
+    | RealLiteral Sign Scientific
+    | Reveal
+    | Show
     | Some
     | Text
     | TextLiteral (Chunks Offset Input)
@@ -790,31 +793,28 @@ render t = case t of
     Grace.Parser.Dot                -> "."
     Grace.Parser.DotNumber _        -> ".n"
     Grace.Parser.DoubleEquals       -> "=="
-    Grace.Parser.Real               -> "Real"
-    Grace.Parser.RealLiteral _ _    -> "a real number literal"
-    Grace.Parser.Show               -> "show"
     Grace.Parser.Else               -> "else"
     Grace.Parser.Equals             -> "="
     Grace.Parser.False_             -> "False"
     Grace.Parser.Fields             -> "Fields"
     Grace.Parser.File _             -> "a file"
+    Grace.Parser.Fold               -> "fold"
     Grace.Parser.Forall             -> "forall"
     Grace.Parser.ForwardSlash       -> "/"
     Grace.Parser.GreaterThanOrEqual -> ">="
     Grace.Parser.If                 -> "if"
     Grace.Parser.In                 -> "in"
+    Grace.Parser.Indexed            -> "indexed"
     Grace.Parser.Int _ _            -> "an integer literal"
     Grace.Parser.Integer            -> "Integer"
     Grace.Parser.JSON               -> "JSON"
     Grace.Parser.Key                -> "Key"
     Grace.Parser.Label _            -> "a label"
     Grace.Parser.Lambda             -> "\\"
+    Grace.Parser.Length             -> "length"
     Grace.Parser.LessThanOrEqual    -> "<="
     Grace.Parser.Let                -> "let"
     Grace.Parser.List               -> "list"
-    Grace.Parser.Indexed            -> "indexed"
-    Grace.Parser.Length             -> "length"
-    Grace.Parser.Fold               -> "fold"
     Grace.Parser.Map                -> "map"
     Grace.Parser.Modulus            -> "%"
     Grace.Parser.Natural            -> "Natural"
@@ -828,13 +828,17 @@ render t = case t of
     Grace.Parser.Or                 -> "||"
     Grace.Parser.Plus               -> "+"
     Grace.Parser.Prompt             -> "prompt"
+    Grace.Parser.Real               -> "Real"
+    Grace.Parser.RealLiteral _ _    -> "a real number literal"
+    Grace.Parser.Reveal             -> "reveal"
+    Grace.Parser.Show               -> "show"
     Grace.Parser.Some               -> "some"
     Grace.Parser.Text               -> "Text"
     Grace.Parser.TextLiteral _      -> "a text literal"
     Grace.Parser.Then               -> "then"
-    Grace.Parser.Type               -> "Type"
     Grace.Parser.Times              -> "*"
     Grace.Parser.True_              -> "True"
+    Grace.Parser.Type               -> "Type"
     Grace.Parser.URI _              -> "a URI"
     Grace.Parser.YAML               -> "yaml"
 
@@ -1147,6 +1151,10 @@ grammar endsWithBrace = mdo
         <|> do  location <- locatedToken Grace.Parser.Abs
 
                 return Syntax.Builtin{ builtin = Syntax.Abs, .. }
+
+        <|> do  location <- locatedToken Grace.Parser.Reveal
+
+                return Syntax.Builtin{ builtin = Syntax.Reveal, .. }
 
         <|> do  ~(location, chunks) <- locatedChunks
 

@@ -2671,6 +2671,13 @@ infer e₀ = do
                 , Syntax.Builtin{ builtin = Syntax.Abs, .. }
                 )
 
+        Syntax.Builtin{ builtin = Syntax.Reveal, .. } -> do
+            return
+                (   Type.Scalar{ scalar = Monotype.Key, .. }
+                ~>  Type.Scalar{ scalar = Monotype.Text, .. }
+                , Syntax.Builtin{ builtin = Syntax.Reveal, .. }
+                )
+
         Syntax.Embed{..} -> do
             _Γ <- get
 
