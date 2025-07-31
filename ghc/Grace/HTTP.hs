@@ -12,6 +12,7 @@ module Grace.HTTP
     , Manager
     , newManager
     , fetch
+    , post
     , renderError
     , Methods
     , getMethods
@@ -19,13 +20,22 @@ module Grace.HTTP
     ) where
 
 import Control.Exception (Exception(..))
+import Data.ByteString.Lazy (ByteString)
 import Data.Text (Text)
 import Data.Text.Encoding.Error (UnicodeException)
-import Network.HTTP.Client (HttpExceptionContent(..), Manager)
 import OpenAI.V1 (Methods(..))
 import OpenAI.V1.Chat.Completions (ChatCompletionObject, CreateChatCompletion)
 
+import Network.HTTP.Client
+    ( HttpExceptionContent(..)
+    , Manager
+    , Request(..)
+    , RequestBody(..)
+    , method
+    )
+
 import qualified Control.Exception as Exception
+import qualified Data.CaseInsensitive as CaseInsensitive
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
 import qualified Data.Text.Lazy as Text.Lazy
@@ -68,6 +78,53 @@ fetch manager url = do
     case Lazy.Encoding.decodeUtf8' lazyBytes of
         Left exception -> Exception.throwIO (NotUTF8 exception)
         Right lazyText -> return (Text.Lazy.toStrict lazyText)
+
+-- | Make a POST request
+post
+    :: Manager
+    -> Text
+    -- ^ URL
+    -> [(Text, Text)]
+    -- ^ Headers
+    -> Maybe ByteString
+    -- ^ Request body
+    -> IO ByteString
+    -- ^ Response body
+post manager url headers maybeRequestBody = do
+    request₀ <- HTTP.parseUrlThrow (Text.unpack url)
+
+    let requiredHeaders =
+            [ ("Content-Type", "application/json")
+            , ("Accept"      , "application/json")
+            ]
+
+    let requestHeaders = do
+            (headerName, headerValue) <- requiredHeaders <> headers
+
+            let newHeaderName =
+                    CaseInsensitive.mk (Encoding.encodeUtf8 headerName)
+
+            let newHeaderValue = Encoding.encodeUtf8 headerValue
+
+            return (newHeaderName, newHeaderValue)
+
+    let request₁ = request₀
+            { method = HTTP.Types.methodPost
+            , requestHeaders
+            }
+
+    let request₂ = case maybeRequestBody of
+            Nothing ->
+                request₁
+            Just requestBody ->
+                request₁{ requestBody = RequestBodyLBS requestBody }
+
+    let handler :: HTTP.HttpException -> IO a
+        handler httpException = Exception.throwIO (HttpException httpException)
+
+    response <- Exception.handle handler (HTTP.httpLbs request₂ manager)
+
+    return (HTTP.responseBody response)
 
 -- | Render an `HttpException` as `Data.Text.Text`
 renderError :: HttpException -> Text

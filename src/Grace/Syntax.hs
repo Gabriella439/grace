@@ -33,11 +33,12 @@ module Grace.Syntax
     , Binding(..)
     ) where
 
-import Control.Lens (Fold, Plated(..), Traversal')
+import Control.Lens (Getting, Plated(..), Traversal')
 import Data.Aeson (ToJSON(..))
 import Data.Bifunctor (Bifunctor(..))
 import Data.Generics.Sum (_As)
 import Data.List.NonEmpty (NonEmpty(..))
+import Data.Monoid (Any)
 import Data.Scientific (Scientific)
 import Data.Sequence (Seq((:<|)))
 import Data.String (IsString(..))
@@ -140,6 +141,7 @@ data Syntax s a
     --   >>> pretty @(Syntax () Void) (Text () (Chunks "a" [("x", "b")]))
     --   "a${x}b"
     | Prompt{ location :: s, arguments :: Syntax s a, schema :: Maybe (Type s) }
+    | HTTP{ location :: s, arguments :: Syntax s a, schema :: Maybe (Type s) }
     | Scalar { location :: s, scalar :: Scalar }
     | Operator { location :: s, left :: Syntax s a, operatorLocation :: s, operator :: Operator, right :: Syntax s a }
     -- ^
@@ -192,6 +194,8 @@ instance Monad (Syntax ()) where
         onChunk (interpolation, text) = (interpolation >>= f, text)
     Prompt{ arguments, ..} >>= f =
         Prompt{ arguments = arguments >>= f, ..}
+    HTTP{ arguments, ..} >>= f =
+        HTTP{ arguments = arguments >>= f, ..}
     Scalar{..} >>= _ =
         Scalar{..}
     Operator{ left, right, .. } >>= f =
@@ -255,6 +259,9 @@ instance Plated (Syntax s a) where
             Prompt{ arguments = oldArguments, .. } -> do
                 newArguments <- onSyntax oldArguments
                 return Prompt{ arguments = newArguments, .. }
+            HTTP{ arguments = oldArguments, .. } -> do
+                newArguments <- onSyntax oldArguments
+                return HTTP{ arguments = newArguments, .. }
             Scalar{..} -> do
                 pure Scalar{..}
             Operator{ left = oldLeft, right = oldRight, .. } -> do
@@ -295,6 +302,8 @@ instance Bifunctor Syntax where
         Text{ location = f location, chunks = first f chunks }
     first f Prompt{..} =
         Prompt{ location = f location, arguments = first f arguments, schema = fmap (fmap f) schema }
+    first f HTTP{..} =
+        HTTP{ location = f location, arguments = first f arguments, schema = fmap (fmap f) schema }
     first f Scalar{..} =
         Scalar{ location = f location, .. }
     first f Operator{..} =
@@ -349,6 +358,8 @@ usedIn _ Scalar{ } =
     False
 usedIn name₀ Prompt{ arguments } =
     usedIn name₀ arguments
+usedIn name₀ HTTP{ arguments } =
+    usedIn name₀ arguments
 usedIn name₀ Operator{ left, right } =
     usedIn name₀ left && usedIn name₀ right
 usedIn _ Builtin{ } =
@@ -356,8 +367,12 @@ usedIn _ Builtin{ } =
 usedIn _ Embed{ } =
     False
 
-effects :: Fold (Syntax s a) ()
-effects = Lens.cosmos . _As @"Prompt" . Lens.to (\_ -> ())
+effects :: Getting Any (Syntax s a) ()
+effects =
+      Lens.cosmos
+    . (   (_As @"Prompt" . Lens.to (\_ -> ()))
+      <>  (_As @"HTTP"   . Lens.to (\_ -> ()))
+      )
 
 -- | A text literal with interpolated expressions
 data Chunks s a = Chunks Text [(Syntax s a, Text)]
@@ -443,6 +458,8 @@ types k Annotation{ annotation = t, .. } =
     fmap (\t' -> Annotation{ annotation = t', .. }) (k t)
 types k Prompt{ schema = Just t, .. } =
     fmap (\t' -> Prompt{ schema = Just t', .. }) (k t)
+types k HTTP{ schema = Just t, .. } =
+    fmap (\t' -> HTTP{ schema = Just t', .. }) (k t)
 types k Let{ bindings = bs, .. } =
     fmap (\bs' -> Let{ bindings = bs', .. }) (traverse onBinding bs)
   where
@@ -702,6 +719,25 @@ prettyExpression Prompt{ schema = Just schema, ..} = Pretty.group (Pretty.flatAl
         <>  Pretty.operator ":"
         <>  " "
         <>  Pretty.nest 4 (pretty schema)
+prettyExpression HTTP{ schema = Just schema, ..} = Pretty.group (Pretty.flatAlt long short)
+  where
+    short = keyword "http"
+        <>  " "
+        <>  prettyProjectExpression arguments
+        <>  " "
+        <>  Pretty.operator ":"
+        <>  " "
+        <>  pretty schema
+
+    long =  keyword "http"
+        <>  Pretty.hardline
+        <>  "  "
+        <>  Pretty.nest 2 (prettyProjectExpression arguments)
+        <>  Pretty.hardline
+        <>  "  "
+        <>  Pretty.operator ":"
+        <>  " "
+        <>  Pretty.nest 4 (pretty schema)
 prettyExpression Annotation{..} =
     Pretty.group (Pretty.flatAlt long short)
   where
@@ -815,6 +851,7 @@ prettyApplicationExpression expression
     isApplication Application{} = True
     isApplication Fold{}        = True
     isApplication Prompt{}      = True
+    isApplication HTTP{}        = True
     isApplication _             = False
 
     short = prettyShort expression
@@ -829,6 +866,10 @@ prettyApplicationExpression expression
             keyword "fold" <> " " <> prettyProjectExpression handlers
     prettyShort Prompt{ schema = Nothing, .. } =
             keyword "prompt" <> " " <> prettyProjectExpression arguments
+    prettyShort HTTP{ schema = Nothing, .. } =
+                keyword "http"
+            <>  " "
+            <>  prettyProjectExpression arguments
     prettyShort other =
         prettyProjectExpression other
 
@@ -844,6 +885,11 @@ prettyApplicationExpression expression
         <>  Pretty.nest 2 (prettyProjectExpression handlers)
     prettyLong Prompt{..} =
             keyword "prompt"
+        <>  Pretty.hardline
+        <>  "  "
+        <>  Pretty.nest 2 (prettyProjectExpression arguments)
+    prettyLong HTTP{..} =
+            keyword "http"
         <>  Pretty.hardline
         <>  "  "
         <>  Pretty.nest 2 (prettyProjectExpression arguments)

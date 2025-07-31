@@ -1820,6 +1820,57 @@ infer e₀ = do
 
             return (type_, Syntax.Prompt{ arguments = solveSyntax _Γ newArguments, schema = Just type_, .. })
 
+        Syntax.HTTP{ location, arguments, schema } -> do
+            newArguments <- check arguments Type.Union
+                { location
+                , alternatives = Type.Alternatives
+                    [ ( "POST"
+                      , Type.Record
+                          { location
+                          , fields = Type.Fields
+                              [ ("url", Type.Scalar{ scalar = Monotype.Text, .. })
+                              , ( "headers"
+                                , Type.Optional
+                                    { location
+                                    , type_ =
+                                        Type.List
+                                          { location
+                                          , type_ = Type.Record
+                                              { location
+                                              , fields = Type.Fields
+                                                  [ ("header", Type.Scalar{ scalar = Monotype.Text, .. })
+                                                  , ("value", Type.Scalar{ scalar = Monotype.Text, .. })
+                                                  ]
+                                                  Monotype.EmptyFields
+                                              }
+                                          }
+                                    }
+                                )
+                              , ( "request"
+                                , Type.Optional
+                                    { location
+                                    , type_ = Type.Scalar
+                                        { location
+                                        , scalar = Monotype.JSON
+                                        }
+                                    }
+                                )
+                              ]
+                              Monotype.EmptyFields
+                          }
+                      )
+                    ]
+                    Monotype.EmptyAlternatives
+                }
+
+            let newSchema = case schema of
+                    Just type_ -> type_
+                    Nothing    -> Type.Scalar{ scalar = Monotype.JSON, .. }
+
+            context <- get
+
+            return (newSchema, Syntax.HTTP{ arguments = solveSyntax context newArguments, schema = Just newSchema, .. })
+
         -- All the type inference rules for scalars go here.  This part is
         -- pretty self-explanatory: a scalar literal returns the matching
         -- scalar type.
@@ -2890,7 +2941,7 @@ check Syntax.Text{ chunks = Syntax.Chunks text₀ rest, .. } Type.Scalar{ scalar
 
     return Syntax.Text{ chunks = Syntax.Chunks text₀ newRest, .. }
 
-check Syntax.Prompt{ schema = Nothing, .. } _B = do
+check Syntax.Prompt{ schema = Nothing, .. } annotation = do
     newArguments <- check arguments Type.Record
         { fields =
             Type.Fields
@@ -2904,7 +2955,58 @@ check Syntax.Prompt{ schema = Nothing, .. } _B = do
         , ..
         }
 
-    return Syntax.Prompt{ arguments = newArguments, schema = Just _B, .. }
+    return Syntax.Prompt{ arguments = newArguments, schema = Just annotation, .. }
+
+check Syntax.HTTP{ schema = Nothing, .. } annotation = do
+    newArguments <- check arguments Type.Union
+        { location
+        , alternatives = Type.Alternatives
+            [ ( "POST"
+              , Type.Record
+                  { location
+                  , fields = Type.Fields
+                      [ ("url", Type.Scalar{ scalar = Monotype.Text, .. })
+                      , ( "headers"
+                        , Type.Optional
+                            { location
+                            , type_ =
+                                Type.List
+                                  { location
+                                  , type_ = Type.Record
+                                      { location
+                                      , fields = Type.Fields
+                                          [ ("header", Type.Scalar{ scalar = Monotype.Text, .. })
+                                          , ("value", Type.Scalar{ scalar = Monotype.Text, .. })
+                                          ]
+                                          Monotype.EmptyFields
+                                      }
+                                  }
+                            }
+                        )
+                      , ( "request"
+                        , Type.Optional
+                            { location
+                            , type_ = Type.Scalar
+                                { location
+                                , scalar = Monotype.JSON
+                                }
+                            }
+                        )
+                      ]
+                      Monotype.EmptyFields
+                  }
+              )
+            ]
+            Monotype.EmptyAlternatives
+        }
+
+    context₀ <- get
+
+    subtype (Context.solveType context₀ annotation) Type.Scalar{ location, scalar = Monotype.JSON }
+
+    context₁ <- get
+
+    return Syntax.HTTP{ arguments = newArguments, schema = Just (Context.solveType context₁ annotation), .. }
 
 check Syntax.List{..} annotation@Type.Scalar{ scalar = Monotype.JSON } = do
     newElements <- traverse (`check` annotation) elements

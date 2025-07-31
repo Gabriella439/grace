@@ -17,12 +17,13 @@ module Grace.Value
     ) where
 
 import Control.Applicative (empty)
-import Control.Lens (Fold, Plated(..))
+import Control.Lens (Getting, Plated(..))
 import Data.Aeson (FromJSON(..))
 import Data.Foldable (toList)
 import Data.Generics.Sum (_As)
 import Data.Generics.Product (the)
 import Data.HashMap.Strict.InsOrd (InsOrdHashMap)
+import Data.Monoid (Any)
 import Data.Sequence (Seq)
 import Data.Text (Text)
 import Data.Void (Void)
@@ -130,5 +131,5 @@ toJSON _ = do
     empty
 
 -- | Determines whether the `Value` has an effect
-effects :: Fold Value ()
+effects :: Getting Any Value ()
 effects = Lens.cosmos . _As @"Lambda" . the @3 . Syntax.effects

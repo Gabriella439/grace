@@ -19,8 +19,10 @@ library
                      , async
                      , bytestring
                      , containers
+                     , case-insensitive
                      , filepath
                      , generic-lens
+                     , http-types
                      , insert-ordered-containers
                      , lens
                      , megaparsec
@@ -75,7 +77,6 @@ library
                      , haskeline
                      , http-client
                      , http-client-tls
-                     , http-types
                      , optparse-applicative
                      , repline
                      , terminal-size

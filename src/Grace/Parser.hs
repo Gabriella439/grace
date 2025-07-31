@@ -146,6 +146,7 @@ lexToken =
             , Grace.Parser.Then         <$ symbol "then"
             , Grace.Parser.Else         <$ symbol "else"
             , Grace.Parser.Fold         <$ symbol "fold"
+            , Grace.Parser.HTTP         <$ symbol "http"
             , Grace.Parser.Prompt       <$ symbol "prompt"
             , Grace.Parser.Type         <$ symbol "Type"
             , Grace.Parser.Fields       <$ symbol "Fields"
@@ -494,6 +495,7 @@ reserved =
         , "let"
         , "map"
         , "null"
+        , "http"
         , "prompt"
         , "reveal"
         , "show"
@@ -618,6 +620,7 @@ data Token
     | Optional
     | Or
     | Plus
+    | HTTP
     | Prompt
     | Real
     | RealLiteral Sign Scientific
@@ -827,6 +830,7 @@ render t = case t of
     Grace.Parser.Optional           -> "List"
     Grace.Parser.Or                 -> "||"
     Grace.Parser.Plus               -> "+"
+    Grace.Parser.HTTP               -> "http"
     Grace.Parser.Prompt             -> "prompt"
     Grace.Parser.Real               -> "Real"
     Grace.Parser.RealLiteral _ _    -> "a real number literal"
@@ -918,19 +922,28 @@ grammar endsWithBrace = mdo
 
                         return Syntax.Prompt{ schema = Nothing, ..}
 
+                let annotatedHTTP = do
+                        location <- locatedToken Grace.Parser.HTTP
+
+                        arguments <- projectExpression
+
+                        return Syntax.HTTP{ schema = Nothing, ..}
+
                 let adapt Syntax.Embed{ embedded = Path file AsCode, .. } Type.Scalar{ scalar = Monotype.Text } =
                         Syntax.Embed{ embedded = Path file AsText, .. }
                     adapt Syntax.Embed{ embedded = Grace.Input.URI uri AsCode, .. } Type.Scalar{ scalar = Monotype.Text } =
                         Syntax.Embed{ embedded = Grace.Input.URI uri AsText, .. }
                     adapt Syntax.Prompt{ schema = Nothing, .. } annotation =
                         Syntax.Prompt{ schema = Just annotation, .. }
+                    adapt Syntax.HTTP{ schema = Nothing, .. } annotation =
+                        Syntax.HTTP{ schema = Just annotation, .. }
                     adapt annotated annotation =
                         Syntax.Annotation
                             { location = Syntax.location annotated
                             , ..
                             }
 
-                annotated <- annotatedFile <|> annotatedURI <|> annotatedPrompt <|> operatorExpression
+                annotated <- annotatedFile <|> annotatedURI <|> annotatedPrompt <|> annotatedHTTP <|> operatorExpression
 
                 parseToken Grace.Parser.Colon
 
@@ -988,10 +1001,21 @@ grammar endsWithBrace = mdo
     applicationExpression <- rule
         (   do  location <- locatedToken Grace.Parser.Prompt
 
-                ~(arguments :| es) <- some1 projectExpression
+                arguments <- projectExpression
+
+                es <- many projectExpression
 
                 return do
                     let nil = Syntax.Prompt{ schema = Nothing, ..  }
+                    foldl application nil es
+        <|> do  location <- locatedToken Grace.Parser.HTTP
+
+                arguments <- projectExpression
+
+                es <- many projectExpression
+
+                return do
+                    let nil = Syntax.HTTP{ arguments, schema = Nothing, ..  }
                     foldl application nil es
         <|> do  es <- some1 projectExpression
                 return (foldl application (NonEmpty.head es) (NonEmpty.tail es))

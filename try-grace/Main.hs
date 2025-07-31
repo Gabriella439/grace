@@ -829,8 +829,12 @@ renderInput keyToMethods ref Type.Optional{ type_ } = do
     let get = do
             bool <- getChecked input
 
-            if  | bool      -> getInner
-                | otherwise -> return (Value.Scalar Null)
+            if  | bool  -> do
+                    value <- getInner
+
+                    return (Application (Value.Builtin Syntax.Some) value)
+                | otherwise -> do
+                    return (Value.Scalar Null)
 
     return (div, get, refreshInner)
 

@@ -1,3 +1,4 @@
+{-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 {-| This module provides a uniform interface for making HTTP requests using both
@@ -8,6 +9,7 @@ module Grace.HTTP
     , Manager
     , newManager
     , fetch
+    , post
     , renderError
     , Methods
     , getMethods
@@ -15,6 +17,7 @@ module Grace.HTTP
     ) where
 
 import Control.Exception (Exception(..))
+import Data.ByteString.Lazy (ByteString)
 import Data.Text (Text)
 import GHCJS.Fetch (Request(..), RequestOptions(..), JSPromiseException)
 import OpenAI.V1.Chat.Completions (ChatCompletionObject, CreateChatCompletion)
@@ -22,11 +25,13 @@ import OpenAI.V1.Chat.Completions (ChatCompletionObject, CreateChatCompletion)
 import qualified Control.Exception as Exception
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy as ByteString.Lazy
+import qualified Data.CaseInsensitive as CaseInsensitive
 import qualified Data.JSString as JSString
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
 import qualified GHCJS.Fetch as Fetch
 import qualified GHCJS.Prim as Prim
+import qualified Network.HTTP.Types as HTTP.Types
 
 {-| The GHCJS implementation of HTTP requests doesn't require a real `Manager`
     so this supplies an empty placeholder
@@ -61,6 +66,58 @@ fetch _manager url = do
     jsString <- Fetch.responseText response
 
     return (Text.pack (JSString.unpack jsString))
+
+-- | Make a POST request
+post
+    :: Manager
+    -> Text
+    -- ^ URL
+    -> [(Text, Text)]
+    -- ^ Headers
+    -> Maybe ByteString
+    -- ^ Request body
+    -> IO ByteString
+    -- ^ Response body
+post manager url headers maybeRequestBody = do
+    let requiredHeaders =
+            [ ("Content-Type", "application/json")
+            , ("Accept"      , "application/json")
+            ]
+
+    let reqOptHeaders = do
+            (headerName, headerValue) <- requiredHeaders <> headers
+
+            return (CaseInsensitive.mk (Encoding.encodeUtf8 headerName), Encoding.encodeUtf8 headerValue)
+
+    let reqOptions₀ = Fetch.defaultRequestOptions
+            { reqOptHeaders
+            , reqOptMethod = HTTP.Types.methodPost
+            }
+
+    reqOptions₁ <- case maybeRequestBody of
+            Nothing -> do
+                return reqOptions₀
+
+            Just requestBody -> do
+                requestText <- case Encoding.decodeUtf8' (ByteString.Lazy.toStrict requestBody) of
+                    Left exception -> Exception.throwIO exception
+                    Right text -> return text
+
+                let reqOptBody =
+                        Just (Prim.toJSString (Text.unpack requestText))
+
+                return reqOptions₀{ reqOptBody }
+
+    let request = Request
+            { reqUrl = JSString.pack (Text.unpack url)
+            , reqOptions = reqOptions₁
+            }
+
+    response <- Fetch.fetch request
+
+    jsString <- Fetch.responseText response
+
+    return (ByteString.Lazy.fromStrict (Encoding.encodeUtf8 (Text.pack (JSString.unpack jsString))))
 
 -- | Render an `HttpException` as `Data.Text.Text`
 renderError :: HttpException -> Text

@@ -30,6 +30,7 @@ import Control.Exception.Safe (Exception(..), SomeException)
 import Control.Monad.IO.Class (liftIO)
 import Data.Bifunctor (first)
 import Data.Foldable (toList)
+import Data.HashMap.Strict.InsOrd (InsOrdHashMap)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Sequence (ViewL(..))
 import Data.Text (Text)
@@ -65,6 +66,7 @@ import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
 import qualified Control.Monad as Monad
 import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Types as Aeson.Types
 import qualified Data.Aeson.Yaml as YAML
 import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.Foldable as Foldable
@@ -210,17 +212,17 @@ fromJSON Type.Union{ alternatives = Type.Alternatives alternativeTypes _ } (Aeso
 
         return (Value.Application (Value.Alternative tag) value)
 fromJSON type_@Type.Record{ fields = Type.Fields fieldTypes _ } value@(Aeson.Object object) = do
-    let process (key, v) = do
-            case Prelude.lookup key fieldTypes of
-                Just fieldType -> do
-                    expression <- fromJSON  fieldType v
+    let properties = HashMap.toList (Compat.fromAesonMap object)
 
-                    return (key, expression)
+    let process (key, fieldType) = case Prelude.lookup key properties of
+            Just v -> do
+                expression <- fromJSON fieldType v
 
-                Nothing -> do
-                    Left InvalidJSON{..}
+                return (key, expression)
+            Nothing -> do
+                Left InvalidJSON{..}
 
-    textValues <- traverse process (HashMap.toList (Compat.fromAesonMap object))
+    textValues <- traverse process fieldTypes
 
     return (Value.Record (HashMap.fromList textValues))
 fromJSON Type.List{ type_ } (Aeson.Array vector) = do
@@ -245,6 +247,9 @@ fromJSON Type.Scalar{ scalar = Monotype.Bool } (Aeson.Bool bool) =
     return (Value.Scalar (Bool bool))
 fromJSON Type.Optional{ } Aeson.Null =
     return (Value.Scalar Null)
+fromJSON Type.Scalar{ scalar = Monotype.JSON } value = do
+    let Just v = Aeson.Types.parseMaybe Aeson.parseJSON value
+    return v
 fromJSON type_ value = do
     Left InvalidJSON{..}
 
@@ -292,6 +297,18 @@ staticAssets = Unsafe.unsafePerformIO do
 
     return (Text.concat prompts <> "\n\n" <> Text.concat examples)
 {-# NOINLINE staticAssets #-}
+
+sorted :: Ord key => InsOrdHashMap key value -> [(key, value)]
+sorted = List.sortBy (Ord.comparing fst) . HashMap.toList
+
+defaultTo :: Type s -> Type s -> Type s
+defaultTo def Type.Forall{ name, domain = Domain.Type, type_ } =
+    Type.substituteType name 0 def type_
+defaultTo _ Type.Forall{ name, domain = Domain.Fields, type_ } =
+    Type.substituteFields name 0 (Type.Fields [] Monotype.EmptyFields) type_
+defaultTo _ Type.Forall{ name, domain = Domain.Alternatives, type_ } =
+    Type.substituteAlternatives name 0 (Type.Alternatives [] Monotype.EmptyAlternatives) type_
+defaultTo _ type_ = type_
 
 {-| Evaluate an expression, leaving behind a `Value` free of reducible
     sub-expressions
@@ -478,16 +495,9 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
 
             Syntax.Prompt{ schema = Nothing } -> do
                 Concurrently (Exception.throwIO MissingSchema)
-            Syntax.Prompt{ schema = Just schema, location = _, .. } -> Concurrently do
-                let defaultToText Type.Forall{ location, name, domain = Domain.Type, type_ } =
-                        Type.substituteType name 0 Type.Scalar{ location, scalar = Monotype.Text } type_
-                    defaultToText Type.Forall{ name, domain = Domain.Fields, type_ } =
-                        Type.substituteFields name 0 (Type.Fields [] Monotype.EmptyFields) type_
-                    defaultToText Type.Forall{ name, domain = Domain.Alternatives, type_ } =
-                        Type.substituteAlternatives name 0 (Type.Alternatives [] Monotype.EmptyAlternatives) type_
-                    defaultToText type_ = type_
-
-                let defaultedSchema = Lens.transform defaultToText schema
+            Syntax.Prompt{ location, schema = Just schema, .. } -> Concurrently do
+                let defaultedSchema =
+                        Lens.transform (defaultTo Type.Scalar{ scalar = Monotype.Text, .. }) schema
 
                 value <- runConcurrently (loop env arguments)
 
@@ -731,6 +741,68 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                     _ ->
                         fail "Grace.Normalize.evaluate: prompt argument must be a record"
 
+            Syntax.HTTP{ schema = Nothing } -> do
+                Concurrently (Exception.throwIO MissingSchema)
+            Syntax.HTTP{ location, arguments, schema = Just schema } -> Concurrently do
+                newArguments <- runConcurrently (loop env arguments)
+
+                record <- case newArguments of
+                    Value.Application (Value.Alternative "POST") record ->
+                        return record
+                    _ ->
+                        fail "Grace.Normalize.evaluate: http argument must be an alternative"
+
+                fieldValues <- case record of
+                    Value.Record fvs ->
+                        return fvs
+                    _ ->
+                        fail "Grace.Normalize.evaluate: POST argument must be a record"
+
+                url <- case HashMap.lookup "url" fieldValues of
+                    Just (Value.Text url) -> return url
+                    _ -> fail "Grace.Normalize.evaluate: url must be text"
+
+                headers <- case HashMap.lookup "headers" fieldValues of
+                    Just (Value.Application (Value.Builtin Some) (Value.List (toList -> headers))) ->
+                        return headers
+                    Just (Value.Scalar Null) ->
+                        return []
+                    Nothing ->
+                        return []
+                    _ ->
+                        fail "Grace.Normalize.evaluate: headers must be a list"
+
+                let convertHeader (Value.Record (sorted -> [("header", Value.Text header), ("value", Value.Text value)])) =
+                        return (header, value)
+                    convertHeader _ =
+                        fail "Grace.Normalize.evaluate: header must be a name and value"
+
+                convertedHeaders <- traverse convertHeader headers
+
+                let maybeRequest = do
+                        Value.Application (Value.Builtin Some) request <- HashMap.lookup "request" fieldValues
+
+                        v <- Value.toJSON request
+
+                        return (Aeson.encode v)
+
+                manager <- liftIO HTTP.newManager
+
+                responseBody <- liftIO (HTTP.post manager url convertedHeaders maybeRequest)
+
+                responseValue <- case Aeson.eitherDecode responseBody of
+                    Left message_ ->
+                        Exception.throwIO JSONDecodingFailed{ message = message_, text = error "TODO" }
+                    Right responseValue ->
+                        return responseValue
+
+                let defaultedSchema =
+                        Lens.transform (defaultTo Type.Scalar{ scalar = Monotype.JSON, .. }) schema
+
+                case fromJSON defaultedSchema responseValue of
+                    Left exception -> Exception.throwIO exception
+                    Right value    -> return value
+
             Syntax.Scalar{..} ->
                 pure (Value.Scalar scalar)
 
@@ -964,11 +1036,11 @@ apply keyToMethods function₀ argument₀ = runConcurrently (loop function₀ a
 
             return (fieldName, value)
     loop
-        (Value.Fold (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("false", falseHandler), ("true", trueHandler)])))
+        (Value.Fold (Value.Record (sorted -> [("false", falseHandler), ("true", trueHandler)])))
         (Value.Scalar (Bool b)) =
             pure (if b then trueHandler else falseHandler)
     loop
-        (Value.Fold (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("succ", succ), ("zero", zero)])))
+        (Value.Fold (Value.Record (sorted -> [("succ", succ), ("zero", zero)])))
         (Value.Scalar (Natural n)) = Concurrently (go n zero)
       where
         go 0 !result = do
@@ -977,15 +1049,15 @@ apply keyToMethods function₀ argument₀ = runConcurrently (loop function₀ a
             x <- runConcurrently (loop succ result)
             go (m - 1) x
     loop
-        (Value.Fold (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("null", _), ("some", some)])))
+        (Value.Fold (Value.Record (sorted -> [("null", _), ("some", some)])))
         (Value.Application (Value.Builtin Some) x) =
             loop some x
     loop
-        (Value.Fold (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("null", null), ("some", _)])))
+        (Value.Fold (Value.Record (sorted -> [("null", null), ("some", _)])))
         (Value.Scalar Null)  =
             pure null
     loop
-        (Value.Fold (Value.Record (List.sortBy (Ord.comparing fst) . HashMap.toList -> [("cons", cons), ("nil", nil)])))
+        (Value.Fold (Value.Record (sorted -> [("cons", cons), ("nil", nil)])))
         (Value.List elements) = Concurrently do
             inner (Seq.reverse elements) nil
       where
@@ -1000,7 +1072,7 @@ apply keyToMethods function₀ argument₀ = runConcurrently (loop function₀ a
     loop
         (Value.Fold
             (Value.Record
-                (List.sortBy (Ord.comparing fst) . HashMap.toList ->
+                (sorted ->
                     [ ("array"  , array  )
                     , ("bool"   , bool   )
                     , ("integer", integer)
@@ -1219,9 +1291,9 @@ data JSONDecodingFailed = JSONDecodingFailed
 
 instance Exception JSONDecodingFailed where
     displayException JSONDecodingFailed{..} =
-        "Failed to decode model output as JSON\n\
+        "Failed to decode output as JSON\n\
         \\n\
-        \The model produced the following output:\n\
+        \The HTTP request produced the following output:\n\
         \\n\
         \" <> Text.unpack text <> "\n\
         \\n\
@@ -1237,7 +1309,7 @@ data MissingSchema = MissingSchema
 
 instance Exception MissingSchema where
     displayException MissingSchema =
-        "Internal error - Elaboration failed to infer schema for prompt"
+        "Internal error - Elaboration failed to infer schema"
 
 -- | Invalid JSON output which didn't match the expected type
 data InvalidJSON a = InvalidJSON
@@ -1249,7 +1321,7 @@ instance (Show a, Typeable a) => Exception (InvalidJSON a) where
     displayException InvalidJSON{..} =
         "Invalid JSON\n\
         \\n\
-        \The model produced the following JSON value:\n\
+        \The server responded with the following JSON value:\n\
         \\n\
         \" <> string <> "\n\
         \\n\
