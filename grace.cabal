@@ -43,6 +43,7 @@ library
   exposed-modules:     Grace.Context
                      , Grace.DataFile
                      , Grace.Domain
+                     , Grace.Encode
                      , Grace.Existential
                      , Grace.Input
                      , Grace.Import
