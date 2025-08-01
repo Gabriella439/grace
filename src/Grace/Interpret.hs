@@ -13,17 +13,20 @@ module Grace.Interpret
       Input(..)
     , interpret
     , interpretWith
+    , load
     ) where
 
 import Control.Exception.Safe (MonadCatch)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Text (Text)
+import Grace.Decode (Decoder(..))
 import Grace.HTTP (Manager, Methods)
 import Grace.Input (Input(..))
 import Grace.Location (Location(..))
 import Grace.Type (Type)
 import Grace.Value (Value)
 
+import qualified Control.Exception.Safe as Exception
 import qualified Grace.Context as Context
 import qualified Grace.HTTP as HTTP
 import qualified Grace.Import as Import
@@ -84,3 +87,18 @@ interpretWith keyToMethods bindings maybeAnnotation manager input = do
     value <- liftIO (Normalize.evaluate keyToMethods evaluationContext elaboratedExpression)
 
     return (inferred, value)
+
+-- | Load a Grace expression
+load :: (MonadCatch m, MonadIO m) => Decoder a -> Input -> m a
+load Decoder{ decode, expected } input = do
+    keyToMethods <- liftIO HTTP.getMethods
+
+    manager <- liftIO HTTP.newManager
+
+    let type_ = fmap (\_ -> Unknown) expected
+
+    (_, value) <- interpretWith keyToMethods [] (Just type_) manager input
+
+    case decode value of
+        Left exception -> Exception.throwM exception
+        Right a -> return a

@@ -40,7 +40,7 @@ import Data.Void (Void)
 import Grace.DataFile as DataFile
 import Grace.HTTP (Methods)
 import Grace.Input (Input(..))
-import Grace.Location (Location)
+import Grace.Location (Location(..))
 import Grace.Pretty (Pretty(..))
 import Grace.Syntax (Builtin(..), Scalar(..), Syntax)
 import Grace.Type (Type)
@@ -570,7 +570,7 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
 
                                             let infer (name, assignment) = do
                                                     let expression :: Syntax Location Input
-                                                        expression = first (\_ -> undefined) (fmap Void.absurd (quote assignment))
+                                                        expression = first (\_ -> Unknown) (fmap Void.absurd (quote assignment))
 
                                                     let input = Code "(intermediate value)" (Pretty.toSmart expression)
 

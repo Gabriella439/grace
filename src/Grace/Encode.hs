@@ -1,13 +1,10 @@
-{-# LANGUAGE DefaultSignatures          #-}
-{-# LANGUAGE DerivingStrategies         #-}
-{-# LANGUAGE DuplicateRecordFields      #-}
-{-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE NamedFieldPuns             #-}
-{-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE TypeApplications           #-}
-{-# LANGUAGE TypeOperators              #-}
+{-# LANGUAGE DefaultSignatures   #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE NamedFieldPuns      #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE TypeOperators       #-}
 
 {-| Use this module to encode Haskell expressions as Grace expressions
 
@@ -18,22 +15,20 @@
 -}
 module Grace.Encode
     ( ToGrace(..)
-    , Encoder(..)
     , Key(..)
     ) where
 
 import Control.Monad.State (State)
-import Data.Functor.Contravariant (Contravariant(..))
+import Data.HashMap.Strict.InsOrd (InsOrdHashMap)
+import Data.Int (Int8, Int16, Int32, Int64)
 import Data.Scientific (Scientific)
 import Data.Sequence (Seq)
 import Data.Text (Text)
-import Data.Void (Void)
-import Data.Int (Int8, Int16, Int32, Int64)
-import Data.String (IsString)
 import Data.Vector (Vector)
+import Data.Void (Void)
 import Data.Word (Word8, Word16, Word32, Word64)
-import Grace.Syntax (Syntax(..))
-import Grace.Type (Type(..))
+import Grace.Marshal (Key(..))
+import Grace.Value (Value(..))
 import Numeric.Natural (Natural)
 
 import GHC.Generics
@@ -55,493 +50,246 @@ import GHC.Generics
 import qualified Control.Monad.State as State
 import qualified Data.Scientific as Scientific
 import qualified Data.Sequence as Seq
+import qualified Data.HashMap.Strict.InsOrd as HashMap
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as Text.Lazy
 import qualified Data.Vector as Vector
 import qualified GHC.Generics as Generics
-import qualified Grace.Monotype as Monotype
+import qualified Grace.Marshal as Marshal
 import qualified Grace.Syntax as Syntax
-import qualified Grace.Type as Type
+import qualified Grace.Value as Value
 
 -- | Convert a Haskell expression to a Grace expression
 class ToGrace a where
-    encoder :: Encoder a
+    encode :: a -> Value
 
-    default encoder :: (Generic a, GenericToGrace (Rep a)) => Encoder a
-    encoder = contramap from (State.evalState genericEncoder 0)
+    default encode :: (Generic a, GenericToGrace (Rep a)) => a -> Value
+    encode = State.evalState genericEncode 0 . from
 
-instance ToGrace Void where
+instance ToGrace Void
 instance ToGrace ()
 instance (ToGrace a, ToGrace b) => ToGrace (a, b)
 instance (ToGrace a, ToGrace b) => ToGrace (Either a b)
 
 instance ToGrace Bool where
-    encoder = Encoder{ encode, expected }
-      where
-        encode bool = Syntax.Scalar{ location = (), scalar = Syntax.Bool bool }
-
-        expected = Type.Scalar{ location = (), scalar = Monotype.Bool }
+    encode bool = Value.Scalar (Syntax.Bool bool)
 
 instance ToGrace Natural where
-    encoder = Encoder{ encode, expected }
-      where
-        encode natural =
-            Syntax.Scalar{ location = (), scalar = Syntax.Natural natural }
-
-        expected = Type.Scalar{ location = (), scalar = Monotype.Natural }
+    encode natural = Value.Scalar (Syntax.Natural natural)
 
 instance ToGrace Word where
-    encoder = contramap fromIntegral (encoder @Natural)
+    encode = encode @Natural . fromIntegral
 
 instance ToGrace Word8 where
-    encoder = contramap fromIntegral (encoder @Natural)
+    encode = encode @Natural . fromIntegral
 
 instance ToGrace Word16 where
-    encoder = contramap fromIntegral (encoder @Natural)
+    encode = encode @Natural . fromIntegral
 
 instance ToGrace Word32 where
-    encoder = contramap fromIntegral (encoder @Natural)
+    encode = encode @Natural . fromIntegral
 
 instance ToGrace Word64 where
-    encoder = contramap fromIntegral (encoder @Natural)
+    encode = encode @Natural . fromIntegral
 
 instance ToGrace Integer where
-    encoder = Encoder{ encode, expected }
-      where
-        encode integer =
-            Syntax.Scalar{ location = (), scalar = Syntax.Integer integer }
-
-        expected = Type.Scalar{ location = (), scalar = Monotype.Integer }
+    encode integer = Value.Scalar (Syntax.Integer integer)
 
 instance ToGrace Int where
-    encoder = contramap fromIntegral (encoder @Integer)
+    encode = encode @Integer . fromIntegral
 
 instance ToGrace Int8 where
-    encoder = contramap fromIntegral (encoder @Integer)
+    encode = encode @Integer . fromIntegral
 
 instance ToGrace Int16 where
-    encoder = contramap fromIntegral (encoder @Integer)
+    encode = encode @Integer . fromIntegral
 
 instance ToGrace Int32 where
-    encoder = contramap fromIntegral (encoder @Integer)
+    encode = encode @Integer . fromIntegral
 
 instance ToGrace Int64 where
-    encoder = contramap fromIntegral (encoder @Integer)
+    encode = encode @Integer . fromIntegral
 
 instance ToGrace Scientific where
-    encoder = Encoder{ encode, expected }
-      where
-        encode scientific =
-            Syntax.Scalar{ location = (), scalar = Syntax.Real scientific }
-
-        expected = Type.Scalar{ location = (), scalar = Monotype.Real }
+    encode scientific = Value.Scalar (Syntax.Real scientific)
 
 instance ToGrace Float where
-    encoder = contramap Scientific.fromFloatDigits (encoder @Scientific)
+    encode = encode @Scientific . Scientific.fromFloatDigits
 
 instance ToGrace Double where
-    encoder = contramap Scientific.fromFloatDigits (encoder @Scientific)
+    encode = encode @Scientific . Scientific.fromFloatDigits
 
 instance ToGrace Text where
-    encoder = Encoder{ encode, expected }
-      where
-        encode text =
-            Syntax.Text{ location = (), chunks = Syntax.Chunks text [] }
-
-        expected = Type.Scalar{ location = (), scalar = Monotype.Text }
+    encode text = Value.Text text
 
 instance ToGrace Text.Lazy.Text where
-    encoder = contramap Text.Lazy.toStrict encoder
+    encode = encode . Text.Lazy.toStrict
 
 instance {-# OVERLAPPING #-} ToGrace [Char] where
-    encoder = contramap Text.pack encoder
-
-instance ToGrace a => ToGrace (Seq a) where
-    encoder = Encoder{ encode, expected }
-      where
-        Encoder{ encode = encode₀, expected = expected₀ } = encoder
-
-        encode list =
-            Syntax.List{ location = (), elements = fmap encode₀ list }
-
-        expected = Type.List{ location = (), type_ = expected₀ }
-
-instance ToGrace a => ToGrace [a] where
-    encoder = contramap Seq.fromList encoder
-
-instance ToGrace a => ToGrace (Vector a) where
-    encoder = contramap Vector.toList encoder
-
-instance ToGrace a => ToGrace (Maybe a) where
-    encoder = Encoder{ encode, expected }
-      where
-        Encoder{ encode = encode₀, expected = expected₀ } = encoder
-
-        encode (Just a) =
-            Syntax.Application
-                { location = ()
-                , function = Syntax.Builtin
-                    { location = ()
-                    , builtin = Syntax.Some
-                    }
-                , argument = encode₀ a
-                }
-        encode Nothing =
-            Syntax.Scalar{ location = (), scalar = Syntax.Null }
-
-        expected = Type.Optional{ location = (), type_ = expected₀ }
-
-{-| An `Encoder` represents both the encoding logic for a value alongside its
-    type
-
-    The reason why we do this:
-
-@
-class `ToGrace` a where
-    `encoder` :: `Encoder` s a
-@
-
-    … and not this:
-
-@
-class `ToGrace` a where
-    encode :: a -> `Syntax` s `Void`
-
-    expected :: Type s
-@
-
-    … is because the latter requires @AllowAmbiguousTypes@ in order to use such
-    an @expected@ method (since @a@ appears nowhere in the type of @expected@).
-
-    Instead, if you do this:
-
-@
-`encode` foo
-  where
-    `Encoder`{ `encode`, `expected` } = `encoder`
-@
-
-    … then the compiler can infer which `expected` to use based on which type
-    `encode` is instantiated to.
--}
-data Encoder a = Encoder
-    { encode :: a -> Syntax () Void
-    , expected :: Type ()
-    }
-
-instance Contravariant Encoder where
-    contramap f Encoder{ encode, expected } =
-        Encoder{ encode = encode . f, expected }
-
--- | A protected `Text` value
-newtype Key = Key{ text :: Text }
-    deriving newtype (IsString)
+    encode = encode . Text.pack
 
 instance ToGrace Key where
-    encoder = Encoder{ encode, expected }
-      where
-        encode Key{ text } =
-            Syntax.Scalar{ location = (), scalar = Syntax.Key text }
+    encode Key{ text } = Value.Scalar (Syntax.Key text)
 
-        expected = Type.Scalar{ location = (), scalar = Monotype.Key }
+instance ToGrace a => ToGrace (Seq a) where
+    encode list = Value.List (fmap encode list)
+
+instance ToGrace a => ToGrace [a] where
+    encode = encode . Seq.fromList
+
+instance ToGrace a => ToGrace (Vector a) where
+    encode = encode . Vector.toList
+
+instance ToGrace a => ToGrace (Maybe a) where
+    encode (Just a) = Value.Application (Value.Builtin Syntax.Some) (encode a)
+    encode Nothing = Value.Scalar Syntax.Null
 
 {-| This is the underlying class that powers the `ToGrace` class's support for
     automatically deriving a `Generic` implementation
 -}
 class GenericToGrace f where
-    genericEncoder :: State Int (Encoder (f a))
+    genericEncode :: State Int (f a -> Value)
 
 instance GenericToGrace V1 where
-    genericEncoder = do
+    genericEncode = do
         -- EmptyCase does not work here and produces a non-exhaustive pattern
         -- match warning
-        let encode _ = error "Grace.Encode.genericEncoder: V1 inhabited"
+        let encode_ _ = error "Grace.Encode.genericEncode: V1 inhabited"
 
-        let expected = Type.Union
-                { location = ()
-                , alternatives = Type.Alternatives [] Monotype.EmptyAlternatives
-                }
-
-        return Encoder{ encode, expected }
+        return encode_
 
 instance GenericToGrace U1 where
-    genericEncoder = do
-        return Encoder{ encode, expected }
-      where
-        encode U1 = Syntax.Record{ location = (), fieldValues = [] }
+    genericEncode = do
+        let encode_ U1 = Value.Record mempty
 
-        expected = Type.Record
-            { location = ()
-            , fields = Type.Fields [] Monotype.EmptyFields
-            }
+        return encode_
 
 instance GenericToGrace f => GenericToGrace (M1 D d f) where
-    genericEncoder = fmap (contramap unM1) genericEncoder
+    genericEncode = fmap (. unM1) genericEncode
 
 instance GenericToGrace f => GenericToGrace (M1 C c f) where
-    genericEncoder = fmap (contramap unM1) genericEncoder
+    genericEncode = fmap (. unM1) genericEncode
 
 instance (Selector s, ToGrace a) => GenericToGrace (M1 S s (K1 i a)) where
-    genericEncoder = do
+    genericEncode = do
         let m1 :: M1 S s (K1 i a) r
             m1 = undefined
 
-        name <- selector m1
+        name <- Marshal.selector m1
 
-        let Encoder{ encode = encode₀, expected = expected₀ } = encoder
-
-        let encode (M1 (K1 a))
+        let encode_ (M1 (K1 a))
                 | Generics.selName m1 == "" =
-                    encode₀ a
-                | otherwise =
-                    Syntax.Record
-                        { location = ()
-                        , fieldValues = [ (name, encode₀ a) ]
-                        }
+                    encode a
+                | otherwise = Value.Record (HashMap.singleton name (encode a))
 
-        let expected
-                | Generics.selName m1  == "" =
-                    expected₀
-                | otherwise =
-                    Type.Record
-                        { location = ()
-                        , fields =
-                            Type.Fields
-                                [ (name, expected₀) ]
-                                Monotype.EmptyFields
-                        }
-
-        return Encoder{ encode, expected }
+        return encode_
 
 instance (Selector s₀, Selector s₁, ToGrace a₀, ToGrace a₁) => GenericToGrace (M1 S s₀ (K1 i₀ a₀) :*: M1 S s₁ (K1 i₁ a₁)) where
-    genericEncoder = do
-        name₀ <- selector (undefined :: M1 S s₀ (K1 i₀ a₀) r)
-        name₁ <- selector (undefined :: M1 S s₁ (K1 i₁ a₁) r)
+    genericEncode = do
+        name₀ <- Marshal.selector (undefined :: M1 S s₀ (K1 i₀ a₀) r)
+        name₁ <- Marshal.selector (undefined :: M1 S s₁ (K1 i₁ a₁) r)
 
-        let Encoder{ encode = encode₀, expected = expected₀ } = encoder
-        let Encoder{ encode = encode₁, expected = expected₁ } = encoder
+        let encode_ (M1 (K1 a₀) :*: M1 (K1 a₁)) =
+                Value.Record
+                    (HashMap.fromList
+                        [ (name₀, encode a₀), (name₁, encode a₁) ]
+                    )
 
-        let encode (M1 (K1 a₀) :*: M1 (K1 a₁)) = Syntax.Record
-                { location = ()
-                , fieldValues = [ (name₀, encode₀ a₀), (name₁, encode₁ a₁) ]
-                }
-
-        let expected = Type.Record
-                { location = ()
-                , fields = Type.Fields
-                    [ (name₀, expected₀), (name₁, expected₁) ]
-                    Monotype.EmptyFields
-                }
-
-        return Encoder{ encode, expected }
+        return encode_
 
 instance (Selector s, GenericToGrace (f₀ :*: f₁), ToGrace a) => GenericToGrace ((f₀ :*: f₁) :*: M1 S s (K1 i a)) where
-    genericEncoder = do
-        Encoder{ encode = encode₀, expected = expected₀ } <- genericEncoder
+    genericEncode = do
+        encode₀ <- genericEncode
 
-        name <- selector (undefined :: M1 S s (K1 i a) r)
+        name <- Marshal.selector (undefined :: M1 S s (K1 i a) r)
 
-        let Encoder{ encode = encode₁, expected = expected₁ } = encoder
+        let encode_ (f :*: M1 (K1 a)) = Value.Record
+                ( HashMap.insert name (encode a)
+                    (unsafeExpectRecordLiteral (encode₀ f))
+                )
 
-        let encode (f :*: M1 (K1 a)) = Syntax.Record
-                { location = ()
-                , fieldValues =
-                        unsafeExpectRecordLiteral (encode₀ f)
-                    <>  [ (name, encode₁ a) ]
-                }
-
-        let expected = Type.Record
-                { location = ()
-                , fields = Type.Fields
-                    (unsafeExpectRecordType expected₀ <> [ (name, expected₁) ])
-                    Monotype.EmptyFields
-                }
-
-        return Encoder{ encode, expected }
+        return encode_
 
 instance (Selector s, ToGrace a, GenericToGrace (f₀ :*: f₁)) => GenericToGrace (M1 S s (K1 i a) :*: (f₀ :*: f₁)) where
-    genericEncoder = do
-        name <- selector (undefined :: M1 S s (K1 i a) r)
+    genericEncode = do
+        name <- Marshal.selector (undefined :: M1 S s (K1 i a) r)
 
-        let Encoder{ encode = encode₀, expected = expected₀ } = encoder
+        encode₁ <- genericEncode
 
-        Encoder{ encode = encode₁, expected = expected₁ } <- genericEncoder
+        let encode_ (M1 (K1 a) :*: f) = Value.Record
+                (HashMap.insert name (encode a)
+                  (unsafeExpectRecordLiteral (encode₁ f))
+                )
 
-        let encode (M1 (K1 a) :*: f) = Syntax.Record
-                { location = ()
-                , fieldValues =
-                    (name, encode₀ a) : unsafeExpectRecordLiteral (encode₁ f)
-                }
-
-        let expected = Type.Record
-                { location = ()
-                , fields = Type.Fields
-                    ((name, expected₀) : unsafeExpectRecordType expected₁)
-                    Monotype.EmptyFields
-                }
-
-        return Encoder{ encode, expected }
+        return encode_
 
 instance (GenericToGrace (f₀ :*: f₁), GenericToGrace (f₂ :*: f₃)) => GenericToGrace ((f₀ :*: f₁) :*: (f₂ :*: f₃)) where
-    genericEncoder = do
-        Encoder{ encode = encode₀, expected = expected₀ } <- genericEncoder
-        Encoder{ encode = encode₁, expected = expected₁ } <- genericEncoder
+    genericEncode = do
+        encode₀ <- genericEncode
+        encode₁ <- genericEncode
 
-        let encode (f₀ :*: f₁) = Syntax.Record
-                { location = ()
-                , fieldValues =
-                        unsafeExpectRecordLiteral (encode₀ f₀)
-                    <>  unsafeExpectRecordLiteral (encode₁ f₁)
-                }
+        let encode_ (f₀ :*: f₁) = Value.Record
+                (   unsafeExpectRecordLiteral (encode₀ f₀)
+                <>  unsafeExpectRecordLiteral (encode₁ f₁)
+                )
 
-        let expected = Type.Record
-                { location = ()
-                , fields = Type.Fields
-                    (   unsafeExpectRecordType expected₀
-                    <>  unsafeExpectRecordType expected₁
-                    )
-                    Monotype.EmptyFields
-                }
-
-        return Encoder{ encode, expected }
+        return encode_
 
 instance (Constructor c₀, Constructor c₁, GenericToGrace f₀, GenericToGrace f₁) => GenericToGrace (M1 C c₀ f₀ :+: M1 C c₁ f₁) where
-    genericEncoder = do
+    genericEncode = do
         let name₀ = Text.pack (Generics.conName (undefined :: M1 i c₀ f₀ r))
         let name₁ = Text.pack (Generics.conName (undefined :: M1 i c₁ f₁ r))
 
-        let Encoder{ encode = encode₀, expected = expected₀ } =
-                State.evalState genericEncoder 0
-        let Encoder{ encode = encode₁, expected = expected₁ } =
-                State.evalState genericEncoder 0
+        let encode₀ = State.evalState genericEncode 0
+        let encode₁ = State.evalState genericEncode 0
 
-        let encode (L1 (M1 f)) = Syntax.Application
-                { location = ()
-                , function = Syntax.Alternative{ location = (), name = name₀ }
-                , argument = encode₀ f
-                }
-            encode (R1 (M1 f)) = Syntax.Application
-                { location = ()
-                , function = Syntax.Alternative{ location = (), name = name₁ }
-                , argument = encode₁ f
-                }
+        let encode_ (L1 (M1 f)) =
+                Value.Application (Value.Alternative name₀) (encode₀ f)
+            encode_ (R1 (M1 f)) =
+                Value.Application (Value.Alternative name₁) (encode₁ f)
 
-        let expected = Type.Union
-                { location = ()
-                , alternatives = Type.Alternatives
-                    [ (name₀, expected₀), (name₁, expected₁) ]
-                    Monotype.EmptyAlternatives
-                }
-
-        return Encoder{ encode, expected }
+        return encode_
 
 instance (Constructor c, GenericToGrace f₀, GenericToGrace (f₁ :+: f₂)) => GenericToGrace (M1 C c f₀ :+: (f₁ :+: f₂)) where
-    genericEncoder = do
+    genericEncode = do
         let name = Text.pack (Generics.conName (undefined :: M1 C c f₀ r))
 
-        let Encoder{ encode = encode₀, expected = expected₀ } =
-                State.evalState genericEncoder 0
-        let Encoder{ encode = encode₁, expected = expected₁ } =
-                State.evalState genericEncoder 0
+        let encode₀ = State.evalState genericEncode 0
+        let encode₁ = State.evalState genericEncode 0
 
-        let encode (L1 (M1 f)) =
-                Syntax.Application
-                    { location = ()
-                    , function = Syntax.Alternative{ location = (), name }
-                    , argument = encode₀ f
-                    }
-            encode (R1 f) =
+        let encode_ (L1 (M1 f)) =
+                Value.Application (Value.Alternative name) (encode₀ f)
+            encode_ (R1 f) =
                 encode₁ f
 
-        let expected = Type.Union
-                { location = ()
-                , alternatives = Type.Alternatives
-                    (   unsafeExpectUnion expected₀
-                    <>  unsafeExpectUnion expected₁
-                    )
-                    Monotype.EmptyAlternatives
-                }
-
-        return Encoder{ encode, expected }
+        return encode_
 
 instance (Constructor c, GenericToGrace (f₀ :+: f₁), GenericToGrace f₂) => GenericToGrace ((f₀ :+: f₁) :+: M1 C c f₂) where
-    genericEncoder = do
+    genericEncode = do
         let name = Text.pack (Generics.conName (undefined :: M1 C c f₂ r))
 
-        let Encoder{ encode = encode₀, expected = expected₀ } =
-                State.evalState genericEncoder 0
-        let Encoder{ encode = encode₁, expected = expected₁ } =
-                State.evalState genericEncoder 0
+        let encode₀ = State.evalState genericEncode 0
+        let encode₁ = State.evalState genericEncode 0
 
-        let encode (L1 f) =
+        let encode_ (L1 f) =
                 encode₀ f
-            encode (R1 (M1 f)) =
-                Syntax.Application
-                    { location = ()
-                    , function = Syntax.Alternative{ location = (), name }
-                    , argument = encode₁ f
-                    }
+            encode_ (R1 (M1 f)) =
+                Value.Application (Value.Alternative name) (encode₁ f)
 
-        let expected = Type.Union
-                { location = ()
-                , alternatives = Type.Alternatives
-                    (   unsafeExpectUnion expected₀
-                    <>  unsafeExpectUnion expected₁
-                    )
-                    Monotype.EmptyAlternatives
-                }
-
-        return Encoder{ encode, expected }
+        return encode_
 
 instance (GenericToGrace (f₀ :+: f₁), GenericToGrace (f₂ :+: f₃)) => GenericToGrace ((f₀ :+: f₁) :+: (f₂ :+: f₃)) where
-    genericEncoder = do
-        let Encoder{ encode = encode₀, expected = expected₀ } =
-                State.evalState genericEncoder 0
-        let Encoder{ encode = encode₁, expected = expected₁ } =
-                State.evalState genericEncoder 0
+    genericEncode = do
+        let encode₀ = State.evalState genericEncode 0
+        let encode₁ = State.evalState genericEncode 0
 
-        let encode (L1 f) = encode₀ f
-            encode (R1 f) = encode₁ f
+        let encode_ (L1 f) = encode₀ f
+            encode_ (R1 f) = encode₁ f
 
-        let expected = Type.Union
-                { location = ()
-                , alternatives = Type.Alternatives
-                    (   unsafeExpectUnion expected₀
-                    <>  unsafeExpectUnion expected₁
-                    )
-                    Monotype.EmptyAlternatives
-                }
+        return encode_
 
-        return Encoder{ encode, expected }
-
-selector :: Selector s => M1 S s f r -> State Int Text
-selector m1 = do
-    let name₀ = Generics.selName m1
-
-    if name₀ == ""
-        then do
-            n <- State.get
-
-            State.put $! n + 1
-
-            return (Text.pack (show n))
-        else do
-            return (Text.pack name₀)
-
-unsafeExpectRecordLiteral :: Syntax s a -> [(Text, Syntax s a)]
-unsafeExpectRecordLiteral Syntax.Record{ fieldValues } =
+unsafeExpectRecordLiteral :: Value -> InsOrdHashMap Text Value
+unsafeExpectRecordLiteral (Value.Record fieldValues) =
     fieldValues
 unsafeExpectRecordLiteral _ =
     error "Grace.Encode.unsafeExpectRecordLiteral: not a record"
-
-unsafeExpectRecordType :: Type s -> [(Text, Type s)]
-unsafeExpectRecordType Type.Record{ fields = Type.Fields fieldTypes _ } =
-    fieldTypes
-unsafeExpectRecordType _ =
-    error "Grace.Encode.unsafeExpectRecordType: not a record"
-
-unsafeExpectUnion :: Type s -> [(Text, Type s)]
-unsafeExpectUnion Type.Union{ alternatives = Type.Alternatives alternativeTypes _ } =
-    alternativeTypes
-unsafeExpectUnion _ =
-    error "Grace.Encode.unsafeExpectUnion: not a union"

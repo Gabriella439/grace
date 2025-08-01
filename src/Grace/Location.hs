@@ -25,18 +25,20 @@ newtype Offset = Offset { getOffset :: Int }
     deriving newtype (Eq, Num, Show)
 
 -- | This type stores the location of each subexpression
-data Location = Location
-    { name :: String
-    -- ^ The file or name describing where the code came from
-    , code :: Text
-    -- ^ The original source code (the entire file)
-    --
-    --   Note that this will not always be the same for each `Location` because
-    --   different subexpressions might originate from different files if they
-    --   were imported
-    , offset :: Offset
-    -- ^ The offset (in characters) within the code
-    }
+data Location
+    = Location
+        { name :: String
+        -- ^ The file or name describing where the code came from
+        , code :: Text
+        -- ^ The original source code (the entire file)
+        --
+        --   Note that this will not always be the same for each `Location`
+        --   because different subexpressions might originate from different
+        --   files if they were imported
+        , offset :: Offset
+        -- ^ The offset (in characters) within the code
+        }
+    | Unknown
     deriving stock (Eq, Show)
 
 -- | Render an error message, given a `Location` for the error
@@ -89,3 +91,4 @@ renderError message Location{..} = prefix <> "\n" <> suffix
         <>  Text.pack (show column)
         <>  ": "
         <>  message
+renderError message Unknown = message
