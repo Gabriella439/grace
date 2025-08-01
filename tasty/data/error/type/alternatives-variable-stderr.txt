@@ -2,7 +2,7 @@ Union type mismatch
 
 The following union type:
 
-  < Right: Bool | e? >
+  < Right: Bool | c? >
 
 tasty/data/error/type/alternatives-variable-input.ffg:2:44: 
   │

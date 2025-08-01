@@ -2770,6 +2770,49 @@ check e Type.Forall{..} = do
     scoped (Context.Variable domain name) do
         check e type_
 
+check Syntax.Application{ location = location₀, function = Syntax.Alternative{ location = location₁, name }, argument } expected@Type.Union{ alternatives = Type.Alternatives alternativeTypes remainingAlternatives } = do
+    existential <- fresh
+
+    push (Context.UnsolvedAlternatives existential)
+
+    case lookup name alternativeTypes of
+        Just innerType₁ -> do
+            newArgument <- check argument innerType₁
+
+            return Syntax.Application
+                { location = location₀
+                , function = Syntax.Alternative
+                    { location = location₀
+                    , name
+                    }
+                , argument = newArgument
+                }
+
+        Nothing -> do
+            (innerType₀, newArgument) <- infer argument
+
+            let alternatives = Type.Alternatives
+                    [ (name, innerType₀) ]
+                    (Monotype.UnsolvedAlternatives existential)
+
+            let actual = Type.Union{ location = location₁, alternatives }
+
+            case remainingAlternatives of
+                Monotype.UnsolvedAlternatives p -> do
+                    instantiateAlternativesR location₁ alternatives p
+
+                    return Syntax.Application
+                        { location = location₀
+                        , function = Syntax.Alternative
+                            { location = location₀
+                            , name
+                            }
+                        , argument = newArgument
+                        }
+
+                _ -> do
+                    Exception.throwIO (UnionTypeMismatch actual expected [ name ])
+
 check Syntax.Scalar{ scalar = Syntax.Null, .. } Type.Optional{ } = do
     return Syntax.Scalar{ scalar = Syntax.Null, .. }
 
