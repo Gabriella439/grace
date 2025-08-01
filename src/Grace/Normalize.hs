@@ -38,6 +38,7 @@ import Data.Typeable (Typeable)
 import Data.Vector (Vector)
 import Data.Void (Void)
 import Grace.DataFile as DataFile
+import Grace.Decode (Decoder(..), FromGrace(..))
 import Grace.HTTP (Methods)
 import Grace.Input (Input(..))
 import Grace.Location (Location(..))
@@ -417,7 +418,7 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
             Syntax.Project{ larger, smaller } -> do
                 let lookup field fieldValues = case HashMap.lookup field fieldValues of
                         Just v -> v
-                        Nothing -> (Value.Scalar Syntax.Null)
+                        Nothing -> Value.Scalar Syntax.Null
 
                 larger' <- loop env larger
 
@@ -746,49 +747,13 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
             Syntax.HTTP{ location, arguments, schema = Just schema } -> Concurrently do
                 newArguments <- runConcurrently (loop env arguments)
 
-                record <- case newArguments of
-                    Value.Application (Value.Alternative "POST") record ->
-                        return record
-                    _ ->
-                        fail "Grace.Normalize.evaluate: http argument must be an alternative"
-
-                fieldValues <- case record of
-                    Value.Record fvs ->
-                        return fvs
-                    _ ->
-                        fail "Grace.Normalize.evaluate: POST argument must be a record"
-
-                url <- case HashMap.lookup "url" fieldValues of
-                    Just (Value.Text url) -> return url
-                    _ -> fail "Grace.Normalize.evaluate: url must be text"
-
-                headers <- case HashMap.lookup "headers" fieldValues of
-                    Just (Value.Application (Value.Builtin Some) (Value.List (toList -> headers))) ->
-                        return headers
-                    Just (Value.Scalar Null) ->
-                        return []
-                    Nothing ->
-                        return []
-                    _ ->
-                        fail "Grace.Normalize.evaluate: headers must be a list"
-
-                let convertHeader (Value.Record (sorted -> [("header", Value.Text header), ("value", Value.Text value)])) =
-                        return (header, value)
-                    convertHeader _ =
-                        fail "Grace.Normalize.evaluate: header must be a name and value"
-
-                convertedHeaders <- traverse convertHeader headers
-
-                let maybeRequest = do
-                        Value.Application (Value.Builtin Some) request <- HashMap.lookup "request" fieldValues
-
-                        v <- Value.toJSON request
-
-                        return (Aeson.encode v)
+                http <- case decode decoder newArguments of
+                    Left exception -> Exception.throwIO exception
+                    Right http -> return http
 
                 manager <- liftIO HTTP.newManager
 
-                responseBody <- liftIO (HTTP.post manager url convertedHeaders maybeRequest)
+                responseBody <- liftIO (HTTP.post manager http)
 
                 responseValue <- case Aeson.eitherDecode responseBody of
                     Left message_ ->

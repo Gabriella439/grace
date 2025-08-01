@@ -1,4 +1,6 @@
 {-# LANGUAGE DerivingStrategies    #-}
+{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedLists       #-}
 {-# LANGUAGE OverloadedStrings     #-}
@@ -12,6 +14,7 @@ module Grace.HTTP
     , Manager
     , newManager
     , fetch
+    , HTTP(..)
     , post
     , renderError
     , Methods
@@ -23,6 +26,8 @@ import Control.Exception (Exception(..))
 import Data.ByteString.Lazy (ByteString)
 import Data.Text (Text)
 import Data.Text.Encoding.Error (UnicodeException)
+import GHC.Generics (Generic)
+import Grace.Decode (FromGrace)
 import OpenAI.V1 (Methods(..))
 import OpenAI.V1.Chat.Completions (ChatCompletionObject, CreateChatCompletion)
 
@@ -35,6 +40,7 @@ import Network.HTTP.Client
     )
 
 import qualified Control.Exception as Exception
+import qualified Data.Aeson as Aeson
 import qualified Data.CaseInsensitive as CaseInsensitive
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
@@ -79,32 +85,40 @@ fetch manager url = do
         Left exception -> Exception.throwIO (NotUTF8 exception)
         Right lazyText -> return (Text.Lazy.toStrict lazyText)
 
+data Header = Header{ header :: Text, value :: Text }
+    deriving stock (Generic)
+    deriving anyclass (FromGrace)
+
+data HTTP
+    = POST
+        { url :: Text
+        , headers :: Maybe [Header]
+        , request :: Maybe Aeson.Value
+        }
+    deriving stock (Generic)
+    deriving anyclass (FromGrace)
+
 -- | Make a POST request
-post
-    :: Manager
-    -> Text
-    -- ^ URL
-    -> [(Text, Text)]
-    -- ^ Headers
-    -> Maybe ByteString
-    -- ^ Request body
-    -> IO ByteString
-    -- ^ Response body
-post manager url headers maybeRequestBody = do
+post :: Manager -> HTTP -> IO ByteString
+post manager POST{ url, headers, request } = do
     request₀ <- HTTP.parseUrlThrow (Text.unpack url)
 
+    let defaultedHeaders = case headers of
+            Nothing -> []
+            Just h -> h
+
     let requiredHeaders =
-            [ ("Content-Type", "application/json")
-            , ("Accept"      , "application/json")
+            [ Header{ header = "Content-Type", value = "application/json" }
+            , Header{ header = "Accept"      , value = "application/json" }
             ]
 
     let requestHeaders = do
-            (headerName, headerValue) <- requiredHeaders <> headers
+            Header{ header, value } <- requiredHeaders <> defaultedHeaders
 
             let newHeaderName =
-                    CaseInsensitive.mk (Encoding.encodeUtf8 headerName)
+                    CaseInsensitive.mk (Encoding.encodeUtf8 header)
 
-            let newHeaderValue = Encoding.encodeUtf8 headerValue
+            let newHeaderValue = Encoding.encodeUtf8 value
 
             return (newHeaderName, newHeaderValue)
 
@@ -113,11 +127,11 @@ post manager url headers maybeRequestBody = do
             , requestHeaders
             }
 
-    let request₂ = case maybeRequestBody of
+    let request₂ = case request of
             Nothing ->
                 request₁
             Just requestBody ->
-                request₁{ requestBody = RequestBodyLBS requestBody }
+                request₁{ requestBody = RequestBodyLBS (Aeson.encode requestBody) }
 
     let handler :: HTTP.HttpException -> IO a
         handler httpException = Exception.throwIO (HttpException httpException)

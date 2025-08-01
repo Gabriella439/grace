@@ -25,6 +25,10 @@ module Grace.Infer
     ( -- * Type inference
       typeOf
     , typeWith
+
+      -- * Types
+    , HTTP(..)
+
       -- * Errors related to type inference
     , TypeInferenceError(..)
     ) where
@@ -39,8 +43,9 @@ import Data.Sequence (ViewL(..), (<|))
 import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Context (Context, Entry)
+import Grace.Decode (Decoder(..), FromGrace(..))
 import Grace.Existential (Existential)
-import Grace.HTTP (Manager)
+import Grace.HTTP (HTTP(..), Manager)
 import Grace.Input (Input)
 import Grace.Location (Location(..))
 import Grace.Monotype (Monotype)
@@ -1821,51 +1826,13 @@ infer e₀ = do
             return (type_, Syntax.Prompt{ arguments = solveSyntax _Γ newArguments, schema = Just type_, .. })
 
         Syntax.HTTP{ location, arguments, schema } -> do
-            newArguments <- check arguments Type.Union
-                { location
-                , alternatives = Type.Alternatives
-                    [ ( "POST"
-                      , Type.Record
-                          { location
-                          , fields = Type.Fields
-                              [ ("url", Type.Scalar{ scalar = Monotype.Text, .. })
-                              , ( "headers"
-                                , Type.Optional
-                                    { location
-                                    , type_ =
-                                        Type.List
-                                          { location
-                                          , type_ = Type.Record
-                                              { location
-                                              , fields = Type.Fields
-                                                  [ ("header", Type.Scalar{ scalar = Monotype.Text, .. })
-                                                  , ("value", Type.Scalar{ scalar = Monotype.Text, .. })
-                                                  ]
-                                                  Monotype.EmptyFields
-                                              }
-                                          }
-                                    }
-                                )
-                              , ( "request"
-                                , Type.Optional
-                                    { location
-                                    , type_ = Type.Scalar
-                                        { location
-                                        , scalar = Monotype.JSON
-                                        }
-                                    }
-                                )
-                              ]
-                              Monotype.EmptyFields
-                          }
-                      )
-                    ]
-                    Monotype.EmptyAlternatives
-                }
+            let input = fmap (\_ -> location) (expected (decoder @HTTP))
+
+            newArguments <- check arguments input
 
             let newSchema = case schema of
-                    Just type_ -> type_
-                    Nothing    -> Type.Scalar{ scalar = Monotype.JSON, .. }
+                    Just output -> output
+                    Nothing -> Type.Scalar{ scalar = Monotype.JSON, .. }
 
             context <- get
 
@@ -2958,47 +2925,9 @@ check Syntax.Prompt{ schema = Nothing, .. } annotation = do
     return Syntax.Prompt{ arguments = newArguments, schema = Just annotation, .. }
 
 check Syntax.HTTP{ schema = Nothing, .. } annotation = do
-    newArguments <- check arguments Type.Union
-        { location
-        , alternatives = Type.Alternatives
-            [ ( "POST"
-              , Type.Record
-                  { location
-                  , fields = Type.Fields
-                      [ ("url", Type.Scalar{ scalar = Monotype.Text, .. })
-                      , ( "headers"
-                        , Type.Optional
-                            { location
-                            , type_ =
-                                Type.List
-                                  { location
-                                  , type_ = Type.Record
-                                      { location
-                                      , fields = Type.Fields
-                                          [ ("header", Type.Scalar{ scalar = Monotype.Text, .. })
-                                          , ("value", Type.Scalar{ scalar = Monotype.Text, .. })
-                                          ]
-                                          Monotype.EmptyFields
-                                      }
-                                  }
-                            }
-                        )
-                      , ( "request"
-                        , Type.Optional
-                            { location
-                            , type_ = Type.Scalar
-                                { location
-                                , scalar = Monotype.JSON
-                                }
-                            }
-                        )
-                      ]
-                      Monotype.EmptyFields
-                  }
-              )
-            ]
-            Monotype.EmptyAlternatives
-        }
+    let type_ = fmap (\_ -> location) (expected (decoder @HTTP))
+
+    newArguments <- check arguments type_
 
     context₀ <- get
 

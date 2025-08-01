@@ -1,5 +1,8 @@
-{-# LANGUAGE NamedFieldPuns    #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveAnyClass     #-}
+{-# LANGUAGE DeriveGeneric      #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE NamedFieldPuns     #-}
+{-# LANGUAGE OverloadedStrings  #-}
 
 {-| This module provides a uniform interface for making HTTP requests using both
     GHC and GHCJS
@@ -9,6 +12,7 @@ module Grace.HTTP
     , Manager
     , newManager
     , fetch
+    , HTTP(..)
     , post
     , renderError
     , Methods
@@ -19,7 +23,9 @@ module Grace.HTTP
 import Control.Exception (Exception(..))
 import Data.ByteString.Lazy (ByteString)
 import Data.Text (Text)
+import GHC.Generics (Generic)
 import GHCJS.Fetch (Request(..), RequestOptions(..), JSPromiseException)
+import Grace.Decode (FromGrace)
 import OpenAI.V1.Chat.Completions (ChatCompletionObject, CreateChatCompletion)
 
 import qualified Control.Exception as Exception
@@ -67,39 +73,47 @@ fetch _manager url = do
 
     return (Text.pack (JSString.unpack jsString))
 
+data Header = Header{ header :: Text, value :: Text }
+    deriving stock (Generic)
+    deriving anyclass (FromGrace)
+
+data HTTP
+    = POST
+        { url :: Text
+        , headers :: Maybe [Header]
+        , request :: Maybe Aeson.Value
+        }
+    deriving stock (Generic)
+    deriving anyclass (FromGrace)
+
 -- | Make a POST request
-post
-    :: Manager
-    -> Text
-    -- ^ URL
-    -> [(Text, Text)]
-    -- ^ Headers
-    -> Maybe ByteString
-    -- ^ Request body
-    -> IO ByteString
-    -- ^ Response body
-post manager url headers maybeRequestBody = do
+post :: Manager -> HTTP -> IO ByteString
+post manager Post{ url, headers, request } = do
+    let defaultedHeaders = case headers of
+            Nothing -> []
+            Just h -> h
+
     let requiredHeaders =
-            [ ("Content-Type", "application/json")
-            , ("Accept"      , "application/json")
+            [ Header{ header = "Content-Type", value = "application/json" }
+            , Header{ header = "Accept"      , value = "application/json" }
             ]
 
     let reqOptHeaders = do
-            (headerName, headerValue) <- requiredHeaders <> headers
+            Header{ header, value } <- requiredHeaders <> defaultedHeaders
 
-            return (CaseInsensitive.mk (Encoding.encodeUtf8 headerName), Encoding.encodeUtf8 headerValue)
+            return (CaseInsensitive.mk (Encoding.encodeUtf8 header), Encoding.encodeUtf8 value)
 
     let reqOptions₀ = Fetch.defaultRequestOptions
             { reqOptHeaders
             , reqOptMethod = HTTP.Types.methodPost
             }
 
-    reqOptions₁ <- case maybeRequestBody of
+    reqOptions₁ <- case request of
             Nothing -> do
                 return reqOptions₀
 
             Just requestBody -> do
-                requestText <- case Encoding.decodeUtf8' (ByteString.Lazy.toStrict requestBody) of
+                requestText <- case Encoding.decodeUtf8' (ByteString.Lazy.toStrict (Aeson.encode requestBody)) of
                     Left exception -> Exception.throwIO exception
                     Right text -> return text
 
