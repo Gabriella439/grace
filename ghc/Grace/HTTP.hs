@@ -15,7 +15,7 @@ module Grace.HTTP
     , newManager
     , fetch
     , HTTP(..)
-    , post
+    , http
     , renderError
     , Methods
     , getMethods
@@ -89,8 +89,17 @@ data Header = Header{ header :: Text, value :: Text }
     deriving stock (Generic)
     deriving anyclass (FromGrace)
 
+data Parameter = Parameter{ parameter :: Text, value :: Maybe Text }
+    deriving stock (Generic)
+    deriving anyclass (FromGrace)
+
 data HTTP
-    = POST
+    = GET
+        { url :: Text
+        , headers :: Maybe [Header]
+        , parameters :: Maybe [Parameter]
+        }
+    | POST
         { url :: Text
         , headers :: Maybe [Header]
         , request :: Maybe Aeson.Value
@@ -99,8 +108,51 @@ data HTTP
     deriving anyclass (FromGrace)
 
 -- | Make a POST request
-post :: Manager -> HTTP -> IO ByteString
-post manager POST{ url, headers, request } = do
+http :: Manager -> HTTP -> IO ByteString
+http manager GET{ url, headers, parameters } = do
+    request₀ <- HTTP.parseUrlThrow (Text.unpack url)
+
+    let defaultedHeaders = case headers of
+            Nothing -> []
+            Just h -> h
+
+    let requiredHeaders =
+            [ Header{ header = "Content-Type", value = "application/json" }
+            , Header{ header = "Accept"      , value = "application/json" }
+            ]
+
+    let requestHeaders = do
+            Header{ header, value } <- requiredHeaders <> defaultedHeaders
+
+            let newHeaderName =
+                    CaseInsensitive.mk (Encoding.encodeUtf8 header)
+
+            let newHeaderValue = Encoding.encodeUtf8 value
+
+            return (newHeaderName, newHeaderValue)
+
+    let request₁ = request₀
+            { method = HTTP.Types.methodGet
+            , requestHeaders
+            }
+
+    let request₂ = case parameters of
+            Nothing ->
+                request₁
+            Just ps ->
+                let convertedParameters = do
+                        Parameter{ parameter, value } <- ps
+                        return (Encoding.encodeUtf8 parameter, fmap Encoding.encodeUtf8 value)
+
+                in  HTTP.setQueryString convertedParameters request₁
+
+    let handler :: HTTP.HttpException -> IO a
+        handler httpException = Exception.throwIO (HttpException httpException)
+
+    response <- Exception.handle handler (HTTP.httpLbs request₂ manager)
+
+    return (HTTP.responseBody response)
+http manager POST{ url, headers, request } = do
     request₀ <- HTTP.parseUrlThrow (Text.unpack url)
 
     let defaultedHeaders = case headers of

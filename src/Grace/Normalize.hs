@@ -753,7 +753,7 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
 
                 manager <- liftIO HTTP.newManager
 
-                responseBody <- liftIO (HTTP.post manager http)
+                responseBody <- liftIO (HTTP.http manager http)
 
                 responseValue <- case Aeson.eitherDecode responseBody of
                     Left message_ ->

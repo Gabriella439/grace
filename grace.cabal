@@ -71,7 +71,8 @@ library
 
   if impl(ghcjs) || os(ghcjs)
     hs-source-dirs:    ghcjs
-    build-depends:     ghcjs-base
+    build-depends:     binary
+                     , ghcjs-base
                      , ghcjs-fetch
                      , ghcjs-prim
   else

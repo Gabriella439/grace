@@ -1,8 +1,9 @@
-{-# LANGUAGE DeriveAnyClass     #-}
-{-# LANGUAGE DeriveGeneric      #-}
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE NamedFieldPuns     #-}
-{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE DeriveGeneric         #-}
+{-# LANGUAGE DerivingStrategies    #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE OverloadedStrings     #-}
 
 {-| This module provides a uniform interface for making HTTP requests using both
     GHC and GHCJS
@@ -13,7 +14,7 @@ module Grace.HTTP
     , newManager
     , fetch
     , HTTP(..)
-    , post
+    , http
     , renderError
     , Methods
     , getMethods
@@ -25,11 +26,13 @@ import Data.ByteString.Lazy (ByteString)
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import GHCJS.Fetch (Request(..), RequestOptions(..), JSPromiseException)
+import GHCJS.Fetch.Types (JSResponse)
 import Grace.Decode (FromGrace)
 import OpenAI.V1.Chat.Completions (ChatCompletionObject, CreateChatCompletion)
 
 import qualified Control.Exception as Exception
 import qualified Data.Aeson as Aeson
+import qualified Data.Binary.Builder as Builder
 import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.CaseInsensitive as CaseInsensitive
 import qualified Data.JSString as JSString
@@ -77,8 +80,17 @@ data Header = Header{ header :: Text, value :: Text }
     deriving stock (Generic)
     deriving anyclass (FromGrace)
 
+data Parameter = Parameter{ parameter :: Text, value :: Maybe Text }
+    deriving stock (Generic)
+    deriving anyclass (FromGrace)
+
 data HTTP
-    = POST
+    = GET
+        { url :: Text
+        , headers :: Maybe [Header]
+        , parameters :: Maybe [Parameter]
+        }
+    | POST
         { url :: Text
         , headers :: Maybe [Header]
         , request :: Maybe Aeson.Value
@@ -86,29 +98,74 @@ data HTTP
     deriving stock (Generic)
     deriving anyclass (FromGrace)
 
--- | Make a POST request
-post :: Manager -> HTTP -> IO ByteString
-post manager Post{ url, headers, request } = do
-    let defaultedHeaders = case headers of
-            Nothing -> []
-            Just h -> h
+completeHeaders :: Maybe [Header] -> [HTTP.Types.Header]
+completeHeaders headers = do
+    Header{ header, value } <- requiredHeaders <> defaultedHeaders
 
-    let requiredHeaders =
-            [ Header{ header = "Content-Type", value = "application/json" }
-            , Header{ header = "Accept"      , value = "application/json" }
-            ]
+    let headerBytes = CaseInsensitive.mk (Encoding.encodeUtf8 header)
 
-    let reqOptHeaders = do
-            Header{ header, value } <- requiredHeaders <> defaultedHeaders
+    let valueBytes = Encoding.encodeUtf8 value
 
-            return (CaseInsensitive.mk (Encoding.encodeUtf8 header), Encoding.encodeUtf8 value)
+    return (headerBytes, valueBytes)
+  where
+    requiredHeaders =
+        [ Header{ header = "Content-Type", value = "application/json" }
+        , Header{ header = "Accept"      , value = "application/json" }
+        ]
+
+    defaultedHeaders = case headers of
+        Nothing -> []
+        Just h -> h
+
+responseToBytes :: JSResponse -> IO ByteString
+responseToBytes response = do
+    jsString <- Fetch.responseText response
+
+    return (ByteString.Lazy.fromStrict (Encoding.encodeUtf8 (Text.pack (JSString.unpack jsString))))
+
+-- | Make an HTTP request
+http :: Manager -> HTTP -> IO ByteString
+http _ GET{ url, headers, parameters } = do
+    reqUrl <- case parameters of
+        Nothing -> do
+            return (JSString.pack (Text.unpack url))
+        Just ps -> do
+          let queryText = do
+                  Parameter{ parameter, value } <- ps
+
+                  return (parameter, value)
+
+          let builder = HTTP.Types.renderQueryText True queryText
+
+          let bytes =
+                  ByteString.Lazy.toStrict (Builder.toLazyByteString builder)
+
+          query <- case Encoding.decodeUtf8' bytes of
+              Left exception -> Exception.throwIO exception
+              Right text -> return text
+
+          return (JSString.pack (Text.unpack (url <> query)))
+
+    let reqOptions = Fetch.defaultRequestOptions
+            { reqOptHeaders = completeHeaders headers
+            , reqOptMethod = HTTP.Types.methodGet
+            }
+
+    let request = Request{ reqUrl, reqOptions }
+
+    response <- Fetch.fetch request
+
+    responseToBytes response
+
+http _ POST{ url, headers, request } = do
+    let reqUrl = JSString.pack (Text.unpack url)
 
     let reqOptions₀ = Fetch.defaultRequestOptions
-            { reqOptHeaders
+            { reqOptHeaders = completeHeaders headers
             , reqOptMethod = HTTP.Types.methodPost
             }
 
-    reqOptions₁ <- case request of
+    reqOptions <- case request of
             Nothing -> do
                 return reqOptions₀
 
@@ -122,16 +179,9 @@ post manager Post{ url, headers, request } = do
 
                 return reqOptions₀{ reqOptBody }
 
-    let request = Request
-            { reqUrl = JSString.pack (Text.unpack url)
-            , reqOptions = reqOptions₁
-            }
+    response <- Fetch.fetch Request{ reqUrl, reqOptions }
 
-    response <- Fetch.fetch request
-
-    jsString <- Fetch.responseText response
-
-    return (ByteString.Lazy.fromStrict (Encoding.encodeUtf8 (Text.pack (JSString.unpack jsString))))
+    responseToBytes response
 
 -- | Render an `HttpException` as `Data.Text.Text`
 renderError :: HttpException -> Text
