@@ -15,8 +15,8 @@
 
     Example usage:
 
-    >>> decode decoder (Value.Scalar (Syntax.Bool True)) :: Result Bool
-    Success True
+    >>> decode decoder (Value.Scalar (Syntax.Bool True)) :: Either DecodingError Bool
+    Right True
 -}
 module Grace.Decode
     ( -- * Classes
