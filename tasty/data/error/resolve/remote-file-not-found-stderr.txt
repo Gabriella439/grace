@@ -1,3 +1,0 @@
-Import resolution failed: https://example.com/a
-
-Connection establishment took too long
