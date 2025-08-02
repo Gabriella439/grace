@@ -227,6 +227,40 @@ wellFormed context Type.Union{ location, alternatives = Type.Alternatives kAs re
 wellFormed _ Type.Scalar{} = do
     return ()
 
+-- A field is required if and only if it is a subtype of @Optional T@ for some
+-- type @T@
+--
+-- The reason we don't just check if @superType₁@ is @Optional { }@ is because
+-- it might be an unsolved variable.  Checking if it is a subtype of
+-- @Optional a?@ is the most robust way to check.
+isFieldRequired
+    :: (MonadState Status m, MonadCatch m) => Type Location -> m Bool
+isFieldRequired fieldType = do
+    context <- get
+
+    let assertOptional = do
+            existential <- fresh
+
+            push (Context.UnsolvedType existential)
+
+            let optional = Type.Optional{ location, type_ }
+                  where
+                    location = Type.location fieldType
+
+                    type_ = Type.UnsolvedType
+                        { existential
+                        , location
+                        }
+
+            subtype fieldType optional
+
+            return False
+
+    assertOptional `Exception.catch` \(_ :: TypeInferenceError) -> do
+        set context
+
+        return True
+
 -- | @`subtype` sub super@ checks that @sub@ is a subtype of @super@
 subtype
     :: (MonadState Status m, MonadCatch m)
@@ -352,38 +386,6 @@ subtype subType₀ superType₀ = do
                         (Context.solveType context superType₁)
 
             sequence_ (Map.intersectionWith subtypeField subFieldTypes superFieldTypes)
-
-            -- A field is required if and only if it is a subtype of
-            -- @Optional T@ for some type @T@
-            --
-            -- The reason we don't just check if @superType₁@ is @Optional { }@
-            -- is because it might be an unsolved variable.  Checking if it is
-            -- a subtype of @Optional a?@ is the most robust way to check.
-            let isFieldRequired fieldType = do
-                    context <- get
-
-                    let assertOptional = do
-                            existential <- fresh
-
-                            push (Context.UnsolvedType existential)
-
-                            let optional = Type.Optional{ location, type_ }
-                                  where
-                                    location = Type.location fieldType
-
-                                    type_ = Type.UnsolvedType
-                                        { existential
-                                        , location
-                                        }
-
-                            subtype fieldType optional
-
-                            return False
-
-                    assertOptional `Exception.catch` \(_ :: TypeInferenceError) -> do
-                        set context
-
-                        return True
 
             let getRequiredFields = do
                     m <- traverse isFieldRequired superExtraFieldTypes
@@ -2891,11 +2893,22 @@ check e@Syntax.Record{ fieldValues } _B@Type.Record{ fields = Type.Fields fieldT
     | let mapValues = Map.fromList fieldValues
     , let mapTypes  = Map.fromList fieldTypes
 
-    , let extraValues = Map.difference mapValues mapTypes
-    , let extraTypes  = Map.difference mapTypes  mapValues
-
+    -- This is to prevent an infinite loop because we're going to recursively
+    -- call `check` again below with two non-intersecting records to generate a
+    -- type error if they're not both empty.
     , let both = Map.intersectionWith (,) mapValues mapTypes
     , not (Map.null both) = do
+        let extraValues = Map.difference mapValues mapTypes
+        let extraTypes  = Map.difference mapTypes  mapValues
+
+        isRequiredTypes <- traverse isFieldRequired extraTypes
+
+        let extraRequiredTypes =
+                Map.difference extraTypes (Map.filter not isRequiredTypes)
+
+        let extraOptionalTypes =
+                Map.difference extraTypes (Map.filter id isRequiredTypes)
+
         let process (field, (value, type_)) = do
                 _Γ <- get
 
@@ -2903,7 +2916,7 @@ check e@Syntax.Record{ fieldValues } _B@Type.Record{ fields = Type.Fields fieldT
 
                 return (field, newValue)
 
-        newFieldValues₀ <- traverse process (Map.toList both)
+        overlappingValues <- traverse process (Map.toList both)
 
         let e' = Syntax.Record
                 { fieldValues = Map.toList extraValues
@@ -2912,16 +2925,25 @@ check e@Syntax.Record{ fieldValues } _B@Type.Record{ fields = Type.Fields fieldT
 
         let _B' = Type.Record
                 { location = Type.location _B
-                , fields = Type.Fields (Map.toList extraTypes) fields
+                , fields = Type.Fields (Map.toList extraRequiredTypes) fields
                 }
 
         _Γ <- get
 
+        -- Generate a type error if either `e'` or `_B'` is not empty
+        --
+        -- `result` should always be an empty record, but we pass it through the
+        -- returned fields out of an abundance of caution.
         result <- check e' (Context.solveType _Γ _B')
 
+        let optionalValues = do
+                (field, type_) <- Map.toList extraOptionalTypes
+
+                return (field, Syntax.Scalar{ location = Type.location type_, scalar = Syntax.Null })
+
         case result of
-            Syntax.Record{ fieldValues = newFieldValues₁, .. } ->
-                return Syntax.Record{ fieldValues = newFieldValues₀ <> newFieldValues₁, .. }
+            Syntax.Record{ fieldValues = nonOverlappingValues, .. } ->
+                return Syntax.Record{ fieldValues = overlappingValues <> optionalValues <> nonOverlappingValues, .. }
             other ->
                 return other
 
@@ -2968,9 +2990,9 @@ check Syntax.Prompt{ schema = Nothing, .. } annotation = do
     return Syntax.Prompt{ arguments = newArguments, schema = Just annotation, .. }
 
 check Syntax.HTTP{ schema = Nothing, .. } annotation = do
-    let type_ = fmap (\_ -> location) (expected (decoder @HTTP))
+    let input = fmap (\_ -> location) (expected (decoder @HTTP))
 
-    newArguments <- check arguments type_
+    newArguments <- check arguments input
 
     context₀ <- get
 
