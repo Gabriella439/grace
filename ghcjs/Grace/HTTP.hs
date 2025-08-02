@@ -8,6 +8,8 @@ module Grace.HTTP
     ( HttpException
     , fetch
     , HTTP(..)
+    , Header(..)
+    , Parameter(..)
     , http
     , renderError
     , Methods
@@ -21,7 +23,7 @@ import Data.Text (Text)
 import GHCJS.Fetch (Request(..), RequestOptions(..), JSPromiseException)
 import GHCJS.Fetch.Types (JSResponse)
 import Grace.Decode (FromGrace)
-import Grace.HTTP.Type (HTTP(..), Parameter(..), completeHeaders)
+import Grace.HTTP.Type (Header(..), HTTP(..), Parameter(..), completeHeaders)
 import OpenAI.V1.Chat.Completions (ChatCompletionObject, CreateChatCompletion)
 
 import qualified Control.Exception as Exception

@@ -1212,6 +1212,7 @@ quote value = case value of
   where
     location = ()
 
+-- | Strip all `Some`s from a `Syntax` tree
 strip :: Syntax s a -> Syntax s a
 strip = Lens.transform transformation
   where

@@ -11,6 +11,8 @@ module Grace.HTTP
     ( HttpException
     , fetch
     , HTTP(..)
+    , Header(..)
+    , Parameter(..)
     , http
     , renderError
     , Methods
@@ -23,7 +25,7 @@ import Control.Exception (Exception(..))
 import Data.ByteString.Lazy (ByteString)
 import Data.Text (Text)
 import Data.Text.Encoding.Error (UnicodeException)
-import Grace.HTTP.Type (HTTP(..), Parameter(..), completeHeaders)
+import Grace.HTTP.Type (Header(..), HTTP(..), Parameter(..), completeHeaders)
 import OpenAI.V1 (Methods(..))
 import OpenAI.V1.Chat.Completions (ChatCompletionObject, CreateChatCompletion)
 

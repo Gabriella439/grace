@@ -14,8 +14,9 @@
     Scalar{ location = (), scalar = Bool True }
 -}
 module Grace.Encode
-    ( ToGrace(..)
-    , Key(..)
+    ( -- * Classes
+      ToGrace(..)
+    , GenericToGrace(..)
     ) where
 
 import Control.Monad.State (State)

@@ -19,9 +19,13 @@
     Success True
 -}
 module Grace.Decode
-    ( FromGrace(..)
+    ( -- * Classes
+      FromGrace(..)
+    , GenericFromGrace(..)
     , Decoder(..)
-    , Key(..)
+
+      -- * Exceptions
+    , DecodingError(..)
     ) where
 
 import Control.Exception (Exception)

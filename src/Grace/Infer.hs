@@ -156,7 +156,7 @@ scopedUnsolvedAlternatives k = do
 
         k (Type.Alternatives [] (Monotype.UnsolvedAlternatives a))
 
-{-| @`wellFormed` context type@ checks that all type/fields/alternatives
+{-| @wellFormed context type@ checks that all type/fields/alternatives
     variables within @type@ are declared within the @context@
 -}
 wellFormed :: MonadThrow m => Context Location -> Type Location -> m ()
@@ -258,7 +258,7 @@ isFieldRequired fieldType = do
 
         return True
 
--- | @`subtype` sub super@ checks that @sub@ is a subtype of @super@
+-- | @subtype sub super@ checks that @sub@ is a subtype of @super@
 subtype
     :: (MonadState Status m, MonadCatch m)
     => Type Location -> Type Location -> m ()

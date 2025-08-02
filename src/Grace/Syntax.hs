@@ -367,6 +367,7 @@ usedIn _ Builtin{ } =
 usedIn _ Embed{ } =
     False
 
+-- | Matches all effects within a `Syntax` tree
 effects :: Getting Any (Syntax s a) ()
 effects =
       Lens.cosmos
