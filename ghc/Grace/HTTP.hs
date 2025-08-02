@@ -1,8 +1,5 @@
 {-# LANGUAGE DerivingStrategies    #-}
-{-# LANGUAGE DeriveAnyClass        #-}
-{-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE OverloadedLists       #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE NamedFieldPuns        #-}
 
@@ -26,8 +23,7 @@ import Control.Exception (Exception(..))
 import Data.ByteString.Lazy (ByteString)
 import Data.Text (Text)
 import Data.Text.Encoding.Error (UnicodeException)
-import GHC.Generics (Generic)
-import Grace.Decode (FromGrace)
+import Grace.HTTP.Type (HTTP(..), Parameter(..), completeHeaders)
 import OpenAI.V1 (Methods(..))
 import OpenAI.V1.Chat.Completions (ChatCompletionObject, CreateChatCompletion)
 
@@ -41,7 +37,6 @@ import Network.HTTP.Client
 
 import qualified Control.Exception as Exception
 import qualified Data.Aeson as Aeson
-import qualified Data.CaseInsensitive as CaseInsensitive
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
 import qualified Data.Text.Lazy as Text.Lazy
@@ -85,55 +80,14 @@ fetch manager url = do
         Left exception -> Exception.throwIO (NotUTF8 exception)
         Right lazyText -> return (Text.Lazy.toStrict lazyText)
 
-data Header = Header{ header :: Text, value :: Text }
-    deriving stock (Generic)
-    deriving anyclass (FromGrace)
-
-data Parameter = Parameter{ parameter :: Text, value :: Maybe Text }
-    deriving stock (Generic)
-    deriving anyclass (FromGrace)
-
-data HTTP
-    = GET
-        { url :: Text
-        , headers :: Maybe [Header]
-        , parameters :: Maybe [Parameter]
-        }
-    | POST
-        { url :: Text
-        , headers :: Maybe [Header]
-        , request :: Maybe Aeson.Value
-        }
-    deriving stock (Generic)
-    deriving anyclass (FromGrace)
-
 -- | Make a POST request
 http :: Manager -> HTTP -> IO ByteString
 http manager GET{ url, headers, parameters } = do
     request₀ <- HTTP.parseUrlThrow (Text.unpack url)
 
-    let defaultedHeaders = case headers of
-            Nothing -> []
-            Just h -> h
-
-    let requiredHeaders =
-            [ Header{ header = "Content-Type", value = "application/json" }
-            , Header{ header = "Accept"      , value = "application/json" }
-            ]
-
-    let requestHeaders = do
-            Header{ header, value } <- requiredHeaders <> defaultedHeaders
-
-            let newHeaderName =
-                    CaseInsensitive.mk (Encoding.encodeUtf8 header)
-
-            let newHeaderValue = Encoding.encodeUtf8 value
-
-            return (newHeaderName, newHeaderValue)
-
     let request₁ = request₀
             { method = HTTP.Types.methodGet
-            , requestHeaders
+            , requestHeaders = completeHeaders headers
             }
 
     let request₂ = case parameters of
@@ -155,28 +109,9 @@ http manager GET{ url, headers, parameters } = do
 http manager POST{ url, headers, request } = do
     request₀ <- HTTP.parseUrlThrow (Text.unpack url)
 
-    let defaultedHeaders = case headers of
-            Nothing -> []
-            Just h -> h
-
-    let requiredHeaders =
-            [ Header{ header = "Content-Type", value = "application/json" }
-            , Header{ header = "Accept"      , value = "application/json" }
-            ]
-
-    let requestHeaders = do
-            Header{ header, value } <- requiredHeaders <> defaultedHeaders
-
-            let newHeaderName =
-                    CaseInsensitive.mk (Encoding.encodeUtf8 header)
-
-            let newHeaderValue = Encoding.encodeUtf8 value
-
-            return (newHeaderName, newHeaderValue)
-
     let request₁ = request₀
             { method = HTTP.Types.methodPost
-            , requestHeaders
+            , requestHeaders = completeHeaders headers
             }
 
     let request₂ = case request of

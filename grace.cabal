@@ -46,6 +46,7 @@ library
                      , Grace.Domain
                      , Grace.Encode
                      , Grace.Existential
+                     , Grace.HTTP
                      , Grace.Input
                      , Grace.Import
                      , Grace.Interpret
@@ -56,12 +57,12 @@ library
                      , Grace.Parser
                      , Grace.Pretty
                      , Grace.Syntax
-                     , Grace.HTTP
                      , Grace.Type
                      , Grace.Value
                      , Grace.Width
 
   other-modules:       Grace.Compat
+                     , Grace.HTTP.Type
                      , Grace.Marshal
                      , Paths_grace
 

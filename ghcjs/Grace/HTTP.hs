@@ -1,9 +1,5 @@
-{-# LANGUAGE DeriveAnyClass        #-}
-{-# LANGUAGE DeriveGeneric         #-}
-{-# LANGUAGE DerivingStrategies    #-}
-{-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE NamedFieldPuns        #-}
-{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE NamedFieldPuns    #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 {-| This module provides a uniform interface for making HTTP requests using both
     GHC and GHCJS
@@ -24,17 +20,16 @@ module Grace.HTTP
 import Control.Exception (Exception(..))
 import Data.ByteString.Lazy (ByteString)
 import Data.Text (Text)
-import GHC.Generics (Generic)
 import GHCJS.Fetch (Request(..), RequestOptions(..), JSPromiseException)
 import GHCJS.Fetch.Types (JSResponse)
 import Grace.Decode (FromGrace)
+import Grace.HTTP.Type (HTTP(..), Parameter(..), completeHeaders)
 import OpenAI.V1.Chat.Completions (ChatCompletionObject, CreateChatCompletion)
 
 import qualified Control.Exception as Exception
 import qualified Data.Aeson as Aeson
 import qualified Data.Binary.Builder as Builder
 import qualified Data.ByteString.Lazy as ByteString.Lazy
-import qualified Data.CaseInsensitive as CaseInsensitive
 import qualified Data.JSString as JSString
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
@@ -75,47 +70,6 @@ fetch _manager url = do
     jsString <- Fetch.responseText response
 
     return (Text.pack (JSString.unpack jsString))
-
-data Header = Header{ header :: Text, value :: Text }
-    deriving stock (Generic)
-    deriving anyclass (FromGrace)
-
-data Parameter = Parameter{ parameter :: Text, value :: Maybe Text }
-    deriving stock (Generic)
-    deriving anyclass (FromGrace)
-
-data HTTP
-    = GET
-        { url :: Text
-        , headers :: Maybe [Header]
-        , parameters :: Maybe [Parameter]
-        }
-    | POST
-        { url :: Text
-        , headers :: Maybe [Header]
-        , request :: Maybe Aeson.Value
-        }
-    deriving stock (Generic)
-    deriving anyclass (FromGrace)
-
-completeHeaders :: Maybe [Header] -> [HTTP.Types.Header]
-completeHeaders headers = do
-    Header{ header, value } <- requiredHeaders <> defaultedHeaders
-
-    let headerBytes = CaseInsensitive.mk (Encoding.encodeUtf8 header)
-
-    let valueBytes = Encoding.encodeUtf8 value
-
-    return (headerBytes, valueBytes)
-  where
-    requiredHeaders =
-        [ Header{ header = "Content-Type", value = "application/json" }
-        , Header{ header = "Accept"      , value = "application/json" }
-        ]
-
-    defaultedHeaders = case headers of
-        Nothing -> []
-        Just h -> h
 
 responseToBytes :: JSResponse -> IO ByteString
 responseToBytes response = do
