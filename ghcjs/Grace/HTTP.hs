@@ -6,8 +6,6 @@
 -}
 module Grace.HTTP
     ( HttpException
-    , Manager
-    , newManager
     , fetch
     , HTTP(..)
     , http
@@ -37,29 +35,16 @@ import qualified GHCJS.Fetch as Fetch
 import qualified GHCJS.Prim as Prim
 import qualified Network.HTTP.Types as HTTP.Types
 
-{-| The GHCJS implementation of HTTP requests doesn't require a real `Manager`
-    so this supplies an empty placeholder
--}
-type Manager = ()
-
 -- | An `HttpException` is just a type synonym for a `JSPromiseException`
 type HttpException = JSPromiseException
 
-{-| Acquire a new `Manager`
-
-    This does nothing since the GHCJS implementation doesn't use a `Manager`
--}
-newManager :: IO Manager
-newManager = mempty
-
 -- | Fetch a URL (using @XMLHttpRequest@)
 fetch
-    :: Manager
-    -> Text
+    :: Text
     -- ^ URL
     -> IO Text
     -- ^ Response body
-fetch _manager url = do
+fetch url = do
     let request = Request
             { reqUrl = JSString.pack (Text.unpack url)
             , reqOptions = Fetch.defaultRequestOptions
@@ -78,8 +63,8 @@ responseToBytes response = do
     return (ByteString.Lazy.fromStrict (Encoding.encodeUtf8 (Text.pack (JSString.unpack jsString))))
 
 -- | Make an HTTP request
-http :: Manager -> HTTP -> IO ByteString
-http _ GET{ url, headers, parameters } = do
+http :: HTTP -> IO ByteString
+http GET{ url, headers, parameters } = do
     reqUrl <- case parameters of
         Nothing -> do
             return (JSString.pack (Text.unpack url))
@@ -111,7 +96,7 @@ http _ GET{ url, headers, parameters } = do
 
     responseToBytes response
 
-http _ POST{ url, headers, request } = do
+http POST{ url, headers, request } = do
     let reqUrl = JSString.pack (Text.unpack url)
 
     let reqOptions₀ = Fetch.defaultRequestOptions

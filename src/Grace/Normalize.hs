@@ -547,8 +547,6 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                             toOutput ChatCompletionObject{ choices } = do
                                 Exception.throwIO UnexpectedModelResponse{ choices }
 
-                        manager <- liftIO HTTP.newManager
-
                         if code
                             then do
                                 let retry :: [(Text, SomeException)] -> IO (Type Location, Value)
@@ -575,7 +573,7 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
 
                                                     let input = Code "(intermediate value)" (Pretty.toSmart expression)
 
-                                                    (type_, _) <- Infer.typeOf input manager expression
+                                                    (type_, _) <- Infer.typeOf input expression
 
                                                     return (name, type_, assignment)
 
@@ -636,7 +634,7 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
 
                                             output <- toOutput chatCompletionObject
 
-                                            Interpret.interpretWith keyToMethods context (Just schema) manager (Code "(generated)" output)
+                                            Interpret.interpretWith keyToMethods context (Just schema) (Code "(generated)" output)
                                                 `Exception.catch` \interpretError -> do
                                                     retry ((output, interpretError) : errors)
 
@@ -751,9 +749,7 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                     Left exception -> Exception.throwIO exception
                     Right http -> return http
 
-                manager <- liftIO HTTP.newManager
-
-                responseBody <- liftIO (HTTP.http manager http)
+                responseBody <- liftIO (HTTP.http http)
 
                 responseValue <- case Aeson.eitherDecode responseBody of
                     Left message_ ->

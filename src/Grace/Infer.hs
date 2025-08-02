@@ -45,7 +45,7 @@ import Data.Void (Void)
 import Grace.Context (Context, Entry)
 import Grace.Decode (Decoder(..), FromGrace(..))
 import Grace.Existential (Existential)
-import Grace.HTTP (HTTP(..), Manager)
+import Grace.HTTP (HTTP(..))
 import Grace.Input (Input)
 import Grace.Location (Location(..))
 import Grace.Monotype (Monotype)
@@ -81,9 +81,6 @@ data Status = Status
 
     , context :: Context Location
       -- ^ The type-checking context (e.g. Γ, Δ, Θ)
-
-    , manager :: Manager
-      -- ^ Used to resolve HTTP(S) imports
 
     , input :: Input
       -- ^ The parent import, used to resolve relative imports
@@ -2701,15 +2698,15 @@ infer e₀ = do
         Syntax.Embed{..} -> do
             _Γ <- get
 
-            Status{ manager, input, .. } <- State.get
+            Status{ input, .. } <- State.get
 
             let absolute = input <> embedded
 
             Import.referentiallySane input absolute
 
-            State.put Status{ manager, input = absolute, .. }
+            State.put Status{ input = absolute, .. }
 
-            syntax <- liftIO (Import.resolve manager absolute)
+            syntax <- liftIO (Import.resolve absolute)
 
             result <- infer syntax
 
@@ -3132,15 +3129,15 @@ check annotated annotation@Type.Scalar{ scalar = Monotype.Integer } = do
 check Syntax.Embed{ embedded } _B = do
     _Γ <- get
 
-    Status{ manager, input, .. } <- State.get
+    Status{ input, .. } <- State.get
 
     let absolute = input <> embedded
 
     Import.referentiallySane input absolute
 
-    State.put Status{ manager, input = absolute, .. }
+    State.put Status{ input = absolute, .. }
 
-    syntax <- liftIO (Import.resolve manager absolute)
+    syntax <- liftIO (Import.resolve absolute)
 
     result <- check syntax _B
 
@@ -3256,21 +3253,19 @@ inferApplication _A _ = do
 typeOf
     :: (MonadCatch m, MonadIO m)
     => Input
-    -> Manager
     -> Syntax Location Input
     -> m (Type Location, Syntax Location Void)
-typeOf input manager = typeWith input manager []
+typeOf input = typeWith input []
 
 -- | Like `typeOf`, but accepts a custom type-checking `Context`
 typeWith
     :: (MonadCatch m, MonadIO m)
     => Input
-    -> Manager
     -> Context Location
     -> Syntax Location Input
     -> m (Type Location, Syntax Location Void)
-typeWith input manager context syntax = do
-    let initialStatus = Status{ count = 0, context, manager, input }
+typeWith input context syntax = do
+    let initialStatus = Status{ count = 0, context, input }
 
     ((_A, elaborated), Status{ context = _Δ }) <- State.runStateT (infer syntax) initialStatus
 

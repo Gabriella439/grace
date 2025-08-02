@@ -23,7 +23,7 @@ import Data.IORef (IORef)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Maybe (fromJust)
 import Data.Text (Text)
-import Grace.HTTP (HttpException, Manager)
+import Grace.HTTP (HttpException)
 import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
 import Grace.Syntax (Syntax)
@@ -48,13 +48,13 @@ cache :: IORef (HashMap Text Text)
 cache = Unsafe.unsafePerformIO (IORef.newIORef HashMap.empty)
 {-# NOINLINE cache #-}
 
-fetch :: Manager -> Text -> IO Text
-fetch manager url = do
+fetch :: Text -> IO Text
+fetch url = do
     m <- IORef.readIORef cache
 
     case HashMap.lookup url m of
         Nothing -> do
-            body  <- HTTP.fetch manager url
+            body  <- HTTP.fetch url
 
             IORef.writeIORef cache $! HashMap.insert url body m
 
@@ -66,15 +66,15 @@ remoteSchemes :: [RText 'Scheme]
 remoteSchemes = map (fromJust . URI.mkScheme) [ "http", "https" ]
 
 -- | Resolve an `Input` by returning the source code that it represents
-resolve :: Manager -> Input -> IO (Syntax Location Input)
-resolve manager input = case input of
+resolve :: Input -> IO (Syntax Location Input)
+resolve input = case input of
     URI uri mode
         | any (`elem` remoteSchemes) (URI.uriScheme uri) -> do
             let name = URI.renderStr uri
 
             let handler e = throw (HTTPError e)
 
-            text <- Exception.handle handler (fetch manager (Text.pack name))
+            text <- Exception.handle handler (fetch (Text.pack name))
 
             result <- case mode of
                 AsCode -> case Parser.parse name text of

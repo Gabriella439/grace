@@ -20,7 +20,7 @@ import Control.Exception.Safe (MonadCatch)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Text (Text)
 import Grace.Decode (Decoder(..))
-import Grace.HTTP (Manager, Methods)
+import Grace.HTTP (Methods)
 import Grace.Input (Input(..))
 import Grace.Location (Location(..))
 import Grace.Type (Type)
@@ -43,9 +43,7 @@ interpret
     :: (MonadCatch m, MonadIO m)
     => (Text -> Methods) -> Input -> m (Type Location, Value)
 interpret keyToMethods input = do
-    manager <- liftIO HTTP.newManager
-
-    interpretWith keyToMethods [] Nothing manager input
+    interpretWith keyToMethods [] Nothing input
 
 -- | Like `interpret`, but accepts a custom list of bindings
 interpretWith
@@ -56,11 +54,10 @@ interpretWith
     -- ^ @(name, type, value)@ for each custom binding
     -> Maybe (Type Location)
     -- ^ Optional expected type for the input
-    -> Manager
     -> Input
     -> m (Type Location, Value)
-interpretWith keyToMethods bindings maybeAnnotation manager input = do
-    expression <- liftIO (Import.resolve manager input)
+interpretWith keyToMethods bindings maybeAnnotation input = do
+    expression <- liftIO (Import.resolve input)
 
     let annotatedExpression = case maybeAnnotation of
             Just annotation ->
@@ -77,7 +74,7 @@ interpretWith keyToMethods bindings maybeAnnotation manager input = do
 
             return (Context.Annotation variable type_)
 
-    (inferred, elaboratedExpression) <- Infer.typeWith input manager typeContext annotatedExpression
+    (inferred, elaboratedExpression) <- Infer.typeWith input typeContext annotatedExpression
 
     let evaluationContext = do
             (variable, _, value) <- bindings
@@ -93,11 +90,9 @@ load :: (MonadCatch m, MonadIO m) => Decoder a -> Input -> m a
 load Decoder{ decode, expected } input = do
     keyToMethods <- liftIO HTTP.getMethods
 
-    manager <- liftIO HTTP.newManager
-
     let type_ = fmap (\_ -> Unknown) expected
 
-    (_, value) <- interpretWith keyToMethods [] (Just type_) manager input
+    (_, value) <- interpretWith keyToMethods [] (Just type_) input
 
     case decode value of
         Left exception -> Exception.throwM exception

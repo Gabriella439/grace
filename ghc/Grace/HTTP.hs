@@ -1,3 +1,4 @@
+{-# LANGUAGE BlockArguments        #-}
 {-# LANGUAGE DerivingStrategies    #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedStrings     #-}
@@ -8,8 +9,6 @@
 -}
 module Grace.HTTP
     ( HttpException
-    , Manager
-    , newManager
     , fetch
     , HTTP(..)
     , http
@@ -19,6 +18,7 @@ module Grace.HTTP
     , Grace.HTTP.createChatCompletion
     ) where
 
+import Control.Concurrent.MVar (MVar)
 import Control.Exception (Exception(..))
 import Data.ByteString.Lazy (ByteString)
 import Data.Text (Text)
@@ -35,6 +35,7 @@ import Network.HTTP.Client
     , method
     )
 
+import qualified Control.Concurrent.MVar as MVar
 import qualified Control.Exception as Exception
 import qualified Data.Aeson as Aeson
 import qualified Data.Text as Text
@@ -45,6 +46,7 @@ import qualified Network.HTTP.Client as HTTP
 import qualified Network.HTTP.Client.TLS as TLS
 import qualified Network.HTTP.Types as HTTP.Types
 import qualified OpenAI.V1 as OpenAI
+import qualified System.IO.Unsafe as Unsafe
 
 -- | Exception type thrown by `fetch` in the event of any failure
 data HttpException
@@ -55,18 +57,33 @@ data HttpException
 instance Exception HttpException where
     displayException = Text.unpack . renderError
 
+managerMVar :: MVar (Maybe Manager)
+managerMVar = Unsafe.unsafePerformIO (MVar.newMVar Nothing)
+{-# NOINLINE managerMVar #-}
+
 -- | Acquire a new `Manager`
+--
+-- This is safe to call multiple times.  The `Manager` returned by the first
+-- call is cached and reused by subsequent calls.
 newManager :: IO Manager
-newManager = TLS.newTlsManager
+newManager = MVar.modifyMVar managerMVar \maybeManager -> do
+    manager <- case maybeManager of
+        Nothing -> do
+            TLS.newTlsManager
+        Just manager -> do
+            return manager
+
+    return (Just manager, manager)
 
 -- | Fetch a URL (using the @http-client@ package)
 fetch
-    :: Manager
-    -> Text
+    :: Text
     -- ^ URL
     -> IO Text
     -- ^ Response body
-fetch manager url = do
+fetch url = do
+    manager <- newManager
+
     request <- HTTP.parseUrlThrow (Text.unpack url)
 
     let handler :: HTTP.HttpException -> IO a
@@ -81,8 +98,10 @@ fetch manager url = do
         Right lazyText -> return (Text.Lazy.toStrict lazyText)
 
 -- | Make a POST request
-http :: Manager -> HTTP -> IO ByteString
-http manager GET{ url, headers, parameters } = do
+http :: HTTP -> IO ByteString
+http GET{ url, headers, parameters } = do
+    manager <- newManager
+
     request₀ <- HTTP.parseUrlThrow (Text.unpack url)
 
     let request₁ = request₀
@@ -106,7 +125,9 @@ http manager GET{ url, headers, parameters } = do
     response <- Exception.handle handler (HTTP.httpLbs request₂ manager)
 
     return (HTTP.responseBody response)
-http manager POST{ url, headers, request } = do
+http POST{ url, headers, request } = do
+    manager <- newManager
+
     request₀ <- HTTP.parseUrlThrow (Text.unpack url)
 
     let request₁ = request₀

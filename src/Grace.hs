@@ -225,11 +225,9 @@ main = Exception.handle handler do
                         , offset = 4
                         }
 
-            manager <- HTTP.newManager
-
             let expected = Type.Scalar{ scalar = Monotype.Text, location }
 
-            (_, value) <- Interpret.interpretWith keyToMethods [] (Just expected) manager input
+            (_, value) <- Interpret.interpretWith keyToMethods [] (Just expected) input
 
             case value of
                 Value.Text text -> Text.IO.putStr text
@@ -267,8 +265,6 @@ main = Exception.handle handler do
                     traverse_ formatFile files
 
         Builtins{..} -> do
-            manager <- HTTP.newManager
-
             let displayBuiltin :: Builtin -> IO ()
                 displayBuiltin builtin = do
                     let code =
@@ -286,7 +282,7 @@ main = Exception.handle handler do
 
                     let input = Code "(input)" code
 
-                    (type_, _) <- Infer.typeOf input manager expression
+                    (type_, _) <- Infer.typeOf input expression
 
                     let annotated :: Syntax Location Void
                         annotated =

@@ -941,7 +941,7 @@ renderInput keyToMethods _ type_ = do
             let input_ = Code "(input)" text
 
             result <- (liftIO . Exception.try) do
-                (_, value) <- Interpret.interpretWith keyToMethods [] (Just type_) () input_
+                (_, value) <- Interpret.interpretWith keyToMethods [] (Just type_) input_
 
                 return value
 
@@ -1082,10 +1082,10 @@ main = do
                     setDisplay error  "block"
 
                     result <- Exception.try do
-                        expression <- Import.resolve () input_
+                        expression <- Import.resolve input_
 
                         let run = do
-                                (inferred, elaboratedExpression) <- Infer.typeWith input_ () [] expression
+                                (inferred, elaboratedExpression) <- Infer.typeWith input_ [] expression
 
                                 value <- Normalize.evaluate keyToMethods [] elaboratedExpression
 
