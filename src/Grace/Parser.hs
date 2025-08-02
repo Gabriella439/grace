@@ -998,34 +998,31 @@ grammar endsWithBrace = mdo
     let application function argument =
             Syntax.Application{ location = Syntax.location function, .. }
 
-    applicationExpression <- rule
-        (   do  location <- locatedToken Grace.Parser.Prompt
+    applicationExpression <- rule do
+        e <-  (   do  location <- locatedToken Grace.Parser.Prompt
 
-                arguments <- projectExpression
+                      arguments <- projectExpression
 
-                es <- many projectExpression
+                      return Syntax.Prompt{ schema = Nothing, ..  }
 
-                return do
-                    let nil = Syntax.Prompt{ schema = Nothing, ..  }
-                    foldl application nil es
-        <|> do  location <- locatedToken Grace.Parser.HTTP
+              <|> do  location <- locatedToken Grace.Parser.HTTP
 
-                arguments <- projectExpression
+                      arguments <- projectExpression
 
-                es <- many projectExpression
+                      return Syntax.HTTP{ schema = Nothing, ..  }
 
-                return do
-                    let nil = Syntax.HTTP{ arguments, schema = Nothing, ..  }
-                    foldl application nil es
-        <|> do  es <- some1 projectExpression
-                return (foldl application (NonEmpty.head es) (NonEmpty.tail es))
-        <|> do  location <- locatedToken Grace.Parser.Fold
-                ~(handlers :| es) <- some1 projectExpression
+              <|> do  location <- locatedToken Grace.Parser.Fold
 
-                return do
-                    let nil = Syntax.Fold{..}
-                    foldl application nil es
-        )
+                      handlers <- projectExpression
+
+                      return Syntax.Fold{..}
+
+              <|> do  projectExpression
+              )
+
+        es <- many projectExpression
+
+        return (foldl application e es)
 
     projectExpression <- rule do
         let snoc location record f =
