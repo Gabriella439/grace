@@ -1,11 +1,12 @@
-{-# LANGUAGE BlockArguments     #-}
-{-# LANGUAGE DataKinds          #-}
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE FlexibleContexts   #-}
-{-# LANGUAGE NamedFieldPuns     #-}
-{-# LANGUAGE OverloadedStrings  #-}
-{-# LANGUAGE RecordWildCards    #-}
-{-# LANGUAGE TypeApplications   #-}
+{-# LANGUAGE BlockArguments      #-}
+{-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE DerivingStrategies  #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE NamedFieldPuns      #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 
 -- | This module implements the main interpretation function
 module Grace.Interpret
@@ -19,7 +20,7 @@ module Grace.Interpret
 import Control.Exception.Safe (MonadCatch)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Text (Text)
-import Grace.Decode (Decoder(..))
+import Grace.Decode (FromGrace(..))
 import Grace.HTTP (Methods)
 import Grace.Input (Input(..))
 import Grace.Location (Location(..))
@@ -86,11 +87,11 @@ interpretWith keyToMethods bindings maybeAnnotation input = do
     return (inferred, value)
 
 -- | Load a Grace expression
-load :: (MonadCatch m, MonadIO m) => Decoder a -> Input -> m a
-load Decoder{ decode, expected } input = do
+load :: forall m a . (FromGrace a, MonadCatch m, MonadIO m) => Input -> m a
+load input = do
     keyToMethods <- liftIO HTTP.getMethods
 
-    let type_ = fmap (\_ -> Unknown) expected
+    let type_ = fmap (\_ -> Unknown) (expected @a)
 
     (_, value) <- interpretWith keyToMethods [] (Just type_) input
 

@@ -43,7 +43,7 @@ import Data.Sequence (ViewL(..), (<|))
 import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Context (Context, Entry)
-import Grace.Decode (Decoder(..), FromGrace(..))
+import Grace.Decode (FromGrace(..))
 import Grace.Existential (Existential)
 import Grace.HTTP (HTTP(..))
 import Grace.Input (Input)
@@ -1825,7 +1825,7 @@ infer e₀ = do
             return (type_, Syntax.Prompt{ arguments = solveSyntax _Γ newArguments, schema = Just type_, .. })
 
         Syntax.HTTP{ location, arguments, schema } -> do
-            let input = fmap (\_ -> location) (expected (decoder @HTTP))
+            let input = fmap (\_ -> location) (expected @HTTP)
 
             newArguments <- check arguments input
 
@@ -2769,7 +2769,7 @@ check e Type.Forall{..} = do
     scoped (Context.Variable domain name) do
         check e type_
 
-check Syntax.Application{ location = location₀, function = Syntax.Alternative{ location = location₁, name }, argument } expected@Type.Union{ alternatives = Type.Alternatives alternativeTypes remainingAlternatives } = do
+check Syntax.Application{ location = location₀, function = Syntax.Alternative{ location = location₁, name }, argument } annotation@Type.Union{ alternatives = Type.Alternatives alternativeTypes remainingAlternatives } = do
     existential <- fresh
 
     push (Context.UnsolvedAlternatives existential)
@@ -2810,7 +2810,7 @@ check Syntax.Application{ location = location₀, function = Syntax.Alternative{
                         }
 
                 _ -> do
-                    Exception.throwIO (UnionTypeMismatch actual expected [ name ])
+                    Exception.throwIO (UnionTypeMismatch actual annotation [ name ])
 
 check Syntax.Scalar{ scalar = Syntax.Null, .. } Type.Optional{ } = do
     return Syntax.Scalar{ scalar = Syntax.Null, .. }
@@ -2987,7 +2987,7 @@ check Syntax.Prompt{ schema = Nothing, .. } annotation = do
     return Syntax.Prompt{ arguments = newArguments, schema = Just annotation, .. }
 
 check Syntax.HTTP{ schema = Nothing, .. } annotation = do
-    let input = fmap (\_ -> location) (expected (decoder @HTTP))
+    let input = fmap (\_ -> location) (expected @HTTP)
 
     newArguments <- check arguments input
 

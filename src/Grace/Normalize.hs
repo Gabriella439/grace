@@ -38,7 +38,7 @@ import Data.Typeable (Typeable)
 import Data.Vector (Vector)
 import Data.Void (Void)
 import Grace.DataFile as DataFile
-import Grace.Decode (Decoder(..), FromGrace(..))
+import Grace.Decode (FromGrace(..))
 import Grace.HTTP (Methods)
 import Grace.Input (Input(..))
 import Grace.Location (Location(..))
@@ -642,7 +642,7 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
 
                                 return e
                             else do
-                                let decode text = do
+                                let decode_ text = do
                                         let bytes = Encoding.encodeUtf8 text
 
                                         let lazyBytes = ByteString.Lazy.fromStrict bytes
@@ -683,7 +683,7 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                                             Right result -> return result
 
                                         let extract text = do
-                                                v <- decode text
+                                                v <- decode_ text
 
                                                 case fromJSON defaultedSchema v of
                                                     Left invalidJSON -> Exception.throwIO invalidJSON
@@ -704,7 +704,7 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                                             Right result -> return result
 
                                         let extract text = do
-                                                v <- decode text
+                                                v <- decode_ text
 
                                                 expression <- case fromJSON adjustedSchema v of
                                                     Left invalidJSON -> Exception.throwIO invalidJSON
@@ -745,7 +745,7 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
             Syntax.HTTP{ location, arguments, schema = Just schema } -> Concurrently do
                 newArguments <- runConcurrently (loop env arguments)
 
-                http <- case decode decoder newArguments of
+                http <- case decode newArguments of
                     Left exception -> Exception.throwIO exception
                     Right http -> return http
 
