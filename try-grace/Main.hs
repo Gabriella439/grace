@@ -492,33 +492,24 @@ renderValue keyToMethods ref parent Type.Function{ input, output } function = do
 
             outputVal <- createElement "div"
 
-            spinner <- createElement "div"
-            setAttribute spinner "class"    "spinner-border text-primary"
-            setAttribute spinner "role"     "status"
-            setAttribute spinner "overflow" "hidden"
-
-            error <- createElement "pre"
+            (setBusy, setSuccess, setError) <- createForm False outputVal
 
             let render value = do
-                    replaceChild outputVal spinner
+                    setBusy
 
                     result <- (liftIO . Exception.try) do
                         newValue <- Normalize.apply keyToMethods function value
 
-                        refreshInput <- renderValue keyToMethods ref outputVal output newValue
+                        refreshInput <- setSuccess output newValue \htmlWrapper -> do
+                            renderValue keyToMethods ref htmlWrapper output newValue
 
                         refreshInput
 
                     case result of
                         Left exception -> do
-                            setTextContent error (Text.pack (displayException (exception :: SomeException)))
+                            setError (Text.pack (displayException (exception :: SomeException)))
 
-                            replaceChild outputVal error
-
-                            empty
                         Right r -> do
-                            replaceChildren outputVal (Array.fromList [])
-
                             return r
 
             debouncedRender <- debounce render
@@ -1009,6 +1000,129 @@ debounce f = do
 
         STM.atomically (TVar.writeTVar tvar Ready)
 
+createForm
+    :: Bool
+    -- ^ Show tabs?
+    -> JSVal
+    -> IO
+        ( IO ()
+        , Type Location -> Value -> (JSVal -> IO (IO ())) -> IO (IO ())
+        , Text -> IO ()
+        )
+createForm showTabs output = do
+    let toTab class_ name = do
+            a <- createElement "a"
+            setAttribute a "class" class_
+            setAttribute a "href"  "#"
+            setTextContent a name
+
+            item <- createElement "li"
+            setAttribute item "class" "nav-item"
+
+            replaceChild item a
+
+            return item
+
+    formTab <- toTab "nav-link mode-tab active" "Form"
+    codeTab <- toTab "nav-link mode-tab"        "Code"
+    typeTab <- toTab "nav-link mode-tab"        "Type"
+
+    let tabs = [ formTab, codeTab, typeTab ]
+
+    tabsList <- createElement "ul"
+    setAttribute tabsList "class" "nav nav-tabs"
+    setAttribute tabsList "class" "nav nav-tabs"
+
+    replaceChildren tabsList (Array.fromList tabs)
+
+    pane <- createElement "div"
+
+    success <- createElement "success"
+
+    let successChildren =
+            if showTabs then [ tabsList, pane ] else [ pane ]
+
+    replaceChildren success (Array.fromList successChildren)
+
+    codemirrorBuffer <- getElementById "codemirror-buffer"
+
+    let createCodemirrorOutput = do
+            textarea <- createElement "textarea"
+
+            replaceChild codemirrorBuffer textarea
+
+            codeMirror <- setupCodemirrorOutput textarea
+
+            replaceChildren codemirrorBuffer (Array.fromList [])
+
+            return (codeMirror, getWrapperElement codeMirror)
+
+    htmlWrapper <- createElement "div"
+    setAttribute htmlWrapper "class" "form"
+
+    (codeOutput, codeWrapper) <- createCodemirrorOutput
+    (typeOutput, typeWrapper) <- createCodemirrorOutput
+
+    let registerTabCallback selectedTab action = do
+            callback <- Callback.asyncCallback do
+                let deselect tab = removeClass tab "active"
+
+                traverse_ deselect tabs
+
+                addClass selectedTab "active"
+
+                action
+
+            addEventListener selectedTab "click" callback
+
+    registerTabCallback formTab do
+        replaceChild pane htmlWrapper
+
+    registerTabCallback codeTab do
+        replaceChild pane codeWrapper
+
+        refresh codeOutput
+
+    registerTabCallback typeTab do
+        replaceChild pane typeWrapper
+
+        refresh typeOutput
+
+    replaceChild pane htmlWrapper
+
+    spinner <- do
+        spinner <- createElement "div"
+        setAttribute spinner "class"    "spinner-border text-primary"
+        setAttribute spinner "role"     "status"
+        setAttribute spinner "overflow" "hidden"
+
+        return spinner
+
+    error <- createElement "pre"
+
+    let setBusy = do
+            replaceChild output spinner
+
+    let setError text = do
+            setTextContent error text
+
+            replaceChild output error
+
+    let setSuccess type_ value render = do
+            setValue codeOutput (valueToText value)
+            setValue typeOutput (typeToText type_)
+
+            refreshInput <- render htmlWrapper
+
+            replaceChild output success
+
+            refresh codeOutput
+            refresh typeOutput
+
+            return refreshInput
+
+    return (setBusy, setSuccess, setError)
+
 main :: IO ()
 main = do
     inputArea     <- getElementById "input"
@@ -1028,87 +1142,9 @@ main = do
 
     keyToMethods <- HTTP.getMethods
 
-    let toTab class_ name = do
-            a <- createElement "a"
-            setAttribute a "class" class_
-            setAttribute a "href"  "#"
-            setTextContent a name
-
-            item <- createElement "li"
-            setAttribute item "class" "nav-item"
-
-            replaceChild item a
-
-            return item
-
-    formTab <- toTab "nav-link mode-tab active" "Form"
-    codeTab <- toTab "nav-link mode-tab" "Code"
-    typeTab <- toTab "nav-link mode-tab" "Type"
-
-    let tabs = [ formTab, codeTab, typeTab ]
-
-    tabsList <- createElement "ul"
-    setAttribute tabsList "class" "nav nav-tabs"
-    setAttribute tabsList "class" "nav nav-tabs"
-
-    replaceChildren tabsList (Array.fromList tabs)
-
-    pane <- createElement "div"
-
-    success <- createElement "success"
-
-    replaceChildren success (Array.fromList [ tabsList, pane ])
-
-    codemirrorBuffer <- getElementById "codemirror-buffer"
-
-    let createCodemirrorOutput = do
-            textarea <- createElement "textarea"
-
-            replaceChild codemirrorBuffer textarea
-
-            codeMirror <- setupCodemirrorOutput textarea
-
-            replaceChildren codemirrorBuffer (Array.fromList [])
-
-            return (codeMirror, getWrapperElement codeMirror)
-
-    htmlWrapper <- createElement "div"
-    (codeOutput, codeWrapper) <- createCodemirrorOutput
-    (typeOutput, typeWrapper) <- createCodemirrorOutput
-
-    replaceChild pane htmlWrapper
-
-    spinner <- do
-        spinner <- createElement "div"
-        setAttribute spinner "class" "spinner-border text-primary"
-        setAttribute spinner "role"  "status"
-
-        return spinner
-
-    error <- createElement "pre"
-
     output <- getElementById "output"
 
-    let setBusy = do
-            replaceChild output spinner
-
-    let setError text = do
-            setTextContent error text
-
-            replaceChild output error
-
-    let setSuccess type_ value = do
-            setValue codeOutput (valueToText value)
-            setValue typeOutput (typeToText type_)
-
-            refreshInput <- renderValue keyToMethods counter htmlWrapper type_ value
-
-            replaceChild output success
-
-            refresh codeOutput
-            refresh typeOutput
-
-            refreshInput
+    (setBusy, setSuccess, setError) <- createForm True output
 
     let interpret () = do
             text <- getValue codeInput
@@ -1145,7 +1181,10 @@ main = do
 
                         value <- Normalize.evaluate keyToMethods [] elaboratedExpression
 
-                        setSuccess inferred value
+                        refreshInput <- setSuccess inferred value \htmlWrapper -> do
+                            renderValue keyToMethods counter htmlWrapper inferred value
+
+                        refreshInput
 
                     case result of
                         Left exception -> do
@@ -1292,31 +1331,6 @@ main = do
         setValue codeInput (URI.Encode.decodeText expression)
 
     debouncedInterpret ()
-
-    let registerTabCallback tab action = do
-            callback <- Callback.asyncCallback do
-                let deselect tab = removeClass tab "active"
-
-                traverse_ deselect tabs
-
-                addClass tab "active"
-
-                action
-
-            addEventListener tab "click" callback
-
-    registerTabCallback formTab do
-        replaceChild pane htmlWrapper
-
-    registerTabCallback codeTab do
-        replaceChild pane codeWrapper
-
-        refresh codeOutput
-
-    registerTabCallback typeTab do
-        replaceChild pane typeWrapper
-
-        refresh typeOutput
 
 helloWorldExample :: Text
 helloWorldExample =

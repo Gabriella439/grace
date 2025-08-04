@@ -22,23 +22,8 @@
 <br/>
 <button id="start-tutorial" type="button" class="btn btn-primary" style="display: none;">Try the tutorial</button>
 <br/>
-<div id="output" style="display: none;">
-  <ul class="nav nav-tabs">
-    <li class="nav-item">
-      <a id="form-tab" class="nav-link mode-tab active" href="#">Form</a>
-    </li>
-    <li class="nav-item">
-      <a id="code-tab" class="nav-link mode-tab" href="#">Code</a>
-    </li>
-    <li class="nav-item">
-      <a id="type-tab" class="nav-link mode-tab" href="#">Type</a>
-    </li>
-  </ul>
-  <div class="display" id="form"></div>
-  <textarea class="display" style="display: none;" id="code"></textarea>
-  <textarea class="display" style="display: none;" id="type"></textarea>
-</div>
-<pre id="error"></pre>
+<div id="output"></div>
+<div id="codemirror-buffer"></div>
 </main>
 </div>
 </body>
@@ -50,12 +35,6 @@ function replaceChildrenWorkaround(x, y) {
 }
 function deleteSearchParamWorkaround(x, y) {
     x.delete(y)
-}
-function select(tabId) {
-  Array.from(document.getElementsByClassName("mode-tab")).forEach(element => {
-    element.classList.remove("active");
-  });
-  document.getElementById(tabId).classList.toggle("active");
 }
 function autoResize(element) {
   element.addEventListener('input', () => {
