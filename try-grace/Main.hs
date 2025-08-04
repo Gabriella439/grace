@@ -241,11 +241,11 @@ refresh a = liftIO (refresh_ a)
 foreign import javascript unsafe "select($1)"
     select_ :: JSString -> IO ()
 
-foreign import javascript unsafe "$1.getWrapperElement()"
-    getWrapperElement :: JSVal -> JSVal
-
 select :: MonadIO io => Text -> io ()
 select a = liftIO (select_ (fromText a))
+
+foreign import javascript unsafe "$1.getWrapperElement()"
+    getWrapperElement :: JSVal -> JSVal
 
 foreign import javascript unsafe "$1.on('change', $2)"
     onChange_ :: JSVal -> Callback (IO ()) -> IO ()
@@ -492,20 +492,34 @@ renderValue keyToMethods ref parent Type.Function{ input, output } function = do
 
             outputVal <- createElement "div"
 
+            spinner <- createElement "div"
+            setAttribute spinner "class"    "spinner-border text-primary"
+            setAttribute spinner "role"     "status"
+            setAttribute spinner "overflow" "hidden"
+
+            error <- createElement "pre"
+
             let render value = do
-                    spinner <- createElement "div"
-
-                    setAttribute spinner "class"    "spinner-border text-primary"
-                    setAttribute spinner "role"     "status"
-                    setAttribute spinner "overflow" "hidden"
-
                     replaceChild outputVal spinner
 
-                    newValue <- Normalize.apply keyToMethods function value
+                    result <- (liftIO . Exception.try) do
+                        newValue <- Normalize.apply keyToMethods function value
 
-                    refreshInput <- renderValue keyToMethods ref outputVal output newValue
+                        refreshInput <- renderValue keyToMethods ref outputVal output newValue
 
-                    refreshInput
+                        refreshInput
+
+                    case result of
+                        Left exception -> do
+                            setTextContent error (Text.pack (displayException (exception :: SomeException)))
+
+                            replaceChild outputVal error
+
+                            empty
+                        Right r -> do
+                            replaceChildren outputVal (Array.fromList [])
+
+                            return r
 
             debouncedRender <- debounce render
 
@@ -946,12 +960,12 @@ renderInput keyToMethods _ type_ = do
                 return value
 
             case result of
-                Left interpretError -> do
+                Left exception -> do
                     if (text == "")
                         then do
                             setDisplay error "none"
                         else do
-                            setTextContent error (Text.pack (displayException (interpretError :: SomeException)))
+                            setTextContent error (Text.pack (displayException (exception :: SomeException)))
 
                             setDisplay error "block"
 
@@ -998,27 +1012,11 @@ debounce f = do
 main :: IO ()
 main = do
     inputArea     <- getElementById "input"
-    error         <- getElementById "error"
-    output        <- getElementById "output"
-    codeArea      <- getElementById "code"
-    typeArea      <- getElementById "type"
-    form          <- getElementById "form"
     startTutorial <- getElementById "start-tutorial"
 
     codeInput  <- setupCodemirrorInput inputArea
-    codeOutput <- setupCodemirrorOutput codeArea
-    typeOutput <- setupCodemirrorOutput typeArea
 
     focus codeInput
-
-    setDisplay form "block"
-    setDisplay (getWrapperElement codeOutput) "none"
-    setDisplay (getWrapperElement typeOutput) "none"
-
-    spinner <- createElement "div"
-
-    setAttribute spinner "class" "spinner-border text-primary"
-    setAttribute spinner "role"  "status"
 
     counter <- IORef.newIORef 0
 
@@ -1030,20 +1028,82 @@ main = do
 
     keyToMethods <- HTTP.getMethods
 
+    let toTab class_ name = do
+            a <- createElement "a"
+            setAttribute a "class" class_
+            setAttribute a "href"  "#"
+            setTextContent a name
+
+            item <- createElement "li"
+            setAttribute item "class" "nav-item"
+
+            replaceChild item a
+
+            return item
+
+    formTab <- toTab "nav-link mode-tab active" "Form"
+    codeTab <- toTab "nav-link mode-tab" "Code"
+    typeTab <- toTab "nav-link mode-tab" "Type"
+
+    let tabs = [ formTab, codeTab, typeTab ]
+
+    tabsList <- createElement "ul"
+    setAttribute tabsList "class" "nav nav-tabs"
+    setAttribute tabsList "class" "nav nav-tabs"
+
+    replaceChildren tabsList (Array.fromList tabs)
+
+    pane <- createElement "div"
+
+    success <- createElement "success"
+
+    replaceChildren success (Array.fromList [ tabsList, pane ])
+
+    codemirrorBuffer <- getElementById "codemirror-buffer"
+
+    let createCodemirrorOutput = do
+            textarea <- createElement "textarea"
+
+            replaceChild codemirrorBuffer textarea
+
+            codeMirror <- setupCodemirrorOutput textarea
+
+            replaceChildren codemirrorBuffer (Array.fromList [])
+
+            return (codeMirror, getWrapperElement codeMirror)
+
+    htmlWrapper <- createElement "div"
+    (codeOutput, codeWrapper) <- createCodemirrorOutput
+    (typeOutput, typeWrapper) <- createCodemirrorOutput
+
+    replaceChild pane htmlWrapper
+
+    spinner <- do
+        spinner <- createElement "div"
+        setAttribute spinner "class" "spinner-border text-primary"
+        setAttribute spinner "role"  "status"
+
+        return spinner
+
+    error <- createElement "pre"
+
+    output <- getElementById "output"
+
+    let setBusy = do
+            replaceChild output spinner
+
     let setError text = do
             setTextContent error text
 
-            setDisplay output "none"
-            setDisplay error  "block"
+            replaceChild output error
 
-    let setOutput type_ value = do
+    let setSuccess type_ value = do
             setValue codeOutput (valueToText value)
             setValue typeOutput (typeToText type_)
 
-            refreshInput <- renderValue keyToMethods counter form type_ value
+            refreshInput <- renderValue keyToMethods counter htmlWrapper type_ value
 
-            setDisplay error  "none"
-            setDisplay output "block"
+            replaceChild output success
 
             refresh codeOutput
             refresh typeOutput
@@ -1069,39 +1129,27 @@ main = do
                     Monad.unless tutorial do
                         setDisplay startTutorial "inline-block"
 
-                    setError ""
+                    replaceChildren output (Array.fromList [])
 
                 | otherwise -> do
                     setDisplay startTutorial "none"
 
+                    setBusy
+
                     let input_ = Code "(input)" text
-
-                    replaceChild error spinner
-
-                    setDisplay output "none"
-                    setDisplay error  "block"
 
                     result <- Exception.try do
                         expression <- Import.resolve input_
 
-                        let run = do
-                                (inferred, elaboratedExpression) <- Infer.typeWith input_ [] expression
+                        (inferred, elaboratedExpression) <- Infer.typeWith input_ [] expression
 
-                                value <- Normalize.evaluate keyToMethods [] elaboratedExpression
+                        value <- Normalize.evaluate keyToMethods [] elaboratedExpression
 
-                                setOutput inferred value
-
-                        if Lens.has Syntax.effects expression
-                            then do
-                                setDisplay output "none"
-
-                                run
-                            else do
-                                run
+                        setSuccess inferred value
 
                     case result of
-                        Left interpretError -> do
-                            setError (Text.pack (displayException (interpretError :: SomeException)))
+                        Left exception -> do
+                            setError (Text.pack (displayException (exception :: SomeException)))
                         Right () -> do
                             return ()
 
@@ -1245,31 +1293,29 @@ main = do
 
     debouncedInterpret ()
 
-    let registerTabCallback tabID action = do
-            tabElement <- getElementById tabID
+    let registerTabCallback tab action = do
+            callback <- Callback.asyncCallback do
+                let deselect tab = removeClass tab "active"
 
-            callback <- Callback.asyncCallback action
+                traverse_ deselect tabs
 
-            addEventListener tabElement "click" callback
+                addClass tab "active"
 
-    registerTabCallback "form-tab" do
-        select "form-tab"
-        setDisplay form "block"
-        setDisplay (getWrapperElement codeOutput) "none"
-        setDisplay (getWrapperElement typeOutput) "none"
+                action
 
-    registerTabCallback "code-tab" do
-        select "code-tab"
-        setDisplay form "none"
-        setDisplay (getWrapperElement codeOutput) "block"
-        setDisplay (getWrapperElement typeOutput) "none"
+            addEventListener tab "click" callback
+
+    registerTabCallback formTab do
+        replaceChild pane htmlWrapper
+
+    registerTabCallback codeTab do
+        replaceChild pane codeWrapper
+
         refresh codeOutput
 
-    registerTabCallback "type-tab" do
-        select "type-tab"
-        setDisplay form "none"
-        setDisplay (getWrapperElement codeOutput) "none"
-        setDisplay (getWrapperElement typeOutput) "block"
+    registerTabCallback typeTab do
+        replaceChild pane typeWrapper
+
         refresh typeOutput
 
 helloWorldExample :: Text
