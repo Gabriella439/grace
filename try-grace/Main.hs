@@ -1004,7 +1004,6 @@ main = do
     typeArea      <- getElementById "type"
     form          <- getElementById "form"
     startTutorial <- getElementById "start-tutorial"
-    runButton     <- getElementById "run"
 
     codeInput  <- setupCodemirrorInput inputArea
     codeOutput <- setupCodemirrorOutput codeArea
@@ -1051,7 +1050,7 @@ main = do
 
             refreshInput
 
-    let interpret shouldRun = do
+    let interpret () = do
             text <- getValue codeInput
 
             if text == ""
@@ -1072,8 +1071,6 @@ main = do
 
                     setError ""
 
-                    setDisplay runButton "none"
-
                 | otherwise -> do
                     setDisplay startTutorial "none"
 
@@ -1087,23 +1084,19 @@ main = do
                     result <- Exception.try do
                         expression <- Import.resolve input_
 
-                        (inferred, elaboratedExpression) <- Infer.typeWith input_ [] expression
-
                         let run = do
+                                (inferred, elaboratedExpression) <- Infer.typeWith input_ [] expression
+
                                 value <- Normalize.evaluate keyToMethods [] elaboratedExpression
 
                                 setOutput inferred value
 
                         if Lens.has Syntax.effects expression
                             then do
-                                setDisplay runButton "block"
                                 setDisplay output "none"
-                                setDisplay error "none"
 
-                                Monad.when shouldRun run
+                                run
                             else do
-                                setDisplay runButton "none"
-
                                 run
 
                     case result of
@@ -1114,7 +1107,7 @@ main = do
 
     debouncedInterpret <- debounce interpret
 
-    inputCallback <- Callback.asyncCallback (debouncedInterpret False)
+    inputCallback <- Callback.asyncCallback (debouncedInterpret ())
 
     onChange codeInput inputCallback
 
@@ -1219,7 +1212,7 @@ main = do
 
                 IORef.writeIORef tutorialRef False
 
-                debouncedInterpret False
+                debouncedInterpret ()
 
                 remove stopTutorial
 
@@ -1250,11 +1243,7 @@ main = do
 
         setValue codeInput (URI.Encode.decodeText expression)
 
-    runCallback <- Callback.asyncCallback (debouncedInterpret True)
-
-    addEventListener runButton "click" runCallback
-
-    debouncedInterpret False
+    debouncedInterpret ()
 
     let registerTabCallback tabID action = do
             tabElement <- getElementById tabID
