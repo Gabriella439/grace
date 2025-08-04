@@ -22,7 +22,6 @@ module Grace.HTTP
 
 import Control.Concurrent.MVar (MVar)
 import Control.Exception (Exception(..))
-import Data.ByteString.Lazy (ByteString)
 import Data.Text (Text)
 import Data.Text.Encoding.Error (UnicodeException)
 import Grace.HTTP.Type (Header(..), HTTP(..), Parameter(..), completeHeaders)
@@ -100,7 +99,7 @@ fetch url = do
         Right lazyText -> return (Text.Lazy.toStrict lazyText)
 
 -- | Make a POST request
-http :: HTTP -> IO ByteString
+http :: HTTP -> IO Text
 http GET{ url, headers, parameters } = do
     manager <- newManager
 
@@ -126,7 +125,10 @@ http GET{ url, headers, parameters } = do
 
     response <- Exception.handle handler (HTTP.httpLbs request₂ manager)
 
-    return (HTTP.responseBody response)
+    case Lazy.Encoding.decodeUtf8' (HTTP.responseBody response) of
+        Left exception -> Exception.throwIO (NotUTF8 exception)
+        Right lazyText -> return (Text.Lazy.toStrict lazyText)
+
 http POST{ url, headers, request } = do
     manager <- newManager
 
@@ -148,7 +150,9 @@ http POST{ url, headers, request } = do
 
     response <- Exception.handle handler (HTTP.httpLbs request₂ manager)
 
-    return (HTTP.responseBody response)
+    case Lazy.Encoding.decodeUtf8' (HTTP.responseBody response) of
+        Left exception -> Exception.throwIO (NotUTF8 exception)
+        Right lazyText -> return (Text.Lazy.toStrict lazyText)
 
 -- | Render an `HttpException` as `Data.Text.Text`
 renderError :: HttpException -> Text

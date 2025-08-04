@@ -751,9 +751,11 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
 
                 responseBody <- liftIO (HTTP.http http)
 
-                responseValue <- case Aeson.eitherDecode responseBody of
+                let bytes = ByteString.Lazy.fromStrict (Encoding.encodeUtf8 responseBody)
+
+                responseValue <- case Aeson.eitherDecode bytes of
                     Left message_ ->
-                        Exception.throwIO JSONDecodingFailed{ message = message_, text = error "TODO" }
+                        Exception.throwIO JSONDecodingFailed{ message = message_, text = responseBody }
                     Right responseValue ->
                         return responseValue
 

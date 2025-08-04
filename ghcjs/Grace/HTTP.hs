@@ -23,7 +23,6 @@ import Data.ByteString.Lazy (ByteString)
 import Data.Text (Text)
 import GHCJS.Fetch (Request(..), RequestOptions(..), JSPromiseException)
 import GHCJS.Fetch.Types (JSResponse)
-import Grace.Decode (FromGrace)
 import Grace.HTTP.Type (Header(..), HTTP(..), Parameter(..), completeHeaders)
 import OpenAI.V1.Chat.Completions (ChatCompletionObject, CreateChatCompletion)
 
@@ -51,6 +50,8 @@ fetch url = do
     let request = Request
             { reqUrl = JSString.pack (Text.unpack url)
             , reqOptions = Fetch.defaultRequestOptions
+                { reqOptMethod = HTTP.Types.methodGet
+                }
             }
 
     response <- Fetch.fetch request
@@ -59,14 +60,14 @@ fetch url = do
 
     return (Text.pack (JSString.unpack jsString))
 
-responseToBytes :: JSResponse -> IO ByteString
-responseToBytes response = do
+responseToText :: JSResponse -> IO Text
+responseToText response = do
     jsString <- Fetch.responseText response
 
-    return (ByteString.Lazy.fromStrict (Encoding.encodeUtf8 (Text.pack (JSString.unpack jsString))))
+    return (Text.pack (JSString.unpack jsString))
 
 -- | Make an HTTP request
-http :: HTTP -> IO ByteString
+http :: HTTP -> IO Text
 http GET{ url, headers, parameters } = do
     reqUrl <- case parameters of
         Nothing -> do
@@ -97,7 +98,7 @@ http GET{ url, headers, parameters } = do
 
     response <- Fetch.fetch request
 
-    responseToBytes response
+    responseToText response
 
 http POST{ url, headers, request } = do
     let reqUrl = JSString.pack (Text.unpack url)
@@ -123,7 +124,7 @@ http POST{ url, headers, request } = do
 
     response <- Fetch.fetch Request{ reqUrl, reqOptions }
 
-    responseToBytes response
+    responseToText response
 
 -- | Render an `HttpException` as `Data.Text.Text`
 renderError :: HttpException -> Text
