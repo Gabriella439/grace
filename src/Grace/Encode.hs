@@ -10,8 +10,8 @@
 
     Example usage:
 
-    >>> encode encoder True
-    Scalar{ location = (), scalar = Bool True }
+    >>> encode True
+    Scalar (Bool True)
 -}
 module Grace.Encode
     ( -- * Classes

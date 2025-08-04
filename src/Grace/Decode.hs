@@ -124,7 +124,7 @@ instance FromGrace Natural where
 
 decodeIntegral
     ::  forall a b
-    .   (FromGrace a, Integral a, Integral b, Bounded b) -- (Integral integral, Bounded num, Num num)
+    .   (FromGrace a, Integral a, Integral b, Bounded b)
     =>  Value -> Either DecodingError b
 decodeIntegral value = do
     integral <- decode @a value
