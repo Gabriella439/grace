@@ -1010,24 +1010,25 @@ createForm
         , Text -> IO ()
         )
 createForm showTabs output = do
-    let toTab class_ name = do
-            a <- createElement "a"
-            setAttribute a "class" class_
-            setAttribute a "href"  "#"
-            setTextContent a name
+    let toTab name = do
+            link <- createElement "a"
+            setAttribute link "class" "nav-link"
+            setAttribute link "href"  "#"
+            setTextContent link name
 
             item <- createElement "li"
             setAttribute item "class" "nav-item"
 
-            replaceChild item a
+            replaceChild item link
 
-            return item
+            return (item, link)
 
-    formTab <- toTab "nav-link mode-tab active" "Form"
-    codeTab <- toTab "nav-link mode-tab"        "Code"
-    typeTab <- toTab "nav-link mode-tab"        "Type"
+    (formTab, formLink) <- toTab "Form"
+    (codeTab, codeLink) <- toTab "Code"
+    (typeTab, typeLink) <- toTab "Type"
 
     let tabs = [ formTab, codeTab, typeTab ]
+    let links = [ formLink, codeLink, typeLink ]
 
     tabsList <- createElement "ul"
     setAttribute tabsList "class" "nav nav-tabs"
@@ -1039,8 +1040,7 @@ createForm showTabs output = do
 
     success <- createElement "success"
 
-    let successChildren =
-            if showTabs then [ tabsList, pane ] else [ pane ]
+    let successChildren = if showTabs then [ tabsList, pane ] else [ pane ]
 
     replaceChildren success (Array.fromList successChildren)
 
@@ -1063,30 +1063,32 @@ createForm showTabs output = do
     (codeOutput, codeWrapper) <- createCodemirrorOutput
     (typeOutput, typeWrapper) <- createCodemirrorOutput
 
-    let registerTabCallback selectedTab action = do
+    let registerTabCallback selectedTab selectedLink action = do
             callback <- Callback.asyncCallback do
-                let deselect tab = removeClass tab "active"
+                let deselect link = removeClass link "active"
 
-                traverse_ deselect tabs
+                traverse_ deselect links
 
-                addClass selectedTab "active"
+                addClass selectedLink "active"
 
                 action
 
             addEventListener selectedTab "click" callback
 
-    registerTabCallback formTab do
+    registerTabCallback formTab formLink do
         replaceChild pane htmlWrapper
 
-    registerTabCallback codeTab do
+    registerTabCallback codeTab codeLink do
         replaceChild pane codeWrapper
 
         refresh codeOutput
 
-    registerTabCallback typeTab do
+    registerTabCallback typeTab typeLink do
         replaceChild pane typeWrapper
 
         refresh typeOutput
+
+    addClass formLink "active"
 
     replaceChild pane htmlWrapper
 
