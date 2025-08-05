@@ -31,6 +31,7 @@ import OpenAI.V1.Chat.Completions (ChatCompletionObject, CreateChatCompletion)
 import Network.HTTP.Client
     ( HttpExceptionContent(..)
     , Manager
+    , ManagerSettings(..)
     , Request(..)
     , RequestBody(..)
     , method
@@ -70,7 +71,10 @@ newManager :: IO Manager
 newManager = MVar.modifyMVar managerMVar \maybeManager -> do
     manager <- case maybeManager of
         Nothing -> do
-            TLS.newTlsManager
+            TLS.newTlsManagerWith TLS.tlsManagerSettings
+                { managerResponseTimeout = HTTP.responseTimeoutNone
+                }
+
         Just manager -> do
             return manager
 
