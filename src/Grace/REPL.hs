@@ -1,8 +1,5 @@
-{-# LANGUAGE BlockArguments    #-}
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
-{-# LANGUAGE TypeApplications  #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RecordWildCards  #-}
 
 -- | This module contains the implementation of the @grace repl@ subcommand
 

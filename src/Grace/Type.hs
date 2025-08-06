@@ -1,14 +1,5 @@
-{-# LANGUAGE ApplicativeDo      #-}
-{-# LANGUAGE DataKinds          #-}
-{-# LANGUAGE DeriveGeneric      #-}
-{-# LANGUAGE DeriveLift         #-}
-{-# LANGUAGE DeriveTraversable  #-}
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE FlexibleInstances  #-}
-{-# LANGUAGE NamedFieldPuns     #-}
-{-# LANGUAGE OverloadedStrings  #-}
-{-# LANGUAGE RecordWildCards    #-}
-{-# LANGUAGE TypeApplications   #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE RecordWildCards   #-}
 
 {-# OPTIONS_GHC -Wno-orphans #-}
 

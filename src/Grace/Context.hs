@@ -1,8 +1,5 @@
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE FlexibleContexts   #-}
-{-# LANGUAGE NamedFieldPuns     #-}
-{-# LANGUAGE OverloadedStrings  #-}
-{-# LANGUAGE RecordWildCards    #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RecordWildCards  #-}
 
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 

@@ -67,6 +67,29 @@ library
                      , Grace.Marshal
                      , Paths_grace
 
+  default-extensions:  ApplicativeDo
+                     , BangPatterns
+                     , BlockArguments
+                     , DataKinds
+                     , DefaultSignatures
+                     , DeriveAnyClass
+                     , DeriveFoldable
+                     , DeriveFunctor
+                     , DeriveGeneric
+                     , DeriveLift
+                     , DeriveTraversable
+                     , DerivingStrategies
+                     , DuplicateRecordFields
+                     , GeneralizedNewtypeDeriving
+                     , MultiWayIf
+                     , NamedFieldPuns
+                     , OverloadedStrings
+                     , ScopedTypeVariables
+                     , StandaloneDeriving
+                     , TypeApplications
+                     , TypeOperators
+                     , ViewPatterns
+
   default-language:    Haskell2010
 
   ghc-options:         -Wall

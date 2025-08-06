@@ -1,11 +1,4 @@
-{-# LANGUAGE BlockArguments        #-}
-{-# LANGUAGE DeriveAnyClass        #-}
-{-# LANGUAGE DeriveGeneric         #-}
-{-# LANGUAGE DerivingStrategies    #-}
-{-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE NamedFieldPuns        #-}
-{-# LANGUAGE OverloadedLists       #-}
-{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE OverloadedLists #-}
 
 -- | This module implements the @prompt@ keyword
 module Grace.Prompt

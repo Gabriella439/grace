@@ -1,12 +1,5 @@
-{-# LANGUAGE BlockArguments      #-}
-{-# LANGUAGE DataKinds           #-}
-{-# LANGUAGE DerivingStrategies  #-}
-{-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE NamedFieldPuns      #-}
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE RecordWildCards     #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RecordWildCards  #-}
 
 -- | This module implements the main interpretation function
 module Grace.Interpret

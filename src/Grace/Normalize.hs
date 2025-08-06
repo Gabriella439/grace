@@ -1,13 +1,5 @@
-{-# LANGUAGE ApplicativeDo         #-}
-{-# LANGUAGE BangPatterns          #-}
-{-# LANGUAGE BlockArguments        #-}
-{-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE NamedFieldPuns        #-}
-{-# LANGUAGE OverloadedLists       #-}
-{-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE RecordWildCards       #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE ViewPatterns          #-}
+{-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE RecordWildCards #-}
 
 -- | This module contains the logic for efficiently evaluating an expression
 module Grace.Normalize

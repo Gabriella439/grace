@@ -1,6 +1,4 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE DeriveLift #-}
-{-# LANGUAGE StandaloneDeriving #-}
 
 {-# OPTIONS_GHC -Wno-orphans #-}
 

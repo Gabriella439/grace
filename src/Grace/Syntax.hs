@@ -1,16 +1,6 @@
-{-# LANGUAGE ApplicativeDo         #-}
-{-# LANGUAGE DataKinds             #-}
-{-# LANGUAGE DeriveGeneric         #-}
-{-# LANGUAGE DeriveLift            #-}
-{-# LANGUAGE DeriveTraversable     #-}
-{-# LANGUAGE DerivingStrategies    #-}
-{-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE NamedFieldPuns        #-}
-{-# LANGUAGE OverloadedLists       #-}
-{-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE RecordWildCards       #-}
-{-# LANGUAGE TypeApplications      #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedLists   #-}
+{-# LANGUAGE RecordWildCards   #-}
 
 {-| This module contains the syntax tree used for the surface syntax (i.e. the
     result of parsing), representing the code as the user wrote it.

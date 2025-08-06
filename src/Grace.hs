@@ -1,8 +1,4 @@
-{-# LANGUAGE ApplicativeDo     #-}
-{-# LANGUAGE BlockArguments    #-}
-{-# LANGUAGE NamedFieldPuns    #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE RecordWildCards #-}
 
 {-| This module contains the top-level `main` function that implements the
     command-line API

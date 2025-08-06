@@ -1,9 +1,3 @@
-{-# LANGUAGE DeriveFunctor      #-}
-{-# LANGUAGE DeriveGeneric      #-}
-{-# LANGUAGE DeriveLift         #-}
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE OverloadedStrings  #-}
-
 {-| This module stores the `Monotype` type representing monomorphic types and
     utilites for operating on `Monotype`s
 -}

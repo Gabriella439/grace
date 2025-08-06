@@ -1,6 +1,3 @@
-{-# LANGUAGE DerivingStrategies         #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-
 -- | Internal module shared between "Grace.Decode" and "Grace.Encode"
 module Grace.Marshal
     ( Key(..)

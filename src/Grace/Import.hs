@@ -1,8 +1,4 @@
-{-# LANGUAGE DataKinds          #-}
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE NamedFieldPuns     #-}
-{-# LANGUAGE OverloadedStrings  #-}
-{-# LANGUAGE RecordWildCards    #-}
+{-# LANGUAGE RecordWildCards #-}
 
 -- | This module contains the import resolution logic
 module Grace.Import

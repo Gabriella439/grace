@@ -1,10 +1,3 @@
-{-# LANGUAGE DeriveAnyClass        #-}
-{-# LANGUAGE DeriveGeneric         #-}
-{-# LANGUAGE DerivingStrategies    #-}
-{-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE NamedFieldPuns        #-}
-{-# LANGUAGE OverloadedStrings     #-}
-
 -- | This module contains types shared between the GHC and GHCJS implementations
 module Grace.HTTP.Type where
 

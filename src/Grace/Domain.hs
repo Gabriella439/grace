@@ -1,8 +1,3 @@
-{-# LANGUAGE DeriveGeneric      #-}
-{-# LANGUAGE DeriveLift         #-}
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE OverloadedStrings  #-}
-
 {-| This module exists primarily to avoid a name clash with constructors of the
     same name in the "Grace.Type" module
 -}

@@ -1,11 +1,6 @@
-{-# LANGUAGE ApplicativeDo      #-}
-{-# LANGUAGE BlockArguments     #-}
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE FlexibleContexts   #-}
-{-# LANGUAGE NamedFieldPuns     #-}
-{-# LANGUAGE OverloadedStrings  #-}
-{-# LANGUAGE RecordWildCards    #-}
-{-# LANGUAGE RecursiveDo        #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RecordWildCards  #-}
+{-# LANGUAGE RecursiveDo      #-}
 
 {-| This module contains the logic for lexing and parsing Grace files
 

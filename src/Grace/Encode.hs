@@ -1,10 +1,5 @@
-{-# LANGUAGE DefaultSignatures   #-}
-{-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE FlexibleInstances   #-}
-{-# LANGUAGE NamedFieldPuns      #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications    #-}
-{-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 {-| Use this module to encode Haskell expressions as Grace expressions
 

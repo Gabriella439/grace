@@ -1,7 +1,3 @@
-{-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE NamedFieldPuns        #-}
-{-# LANGUAGE OverloadedStrings     #-}
-
 {-| This module provides a uniform interface for making HTTP requests using both
     GHC and GHCJS
 -}

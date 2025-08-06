@@ -1,12 +1,4 @@
-{-# LANGUAGE ApplicativeDo #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE OverloadedLists #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications #-}
 
 {-| This module contains the `Value` type used internally for efficient
     evaluation of expressions

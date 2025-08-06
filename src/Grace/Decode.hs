@@ -1,15 +1,7 @@
-{-# LANGUAGE AllowAmbiguousTypes   #-}
-{-# LANGUAGE BlockArguments        #-}
-{-# LANGUAGE DefaultSignatures     #-}
-{-# LANGUAGE DeriveFunctor         #-}
-{-# LANGUAGE DerivingStrategies    #-}
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE NamedFieldPuns        #-}
-{-# LANGUAGE OverloadedLists       #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE TypeApplications      #-}
-{-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE OverloadedLists     #-}
 
 {-| Use this module to decode Grace expressions into Haskell expressions
 

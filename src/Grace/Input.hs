@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 -- | This module contains the functions and types that power to URI-base imports
 module Grace.Input
     ( -- * Input

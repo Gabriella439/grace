@@ -1,13 +1,5 @@
-{-# LANGUAGE BlockArguments      #-}
-{-# LANGUAGE DerivingStrategies  #-}
-{-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE MultiWayIf          #-}
-{-# LANGUAGE NamedFieldPuns      #-}
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE RecordWildCards     #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications    #-}
-{-# LANGUAGE ViewPatterns        #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RecordWildCards  #-}
 
 {-| This module is based on the bidirectional type-checking algorithm from:
 
