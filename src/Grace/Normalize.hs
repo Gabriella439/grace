@@ -19,80 +19,51 @@ module Grace.Normalize
 
       -- * Errors related to normalization
     , MissingCredentials(..)
-    , UnsupportedModelOutput(..)
+    , Prompt.UnsupportedModelOutput(..)
     , JSONDecodingFailed(..)
     , MissingSchema(..)
     ) where
 
-import Control.Applicative (empty)
 import Control.Concurrent.Async (Concurrently(..))
-import Control.Exception.Safe (Exception(..), SomeException)
+import Control.Exception.Safe (Exception(..))
 import Control.Monad.IO.Class (liftIO)
 import Data.Bifunctor (first)
-import Data.Foldable (toList)
 import Data.HashMap.Strict.InsOrd (InsOrdHashMap)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Sequence (ViewL(..))
 import Data.Text (Text)
-import Data.Typeable (Typeable)
-import Data.Vector (Vector)
 import Data.Void (Void)
-import Grace.DataFile as DataFile
 import Grace.Decode (FromGrace(..))
 import Grace.HTTP (Methods)
 import Grace.Input (Input(..))
 import Grace.Location (Location(..))
-import Grace.Pretty (Pretty(..))
 import Grace.Syntax (Builtin(..), Scalar(..), Syntax)
-import Grace.Type (Type)
 import Grace.Value (Value)
-import Numeric.Natural (Natural)
-import OpenAI.V1.Models (Model(..))
-import OpenAI.V1.ResponseFormat (JSONSchema(..), ResponseFormat(..))
 import Prelude hiding (lookup, null, succ)
-import System.FilePath ((</>))
-
-import OpenAI.V1.Chat.Completions
-    ( ChatCompletionObject(..)
-    , Choice(..)
-    , CreateChatCompletion(..)
-    , Message(..)
-    , WebSearchOptions(..)
-    , _CreateChatCompletion
-    )
-
-import {-# SOURCE #-} qualified Grace.Interpret as Interpret
 
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
 import qualified Control.Monad as Monad
 import qualified Data.Aeson as Aeson
-import qualified Data.Aeson.Types as Aeson.Types
 import qualified Data.Aeson.Yaml as YAML
 import qualified Data.ByteString.Lazy as ByteString.Lazy
-import qualified Data.Foldable as Foldable
 import qualified Data.HashMap.Strict.InsOrd as HashMap
 import qualified Data.List as List
-import qualified Data.Map as Map
 import qualified Data.Ord as Ord
 import qualified Data.Scientific as Scientific
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
 import qualified Data.Void as Void
-import qualified Grace.Compat as Compat
-import qualified Grace.Domain as Domain
 import qualified Grace.HTTP as HTTP
 import qualified Grace.Infer as Infer
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Pretty as Pretty
+import qualified Grace.Prompt as Prompt
 import qualified Grace.Syntax as Syntax
 import qualified Grace.Type as Type
 import qualified Grace.Value as Value
-import qualified OpenAI.V1.Chat.Completions as Completions
 import qualified Prelude
-import qualified Prettyprinter as Pretty
-import qualified System.IO.Unsafe as Unsafe
 
 {- $setup
 
@@ -112,204 +83,8 @@ lookupVariable name environment = case Prelude.lookup name environment of
     Just value -> value
     Nothing    -> error "Grace.Normalize.lookupVariable: unbound variable"
 
-toJSONSchema :: Type a -> Either (UnsupportedModelOutput a) Aeson.Value
-toJSONSchema original = loop original
-  where
-    loop Type.Forall{ location, name, type_ } = do
-        loop
-            (Type.substituteType name 0 Type.Scalar{ location, scalar = Monotype.Text } type_)
-    loop Type.Optional{ type_ } = do
-        present <- loop type_
-
-        let absent = Aeson.object [ ("type", "null") ]
-
-        return
-            ( Aeson.object
-                [ ("type", "object")
-                , ("anyOf", Aeson.toJSON ([ present, absent ] :: [ Aeson.Value ]))
-                ]
-            )
-
-    loop Type.List{ type_ } = do
-        items <- loop type_
-
-        return (Aeson.object [ ("type", "array"), ("items", items) ])
-    loop Type.Record{ fields = Type.Fields fieldTypes _ } = do
-        let toProperty (field, type_) = do
-                property <- loop type_
-
-                return (field, property)
-
-        properties <- traverse toProperty fieldTypes
-
-        return
-            ( Aeson.object
-                [ ("type", "object")
-                , ("properties", Aeson.toJSON (Map.fromList properties))
-                , ("additionalProperties", Aeson.toJSON False)
-                , ("required", Aeson.toJSON required)
-                ]
-            )
-      where
-        required = do
-            (field, type_) <- fieldTypes
-
-            case type_ of
-                Type.Optional{ } -> empty
-                _ -> return field
-    loop Type.Union{ alternatives = Type.Alternatives alternativeTypes _ } = do
-        let toAnyOf (alternative, type_) = do
-                contents <- loop type_
-
-                return
-                    (Aeson.object
-                        [ ("type", "object")
-                        , ( "properties"
-                          , Aeson.object
-                              [ ( "tag"
-                                , Aeson.object
-                                    [ ("type", "string")
-                                    , ("const", Aeson.toJSON alternative)
-                                    ]
-                                )
-                              , ("contents", contents)
-                              ]
-                          )
-                        , ("required", Aeson.toJSON ([ "tag", "contents" ] :: [Text]))
-                        , ("additionalProperties", Aeson.toJSON False)
-                        ]
-                    )
-
-        anyOfs <- traverse toAnyOf alternativeTypes
-
-        return
-            ( Aeson.object
-                [ ("type", "object"), ("anyOf", Aeson.toJSON anyOfs) ]
-            )
-    loop Type.Scalar{ scalar = Monotype.Bool } =
-        return (Aeson.object [ ("type", "boolean") ])
-    loop Type.Scalar{ scalar = Monotype.Real } =
-        return (Aeson.object [ ("type", "number") ])
-    loop Type.Scalar{ scalar = Monotype.Integer } =
-        return (Aeson.object [ ("type", "integer") ])
-    loop Type.Scalar{ scalar = Monotype.JSON } =
-        return (Aeson.object [ ])
-    loop Type.Scalar{ scalar = Monotype.Natural } =
-        return
-            (Aeson.object
-                [ ("type", "number")
-                -- , ("minimum", Aeson.toJSON (0 :: Int))
-                -- ^ Not supported by OpenAI
-                ]
-            )
-    loop Type.Scalar{ scalar = Monotype.Text } =
-        return (Aeson.object [ ("type", "string") ])
-    loop _ = Left UnsupportedModelOutput{..}
-
-fromJSON :: Type a -> Aeson.Value -> Either (InvalidJSON a) Value
-fromJSON Type.Union{ alternatives = Type.Alternatives alternativeTypes _ } (Aeson.Object [("contents", contents), ("tag", Aeson.String tag)])
-    | Just alternativeType <- Prelude.lookup tag alternativeTypes = do
-        value <- fromJSON alternativeType contents
-
-        return (Value.Application (Value.Alternative tag) value)
-fromJSON type_@Type.Record{ fields = Type.Fields fieldTypes _ } value@(Aeson.Object object) = do
-    let properties = HashMap.toList (Compat.fromAesonMap object)
-
-    let process (key, fieldType) = case Prelude.lookup key properties of
-            Just v -> do
-                expression <- fromJSON fieldType v
-
-                return (key, expression)
-            Nothing -> do
-                Left InvalidJSON{..}
-
-    textValues <- traverse process fieldTypes
-
-    return (Value.Record (HashMap.fromList textValues))
-fromJSON Type.List{ type_ } (Aeson.Array vector) = do
-    elements <- traverse (fromJSON type_) vector
-    return (Value.List (Seq.fromList (toList elements)))
-fromJSON Type.Scalar{ scalar = Monotype.Text } (Aeson.String text) = do
-    return (Value.Text text)
-fromJSON type_@Type.Scalar{ scalar } value@(Aeson.Number scientific) =
-    case Scientific.floatingOrInteger scientific of
-        Left (_ :: Double)
-            | scalar == Monotype.Real -> do
-                return (Value.Scalar (Real scientific))
-        Right (integer :: Integer)
-            | 0 <= integer
-            , scalar `elem` ([ Monotype.Natural, Monotype.Integer, Monotype.Real ] :: [Monotype.Scalar]) -> do
-                return (Value.Scalar (Natural (fromInteger integer)))
-            | scalar `elem` ([ Monotype.Integer, Monotype.Real ] :: [Monotype.Scalar]) -> do
-                return (Value.Scalar (Integer integer))
-        _ -> do
-            Left InvalidJSON{..}
-fromJSON Type.Scalar{ scalar = Monotype.Bool } (Aeson.Bool bool) =
-    return (Value.Scalar (Bool bool))
-fromJSON Type.Optional{ } Aeson.Null =
-    return (Value.Scalar Null)
-fromJSON Type.Scalar{ scalar = Monotype.JSON } value = do
-    let Just v = Aeson.Types.parseMaybe Aeson.parseJSON value
-    return v
-fromJSON type_ value = do
-    Left InvalidJSON{..}
-
-staticAssets :: Text
-staticAssets = Unsafe.unsafePerformIO do
-    examples <- do
-        let files :: [FilePath]
-            files =
-                [ "learn-in-y-minutes.ffg"
-                , "chaining.ffg"
-                , "prompt.ffg"
-                , "tools.ffg"
-                ]
-
-        let process file = do
-                content <- DataFile.readDataFile ("examples" </> file)
-
-                return
-                    ( "Example: " <> Text.pack file <> "\n\
-                      \\n\
-                      \" <> content <> "\n\
-                      \\n"
-                    )
-
-        traverse process files
-
-    prompts <- do
-        let files :: [FilePath]
-            files =
-                [ "inference.md"
-                , "abnf.md"
-                ]
-
-        let process file = do
-                content <- DataFile.readDataFile ("prompts" </> file)
-
-                return
-                    ( "Post: " <> Text.pack file <> "\n\
-                      \\n\
-                      \" <> content <> "\n\
-                      \\n"
-                    )
-
-        traverse process files
-
-    return (Text.concat prompts <> "\n\n" <> Text.concat examples)
-{-# NOINLINE staticAssets #-}
-
 sorted :: Ord key => InsOrdHashMap key value -> [(key, value)]
 sorted = List.sortBy (Ord.comparing fst) . HashMap.toList
-
-defaultTo :: Type s -> Type s -> Type s
-defaultTo def Type.Forall{ name, domain = Domain.Type, type_ } =
-    Type.substituteType name 0 def type_
-defaultTo _ Type.Forall{ name, domain = Domain.Fields, type_ } =
-    Type.substituteFields name 0 (Type.Fields [] Monotype.EmptyFields) type_
-defaultTo _ Type.Forall{ name, domain = Domain.Alternatives, type_ } =
-    Type.substituteAlternatives name 0 (Type.Alternatives [] Monotype.EmptyAlternatives) type_
-defaultTo _ type_ = type_
 
 {-| Evaluate an expression, leaving behind a `Value` free of reducible
     sub-expressions
@@ -496,249 +271,27 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
 
             Syntax.Prompt{ schema = Nothing } -> do
                 Concurrently (Exception.throwIO MissingSchema)
-            Syntax.Prompt{ location, schema = Just schema, .. } -> Concurrently do
-                let defaultedSchema =
-                        Lens.transform (defaultTo Type.Scalar{ scalar = Monotype.Text, .. }) schema
+            Syntax.Prompt{ location, arguments, schema = Just schema } -> Concurrently do
+                let generateContext = do
+                        let infer (name, assignment) = do
+                                let expression :: Syntax Location Input
+                                    expression = first (\_ -> Unknown) (fmap Void.absurd (quote assignment))
 
-                value <- runConcurrently (loop env arguments)
+                                let input = Code "(intermediate value)" (Pretty.toSmart expression)
 
-                case value of
-                    Value.Record fieldValues -> do
-                        let Just (Value.Scalar (Syntax.Key key)) =
-                                HashMap.lookup "key" fieldValues
+                                (type_, _) <- Infer.typeOf input expression
 
-                        let methods = keyToMethods (Text.strip key)
+                                return (name, type_, assignment)
 
-                        let prompt = do
-                                Value.Application (Value.Builtin Some) (Value.Text p) <- HashMap.lookup "text" fieldValues
-                                return p
+                        traverse infer env
 
-                        let search = case HashMap.lookup "search" fieldValues of
-                                Just (Value.Application (Value.Builtin Some) (Value.Scalar (Syntax.Bool c))) -> c
-                                _ -> False
+                newArguments <- runConcurrently (loop env arguments)
 
-                        let model = case HashMap.lookup "model" fieldValues of
-                                Just (Value.Application (Value.Builtin Some) (Value.Text m)) -> Model m
-                                _ | search -> "gpt-4o-search-preview"
-                                  | otherwise -> "o4-mini"
+                prompt <- case decode newArguments of
+                    Left exception -> Exception.throwIO exception
+                    Right prompt -> return prompt
 
-                        let code = case HashMap.lookup "code" fieldValues of
-                                Just (Value.Application (Value.Builtin Some) (Value.Scalar (Syntax.Bool c))) -> c
-                                _ -> False
-
-                        let web_search_options
-                                | search = Just WebSearchOptions
-                                    { search_context_size = Nothing
-                                    , user_location = Nothing
-                                    }
-                                | otherwise = Nothing
-
-                        let toResponseFormat s = JSON_Schema
-                                { json_schema = JSONSchema
-                                    { description = Nothing
-                                    , name = "result"
-                                    , schema = Just s
-                                    , strict = Just True
-                                    }
-                                }
-
-                        let toOutput ChatCompletionObject{ choices = [ Choice{ message = Assistant{ assistant_content = Just output } } ] } = do
-                                return output
-                            toOutput ChatCompletionObject{ choices } = do
-                                Exception.throwIO UnexpectedModelResponse{ choices }
-
-                        if code
-                            then do
-                                let retry :: [(Text, SomeException)] -> IO (Type Location, Value)
-                                    retry errors
-                                        | (_, interpretError) : rest <- errors
-                                        , length rest == 3 = do
-                                            Exception.throwIO interpretError
-                                        | otherwise = do
-                                            let failedAttempts = do
-                                                    (index, (program, interpretError)) <- zip [ 0 .. ] (reverse errors)
-                                                    return
-                                                        ( "Your failed attempt " <> Text.pack (show (index :: Natural)) <> ":\n\
-                                                          \\n\
-                                                          \" <> program <> "\n\
-                                                          \\n\
-                                                          \Error:\n\
-                                                          \" <> Text.pack (displayException interpretError) <> "\n\
-                                                          \\n"
-                                                        )
-
-                                            let infer (name, assignment) = do
-                                                    let expression :: Syntax Location Input
-                                                        expression = first (\_ -> Unknown) (fmap Void.absurd (quote assignment))
-
-                                                    let input = Code "(intermediate value)" (Pretty.toSmart expression)
-
-                                                    (type_, _) <- Infer.typeOf input expression
-
-                                                    return (name, type_, assignment)
-
-                                            context <- traverse infer env
-
-                                            let renderAssignment (name, type_, _) =
-                                                    Pretty.toSmart (Pretty.group (Pretty.flatAlt long short)) <> "\n\n"
-                                                  where
-                                                    long =  Pretty.label (pretty name)
-                                                        <>  " "
-                                                        <>  Pretty.punctuation ":"
-                                                        <>  Pretty.hardline
-                                                        <>  "  "
-                                                        <>  Pretty.nest 2 (pretty type_)
-
-                                                    short = Pretty.label (pretty name)
-                                                        <>  " "
-                                                        <>  Pretty.punctuation ":"
-                                                        <>  " "
-                                                        <>  pretty type_
-
-                                            let environment
-                                                    | Foldable.null env = ""
-                                                    | otherwise =
-                                                        "Given the following variables:\n\
-                                                        \\n\
-                                                        \" <> foldMap renderAssignment context
-
-                                            let instructions = case prompt of
-                                                    Nothing ->
-                                                        ""
-                                                    Just p ->
-                                                        "… according to these instructions:\n\
-                                                        \\n\
-                                                        \" <> p <> "\n\
-                                                        \\n"
-
-                                            let input =
-                                                    staticAssets <> "\n\
-                                                    \\n\
-                                                    \" <> environment <> "\
-                                                    \Generate a standalone Grace expression matching the following type:\n\
-                                                    \\n\
-                                                    \" <> Pretty.toSmart schema <> "\n\
-                                                    \\n\
-                                                    \" <> instructions <> "\
-                                                    \Output a naked Grace expression without any code fence or explanation.\n\
-                                                    \Your response in its entirety should be a valid input to the Grace interpreter.\n\
-                                                    \\n\
-                                                    \" <> Text.concat failedAttempts
-
-                                            chatCompletionObject <- liftIO do
-                                                HTTP.createChatCompletion methods _CreateChatCompletion
-                                                    { messages = [ User{ content = [ Completions.Text{ text = input } ], name = Nothing } ]
-                                                    , model
-                                                    , web_search_options
-                                                    }
-
-                                            output <- toOutput chatCompletionObject
-
-                                            Interpret.interpretWith keyToMethods context (Just schema) (Code "(generated)" output)
-                                                `Exception.catch` \interpretError -> do
-                                                    retry ((output, interpretError) : errors)
-
-                                (_, e) <- retry []
-
-                                return e
-                            else do
-                                let decode_ text = do
-                                        let bytes = Encoding.encodeUtf8 text
-
-                                        let lazyBytes = ByteString.Lazy.fromStrict bytes
-
-                                        case Aeson.eitherDecode lazyBytes of
-                                            Left message_ -> Exception.throwIO JSONDecodingFailed{ message = message_, text }
-                                            Right v -> return v
-
-                                let requestJSON =
-                                        instructions <> "Generate JSON output matching the following type:\n\
-                                        \\n\
-                                        \" <> Pretty.toSmart defaultedSchema
-                                      where
-                                        instructions = case prompt of
-                                            Nothing ->
-                                                ""
-                                            Just p ->
-                                                p <> "\n\
-                                                \\n"
-
-                                let extractText = do
-                                        let extract text = do
-                                                return (Value.Text text)
-
-                                        let instructions = case prompt of
-                                                Nothing -> ""
-                                                Just p  -> p
-
-                                        return
-                                            ( instructions
-                                            , Nothing
-                                            , extract
-                                            )
-
-                                let extractRecord = do
-                                        jsonSchema <- case toJSONSchema defaultedSchema of
-                                            Left exception -> Exception.throwIO exception
-                                            Right result -> return result
-
-                                        let extract text = do
-                                                v <- decode_ text
-
-                                                case fromJSON defaultedSchema v of
-                                                    Left invalidJSON -> Exception.throwIO invalidJSON
-                                                    Right e -> return e
-
-                                        return
-                                            ( requestJSON
-                                            , Just (toResponseFormat jsonSchema)
-                                            , extract
-                                            )
-
-                                let extractNonRecord = do
-                                        let adjustedSchema =
-                                                Type.Record (Type.location defaultedSchema) (Type.Fields [("response", defaultedSchema)] Monotype.EmptyFields)
-
-                                        jsonSchema <- case toJSONSchema adjustedSchema of
-                                            Left exception -> Exception.throwIO exception
-                                            Right result -> return result
-
-                                        let extract text = do
-                                                v <- decode_ text
-
-                                                expression <- case fromJSON adjustedSchema v of
-                                                    Left invalidJSON -> Exception.throwIO invalidJSON
-                                                    Right expression -> return expression
-
-                                                case expression of
-                                                    Value.Record [("response", response)] -> do
-                                                        return response
-                                                    other -> do
-                                                        return other
-
-                                        return
-                                            ( requestJSON
-                                            , Just (toResponseFormat jsonSchema)
-                                            , extract
-                                            )
-
-                                (text, response_format, extract) <- case defaultedSchema of
-                                        Type.Scalar{ scalar = Monotype.Text } -> extractText
-                                        Type.Record{ } -> extractRecord
-                                        _ -> extractNonRecord
-
-                                chatCompletionObject <- liftIO do
-                                    HTTP.createChatCompletion methods _CreateChatCompletion
-                                        { messages = [ User{ content = [ Completions.Text{ text } ], name = Nothing  } ]
-                                        , model
-                                        , response_format
-                                        }
-
-                                output <- toOutput chatCompletionObject
-
-                                extract output
-                    _ ->
-                        fail "Grace.Normalize.evaluate: prompt argument must be a record"
+                liftIO (Prompt.prompt generateContext location prompt schema)
 
             Syntax.HTTP{ schema = Nothing } -> do
                 Concurrently (Exception.throwIO MissingSchema)
@@ -760,9 +313,9 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                         return responseValue
 
                 let defaultedSchema =
-                        Lens.transform (defaultTo Type.Scalar{ scalar = Monotype.JSON, .. }) schema
+                        Lens.transform (Type.defaultTo Type.Scalar{ scalar = Monotype.JSON, .. }) schema
 
-                case fromJSON defaultedSchema responseValue of
+                case Value.fromJSON defaultedSchema responseValue of
                     Left exception -> Exception.throwIO exception
                     Right value    -> return value
 
@@ -1233,20 +786,6 @@ instance Exception MissingCredentials where
         \\n\
         \You need to provide API credentials in order to use the prompt keyword"
 
--- | The expected type for the model output can't be encoded as JSON
-newtype UnsupportedModelOutput a = UnsupportedModelOutput{ original :: Type a }
-    deriving (Show)
-
-instance (Show a, Typeable a) => Exception (UnsupportedModelOutput a) where
-    displayException UnsupportedModelOutput{..} =
-        "Unsupported model output type\n\
-        \\n\
-        \The expected type for the model output is:\n\
-        \\n\
-        \" <> Text.unpack (Pretty.toSmart original) <> "\n\
-        \\n\
-        \… but that type cannot be encoded as JSON"
-
 -- | JSON decoding failed
 data JSONDecodingFailed = JSONDecodingFailed
     { message :: String
@@ -1274,68 +813,3 @@ data MissingSchema = MissingSchema
 instance Exception MissingSchema where
     displayException MissingSchema =
         "Internal error - Elaboration failed to infer schema"
-
--- | Invalid JSON output which didn't match the expected type
-data InvalidJSON a = InvalidJSON
-    { value :: Aeson.Value
-    , type_ :: Type a
-    } deriving (Show)
-
-instance (Show a, Typeable a) => Exception (InvalidJSON a) where
-    displayException InvalidJSON{..} =
-        "Invalid JSON\n\
-        \\n\
-        \The server responded with the following JSON value:\n\
-        \\n\
-        \" <> string <> "\n\
-        \\n\
-        \… which does not match the following expected type:\n\
-        \\n\
-        \" <> Text.unpack (Pretty.toSmart type_)
-      where
-        bytes = ByteString.Lazy.toStrict (Aeson.encode value)
-
-        string = case Encoding.decodeUtf8' bytes of
-            Left  _    -> show bytes
-            Right text -> Text.unpack text
-
--- | The model didn't return an expected, successful response
-data UnexpectedModelResponse = UnexpectedModelResponse{ choices :: Vector Choice }
-    deriving (Show)
-
-instance Exception UnexpectedModelResponse where
-    displayException UnexpectedModelResponse{ choices } =
-        case toList choices of
-            [] ->
-                "Unexpected model response\n\
-                \\n\
-                \The model did not return any choices"
-
-            _ : _ : _ ->
-                "Unexpected model response\n\
-                \\n\
-                \The model returned multiple choices when only one was expected"
-            [ Choice{ message = Assistant{ refusal = Just refusal } } ] ->
-                "Unexpected model response\n\
-                \\n\
-                \The model refused to answer for the following reason:\n\
-                \\n\
-                \" <> Text.unpack refusal
-            [ Choice{ message = Assistant{ assistant_content = Nothing } } ] ->
-                "Unexpected model response\n\
-                \\n\
-                \The model returned an empty answer"
-            [ Choice{ message } ] ->
-                "Unexpected model response\n\
-                \\n\
-                \The model responded with a non-assistant message\n\
-                \\n\
-                \Message:\n\
-                \\n\
-                \" <> string
-              where
-                bytes = ByteString.Lazy.toStrict (Aeson.encode message)
-
-                string = case Encoding.decodeUtf8' bytes of
-                    Left  _    -> show bytes
-                    Right text -> Text.unpack text

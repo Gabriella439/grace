@@ -23,6 +23,9 @@ module Grace.Decode
       FromGrace(..)
     , GenericFromGrace(..)
 
+      -- * Types
+    , Key(..)
+
       -- * Exceptions
     , DecodingError(..)
     ) where

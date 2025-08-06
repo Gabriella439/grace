@@ -20,6 +20,7 @@ module Grace.Type
       Type(..)
     , Record(..)
     , Union(..)
+
       -- * Utilities
     , solveType
     , solveFields
@@ -30,6 +31,8 @@ module Grace.Type
     , substituteType
     , substituteFields
     , substituteAlternatives
+    , defaultTo
+
       -- * Pretty-printing
     , prettyRecordLabel
     , prettyAlternativeLabel
@@ -437,6 +440,16 @@ alternativesFreeIn unsolved =
         . _As @"UnsolvedAlternatives"
         . Lens.only unsolved
         )
+
+-- | Default universally quantified variables
+defaultTo :: Type s -> Type s -> Type s
+defaultTo def Forall{ name, domain = Domain.Type, type_ } =
+    substituteType name 0 def type_
+defaultTo _ Forall{ name, domain = Domain.Fields, type_ } =
+    substituteFields name 0 (Fields [] Monotype.EmptyFields) type_
+defaultTo _ Forall{ name, domain = Domain.Alternatives, type_ } =
+    substituteAlternatives name 0 (Alternatives [] Monotype.EmptyAlternatives) type_
+defaultTo _ type_ = type_
 
 prettyQuantifiedType :: Type s -> Doc AnsiStyle
 prettyQuantifiedType type0@Forall{} =

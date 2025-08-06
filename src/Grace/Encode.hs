@@ -17,6 +17,9 @@ module Grace.Encode
     ( -- * Classes
       ToGrace(..)
     , GenericToGrace(..)
+
+      -- * Types
+    , Key(..)
     ) where
 
 import Control.Monad.State (State)
