@@ -15,7 +15,7 @@ module Grace.HTTP
     ) where
 
 import Control.Concurrent.MVar (MVar)
-import Control.Exception (Exception(..))
+import Control.Exception.Safe (Exception(..))
 import Data.Text (Text)
 import Data.Text.Encoding.Error (UnicodeException)
 import Grace.HTTP.Type (Header(..), HTTP(..), Parameter(..), completeHeaders)
@@ -32,7 +32,7 @@ import Network.HTTP.Client
     )
 
 import qualified Control.Concurrent.MVar as MVar
-import qualified Control.Exception as Exception
+import qualified Control.Exception.Safe as Exception
 import qualified Data.Aeson as Aeson
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding

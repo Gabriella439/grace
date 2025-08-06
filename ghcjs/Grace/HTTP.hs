@@ -14,7 +14,7 @@ module Grace.HTTP
     , createChatCompletion
     ) where
 
-import Control.Exception (Exception(..))
+import Control.Exception.Safe (Exception(..))
 import Data.ByteString.Lazy (ByteString)
 import Data.Text (Text)
 import GHCJS.Fetch (Request(..), RequestOptions(..), JSPromiseException)
@@ -22,7 +22,7 @@ import GHCJS.Fetch.Types (JSResponse)
 import Grace.HTTP.Type (Header(..), HTTP(..), Parameter(..), completeHeaders)
 import OpenAI.V1.Chat.Completions (ChatCompletionObject, CreateChatCompletion)
 
-import qualified Control.Exception as Exception
+import qualified Control.Exception.Safe as Exception
 import qualified Data.Aeson as Aeson
 import qualified Data.Binary.Builder as Builder
 import qualified Data.ByteString.Lazy as ByteString.Lazy

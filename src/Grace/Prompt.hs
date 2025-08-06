@@ -10,7 +10,7 @@ module Grace.Prompt
     ) where
 
 import Control.Applicative (empty)
-import Control.Exception (Exception(..), SomeException(..))
+import Control.Exception.Safe (Exception(..), SomeException(..))
 import Data.Foldable (toList)
 import Data.Text (Text)
 import Data.Typeable (Typeable)
@@ -38,7 +38,7 @@ import OpenAI.V1.Chat.Completions
 
 import {-# SOURCE #-} qualified Grace.Interpret as Interpret
 
-import qualified Control.Exception as Exception
+import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy as ByteString.Lazy

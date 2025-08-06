@@ -137,6 +137,7 @@ executable try-grace
                      , insert-ordered-containers
                      , lens
                      , mtl
+                     , safe-exceptions
                      , scientific
                      , stm
                      , text

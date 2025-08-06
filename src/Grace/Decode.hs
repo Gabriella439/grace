@@ -22,7 +22,7 @@ module Grace.Decode
     , DecodingError(..)
     ) where
 
-import Control.Exception (Exception)
+import Control.Exception.Safe (Exception)
 import Control.Monad.State (State)
 import Data.Int (Int8, Int16, Int32, Int64)
 import Data.Scientific (Scientific)
@@ -54,7 +54,7 @@ import GHC.Generics
     , (:*:)(..)
     )
 
-import qualified Control.Exception as Exception
+import qualified Control.Exception.Safe as Exception
 import qualified Control.Monad.State as State
 import qualified Data.Aeson as Aeson
 import qualified Data.Foldable as Foldable

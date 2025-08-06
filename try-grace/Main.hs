@@ -9,7 +9,7 @@ module Main where
 
 import Control.Applicative (empty)
 import Control.Concurrent.Async (Async)
-import Control.Exception (Exception(..), SomeException)
+import Control.Exception.Safe (Exception(..), SomeException)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Maybe (MaybeT)
 import Data.Foldable (toList, traverse_)
@@ -34,7 +34,7 @@ import Prelude hiding (div, error, id, span, subtract)
 import qualified Control.Concurrent.Async as Async
 import qualified Control.Concurrent.STM as STM
 import qualified Control.Concurrent.STM.TVar as TVar
-import qualified Control.Exception as Exception
+import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
 import qualified Control.Monad as Monad
 import qualified Control.Monad.State as State
