@@ -358,6 +358,14 @@ subtype subType₀ superType₀ = do
 
                 subtype type_ (Context.solveType context superType₀)
 
+        (Type.Record{ fields = Type.Fields fieldTypes (Monotype.UnsolvedFields existential) }, Type.Scalar{ scalar = Monotype.JSON }) -> do
+            instantiateFieldsL existential (Type.location superType₀) (Type.Fields [] Monotype.EmptyFields)
+
+            for_ fieldTypes \(_, type_) -> do
+                context <- get
+
+                subtype type_ (Context.solveType context superType₀)
+
         (Type.Record{ fields = Type.Fields subFieldTypesList subRemainingFields }, Type.Record{ fields = Type.Fields superFieldTypesList superRemainingFields }) -> do
             let subFieldTypes   = Map.fromList subFieldTypesList
             let superFieldTypes = Map.fromList superFieldTypesList
