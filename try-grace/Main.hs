@@ -132,6 +132,18 @@ foreign import javascript unsafe "$1.setAttribute($2,$3)"
 setAttribute :: MonadIO io => JSVal -> Text -> Text -> io ()
 setAttribute a b c = liftIO (setAttribute_ a (fromText b) (fromText c))
 
+foreign import javascript unsafe "$1.disabled = true"
+    disable_ :: JSVal -> IO ()
+
+disable :: MonadIO io => JSVal -> io ()
+disable a = liftIO (disable_ a)
+
+foreign import javascript unsafe "$1.disabled = false"
+    enable_ :: JSVal -> IO ()
+
+enable :: MonadIO io => JSVal -> io ()
+enable a = liftIO (enable_ a)
+
 foreign import javascript unsafe "$1.replaceChildren($2)"
     replaceChild_ :: JSVal -> JSVal -> IO ()
 
@@ -345,7 +357,7 @@ renderValue _ _ parent _ (Value.Scalar (Bool bool)) = do
 
     setAttribute input "type"     "checkbox"
     setAttribute input "class"    "form-check-input"
-    setAttribute input "disabled" ""
+    disable input
 
     Monad.when bool (setAttribute input "checked" "")
 
@@ -482,9 +494,9 @@ renderValue keyToMethods ref parent outer (Application (Value.Alternative altern
     renderValue keyToMethods ref parent recordType recordValue
 
 renderValue keyToMethods ref parent Type.Function{ input, output } function = do
-    result <- Maybe.runMaybeT (renderInput keyToMethods ref input)
+    maybeResult <- Maybe.runMaybeT (renderInput keyToMethods ref input)
 
-    case result of
+    case maybeResult of
         Nothing -> do
             renderDefault parent function
         Just (inputVal, get, refreshInput) -> do
@@ -497,15 +509,15 @@ renderValue keyToMethods ref parent Type.Function{ input, output } function = do
             let render value = do
                     setBusy
 
-                    result <- (liftIO . Exception.try) do
+                    eitherResult <- (liftIO . Exception.try) do
                         newValue <- Normalize.apply keyToMethods function value
 
-                        refreshInput <- setSuccess output newValue \htmlWrapper -> do
+                        refreshOutput <- setSuccess output newValue \htmlWrapper -> do
                             renderValue keyToMethods ref htmlWrapper output newValue
 
-                        refreshInput
+                        refreshOutput
 
-                    case result of
+                    case eitherResult of
                         Left exception -> do
                             setError (Text.pack (displayException (exception :: SomeException)))
 
@@ -769,47 +781,54 @@ renderInput keyToMethods ref Type.Union{ alternatives = Type.Alternatives keyTyp
                     _ -> do
                         setTextContent label (key <> ":")
 
-                span <- createElement "span"
 
-                setTextContent span " "
+                fieldset <- createElement "fieldset"
+
+                Monad.unless checked (disable fieldset)
+
+                replaceChild fieldset nestedVal
 
                 div <- createElement "div"
 
                 setAttribute div "class" "form-check"
 
-                replaceChildren div (Array.fromList [ input, label, span, nestedVal ])
+                replaceChildren div (Array.fromList [ input, label, fieldset ])
 
                 let get = do
                         value <- nestedGet
 
                         return (Application (Alternative key) value)
 
-                return (div, getChecked input, get, refreshInner)
+                return (div, fieldset, getChecked input, get, refreshInner)
 
-        quartets <- traverse process (zip (True : repeat False) keyTypes)
+        quintets <- traverse process (zip (True : repeat False) keyTypes)
 
         div <- createElement "div"
 
         let children = do
-                (node, _, _, _) <- quartets
+                (node, _, _, _, _) <- quintets
 
                 return node
 
         replaceChildren div (Array.fromList children)
 
-        let loop [] = do
-                empty
-            loop ((_, checkEnabled, getNested, _) : rest) = do
+        let loop get [] = do
+                get
+            loop get ((_, fieldset, checkEnabled, getNested, _) : rest) = do
                 enabled <- checkEnabled
                 if  | enabled -> do
-                        getNested
-                    | otherwise -> do
-                        loop rest
+                        enable fieldset
 
-        let get = loop quartets
+                        loop getNested rest
+                    | otherwise -> do
+                        disable fieldset
+
+                        loop get rest
+
+        let get = loop empty quintets
 
         let refreshInput = sequence_ do
-                (_, _, _, refreshInner) <- quartets
+                (_, _, _, _, refreshInner) <- quintets
 
                 return refreshInner
 
@@ -823,13 +842,13 @@ renderInput keyToMethods ref Type.Optional{ type_ } = do
     setAttribute input "type"  "checkbox"
     setAttribute input "class" "form-check-input"
 
-    span <- createElement "span"
-
-    setTextContent span " "
-
     div <- createElement "div"
 
-    replaceChildren div (Array.fromList [input, span, nestedVal])
+    fieldset <- createElement "fieldset"
+
+    replaceChild fieldset nestedVal
+
+    replaceChildren div (Array.fromList [input, fieldset])
 
     let get = do
             bool <- getChecked input
@@ -837,8 +856,12 @@ renderInput keyToMethods ref Type.Optional{ type_ } = do
             if  | bool  -> do
                     value <- getInner
 
+                    enable fieldset
+
                     return (Application (Value.Builtin Syntax.Some) value)
                 | otherwise -> do
+                    disable fieldset
+
                     return (Value.Scalar Null)
 
     return (div, get, refreshInner)

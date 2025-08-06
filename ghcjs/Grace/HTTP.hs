@@ -15,7 +15,6 @@ module Grace.HTTP
     ) where
 
 import Control.Exception.Safe (Exception(..))
-import Data.ByteString.Lazy (ByteString)
 import Data.Text (Text)
 import GHCJS.Fetch (Request(..), RequestOptions(..), JSPromiseException)
 import GHCJS.Fetch.Types (JSResponse)
