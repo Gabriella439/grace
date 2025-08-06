@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedLists #-}
 
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 -- | This module implements the @prompt@ keyword
 module Grace.Prompt
     ( Prompt(..)
@@ -32,6 +34,7 @@ import OpenAI.V1.Chat.Completions
     , Choice(..)
     , CreateChatCompletion(..)
     , Message(..)
+    , ReasoningEffort(..)
     , WebSearchOptions(..)
     , _CreateChatCompletion
     )
@@ -55,6 +58,8 @@ import qualified Grace.Value as Value
 import qualified OpenAI.V1.Chat.Completions as Completions
 import qualified Prettyprinter as Pretty
 import qualified System.IO.Unsafe as Unsafe
+
+deriving anyclass instance FromGrace ReasoningEffort
 
 -- | Context used to teach the LLM to code in Grace
 staticAssets :: Text
@@ -203,6 +208,7 @@ data Prompt = Prompt
     , model :: Maybe Text
     , code :: Maybe Bool
     , search :: Maybe Bool
+    , effort :: Maybe ReasoningEffort
     } deriving stock (Generic)
       deriving anyclass (FromGrace)
 
@@ -213,7 +219,7 @@ prompt
     -> Prompt
     -> Type Location
     -> IO Value
-prompt generateContext location Prompt{ key = Grace.Decode.Key{ text = key }, text, model, code, search } schema = do
+prompt generateContext location Prompt{ key = Grace.Decode.Key{ text = key }, text, model, code, search, effort } schema = do
     keyToMethods <- HTTP.getMethods
 
     let methods = keyToMethods (Text.strip key)
@@ -237,6 +243,13 @@ prompt generateContext location Prompt{ key = Grace.Decode.Key{ text = key }, te
     let defaultedCode = case code of
             Just c -> c
             Nothing -> False
+
+    let reasoning_effort = case effort of
+            Nothing
+                | Text.isPrefixOf "o" defaultedModel ->
+                    Just ReasoningEffort_High
+            _ ->
+                effort
 
     let defaultedSchema =
             Lens.transform
@@ -330,6 +343,7 @@ prompt generateContext location Prompt{ key = Grace.Decode.Key{ text = key }, te
                                 { messages = [ User{ content = [ Completions.Text{ text = input } ], name = Nothing } ]
                                 , model = Model defaultedModel
                                 , web_search_options
+                                , reasoning_effort
                                 }
 
                         output <- toOutput chatCompletionObject
@@ -432,6 +446,7 @@ prompt generateContext location Prompt{ key = Grace.Decode.Key{ text = key }, te
                     { messages = [ User{ content = [ Completions.Text{ text = text_ } ], name = Nothing  } ]
                     , model = Model defaultedModel
                     , response_format
+                    , reasoning_effort
                     }
 
             output <- toOutput chatCompletionObject
