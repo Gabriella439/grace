@@ -196,7 +196,7 @@ fromJSON type_ value = do
 data InvalidJSON a = InvalidJSON
     { value :: Aeson.Value
     , type_ :: Type a
-    } deriving (Show)
+    } deriving stock (Show)
 
 instance (Show a, Typeable a) => Exception (InvalidJSON a) where
     displayException InvalidJSON{ value, type_} =

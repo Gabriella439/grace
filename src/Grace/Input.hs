@@ -27,7 +27,7 @@ data Input
     | Code String Text
     -- ^ Source code: @Code name content@
     | URI URI.URI Mode
-    deriving (Eq, Show)
+    deriving stock (Eq, Show)
 
 instance Semigroup Input where
     _ <> URI uri mode = URI uri mode
@@ -69,7 +69,7 @@ data Mode
     -- ^ Interpret the string as Grace code (the default)
     | AsText
     -- ^ Interpret the string as raw text
-    deriving (Eq, Show)
+    deriving stock (Eq, Show)
 
 instance Pretty Mode where
     pretty AsCode = mempty

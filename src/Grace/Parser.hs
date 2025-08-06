@@ -639,13 +639,13 @@ data Sign = Unsigned | Positive | Negative
     numbers in error messages
 -}
 data LocatedToken = LocatedToken { token :: Token, state :: State Text Void }
-    deriving (Show)
+    deriving stock (Show)
 
 -- | Errors related to lexing and parsing
 data ParseError
     = LexingFailed Location
     | ParsingFailed Location
-    deriving (Eq, Show)
+    deriving stock (Eq, Show)
 
 instance Exception ParseError where
     displayException (LexingFailed location) = Text.unpack

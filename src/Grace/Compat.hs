@@ -39,9 +39,9 @@ toAesonMap = HashMap.toHashMap
 #endif
 
 #if !MIN_VERSION_containers(0, 6, 6)
-deriving instance Lift a => Lift (Seq a)
-deriving instance Lift a => Lift (Digit a)
-deriving instance Lift a => Lift (Elem a)
-deriving instance Lift a => Lift (FingerTree a)
-deriving instance Lift a => Lift (Node a)
+deriving stock instance Lift a => Lift (Seq a)
+deriving stock instance Lift a => Lift (Digit a)
+deriving stock instance Lift a => Lift (Elem a)
+deriving stock instance Lift a => Lift (FingerTree a)
+deriving stock instance Lift a => Lift (Node a)
 #endif

@@ -367,7 +367,7 @@ effects =
 
 -- | A text literal with interpolated expressions
 data Chunks s a = Chunks Text [(Syntax s a, Text)]
-    deriving (Eq, Foldable, Functor, Lift, Show, Traversable)
+    deriving stock (Eq, Foldable, Functor, Lift, Show, Traversable)
 
 instance Monoid (Chunks s a) where
     mempty = Chunks mempty mempty
@@ -484,7 +484,7 @@ data Scalar
     --   >>> pretty Null
     --   null
     | Key Text
-    deriving (Eq, Generic, Lift, Show)
+    deriving stock (Eq, Generic, Lift, Show)
 
 instance ToJSON Scalar where
     toJSON (Real n) = toJSON n
@@ -557,7 +557,7 @@ data Operator
     -- ^
     --   >>> pretty Divide
     --   /
-    deriving (Eq, Generic, Lift, Show)
+    deriving stock (Eq, Generic, Lift, Show)
 
 instance Pretty Operator where
     pretty And                = Pretty.operator "&&"
@@ -608,7 +608,7 @@ data Builtin
     -- ^
     --   >>> pretty YAML
     --   yaml
-    deriving (Bounded, Enum, Eq, Generic, Lift, Show)
+    deriving stock (Bounded, Enum, Eq, Generic, Lift, Show)
 
 instance Pretty Builtin where
     pretty Abs     = Pretty.builtin "abs"

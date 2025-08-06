@@ -3300,7 +3300,7 @@ data TypeInferenceError
     --
     | RecordTypeMismatch (Type Location) (Type Location) [Text]
     | UnionTypeMismatch (Type Location) (Type Location) [Text]
-    deriving (Eq, Show)
+    deriving stock (Eq, Show)
 
 instance Exception TypeInferenceError where
     displayException (IllFormedAlternatives location a₀ _Γ) =

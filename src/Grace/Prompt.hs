@@ -440,7 +440,7 @@ prompt generateContext location Prompt{ key = Grace.Decode.Key{ text = key }, te
 
 -- | The expected type for the model output can't be encoded as JSON
 newtype UnsupportedModelOutput a = UnsupportedModelOutput{ original :: Type a }
-    deriving (Show)
+    deriving stock (Show)
 
 instance (Show a, Typeable a) => Exception (UnsupportedModelOutput a) where
     displayException UnsupportedModelOutput{ original } =
@@ -454,7 +454,7 @@ instance (Show a, Typeable a) => Exception (UnsupportedModelOutput a) where
 
 -- | The model didn't return an expected, successful response
 data UnexpectedModelResponse = UnexpectedModelResponse{ choices :: Vector Choice }
-    deriving (Show)
+    deriving stock (Show)
 
 instance Exception UnexpectedModelResponse where
     displayException UnexpectedModelResponse{ choices } =
@@ -497,7 +497,7 @@ instance Exception UnexpectedModelResponse where
 data ModelDecodingFailed = ModelDecodingFailed
     { message :: String
     , text :: Text
-    } deriving (Show)
+    } deriving stock (Show)
 
 instance Exception ModelDecodingFailed where
     displayException ModelDecodingFailed{ message, text } =

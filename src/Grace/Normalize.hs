@@ -770,7 +770,7 @@ strip = Lens.transform transformation
 
 -- | Missing API credentials
 data MissingCredentials = MissingCredentials
-    deriving (Show)
+    deriving stock (Show)
 
 instance Exception MissingCredentials where
     displayException MissingCredentials =
@@ -782,7 +782,7 @@ instance Exception MissingCredentials where
 data JSONDecodingFailed = JSONDecodingFailed
     { message :: String
     , text :: Text
-    } deriving (Show)
+    } deriving stock (Show)
 
 instance Exception JSONDecodingFailed where
     displayException JSONDecodingFailed{..} =
@@ -800,7 +800,7 @@ instance Exception JSONDecodingFailed where
 
 -- | Elaboration didn't infer a schema for the @prompt@ keyword
 data MissingSchema = MissingSchema
-    deriving (Show)
+    deriving stock (Show)
 
 instance Exception MissingSchema where
     displayException MissingSchema =

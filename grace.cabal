@@ -92,7 +92,7 @@ library
 
   default-language:    Haskell2010
 
-  ghc-options:         -Wall
+  ghc-options:         -Wall -Wmissing-deriving-strategies
 
   if impl(ghcjs) || os(ghcjs)
     hs-source-dirs:    ghcjs
