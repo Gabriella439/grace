@@ -1259,8 +1259,8 @@ infer e₀ = do
 
         -- →I⇒
         Syntax.Lambda{ location, nameBinding, body } -> do
-            (entries, input) <- case nameBinding of
-                Syntax.NameBinding{ nameLocation, name, annotation = Nothing } -> do
+            (entries, input, newNameBinding) <- case nameBinding of
+                Syntax.NameBinding{ nameLocation, name, annotation = Nothing, assignment = Nothing } -> do
                     existential <- fresh
 
                     push (Context.UnsolvedType existential)
@@ -1269,10 +1269,58 @@ infer e₀ = do
                             Type.UnsolvedType
                                 { existential, location = nameLocation }
 
-                    return ([Context.Annotation name input], input)
+                    let newNameBinding = Syntax.NameBinding
+                            { nameLocation
+                            , name
+                            , annotation = Nothing
+                            , assignment = Nothing
+                            }
 
-                Syntax.NameBinding{ name, annotation = Just input } -> do
-                    return ([Context.Annotation name input], input)
+                    return ([Context.Annotation name input], input, newNameBinding)
+
+                Syntax.NameBinding{ nameLocation, name, annotation = Just input, assignment = Nothing } -> do
+                    let newNameBinding = Syntax.NameBinding
+                            { nameLocation
+                            , name
+                            , annotation = Just input
+                            , assignment = Nothing
+                            }
+
+                    return ([Context.Annotation name input], input, newNameBinding)
+
+                Syntax.NameBinding{ nameLocation, name, annotation = Nothing, assignment = Just assignment } -> do
+                    (input₀, newAssignment) <- infer assignment
+
+                    let input₁ = Type.Optional
+                            { location = Syntax.location assignment
+                            , type_ = input₀
+                            }
+
+                    let newNameBinding = Syntax.NameBinding
+                            { nameLocation
+                            , name
+                            , annotation = Nothing
+                            , assignment = Just newAssignment
+                            }
+
+                    return ([Context.Annotation name input₀], input₁, newNameBinding)
+
+                Syntax.NameBinding{ nameLocation, name, annotation = Just input₀, assignment = Just assignment } -> do
+                    newAssignment <- check assignment input₀
+
+                    let input₁ = Type.Optional
+                            { location = Syntax.location assignment
+                            , type_ = input₀
+                            }
+
+                    let newNameBinding = Syntax.NameBinding
+                            { nameLocation
+                            , name
+                            , annotation = Just input₀
+                            , assignment = Just newAssignment
+                            }
+
+                    return ([Context.Annotation name input₀], input₁, newNameBinding)
 
                 Syntax.FieldNamesBinding{ fieldNamesLocation, fieldNames } -> do
                     let process Syntax.FieldName{ fieldNameLocation, name, annotation = Nothing } = do
@@ -1301,13 +1349,18 @@ infer e₀ = do
 
                     push (Context.UnsolvedFields existential)
 
-                    let input = Type.Record
+                    let annotation = Type.Record
                             { location = fieldNamesLocation
                             , fields =
                                 Type.Fields fieldTypes (Monotype.UnsolvedFields existential)
                             }
 
-                    return (entries, input)
+                    let newNameBinding = Syntax.FieldNamesBinding
+                            { fieldNamesLocation
+                            , fieldNames
+                            }
+
+                    return (entries, annotation, newNameBinding)
 
             output <- do
                 existential <- fresh
@@ -1321,7 +1374,7 @@ infer e₀ = do
 
                     _Γ <- get
 
-                    return (Type.Function{..}, Syntax.Lambda{ body = solveSyntax _Γ newBody, .. })
+                    return (Type.Function{ location, input, output }, Syntax.Lambda{ body = solveSyntax _Γ newBody, nameBinding = newNameBinding, .. })
 
             foldr scoped done entries
 
@@ -2757,14 +2810,90 @@ check
 -- type annotations to fix any type errors that they might encounter, which is
 -- a desirable property!
 
--- →I
-check Syntax.Lambda{ nameBinding = nameBinding@Syntax.NameBinding{..}, ..} Type.Function{ location = _, ..} = do
+check Syntax.Lambda{ nameBinding = Syntax.NameBinding{ name, nameLocation, annotation = Nothing, assignment = Nothing }, ..} Type.Function{ location = _, .. } = do
     scoped (Context.Annotation name input) do
         newBody <- check body output
 
-        return Syntax.Lambda{ body = newBody, .. }
+        let newNameBinding = Syntax.NameBinding
+                { nameLocation
+                , name
+                , annotation = Nothing
+                , assignment = Nothing
+                }
 
--- ∀I
+        return Syntax.Lambda{ body = newBody, nameBinding = newNameBinding, .. }
+
+check Syntax.Lambda{ nameBinding = Syntax.NameBinding{ name, nameLocation, annotation = Just annotation, assignment = Nothing }, .. } Type.Function{ location = _, ..} = do
+    subtype annotation input
+
+    scoped (Context.Annotation name input) do
+        newBody <- check body output
+
+        context <- get
+
+        let newNameBinding = Syntax.NameBinding
+                { nameLocation
+                , name
+                , annotation = Just (Context.solveType context annotation)
+                , assignment = Nothing
+                }
+
+        return Syntax.Lambda{ body = newBody, nameBinding = newNameBinding, .. }
+
+check Syntax.Lambda{ nameBinding = Syntax.NameBinding{ nameLocation, name, annotation = Nothing, assignment = Just assignment }, .. } Type.Function{ location = _, input = input₀, output } = do
+    existential <- fresh
+
+    push (Context.UnsolvedType existential)
+
+    let input₁ = Type.UnsolvedType
+            { location = Syntax.location assignment
+            , existential
+            }
+
+    let optional = Type.Optional
+            { location = Syntax.location assignment
+            , type_ = input₁
+            }
+
+    subtype input₀ optional
+
+    newAssignment <- check assignment input₁
+
+    scoped (Context.Annotation name input₁) do
+        newBody <- check body output
+
+        let newNameBinding = Syntax.NameBinding
+                { nameLocation
+                , name
+                , annotation = Nothing
+                , assignment = Just newAssignment
+                }
+
+        return Syntax.Lambda{ body = newBody, nameBinding = newNameBinding, .. }
+
+check Syntax.Lambda{ nameBinding = Syntax.NameBinding{ name, nameLocation, annotation = Just annotation, assignment = Just assignment }, .. } Type.Function{ location = _, ..} = do
+    newAssignment <- check assignment annotation
+
+    context₀ <- get
+
+    subtype (Context.solveType context₀ annotation) (Context.solveType context₀ input)
+
+    scoped (Context.Annotation name input) do
+        context₁ <- get
+
+        newBody <- check body (Context.solveType context₁ output)
+
+        context₂ <- get
+
+        let newNameBinding = Syntax.NameBinding
+                { nameLocation
+                , name
+                , annotation = Just (Context.solveType context₂ annotation)
+                , assignment = Just newAssignment
+                }
+
+        return Syntax.Lambda{ body = newBody, nameBinding = newNameBinding, .. }
+
 check e Type.Forall{..} = do
     scoped (Context.Variable domain name) do
         check e type_

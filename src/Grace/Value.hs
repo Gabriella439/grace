@@ -53,7 +53,7 @@ import qualified Grace.Type as Type
 {-| This is basically `Syntax.NameBinding` but with only the names and not
     the values or locations
 -}
-data Names = Name Text | FieldNames [Text]
+data Names = Name Text (Maybe Value) | FieldNames [Text]
     deriving stock (Eq, Show)
 
 {-| This type represents a fully evaluated expression with no reducible

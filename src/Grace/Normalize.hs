@@ -113,8 +113,10 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
 
                 io
 
-            Syntax.Lambda{ nameBinding = Syntax.NameBinding{ name }, ..} ->
-                pure (Value.Lambda env (Value.Name name) body)
+            Syntax.Lambda{ nameBinding = Syntax.NameBinding{ name, assignment }, ..} -> do
+                newAssignment <- traverse (loop env) assignment
+
+                pure (Value.Lambda env (Value.Name name newAssignment) body)
 
             Syntax.Lambda{ nameBinding = Syntax.FieldNamesBinding{ fieldNames }, ..} -> do
                 let names = do
@@ -530,7 +532,11 @@ apply
     -> IO Value
 apply keyToMethods function₀ argument₀ = runConcurrently (loop function₀ argument₀)
   where
-    loop (Value.Lambda capturedEnv (Value.Name name) body) argument =
+    loop (Value.Lambda capturedEnv (Value.Name name Nothing) body) argument =
+        Concurrently (evaluate keyToMethods ((name, argument) : capturedEnv) body)
+    loop (Value.Lambda capturedEnv (Value.Name name (Just assignment)) body) (Value.Scalar Null) =
+        Concurrently (evaluate keyToMethods ((name, assignment) : capturedEnv) body)
+    loop (Value.Lambda capturedEnv (Value.Name name (Just _)) body) (Value.Application (Value.Builtin Some) argument) =
         Concurrently (evaluate keyToMethods ((name, argument) : capturedEnv) body)
     loop (Value.Lambda capturedEnv (Value.FieldNames fieldNames) body) (Value.Record keyValues) =
         Concurrently (evaluate keyToMethods (extraEnv <> capturedEnv) body)
@@ -681,11 +687,12 @@ quote value = case value of
         foldl snoc newLambda env
       where
         nameBinding = case names_ of
-            Value.Name name ->
+            Value.Name name assignment ->
                 Syntax.NameBinding
                     { nameLocation = location
-                    , annotation = Nothing
                     , name
+                    , annotation = Nothing
+                    , assignment = fmap quote assignment
                     }
             Value.FieldNames fieldNames ->
                 Syntax.FieldNamesBinding
