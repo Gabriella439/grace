@@ -82,8 +82,12 @@ data Syntax s a
     -- ^
     --   >>> pretty @(Syntax () Void) (Lambda () "x" "x")
     --   \x -> x
-    --   >>> pretty @(Syntax () Void) (Lambda () (NameBinding () "x" (Just "A")) "x")
+    --   >>> pretty @(Syntax () Void) (Lambda () (NameBinding () "x" (Just "A") Nothing) "x")
     --   \(x : A) -> x
+    --   >>> pretty @(Syntax () Void) (Lambda () (NameBinding () "x" Nothing (Just "a")) "x")
+    --   \(x = a) -> x
+    --   >>> pretty @(Syntax () Void) (Lambda () (NameBinding () "x" (Just "A") (Just "a")) "x")
+    --   \(x : A = a) -> x
     | Application { location :: s, function :: Syntax s a, argument :: Syntax s a }
     -- ^
     --   >>> pretty @(Syntax () Void) (Application () "f" "x")
@@ -96,8 +100,8 @@ data Syntax s a
     -- ^
     --   >>> pretty @(Syntax () Void) (Let () (Binding () "x" [] Nothing "y" :| []) "z")
     --   let x = y in z
-    --   >>> pretty @(Syntax () Void) (Let () (Binding () "x" [NameBinding () "a" (Just "A")] (Just "X") "y" :| []) "z")
-    --   let x (a : A) : X = y in z
+    --   >>> pretty @(Syntax () Void) (Let () (Binding () "x" [NameBinding () "a" (Just "A") Nothing, NameBinding () "b" Nothing (Just "e")] (Just "X") "y" :| []) "z")
+    --   let x (a : A) (b = e) : X = y in z
     --   >>> pretty @(Syntax () Void) (Let () (Binding () "a" [] Nothing "b" :| [ Binding () "c" [] Nothing "d" ]) "e")
     --   let a = b let c = d in e
     | List { location :: s, elements :: Seq (Syntax s a) }
@@ -1049,8 +1053,14 @@ prettyPrimitiveExpression other = Pretty.group (Pretty.flatAlt long short)
 
 {-| A bound field name
 
-    >>> pretty (FieldName () "x" Nothing)
+    >>> pretty @(FieldName () Void) (FieldName () "x" Nothing Nothing)
     x
+    >>> pretty @(FieldName () Void) (FieldName () "x" (Just "A") Nothing)
+    x : A
+    >>> pretty @(FieldName () Void) (FieldName () "x" Nothing (Just "a"))
+    x = a
+    >>> pretty @(FieldName () Void) (FieldName () "x" (Just "A") (Just "a"))
+    x : A = a
 -}
 data FieldName s a = FieldName
     { fieldNameLocation :: s
@@ -1092,13 +1102,17 @@ instance Pretty a => Pretty (FieldName s a) where
 
 {-| A bound variable, possibly with a type annotation
 
-    >>> pretty (NameBinding () "x" Nothing)
+    >>> pretty @(NameBinding () Void) (NameBinding () "x" Nothing Nothing)
     x
-    >>> pretty (NameBinding () "x" (Just "X"))
-    (x : X)
-    >>> pretty (FieldNamesBinding () [])
+    >>> pretty @(NameBinding () Void) (NameBinding () "x" (Just "A") Nothing)
+    (x : A)
+    >>> pretty @(NameBinding () Void) (NameBinding () "x" Nothing (Just "a"))
+    (x = a)
+    >>> pretty @(NameBinding () Void) (NameBinding () "x" (Just "A") (Just "a"))
+    (x : A = a)
+    >>> pretty @(NameBinding () Void) (FieldNamesBinding () [])
     { }
-    >>> pretty (FieldNamesBinding () [ "x", "y" ])
+    >>> pretty @(NameBinding () Void) (FieldNamesBinding () [ "x", "y" ])
     { x, y }
 -}
 data NameBinding s a
@@ -1166,7 +1180,7 @@ instance Pretty a => Pretty (NameBinding s a) where
     let x = y
     >>> pretty @(Binding () Void) (Binding () "x" [] (Just "X") "y")
     let x : X = y
-    >>> pretty @(Binding () Void) (Binding () "x" [NameBinding () "a" (Just "A")] (Just "X") "y")
+    >>> pretty @(Binding () Void) (Binding () "x" [NameBinding () "a" (Just "A") Nothing] (Just "X") "y")
     let x (a : A) : X = y
 -}
 data Binding s a = Binding

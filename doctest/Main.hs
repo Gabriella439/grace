@@ -1,4 +1,31 @@
 import qualified Test.DocTest
 
 main :: IO ()
-main = Test.DocTest.doctest [ "-idist/build/autogen", "--fast", "src", "ghc" ]
+main = Test.DocTest.doctest
+    [ "-idist/build/autogen"
+    , "--fast"
+    , "-XApplicativeDo"
+    , "-XBangPatterns"
+    , "-XBlockArguments"
+    , "-XDataKinds"
+    , "-XDefaultSignatures"
+    , "-XDeriveAnyClass"
+    , "-XDeriveFoldable"
+    , "-XDeriveFunctor"
+    , "-XDeriveGeneric"
+    , "-XDeriveLift"
+    , "-XDeriveTraversable"
+    , "-XDerivingStrategies"
+    , "-XDuplicateRecordFields"
+    , "-XGeneralizedNewtypeDeriving"
+    , "-XMultiWayIf"
+    , "-XNamedFieldPuns"
+    , "-XOverloadedStrings"
+    , "-XScopedTypeVariables"
+    , "-XStandaloneDeriving"
+    , "-XTypeApplications"
+    , "-XTypeOperators"
+    , "-XViewPatterns"
+    , "src"
+    , "ghc"
+    ]
