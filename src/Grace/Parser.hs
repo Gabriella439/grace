@@ -847,25 +847,31 @@ grammar endsWithBrace = mdo
         let annotated = do
                 parseToken Grace.Parser.OpenParenthesis
                 ~(nameLocation, name) <- locatedLabel
-                parseToken Grace.Parser.Colon
-                annotation <- quantifiedType
+                annotation <- optional (do parseToken Grace.Parser.Colon; r <- quantifiedType; pure r)
+                assignment <- optional (do parseToken Grace.Parser.Equals; r <- expression; pure r)
                 parseToken Grace.Parser.CloseParenthesis
-                pure NameBinding{ annotation = Just annotation, .. }
+                pure NameBinding{ nameLocation, name, annotation, assignment }
 
         let unannotated = do
                 ~(nameLocation, name) <- locatedLabel
-                pure NameBinding{ annotation = Nothing, .. }
+                pure NameBinding{ nameLocation, name, annotation = Nothing, assignment = Nothing }
 
         let fields = do
                 let parseAnnotation = do
                         parseToken Grace.Parser.Colon
                         annotation <- quantifiedType
-                        pure (Just annotation)
+                        pure annotation
+
+                let parseAssignment = do
+                        parseToken Grace.Parser.Equals
+                        assignment <- expression
+                        pure assignment
 
                 let parseFieldName = do
                         ~(fieldNameLocation, name) <- locatedLabel
-                        annotation <- parseAnnotation <|> pure Nothing
-                        return FieldName{ fieldNameLocation, name, annotation }
+                        annotation <- optional parseAnnotation
+                        assignment <- optional parseAssignment
+                        return FieldName{ fieldNameLocation, name, annotation, assignment }
 
                 fieldNamesLocation <- locatedToken Grace.Parser.OpenBrace
                 fieldNames <- parseFieldName `sepBy` parseToken Grace.Parser.Comma
