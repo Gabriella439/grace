@@ -860,12 +860,18 @@ grammar endsWithBrace = mdo
                 let parseAnnotation = do
                         parseToken Grace.Parser.Colon
                         annotation <- quantifiedType
-                        pure (Just annotation)
+                        pure annotation
+
+                let parseAssignment = do
+                        parseToken Grace.Parser.Equals
+                        assignment <- expression
+                        pure assignment
 
                 let parseFieldName = do
                         ~(fieldNameLocation, name) <- locatedLabel
-                        annotation <- parseAnnotation <|> pure Nothing
-                        return FieldName{ fieldNameLocation, name, annotation }
+                        annotation <- optional parseAnnotation
+                        assignment <- optional parseAssignment
+                        return FieldName{ fieldNameLocation, name, annotation, assignment }
 
                 fieldNamesLocation <- locatedToken Grace.Parser.OpenBrace
                 fieldNames <- parseFieldName `sepBy` parseToken Grace.Parser.Comma

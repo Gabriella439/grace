@@ -1323,27 +1323,102 @@ infer e₀ = do
                     return ([Context.Annotation name input₀], input₁, newNameBinding)
 
                 Syntax.FieldNamesBinding{ fieldNamesLocation, fieldNames } -> do
-                    let process Syntax.FieldName{ fieldNameLocation, name, annotation = Nothing } = do
+                    let process Syntax.FieldName{ fieldNameLocation, name, annotation = Nothing, assignment = Nothing } = do
                             existential <- fresh
 
                             push (Context.UnsolvedType existential)
 
-                            let type_ =
+                            let annotation =
                                     Type.UnsolvedType
                                         { existential
                                         , location = fieldNameLocation
                                         }
 
-                            return (name, type_)
-                        process Syntax.FieldName{ name, annotation = Just type_ } = do
-                            return (name, type_)
+                            let entry = Context.Annotation name annotation
 
-                    fieldTypes <- traverse process fieldNames
+                            let fieldType = (name, annotation)
+
+                            let newFieldName = Syntax.FieldName
+                                    { fieldNameLocation
+                                    , name
+                                    , annotation = Nothing
+                                    , assignment = Nothing
+                                    }
+
+                            return (entry, fieldType, newFieldName)
+
+                        process Syntax.FieldName{ fieldNameLocation, name, annotation = Just annotation, assignment = Nothing } = do
+                            let entry = Context.Annotation name annotation
+
+                            let fieldType = (name, annotation)
+
+                            let newFieldName = Syntax.FieldName
+                                    { fieldNameLocation
+                                    , name
+                                    , annotation = Just annotation
+                                    , assignment = Nothing
+                                    }
+
+                            return (entry, fieldType, newFieldName)
+
+                        process Syntax.FieldName{ fieldNameLocation, name, annotation = Nothing, assignment = Just assignment } = do
+                            (annotation₀, newAssignment) <- infer assignment
+
+                            let entry = Context.Annotation name annotation₀
+
+                            let annotation₁ = Type.Optional
+                                    { location = Syntax.location assignment
+                                    , type_ = annotation₀
+                                    }
+
+                            let fieldType = (name, annotation₁)
+
+                            let newFieldName = Syntax.FieldName
+                                    { fieldNameLocation
+                                    , name
+                                    , annotation = Nothing
+                                    , assignment = Just newAssignment
+                                    }
+
+                            return (entry, fieldType, newFieldName)
+
+                        process Syntax.FieldName{ fieldNameLocation, name, annotation = Just annotation₀, assignment = Just assignment } = do
+                            let entry = Context.Annotation name annotation₀
+
+                            let annotation₁ = Type.Optional
+                                    { location = Syntax.location assignment
+                                    , type_ = annotation₀
+                                    }
+
+                            let fieldType = (name, annotation₁)
+
+                            newAssignment <- check assignment annotation₀
+
+                            let newFieldName = Syntax.FieldName
+                                    { fieldNameLocation
+                                    , name
+                                    , annotation = Just annotation₀
+                                    , assignment = Just newAssignment
+                                    }
+
+                            return (entry, fieldType, newFieldName)
+
+                    tuples <- traverse process fieldNames
 
                     let entries = do
-                            (name, type_) <- fieldTypes
+                            (entry, _, _) <- tuples
 
-                            return (Context.Annotation name type_)
+                            return entry
+
+                    let fieldTypes = do
+                            (_, fieldType, _) <- tuples
+
+                            return fieldType
+
+                    let newFieldNames = do
+                            (_, _, fieldName) <- tuples
+
+                            return fieldName
 
                     existential <- fresh
 
@@ -1357,7 +1432,7 @@ infer e₀ = do
 
                     let newNameBinding = Syntax.FieldNamesBinding
                             { fieldNamesLocation
-                            , fieldNames
+                            , fieldNames = newFieldNames
                             }
 
                     return (entries, annotation, newNameBinding)

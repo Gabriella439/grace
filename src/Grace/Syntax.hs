@@ -157,7 +157,10 @@ instance Monad (Syntax ()) where
         onNameBinding NameBinding{..} =
             NameBinding{ assignment = fmap (>>= f) assignment, .. }
         onNameBinding FieldNamesBinding{ fieldNamesLocation, fieldNames } =
-            FieldNamesBinding{ fieldNamesLocation, fieldNames }
+            FieldNamesBinding{ fieldNamesLocation, fieldNames = fmap onFieldName fieldNames }
+
+        onFieldName FieldName{ assignment, ..} =
+            FieldName{ assignment = fmap (>>= f) assignment, .. }
     Application{ function, argument, .. } >>= f =
         Application{ function = function >>= f, argument = argument >>= f, .. }
     Annotation{ annotated, .. } >>= f =
@@ -171,7 +174,10 @@ instance Monad (Syntax ()) where
         onNameBinding NameBinding{..} =
             NameBinding{ assignment = fmap (>>= f) assignment, .. }
         onNameBinding FieldNamesBinding{ fieldNamesLocation, fieldNames } =
-            FieldNamesBinding{ fieldNamesLocation, fieldNames }
+            FieldNamesBinding{ fieldNamesLocation, fieldNames = fmap onFieldName fieldNames }
+
+        onFieldName FieldName{ assignment, ..} =
+            FieldName{ assignment = fmap (>>= f) assignment, .. }
     List{ elements, .. } >>= f =
         List{ elements = fmap (>>= f) elements, .. }
     Record{ fieldValues, .. } >>= f =
@@ -1046,24 +1052,43 @@ prettyPrimitiveExpression other = Pretty.group (Pretty.flatAlt long short)
     >>> pretty (FieldName () "x" Nothing)
     x
 -}
-data FieldName s = FieldName
+data FieldName s a = FieldName
     { fieldNameLocation :: s
     , name :: Text
     , annotation :: Maybe (Type s)
+    , assignment :: Maybe (Syntax s a)
     } deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
 
-instance IsString (FieldName ()) where
+instance Bifunctor FieldName where
+    first f FieldName{ fieldNameLocation, name, annotation, assignment } =
+        FieldName
+            { fieldNameLocation = f fieldNameLocation
+            , name
+            , annotation = fmap (fmap f) annotation
+            , assignment = fmap (first f) assignment
+            }
+
+    second = fmap
+
+instance IsString (FieldName () a) where
     fromString string = FieldName
         { fieldNameLocation = ()
         , name = fromString string
         , annotation = Nothing
+        , assignment = Nothing
         }
 
-instance Pretty (FieldName s) where
-    pretty FieldName{ name, annotation = Nothing } =
-        label (pretty name)
-    pretty FieldName{ name, annotation = Just type_ } =
-        label (pretty name) <> " " <> punctuation ":" <> " " <> pretty type_
+instance Pretty a => Pretty (FieldName s a) where
+    pretty FieldName{ name, annotation, assignment } =
+            label (pretty name)
+        <>  foldMap renderAnnotation annotation
+        <>  foldMap renderAssignment assignment
+      where
+        renderAnnotation a =
+            " " <> punctuation ":" <> " " <> pretty a
+
+        renderAssignment a =
+            " " <> punctuation "=" <> " " <> pretty a
 
 {-| A bound variable, possibly with a type annotation
 
@@ -1085,7 +1110,7 @@ data NameBinding s a
         }
     | FieldNamesBinding
         { fieldNamesLocation :: s
-        , fieldNames :: [FieldName s]
+        , fieldNames :: [FieldName s a]
         }
     deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
 
@@ -1093,7 +1118,7 @@ instance Bifunctor NameBinding where
     first f NameBinding{ nameLocation, name, annotation, assignment } =
         NameBinding{ nameLocation = f nameLocation, name, annotation = fmap (fmap f) annotation, assignment = fmap (first f) assignment }
     first f FieldNamesBinding{ fieldNamesLocation, fieldNames } =
-        FieldNamesBinding{ fieldNamesLocation = f fieldNamesLocation, fieldNames = fmap (fmap f) fieldNames }
+        FieldNamesBinding{ fieldNamesLocation = f fieldNamesLocation, fieldNames = fmap (first f) fieldNames }
 
     second = fmap
 

@@ -119,11 +119,14 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                 pure (Value.Lambda env (Value.Name name newAssignment) body)
 
             Syntax.Lambda{ nameBinding = Syntax.FieldNamesBinding{ fieldNames }, ..} -> do
-                let names = do
-                        Syntax.FieldName{ name } <- fieldNames
-                        return name
+                let process Syntax.FieldName{ name, assignment } = do
+                        newAssignment <- traverse (loop env) assignment
 
-                pure (Value.Lambda env (Value.FieldNames names) body)
+                        return (name, newAssignment)
+
+                newFieldNames <- traverse process fieldNames
+
+                pure (Value.Lambda env (Value.FieldNames newFieldNames) body)
 
             Syntax.Annotation{ annotated, annotation  } -> do
                 newAnnotated <- loop env annotated
@@ -542,11 +545,13 @@ apply keyToMethods function₀ argument₀ = runConcurrently (loop function₀ a
         Concurrently (evaluate keyToMethods (extraEnv <> capturedEnv) body)
       where
         extraEnv = do
-            fieldName <- fieldNames
+            (fieldName, assignment) <- fieldNames
 
             let value = case HashMap.lookup fieldName keyValues of
-                    Nothing -> Value.Scalar Null
                     Just n  -> n
+                    Nothing -> case assignment of
+                        Just a  -> Value.Application (Value.Builtin Some) a
+                        Nothing -> Value.Scalar Null
 
             return (fieldName, value)
     loop
@@ -694,12 +699,18 @@ quote value = case value of
                     , annotation = Nothing
                     , assignment = fmap quote assignment
                     }
+
             Value.FieldNames fieldNames ->
                 Syntax.FieldNamesBinding
                     { fieldNamesLocation = location
                     , fieldNames = do
-                        fieldName <- fieldNames
-                        return Syntax.FieldName{ name = fieldName, fieldNameLocation = location, annotation = Nothing }
+                        (fieldName, assignment) <- fieldNames
+                        return Syntax.FieldName
+                            { name = fieldName
+                            , fieldNameLocation = location
+                            , annotation = Nothing
+                            , assignment = fmap quote assignment
+                            }
                     }
 
         newLambda = Syntax.Lambda
