@@ -1,0 +1,6 @@
+let greet{ name = "John Doe" } = "Hello, ${name}!"
+
+in  [ greet{ name: "Mary Sue" }
+    , greet{ name: null }
+    , greet{  }
+    ]

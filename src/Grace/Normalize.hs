@@ -547,11 +547,20 @@ apply keyToMethods function₀ argument₀ = runConcurrently (loop function₀ a
         extraEnv = do
             (fieldName, assignment) <- fieldNames
 
-            let value = case HashMap.lookup fieldName keyValues of
-                    Just n  -> n
-                    Nothing -> case assignment of
-                        Just a  -> Value.Application (Value.Builtin Some) a
+            let value = case assignment of
+                    Nothing -> case HashMap.lookup fieldName keyValues of
+                        Just n -> n
                         Nothing -> Value.Scalar Null
+                    Just a -> case HashMap.lookup fieldName keyValues of
+                        Just (Value.Application (Value.Builtin Some) n) ->
+                            n
+                        Just (Value.Scalar Null) ->
+                            a
+                        Nothing ->
+                            a
+                        -- This case should only be hit if elaboration fails
+                        Just n ->
+                            n
 
             return (fieldName, value)
     loop
