@@ -42,6 +42,7 @@ import Grace.Input (Input)
 import Grace.Location (Location(..))
 import Grace.Monotype (Monotype)
 import Grace.Pretty (Pretty(..))
+import Grace.Prompt (Prompt(..))
 import Grace.Syntax (Syntax)
 import Grace.Type (Type(..))
 
@@ -1925,18 +1926,7 @@ infer e₀ = do
             return (Type.Scalar{ scalar = Monotype.Text, .. }, Syntax.Text{ chunks = Syntax.Chunks text₀ newRest, .. })
 
         Syntax.Prompt{ arguments, .. } -> do
-            newArguments <- check arguments Type.Record
-                { fields =
-                    Type.Fields
-                        [ ("key", Type.Scalar{ scalar = Monotype.Key, .. })
-                        , ("text", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Text, .. }, .. })
-                        , ("model", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Text, .. }, .. })
-                        , ("code", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Bool, .. }, .. })
-                        , ("search", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Bool, .. }, .. })
-                        ]
-                        Monotype.EmptyFields
-                , ..
-                }
+            newArguments <- check arguments (fmap (\_ -> location) (expected @Prompt))
 
             type_ <- case schema of
                 Just t -> do
@@ -3175,18 +3165,7 @@ check Syntax.Text{ chunks = Syntax.Chunks text₀ rest, .. } Type.Scalar{ scalar
     return Syntax.Text{ chunks = Syntax.Chunks text₀ newRest, .. }
 
 check Syntax.Prompt{ schema = Nothing, .. } annotation = do
-    newArguments <- check arguments Type.Record
-        { fields =
-            Type.Fields
-                [ ("key", Type.Scalar{ scalar = Monotype.Key, .. })
-                , ("text", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Text, .. }, .. })
-                , ("model", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Text, .. }, .. })
-                , ("code", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Bool, .. }, .. })
-                , ("search", Type.Optional{ type_ = Type.Scalar{ scalar = Monotype.Bool, .. }, .. })
-                ]
-                Monotype.EmptyFields
-        , ..
-        }
+    newArguments <- check arguments (fmap (\_ -> location) (expected @Prompt))
 
     return Syntax.Prompt{ arguments = newArguments, schema = Just annotation, .. }
 

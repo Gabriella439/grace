@@ -61,6 +61,16 @@ import qualified System.IO.Unsafe as Unsafe
 
 deriving anyclass instance FromGrace ReasoningEffort
 
+-- | The amount of effort a reasoning model puts into reasoning
+data Effort = Low | Medium | High
+    deriving stock (Generic)
+    deriving anyclass (FromGrace)
+
+fromEffort :: Effort -> ReasoningEffort
+fromEffort Low = ReasoningEffort_Low
+fromEffort Medium = ReasoningEffort_Medium
+fromEffort High = ReasoningEffort_High
+
 -- | Context used to teach the LLM to code in Grace
 staticAssets :: Text
 staticAssets = Unsafe.unsafePerformIO do
@@ -208,7 +218,7 @@ data Prompt = Prompt
     , model :: Maybe Text
     , code :: Maybe Bool
     , search :: Maybe Bool
-    , effort :: Maybe ReasoningEffort
+    , effort :: Maybe Effort
     } deriving stock (Generic)
       deriving anyclass (FromGrace)
 
@@ -249,7 +259,7 @@ prompt generateContext location Prompt{ key = Grace.Decode.Key{ text = key }, te
                 | Text.isPrefixOf "o" defaultedModel ->
                     Just ReasoningEffort_High
             _ ->
-                effort
+                fmap fromEffort effort
 
     let defaultedSchema =
             Lens.transform
