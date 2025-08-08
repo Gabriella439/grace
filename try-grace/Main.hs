@@ -142,17 +142,11 @@ foreign import javascript unsafe "$1.setAttribute($2,$3)"
 setAttribute :: MonadIO io => JSVal -> Text -> Text -> io ()
 setAttribute a b c = liftIO (setAttribute_ a (fromText b) (fromText c))
 
-foreign import javascript unsafe "$1.disabled = true"
-    disable_ :: JSVal -> IO ()
+foreign import javascript unsafe "$1.disabled = $2"
+    setDisabled_ :: JSVal -> Bool -> IO ()
 
-disable :: MonadIO io => JSVal -> io ()
-disable a = liftIO (disable_ a)
-
-foreign import javascript unsafe "$1.disabled = false"
-    enable_ :: JSVal -> IO ()
-
-enable :: MonadIO io => JSVal -> io ()
-enable a = liftIO (enable_ a)
+setDisabled :: MonadIO io => JSVal -> Bool -> io ()
+setDisabled a b = liftIO (setDisabled_ a b)
 
 foreign import javascript unsafe "$1.replaceChildren($2)"
     replaceChild_ :: JSVal -> JSVal -> IO ()
@@ -364,7 +358,7 @@ renderValue _ _ parent _ (Value.Scalar (Bool bool)) = do
 
     setAttribute input "type"     "checkbox"
     setAttribute input "class"    "form-check-input"
-    disable input
+    setDisabled input True
 
     Monad.when bool (setAttribute input "checked" "")
 
@@ -791,7 +785,7 @@ renderInput keyToMethods ref Type.Union{ alternatives = Type.Alternatives keyTyp
 
                 fieldset <- createElement "fieldset"
 
-                Monad.unless checked (disable fieldset)
+                setDisabled fieldset (not checked)
 
                 replaceChild fieldset nestedVal
 
@@ -822,14 +816,13 @@ renderInput keyToMethods ref Type.Union{ alternatives = Type.Alternatives keyTyp
         let loop get [] = do
                 get
             loop get ((_, fieldset, checkEnabled, getNested, _) : rest) = do
-                enabled <- checkEnabled
-                if  | enabled -> do
-                        enable fieldset
+                checked <- checkEnabled
 
+                setDisabled fieldset (not checked)
+
+                if  | checked -> do
                         loop getNested rest
                     | otherwise -> do
-                        disable fieldset
-
                         loop get rest
 
         let get = loop empty quintets
@@ -858,17 +851,15 @@ renderInput keyToMethods ref Type.Optional{ type_ } = do
     replaceChildren div (Array.fromList [input, fieldset])
 
     let get = do
-            bool <- getChecked input
+            checked <- getChecked input
 
-            if  | bool  -> do
+            setDisabled fieldset (not checked)
+
+            if  | checked -> do
                     value <- getInner
-
-                    enable fieldset
 
                     return (Application (Value.Builtin Syntax.Some) value)
                 | otherwise -> do
-                    disable fieldset
-
                     return (Value.Scalar Null)
 
     return (div, get, refreshInner)
