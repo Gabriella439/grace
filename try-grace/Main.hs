@@ -319,9 +319,9 @@ renderValue
     -> IO (IO ())
 renderValue keyToMethods ref parent Type.Forall{ name, nameLocation, domain = Type, type_ } value = do
     -- If an expression has a polymorphic type, specialize the type to Text
-    let json = Type.Scalar{ location = nameLocation, scalar = Monotype.Text }
+    let text = Type.Scalar{ location = nameLocation, scalar = Monotype.Text }
 
-    renderValue keyToMethods ref parent (Type.substituteType name 0 json type_) value
+    renderValue keyToMethods ref parent (Type.substituteType name 0 text type_) value
 
 renderValue keyToMethods ref parent Type.Forall{ name, domain = Fields, type_ } value = do
     let empty_ = Type.Fields [] EmptyFields
