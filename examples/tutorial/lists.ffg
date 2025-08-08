@@ -1,0 +1,33 @@
+# Now let's cover the basic list operations.
+
+let somePrimes = [ 2, 3, 5, 7, 11 ]
+
+# You can access list elements using dot notation.  `x.n` returns the
+# (0-indexed) nth element of the list:
+let two = somePrimes.0
+let three = somePrimes.1
+
+# Just like Python, negative numbers index from the end of the list:
+let eleven = somePrimes.-1
+let seven = somePrimes.-2
+
+# Use `list[i:j]` to return a slice from the list.
+#
+# The lower bound (i) is inclusive and the upperbound (j) is not inclusive:
+let middleThreeElements = somePrimes[1:4]
+
+# You can omit the lower bound to begin from the first element:
+let firstThreeElements = somePrimes[:3]
+
+# You can omit the upper bound to end on the last element:
+let lastThreeElements = somePrimes[-3:]
+
+in  { somePrimes
+    , two
+    , three
+    , eleven
+    , seven
+    , middleThreeElements
+    , firstThreeElements
+    , lastThreeElements
+    }

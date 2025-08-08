@@ -133,6 +133,7 @@ executable try-grace
                      , async
                      , commonmark
                      , containers
+                     , filepath
                      , ghcjs-base
                      , grace
                      , insert-ordered-containers

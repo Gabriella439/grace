@@ -1,0 +1,16 @@
+# Grace also has a Prelude of utility functions derived from built-in
+# functions that you can also use.
+
+# You can import functions individually, like this:
+let not = https://raw.githubusercontent.com/Gabriella439/grace/main/prelude/bool/not.ffg
+
+# You can also import the Prelude as a whole, which is a nested record:
+let prelude = https://raw.githubusercontent.com/Gabriella439/grace/main/prelude/package.ffg
+
+# Then you can access functions as record fields:
+let clamp = prelude.integer.clamp
+
+in  { "not": not
+    , "clamp": clamp
+    , "The entire Prelude": prelude
+    }

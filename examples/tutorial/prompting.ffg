@@ -1,0 +1,30 @@
+# Grace provides built-in language support for LLMs using the `prompt` function.
+# To run these examples you will need to provide an OpenAI API key below and.
+# and then click "Submit".
+\arguments ->
+
+let key = arguments."OpenAI key" in
+
+{ # You can prompt a model with `Text`, which will (by default) return `Text`:
+  names: prompt{ key, text: "Give me a list of names" }
+
+, # You can request structured output with a type annotation, like this:
+  structuredNames: prompt{ key, text: "Give me a list of names" } : List Text
+
+, # If you request a record with first and last name fields then the model will
+  # adjust its output to match:
+  fullNames:
+    prompt{ key, text: "Give me a list of names" }
+      : List { firstName: Text, lastName: Text }
+
+, # In fact, that type is descriptive enough that we can just omit the prompt:
+  tacitFullNames: prompt{ key } : List { firstName: Text, lastName: Text }
+
+, # By default the `prompt` keyword selects the `o4-mini` model, but you can
+  # specify other models using the `model` argument:
+  differentModel:
+    prompt{ key, model: "gpt-4o" } : List { firstName: Text, lastName: Text }
+}
+
+# Try switching to the "Code" tab below to view the code for the result, then
+# switch back to the "Form" tab and continue to the next example.

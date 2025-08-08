@@ -31,6 +31,7 @@ import Grace.Value (Value(..))
 import JavaScript.Array (JSArray)
 import Numeric.Natural (Natural)
 import Prelude hiding (div, error, id, span, subtract)
+import System.FilePath ((</>))
 
 import qualified Commonmark
 import qualified Control.Concurrent.Async as Async
@@ -52,6 +53,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Lazy as Text.Lazy
 import qualified Data.Text.Lazy.Encoding as Text.Encoding
 import qualified GHCJS.Foreign.Callback as Callback
+import qualified Grace.DataFile as DataFile
 import qualified Grace.HTTP as HTTP
 import qualified Grace.Import as Import
 import qualified Grace.Infer as Infer
@@ -1237,7 +1239,10 @@ main = do
 
             setTextContent stopTutorial "Exit the tutorial"
 
-            let createExample active name code = do
+            let createExample active name file = do
+                    text <- liftIO (DataFile.readDataFile ("examples" </> "tutorial" </> file))
+                    let code = Text.strip text
+
                     n <- State.get
 
                     State.put (n + 1)
@@ -1283,27 +1288,26 @@ main = do
             ul <- createElement "ul"
 
             flip State.evalStateT (0 :: Int) do
-                helloWorld <- createExample True "Hello, world!"
-                    helloWorldExample
+                helloWorld <- createExample True "Hello, world!" "hello.ffg"
 
-                checkboxes <- createExample False "HTML" checkboxesExample
+                checkboxes <- createExample False "HTML" "checkboxes.ffg"
 
-                data_ <- createExample False "Data" dataExample
+                data_ <- createExample False "Data" "data.ffg"
 
-                prompting <- createExample False "Prompting" promptingExample
+                prompting <- createExample False "Prompting" "prompting.ffg"
 
-                variables <- createExample False "Variables" variablesExample
+                variables <- createExample False "Variables" "variables.ffg"
 
-                functions <- createExample False "Functions" functionsExample
+                functions <- createExample False "Functions" "functions.ffg"
 
-                import_ <- createExample False "Imports" importExample
+                imports <- createExample False "Imports" "imports.ffg"
 
 
-                lists <- createExample False "Lists" listsExample
+                lists <- createExample False "Lists" "lists.ffg"
 
-                coding <- createExample False "Coding" codingExample
+                coding <- createExample False "Coding" "coding.ffg"
 
-                prelude <- createExample False "Prelude" preludeExample
+                prelude <- createExample False "Prelude" "prelude.ffg"
 
                 setAttribute ul "class" "nav nav-tabs"
 
@@ -1315,7 +1319,7 @@ main = do
                         , prompting
                         , variables
                         , functions
-                        , import_
+                        , imports
                         , lists
                         , coding
                         , prelude
@@ -1361,234 +1365,3 @@ main = do
         setValue codeInput (URI.Encode.decodeText expression)
 
     debouncedInterpret ()
-
-helloWorldExample :: Text
-helloWorldExample =
-    "# This is a tour of the Fall-from-Grace language (a.k.a. \"Grace\" for short).\n\
-    \#\n\
-    \# First, any line prefixed with a \"#\" character is a comment, like this one.\n\
-    \#\n\
-    \# Second, any change you make to this editable code area will show up below.\n\
-    \# Try editing the string \"Hello, world!\" below to replace \"world\" with your\n\
-    \# name.\n\
-    \#\n\
-    \# Once you are done, click on the \"HTML\" tab above to proceed to the next\n\
-    \# example.\n\
-    \\n\
-    \\"Hello, world!\""
-
-checkboxesExample :: Text
-checkboxesExample =
-    "# This Grace browser attempts to faithfully render any Grace expression\n\
-    \# as an equivalent HTML representation.  For example, a list of boolean\n\
-    \# values such as these will render as an HTML list of checkboxes:\n\
-    \\n\
-    \[ true, false, true ]\n\
-    \\n\
-    \# Try adding another false value to the above list."
-
-dataExample :: Text
-dataExample =
-    "# A record will render as a definition list when converted to HTML\n\
-    \\n\
-    \{ \"An example string\": \"Mercury\"\n\
-    \, \"An example string with a type annotation\": \"cosmic\" : Text\n\
-    \, \"A boolean value\": true\n\
-    \, \"Annotated boolean value\": false : Bool\n\
-    \, \"A natural number\": 42\n\
-    \, \"An integer\": -12\n\
-    \, \"A real number\": 3.14159265359\n\
-    \, \"A list of natural numbers\": [ 1, 1, 2, 3, 5, 8, 13 ]\n\
-    \, \"Annotated list of natural numbers\": [ 1, 1, 2, 3, 5, 8, 13 ] : List Natural\n\
-    \, \"Annotated record\": { x: 0, y: 0 } : { x: Natural, y: Natural }\n\
-    \, \"A list of records (using JSON syntax with quoted field names)\":\n\
-    \    [ { \"isActive\": true\n\
-    \      , \"age\": 36\n\
-    \      , \"name\": \"Dunlap Hubbard\"\n\
-    \      , \"email\": \"dunlaphubbard@example.com\"\n\
-    \      , \"phone\": \"+1 (555) 543-2508\"\n\
-    \      }\n\
-    \    , { \"isActive\": true\n\
-    \      , \"age\": 24\n\
-    \      , \"name\": \"Kirsten Sellers\"\n\
-    \      , \"email\": \"kirstensellers@example.com\"\n\
-    \      , \"phone\": \"+1 (555) 564-2190\"\n\
-    \      }\n\
-    \    ]\n\
-    \}\n\
-    \\n\
-    \# What type do you think the last field has?  Switch to the \"Type\" tab below\n\
-    \# to check your guess, then switch back to the \"Form\" tab before proceeding to\n\
-    \# the next example."
-
-promptingExample :: Text
-promptingExample =
-    "# Grace provides built-in language support for LLMs using the `prompt` function.\n\
-    \# To run these examples you will need to provide an OpenAI API key below and.\n\
-    \# and then click \"Submit\".\n\
-    \\\arguments ->\n\
-    \\n\
-    \let key = arguments.\"OpenAI key\" in\n\
-    \\n\
-    \{ # You can prompt a model with `Text`, which will (by default) return `Text`:\n\
-    \  names: prompt{ key, text: \"Give me a list of names\" }\n\
-    \\n\
-    \, # You can request structured output with a type annotation, like this:\n\
-    \  structuredNames: prompt{ key, text: \"Give me a list of names\" } : List Text\n\
-    \\n\
-    \, # If you request a record with first and last name fields then the model will\n\
-    \  # adjust its output to match:\n\
-    \  fullNames:\n\
-    \    prompt{ key, text: \"Give me a list of names\" }\n\
-    \      : List { firstName: Text, lastName: Text }\n\
-    \\n\
-    \, # In fact, that type is descriptive enough that we can just omit the prompt:\n\
-    \  tacitFullNames: prompt{ key } : List { firstName: Text, lastName: Text }\n\
-    \\n\
-    \, # By default the `prompt` keyword selects the `o4-mini` model, but you can\n\
-    \  # specify other models using the `model` argument:\n\
-    \  differentModel:\n\
-    \    prompt{ key, model: \"gpt-4o\" } : List { firstName: Text, lastName: Text }\n\
-    \}\n\
-    \\n\
-    \# Try switching to the \"Code\" tab below to view the code for the result, then\n\
-    \# switch back to the \"Form\" tab and continue to the next example."
-
-variablesExample :: Text
-variablesExample =
-    "# You can define a variable using `let`:\n\
-    \let john = { name: \"John Doe\", age: 24 }\n\
-    \\n\
-    \# Variables can reference earlier variables:\n\
-    \let twentyFour = john.age\n\
-    \\n\
-    \# You can nest `let` expressions:\n\
-    \let nine = let three = 3\n\
-    \           in  three * three\n\
-    \\n\
-    \in  nine * twentyFour\n\
-    \# Grace is whitespace-insensitive (with the exception of comments, which extend\n\
-    \# to the next newline character), so try deleting all of the above comments and\n\
-    \# modifying the above code to fit on one line."
-
-functionsExample :: Text
-functionsExample =
-    "# You can also define functions using `let` expressions:\n\
-    \let greet{ name } = \"Hello, ${name}!\"\n\
-    \\n\
-    \let greeting = greet{ name: \"world\" }\n\
-    \\n\
-    \# You can add optional type annotations to a function's arguments and output:\n\
-    \let greet{ name: Text } : Text = \"Hello, ${name}!\"\n\
-    \# The type of the `greet` function is `{ name: Text } -> Text` which you can\n\
-    \# read as \"a function whose input is a record (with a `name` field) and whose\n\
-    \# output is `Text`\n\
-    \\n\
-    \# Function definitions can define intermediate variables:\n\
-    \let makeUser{ user } =\n\
-    \        let home = \"/home/${user}\"\n\
-    \        let privateKey = \"${home}/.ssh/id_ed25519\"\n\
-    \        let publicKey = \"${privateKey}.pub\"\n\
-    \        in  { home, privateKey, publicKey }\n\
-    \# What do you think the type of the `makeUser` function is?  Check the \"Type\"\n\
-    \# tab below to check your guess.\n\
-    \\n\
-    \let users =\n\
-    \        [ makeUser{ user: \"bill\" }\n\
-    \        , makeUser{ user: \"jane\" }\n\
-    \        ]\n\
-    \\n\
-    \# We include the functions we defined (i.e. `greet` and `makeUser`) in the\n\
-    \# output because the Grace browser can render functions as interactive forms.\n\
-    \# Switch back to the \"Form\" tab and try entering your name into the generated\n\
-    \# interactive forms.\n\
-    \in  { greet\n\
-    \    , greeting\n\
-    \    , makeUser\n\
-    \    , users\n\
-    \    }"
-
-importExample :: Text
-importExample =
-    "# You can reference other Grace expressions by their URL.  For example,\n\
-    \# the following URL encodes a function for computing US federal income\n\
-    \# tax for 2022:\n\
-    \https://gist.githubusercontent.com/Gabriella439/712d0648bbdcfcc83eadd0ee394beed3/raw/694198a2d114278c42e4981ed6af67b8e3229cea/incomeTax.ffg\n\
-    \# You can use this feature to create reusable Grace code.\n\
-    \#\n\
-    \# Grace browser sessions are sharable, too!  If you copy your current tab's URL\n\
-    \# and open that URL in a new tab you will get the same Grace browser session.\n\
-    \# This means that all forms you create within the Grace browser are\n\
-    \# automatically sharable, too."
-
-listsExample :: Text
-listsExample =
-    "# Now let's cover the basic list operations.\n\
-    \\n\
-    \let somePrimes = [ 2, 3, 5, 7, 11 ]\n\
-    \\n\
-    \# You can access list elements using dot notation.  `x.n` returns the\n\
-    \# (0-indexed) nth element of the list:\n\
-    \let two = somePrimes.0\n\
-    \let three = somePrimes.1\n\
-    \\n\
-    \# Just like Python, negative numbers index from the end of the list:\n\
-    \let eleven = somePrimes.-1\n\
-    \let seven = somePrimes.-2\n\
-    \\n\
-    \# Use `list[i:j]` to return a slice from the list.\n\
-    \#\n\
-    \# The lower bound (i) is inclusive and the upperbound (j) is not inclusive:\n\
-    \let middleThreeElements = somePrimes[1:4]\n\
-    \\n\
-    \# You can omit the lower bound to begin from the first element:\n\
-    \let firstThreeElements = somePrimes[:3]\n\
-    \\n\
-    \# You can omit the upper bound to end on the last element:\n\
-    \let lastThreeElements = somePrimes[-3:]\n\
-    \\n\
-    \in  { somePrimes\n\
-    \    , two\n\
-    \    , three\n\
-    \    , eleven\n\
-    \    , seven\n\
-    \    , middleThreeElements\n\
-    \    , firstThreeElements\n\
-    \    , lastThreeElements\n\
-    \    }"
-
-codingExample :: Text
-codingExample =
-    "\\arguments ->\n\
-    \\n\
-    \let key = arguments.\"OpenAI key\" in\n\
-    \\n\
-    \# What do you think this code will do?  Run it to test your guess:\n\
-    \prompt{ key, code: true }\n\
-    \    : { jobDescription: Text } -> { isFinance : Bool, rationale : Text }\n\
-    \# You can read the above type as \"a function whose input is a record (with a\n\
-    \# `jobDescription` field) and whose output is a record (with `isFinance` and\n\
-    \# `rationale` fields)\n\
-    \\n\
-    \# The `code: true` argument instructs the model to generate Grace code matching\n\
-    \# the expected type.  The generated Grace might use the `prompt` keyword, too!\n\
-    \# Be sure to check out the \"Code\" tab to see what code the model generated"
-
-preludeExample :: Text
-preludeExample =
-    "# Grace also has a Prelude of utility functions derived from built-in\n\
-    \# functions that you can also use.\n\
-    \\n\
-    \# You can import functions individually, like this:\n\
-    \let not = https://raw.githubusercontent.com/Gabriella439/grace/main/prelude/bool/not.ffg\n\
-    \\n\
-    \# You can also import the Prelude as a whole, which is a nested record:\n\
-    \let prelude = https://raw.githubusercontent.com/Gabriella439/grace/main/prelude/package.ffg\n\
-    \\n\
-    \# Then you can access functions as record fields:\n\
-    \let clamp = prelude.integer.clamp\n\
-    \\n\
-    \in  { \"not\": not\n\
-    \    , \"clamp\": clamp\n\
-    \    , \"The entire Prelude\": prelude\n\
-    \    }"

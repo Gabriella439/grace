@@ -1,0 +1,31 @@
+# A record will render as a definition list when converted to HTML
+
+{ "An example string": "Mercury"
+, "An example string with a type annotation": "cosmic" : Text
+, "A boolean value": true
+, "Annotated boolean value": false : Bool
+, "A natural number": 42
+, "An integer": -12
+, "A real number": 3.14159265359
+, "A list of natural numbers": [ 1, 1, 2, 3, 5, 8, 13 ]
+, "Annotated list of natural numbers": [ 1, 1, 2, 3, 5, 8, 13 ] : List Natural
+, "Annotated record": { x: 0, y: 0 } : { x: Natural, y: Natural }
+, "A list of records (using JSON syntax with quoted field names)":
+    [ { "isActive": true
+      , "age": 36
+      , "name": "Dunlap Hubbard"
+      , "email": "dunlaphubbard@example.com"
+      , "phone": "+1 (555) 543-2508"
+      }
+    , { "isActive": true
+      , "age": 24
+      , "name": "Kirsten Sellers"
+      , "email": "kirstensellers@example.com"
+      , "phone": "+1 (555) 564-2190"
+      }
+    ]
+}
+
+# What type do you think the last field has?  Switch to the "Type" tab below
+# to check your guess, then switch back to the "Form" tab before proceeding to
+# the next example.

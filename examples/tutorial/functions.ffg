@@ -1,0 +1,34 @@
+# You can also define functions using `let` expressions:
+let greet{ name } = "Hello, ${name}!"
+
+let greeting = greet{ name: "world" }
+
+# You can add optional type annotations to a function's arguments and output:
+let greet{ name: Text } : Text = "Hello, ${name}!"
+# The type of the `greet` function is `{ name: Text } -> Text` which you can
+# read as "a function whose input is a record (with a `name` field) and whose
+# output is `Text`
+
+# Function definitions can define intermediate variables:
+let makeUser{ user } =
+        let home = "/home/${user}"
+        let privateKey = "${home}/.ssh/id_ed25519"
+        let publicKey = "${privateKey}.pub"
+        in  { home, privateKey, publicKey }
+# What do you think the type of the `makeUser` function is?  Check the "Type"
+# tab below to check your guess.
+
+let users =
+        [ makeUser{ user: "bill" }
+        , makeUser{ user: "jane" }
+        ]
+
+# We include the functions we defined (i.e. `greet` and `makeUser`) in the
+# output because the Grace browser can render functions as interactive forms.
+# Switch back to the "Form" tab and try entering your name into the generated
+# interactive forms.
+in  { greet
+    , greeting
+    , makeUser
+    , users
+    }

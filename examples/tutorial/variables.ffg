@@ -1,0 +1,14 @@
+# You can define a variable using `let`:
+let john = { name: "John Doe", age: 24 }
+
+# Variables can reference earlier variables:
+let twentyFour = john.age
+
+# You can nest `let` expressions:
+let nine = let three = 3
+           in  three * three
+
+in  nine * twentyFour
+# Grace is whitespace-insensitive (with the exception of comments, which extend
+# to the next newline character), so try deleting all of the above comments and
+# modifying the above code to fit on one line.

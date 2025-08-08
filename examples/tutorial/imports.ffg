@@ -1,0 +1,10 @@
+# You can reference other Grace expressions by their URL.  For example,
+# the following URL encodes a function for computing US federal income
+# tax for 2022:
+https://gist.githubusercontent.com/Gabriella439/712d0648bbdcfcc83eadd0ee394beed3/raw/694198a2d114278c42e4981ed6af67b8e3229cea/incomeTax.ffg
+# You can use this feature to create reusable Grace code.
+#
+# Grace browser sessions are sharable, too!  If you copy your current tab's URL
+# and open that URL in a new tab you will get the same Grace browser session.
+# This means that all forms you create within the Grace browser are
+# automatically sharable, too.

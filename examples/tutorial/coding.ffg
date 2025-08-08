@@ -1,0 +1,14 @@
+\arguments ->
+
+let key = arguments."OpenAI key" in
+
+# What do you think this code will do?  Run it to test your guess:
+prompt{ key, code: true }
+    : { jobDescription: Text } -> { isFinance : Bool, rationale : Text }
+# You can read the above type as "a function whose input is a record (with a
+# `jobDescription` field) and whose output is a record (with `isFinance` and
+# `rationale` fields)
+
+# The `code: true` argument instructs the model to generate Grace code matching
+# the expected type.  The generated Grace might use the `prompt` keyword, too!
+# Be sure to check out the "Code" tab to see what code the model generated
