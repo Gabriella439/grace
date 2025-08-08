@@ -16,10 +16,16 @@ module Grace.HTTP
 
 import Control.Exception.Safe (Exception(..))
 import Data.Text (Text)
-import GHCJS.Fetch (Request(..), RequestOptions(..), JSPromiseException)
 import GHCJS.Fetch.Types (JSResponse)
 import Grace.HTTP.Type (Header(..), HTTP(..), Parameter(..), completeHeaders)
 import OpenAI.V1.Chat.Completions (ChatCompletionObject, CreateChatCompletion)
+
+import GHCJS.Fetch
+    ( Request(..)
+    , RequestCredentials(..)
+    , RequestOptions(..)
+    , JSPromiseException
+    )
 
 import qualified Control.Exception.Safe as Exception
 import qualified Data.Aeson as Aeson
@@ -87,6 +93,7 @@ http GET{ url, headers, parameters } = do
     let reqOptions = Fetch.defaultRequestOptions
             { reqOptHeaders = completeHeaders headers
             , reqOptMethod = HTTP.Types.methodGet
+            , reqOptCredentials = CredInclude
             }
 
     let request = Request{ reqUrl, reqOptions }
@@ -101,6 +108,7 @@ http POST{ url, headers, request } = do
     let reqOptions₀ = Fetch.defaultRequestOptions
             { reqOptHeaders = completeHeaders headers
             , reqOptMethod = HTTP.Types.methodPost
+            , reqOptCredentials = CredInclude
             }
 
     reqOptions <- case request of
