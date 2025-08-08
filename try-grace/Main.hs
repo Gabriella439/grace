@@ -94,19 +94,19 @@ foreign import javascript unsafe "$1.checked"
 getChecked :: MonadIO io => JSVal -> io Bool
 getChecked a = liftIO (getChecked_ a)
 
-foreign import javascript unsafe "$1.textContent= $2"
+foreign import javascript unsafe "$1.textContent = $2"
     setTextContent_ :: JSVal -> JSString -> IO ()
 
 setTextContent :: MonadIO io => JSVal -> Text -> io ()
 setTextContent a b = liftIO (setTextContent_ a (fromText b))
 
-foreign import javascript unsafe "$1.innerText= $2"
+foreign import javascript unsafe "$1.innerText = $2"
     setInnerText_ :: JSVal -> JSString -> IO ()
 
 setInnerText :: MonadIO io => JSVal -> Text -> io ()
 setInnerText a b = liftIO (setInnerText_ a (fromText b))
 
-foreign import javascript unsafe "$1.innerHTML= $2"
+foreign import javascript unsafe "$1.innerHTML = $2"
     setInnerHTML_ :: JSVal -> JSString -> IO ()
 
 setInnerHTML :: MonadIO io => JSVal -> Text -> io ()
