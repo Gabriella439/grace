@@ -1051,7 +1051,7 @@ createForm showTabs output = do
 
     pane <- createElement "div"
 
-    success <- createElement "success"
+    success <- createElement "div"
 
     let successChildren = if showTabs then [ tabsList, pane ] else [ pane ]
 
