@@ -94,19 +94,19 @@ foreign import javascript unsafe "$1.checked"
 getChecked :: MonadIO io => JSVal -> io Bool
 getChecked a = liftIO (getChecked_ a)
 
-foreign import javascript unsafe "$1.textContent= $2"
+foreign import javascript unsafe "$1.textContent = $2"
     setTextContent_ :: JSVal -> JSString -> IO ()
 
 setTextContent :: MonadIO io => JSVal -> Text -> io ()
 setTextContent a b = liftIO (setTextContent_ a (fromText b))
 
-foreign import javascript unsafe "$1.innerText= $2"
+foreign import javascript unsafe "$1.innerText = $2"
     setInnerText_ :: JSVal -> JSString -> IO ()
 
 setInnerText :: MonadIO io => JSVal -> Text -> io ()
 setInnerText a b = liftIO (setInnerText_ a (fromText b))
 
-foreign import javascript unsafe "$1.innerHTML= $2"
+foreign import javascript unsafe "$1.innerHTML = $2"
     setInnerHTML_ :: JSVal -> JSString -> IO ()
 
 setInnerHTML :: MonadIO io => JSVal -> Text -> io ()
@@ -142,17 +142,11 @@ foreign import javascript unsafe "$1.setAttribute($2,$3)"
 setAttribute :: MonadIO io => JSVal -> Text -> Text -> io ()
 setAttribute a b c = liftIO (setAttribute_ a (fromText b) (fromText c))
 
-foreign import javascript unsafe "$1.disabled = true"
-    disable_ :: JSVal -> IO ()
+foreign import javascript unsafe "$1.disabled = $2"
+    setDisabled_ :: JSVal -> Bool -> IO ()
 
-disable :: MonadIO io => JSVal -> io ()
-disable a = liftIO (disable_ a)
-
-foreign import javascript unsafe "$1.disabled = false"
-    enable_ :: JSVal -> IO ()
-
-enable :: MonadIO io => JSVal -> io ()
-enable a = liftIO (enable_ a)
+setDisabled :: MonadIO io => JSVal -> Bool -> io ()
+setDisabled a b = liftIO (setDisabled_ a b)
 
 foreign import javascript unsafe "$1.replaceChildren($2)"
     replaceChild_ :: JSVal -> JSVal -> IO ()
@@ -194,8 +188,7 @@ foreign import javascript unsafe "$1.set($2,$3)"
     setParam_ :: JSVal -> JSString -> JSString -> IO ()
 
 setParam :: MonadIO io => JSVal -> Text -> Text -> io ()
-setParam a b c =
-    liftIO (setParam_ a (fromText b) (fromText c))
+setParam a b c = liftIO (setParam_ a (fromText b) (fromText c))
 
 -- @$1.delete($2)@ doesn't work because GHCJS treats delete as a forbidden
 -- reserved keyword, so we work around this by defining the
@@ -205,8 +198,7 @@ foreign import javascript unsafe "deleteSearchParamWorkaround($1, $2)"
     deleteParam_ :: JSVal -> JSString -> IO ()
 
 deleteParam :: MonadIO io => JSVal -> Text -> io ()
-deleteParam a b =
-    liftIO (deleteParam_ a (fromText b))
+deleteParam a b = liftIO (deleteParam_ a (fromText b))
 
 foreign import javascript unsafe "history.replaceState(null, null, '?'+$1.toString())"
   saveSearchParams_ :: JSVal -> IO ()
@@ -259,12 +251,6 @@ foreign import javascript unsafe "$1.refresh()"
 
 refresh :: MonadIO io => JSVal -> io ()
 refresh a = liftIO (refresh_ a)
-
-foreign import javascript unsafe "select($1)"
-    select_ :: JSString -> IO ()
-
-select :: MonadIO io => Text -> io ()
-select a = liftIO (select_ (fromText a))
 
 foreign import javascript unsafe "$1.getWrapperElement()"
     getWrapperElement :: JSVal -> JSVal
@@ -333,9 +319,9 @@ renderValue
     -> IO (IO ())
 renderValue keyToMethods ref parent Type.Forall{ name, nameLocation, domain = Type, type_ } value = do
     -- If an expression has a polymorphic type, specialize the type to Text
-    let json = Type.Scalar{ location = nameLocation, scalar = Monotype.Text }
+    let text = Type.Scalar{ location = nameLocation, scalar = Monotype.Text }
 
-    renderValue keyToMethods ref parent (Type.substituteType name 0 json type_) value
+    renderValue keyToMethods ref parent (Type.substituteType name 0 text type_) value
 
 renderValue keyToMethods ref parent Type.Forall{ name, domain = Fields, type_ } value = do
     let empty_ = Type.Fields [] EmptyFields
@@ -364,7 +350,7 @@ renderValue _ _ parent _ (Value.Scalar (Bool bool)) = do
 
     setAttribute input "type"     "checkbox"
     setAttribute input "class"    "form-check-input"
-    disable input
+    setDisabled input True
 
     Monad.when bool (setAttribute input "checked" "")
 
@@ -791,7 +777,7 @@ renderInput keyToMethods ref Type.Union{ alternatives = Type.Alternatives keyTyp
 
                 fieldset <- createElement "fieldset"
 
-                Monad.unless checked (disable fieldset)
+                setDisabled fieldset (not checked)
 
                 replaceChild fieldset nestedVal
 
@@ -822,14 +808,13 @@ renderInput keyToMethods ref Type.Union{ alternatives = Type.Alternatives keyTyp
         let loop get [] = do
                 get
             loop get ((_, fieldset, checkEnabled, getNested, _) : rest) = do
-                enabled <- checkEnabled
-                if  | enabled -> do
-                        enable fieldset
+                checked <- checkEnabled
 
+                setDisabled fieldset (not checked)
+
+                if  | checked -> do
                         loop getNested rest
                     | otherwise -> do
-                        disable fieldset
-
                         loop get rest
 
         let get = loop empty quintets
@@ -858,17 +843,15 @@ renderInput keyToMethods ref Type.Optional{ type_ } = do
     replaceChildren div (Array.fromList [input, fieldset])
 
     let get = do
-            bool <- getChecked input
+            checked <- getChecked input
 
-            if  | bool  -> do
+            setDisabled fieldset (not checked)
+
+            if  | checked -> do
                     value <- getInner
-
-                    enable fieldset
 
                     return (Application (Value.Builtin Syntax.Some) value)
                 | otherwise -> do
-                    disable fieldset
-
                     return (Value.Scalar Null)
 
     return (div, get, refreshInner)
@@ -1068,7 +1051,7 @@ createForm showTabs output = do
 
     pane <- createElement "div"
 
-    success <- createElement "success"
+    success <- createElement "div"
 
     let successChildren = if showTabs then [ tabsList, pane ] else [ pane ]
 
