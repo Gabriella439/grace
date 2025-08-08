@@ -65,6 +65,10 @@
                                 pkgsNew.haskell.lib.dontCheck
                                   haskellPackagesOld.bsb-http-chunked;
 
+                              commonmark =
+                                pkgsNew.haskell.lib.dontCheck
+                                  haskellPackagesOld.commonmark;
+
                               conduit =
                                 pkgsNew.haskell.lib.dontCheck
                                   haskellPackagesOld.conduit;
