@@ -188,8 +188,7 @@ foreign import javascript unsafe "$1.set($2,$3)"
     setParam_ :: JSVal -> JSString -> JSString -> IO ()
 
 setParam :: MonadIO io => JSVal -> Text -> Text -> io ()
-setParam a b c =
-    liftIO (setParam_ a (fromText b) (fromText c))
+setParam a b c = liftIO (setParam_ a (fromText b) (fromText c))
 
 -- @$1.delete($2)@ doesn't work because GHCJS treats delete as a forbidden
 -- reserved keyword, so we work around this by defining the
@@ -199,8 +198,7 @@ foreign import javascript unsafe "deleteSearchParamWorkaround($1, $2)"
     deleteParam_ :: JSVal -> JSString -> IO ()
 
 deleteParam :: MonadIO io => JSVal -> Text -> io ()
-deleteParam a b =
-    liftIO (deleteParam_ a (fromText b))
+deleteParam a b = liftIO (deleteParam_ a (fromText b))
 
 foreign import javascript unsafe "history.replaceState(null, null, '?'+$1.toString())"
   saveSearchParams_ :: JSVal -> IO ()
