@@ -252,12 +252,6 @@ foreign import javascript unsafe "$1.refresh()"
 refresh :: MonadIO io => JSVal -> io ()
 refresh a = liftIO (refresh_ a)
 
-foreign import javascript unsafe "select($1)"
-    select_ :: JSString -> IO ()
-
-select :: MonadIO io => Text -> io ()
-select a = liftIO (select_ (fromText a))
-
 foreign import javascript unsafe "$1.getWrapperElement()"
     getWrapperElement :: JSVal -> JSVal
 
