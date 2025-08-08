@@ -1,0 +1,7 @@
+# This Grace browser attempts to faithfully render any Grace expression
+# as an equivalent HTML representation.  For example, a list of boolean
+# values such as these will render as an HTML list of checkboxes:
+
+[ true, false, true ]
+
+# Try adding another false value to the above list.

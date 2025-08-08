@@ -1,0 +1,12 @@
+# This is a tour of the Fall-from-Grace language (a.k.a. "Grace" for short).
+#
+# First, any line prefixed with a "#" character is a comment, like this one.
+#
+# Second, any change you make to this editable code area will show up below.
+# Try editing the string "Hello, world!" below to replace "world" with your
+# name.
+#
+# Once you are done, click on the "HTML" tab above to proceed to the next
+# example.
+
+"Hello, world!"
