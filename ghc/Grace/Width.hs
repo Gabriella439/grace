@@ -1,5 +1,3 @@
-{-# LANGUAGE RecordWildCards #-}
-
 {-| This module provides a uniform interface for getting the console width using
     both GHC and GHCJS
 -}
@@ -18,10 +16,9 @@ getWidth :: IO Int
 getWidth = do
     maybeWindow <- Size.size
 
-    let renderWidth =
-            case maybeWindow of
-                Nothing         -> defaultWidth
-                Just Window{..} -> width
+    let renderWidth = case maybeWindow of
+            Nothing              -> defaultWidth
+            Just Window{ width } -> width
 
     return renderWidth
 

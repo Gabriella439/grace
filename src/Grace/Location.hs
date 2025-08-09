@@ -1,5 +1,3 @@
-{-# LANGUAGE RecordWildCards #-}
-
 {-| This module contains the `Location` type used for attaching source code to
     error messages
 -}
@@ -45,16 +43,15 @@ renderError
     -> Location
     -- ^ Location of the error
     -> Text
-renderError message Location{..} = prefix <> "\n" <> suffix
+renderError message Location{ name, code, offset } = prefix <> "\n" <> suffix
   where
-    initialState =
-        PosState
-            { pstateInput      = code
-            , pstateOffset     = 0
-            , pstateSourcePos  = Pos.initialPos name
-            , pstateTabWidth   = Pos.defaultTabWidth
-            , pstateLinePrefix = ""
-            }
+    initialState = PosState
+        { pstateInput      = code
+        , pstateOffset     = 0
+        , pstateSourcePos  = Pos.initialPos name
+        , pstateTabWidth   = Pos.defaultTabWidth
+        , pstateLinePrefix = ""
+        }
 
     (h, state) = Stream.reachOffset (getOffset offset) initialState
 

@@ -1,5 +1,3 @@
-{-# LANGUAGE RecordWildCards #-}
-
 {-| This module contains the top-level `main` function that implements the
     command-line API
 -}
@@ -83,7 +81,7 @@ parser = do
 
             highlight <- parseHighlight
 
-            return Interpret{..}
+            return Interpret{ annotate, file, highlight }
 
     let text = do
             file <- Options.strArgument
@@ -91,7 +89,7 @@ parser = do
                 <>  Options.metavar "FILE"
                 )
 
-            return Grace.Text{..}
+            return Grace.Text{ file }
 
     let format = do
             let parseFile =
@@ -104,12 +102,12 @@ parser = do
 
             files <- many parseFile
 
-            return Format{..}
+            return Format{ highlight, files }
 
     let builtins = do
             highlight <- parseHighlight
 
-            return Builtins{..}
+            return Builtins{ highlight }
 
     let repl = do
             pure REPL{ }
@@ -159,6 +157,7 @@ detectColor Auto  = do ANSI.hSupportsANSI IO.stdout
 getRender :: Highlight -> IO (Doc AnsiStyle -> IO ())
 getRender highlight = do
     color <- detectColor highlight
+
     width <- Width.getWidth
 
     return (Grace.Pretty.renderIO color width IO.stdout)
@@ -178,7 +177,7 @@ main = Exception.handle handler do
     options <- Options.execParser parserInfo
 
     case options of
-        Interpret{..} -> do
+        Interpret{ annotate, highlight, file } -> do
             keyToMethods <- HTTP.getMethods
 
             input <- case file of
@@ -192,12 +191,11 @@ main = Exception.handle handler do
             let syntax = Normalize.strip (Normalize.quote value)
 
             let annotatedExpression
-                    | annotate =
-                        Annotation
-                            { annotated = syntax
-                            , annotation = void inferred
-                            , location = ()
-                            }
+                    | annotate = Annotation
+                        { annotated = syntax
+                        , annotation = void inferred
+                        , location = ()
+                        }
                     | otherwise =
                         syntax
 
@@ -205,7 +203,7 @@ main = Exception.handle handler do
 
             render (Grace.Pretty.pretty annotatedExpression <> Pretty.hardline)
 
-        Grace.Text{..} -> do
+        Grace.Text{ file } -> do
             keyToMethods <- HTTP.getMethods
 
             input <- case file of
@@ -214,12 +212,11 @@ main = Exception.handle handler do
                 _ -> do
                     return (Path file AsCode)
 
-            let location =
-                    Location
-                        { name = "(input)"
-                        , code = "… : Text"
-                        , offset = 4
-                        }
+            let location = Location
+                    { name = "(input)"
+                    , code = "… : Text"
+                    , offset = 4
+                    }
 
             let expected = Type.Scalar{ scalar = Monotype.Text, location }
 
@@ -235,7 +232,7 @@ main = Exception.handle handler do
                         \correct type"
                     Exit.exitFailure
 
-        Format{..} -> do
+        Format{ highlight, files } -> do
             case files of
                 [ "-" ] -> do
                     text <- Text.IO.getContents
@@ -260,7 +257,7 @@ main = Exception.handle handler do
 
                     traverse_ formatFile files
 
-        Builtins{..} -> do
+        Builtins{ highlight } -> do
             let displayBuiltin :: Builtin -> IO ()
                 displayBuiltin builtin = do
                     let code =
@@ -269,24 +266,22 @@ main = Exception.handle handler do
                                 Width.defaultWidth
                                 (Grace.Pretty.pretty builtin)
 
-                    let expression =
-                            Syntax.Builtin
-                                { location = Location
-                                    { name = "(input)", code, offset = 0 }
-                                , ..
-                                }
+                    let expression = Syntax.Builtin
+                            { location = Location
+                                { name = "(input)", code, offset = 0 }
+                            , builtin
+                            }
 
                     let input = Code "(input)" code
 
                     (type_, _) <- Infer.typeOf input expression
 
                     let annotated :: Syntax Location Void
-                        annotated =
-                            Annotation
-                                { annotated = expression
-                                , annotation = type_
-                                , location = Syntax.location expression
-                                }
+                        annotated = Annotation
+                            { annotated = expression
+                            , annotation = type_
+                            , location = Syntax.location expression
+                            }
 
                     render <- getRender highlight
 

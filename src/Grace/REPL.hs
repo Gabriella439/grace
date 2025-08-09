@@ -1,5 +1,4 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE RecordWildCards  #-}
 
 -- | This module contains the implementation of the @grace repl@ subcommand
 
@@ -192,14 +191,15 @@ repl keyToMethods = do
     let banner MultiLine  = return "... "
         banner SingleLine = return ">>> "
 
-    let prefix = Just ':'
-
-    let multilineCommand = Just "paste"
-
-    let initialiser = return ()
-
-    let finaliser = return Repline.Exit
-
-    let action = Repline.evalReplOpts ReplOpts{..}
+    let action = Repline.evalReplOpts ReplOpts
+            { banner 
+            , command
+            , options
+            , prefix = Just ':'
+            , multilineCommand = Just "paste"
+            , tabComplete
+            , initialiser = return ()
+            , finaliser = return Repline.Exit
+            }
 
     State.evalStateT action []

@@ -1,7 +1,6 @@
 {-# LANGUAGE BlockArguments        #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE NamedFieldPuns        #-}
-{-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE OverloadedStrings     #-}
 
 module Main where
@@ -152,7 +151,7 @@ interpretCode = Tasty.HUnit.testCase "interpret code" do
     actualValue <- throws (interpret (Code "(input)" "2 + 2"))
 
     let expectedValue =
-            (Type.Scalar{ scalar = Monotype.Natural, .. }, Value.Scalar (Syntax.Natural 4))
+            (Type.Scalar{ location, scalar = Monotype.Natural }, Value.Scalar (Syntax.Natural 4))
           where
             location = Location{ name = "(input)", code = "2 + 2", offset = 2 }
 
@@ -163,7 +162,7 @@ interpretCodeWithImport = Tasty.HUnit.testCase "interpret code with import from 
     actualValue <- throws (interpret (Code "(input)" "./tasty/data/unit/plus-input.ffg"))
 
     let expectedValue =
-            (Type.Scalar{ scalar = Monotype.Natural, .. }, Value.Scalar (Syntax.Natural 5))
+            (Type.Scalar{ location, scalar = Monotype.Natural }, Value.Scalar (Syntax.Natural 5))
           where
             location = Location{ name = "tasty/data/unit/plus-input.ffg", code = "2 + 3\n", offset = 2 }
 
@@ -189,7 +188,7 @@ interpretCodeWithEnvURI = Tasty.HUnit.testCase "interpret code with env: import"
         throws (interpret (Code "(input)" (Text.pack name)))
 
     let expectedValue =
-            (Type.Scalar{ scalar = Monotype.Bool, .. }, Value.Scalar (Syntax.Bool True))
+            (Type.Scalar{ location, scalar = Monotype.Bool }, Value.Scalar (Syntax.Bool True))
           where
             location = Location{ name, code = "true", offset = 0 }
 
@@ -204,7 +203,7 @@ interpretCodeWithFileURI = Tasty.HUnit.testCase "interpret code with file:// imp
     actualValue <- throws (interpret (Code "(input)" (Text.pack uri)))
 
     let expectedValue =
-            (Type.Scalar{ scalar = Monotype.Bool, .. }, Value.Scalar (Syntax.Bool True))
+            (Type.Scalar{ location, scalar = Monotype.Bool }, Value.Scalar (Syntax.Bool True))
           where
             location = Location{ name = absolute, code = "true\n", offset = 0 }
 

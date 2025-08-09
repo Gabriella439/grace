@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedLists #-}
-{-# LANGUAGE RecordWildCards #-}
 
 -- | This module contains the logic for efficiently evaluating an expression
 module Grace.Normalize
@@ -102,10 +101,10 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
         -> Concurrently Value
     loop env syntax =
         case syntax of
-            Syntax.Variable{..} -> do
+            Syntax.Variable{ name } -> do
                 pure (lookupVariable name env)
 
-            Syntax.Application{..} -> Concurrently do
+            Syntax.Application{ function, argument } -> Concurrently do
                 io <- runConcurrently do
                     function' <- loop env function
                     argument' <- loop env argument
@@ -113,12 +112,12 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
 
                 io
 
-            Syntax.Lambda{ nameBinding = Syntax.NameBinding{ name, assignment }, ..} -> do
+            Syntax.Lambda{ nameBinding = Syntax.NameBinding{ name, assignment }, body } -> do
                 newAssignment <- traverse (loop env) assignment
 
                 pure (Value.Lambda env (Value.Name name newAssignment) body)
 
-            Syntax.Lambda{ nameBinding = Syntax.FieldNamesBinding{ fieldNames }, ..} -> do
+            Syntax.Lambda{ nameBinding = Syntax.FieldNamesBinding{ fieldNames }, body } -> do
                 let process Syntax.FieldName{ name, assignment } = do
                         newAssignment <- traverse (loop env) assignment
 
@@ -145,14 +144,14 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
 
                     promote newAnnotated annotation
 
-            Syntax.Let{ body = body₀, ..} -> Concurrently do
+            Syntax.Let{ bindings, body = body₀ } -> Concurrently do
                 newEnv <- Monad.foldM snoc env bindings
 
                 runConcurrently (loop newEnv body₀)
               where
                 snoc environment Syntax.Binding{ nameLocation, name, nameBindings, assignment } = runConcurrently do
                     let cons nameBinding body =
-                            Syntax.Lambda{ location = nameLocation, ..}
+                            Syntax.Lambda{ location = nameLocation, nameBinding, body }
 
                     let newAssignment = foldr cons assignment nameBindings
 
@@ -160,11 +159,11 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
 
                     return ((name, value) : environment)
 
-            Syntax.List{..} -> do
+            Syntax.List{ elements } -> do
                 values <- traverse (loop env) elements
                 return (Value.List values)
 
-            Syntax.Record{..} -> do
+            Syntax.Record{ fieldValues } -> do
                 let process (key, field) = do
                         newField <- loop env field
                         return (key, newField)
@@ -247,15 +246,15 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                     _ ->
                         error "Grace.Normalize.evaluate: invalid projection"
 
-            Syntax.Alternative{..} ->
+            Syntax.Alternative{ name } ->
                 pure (Value.Alternative name)
 
-            Syntax.Fold{..} -> do
+            Syntax.Fold{ handlers } -> do
                 newHandlers <- loop env handlers
 
                 return (Value.Fold newHandlers)
 
-            Syntax.If{..} -> do
+            Syntax.If{ predicate, ifTrue, ifFalse } -> do
                 predicate' <- loop env predicate
 
                 ifTrue'  <- loop env ifTrue
@@ -310,16 +309,16 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                         return responseValue
 
                 let defaultedSchema =
-                        Lens.transform (Type.defaultTo Type.Scalar{ scalar = Monotype.JSON, .. }) schema
+                        Lens.transform (Type.defaultTo Type.Scalar{ location, scalar = Monotype.JSON }) schema
 
                 case Value.fromJSON defaultedSchema responseValue of
                     Left exception -> Exception.throwIO exception
                     Right value    -> return value
 
-            Syntax.Scalar{..} ->
+            Syntax.Scalar{ scalar } ->
                 pure (Value.Scalar scalar)
 
-            Syntax.Operator{ operator = Syntax.And, .. } -> do
+            Syntax.Operator{ operator = Syntax.And, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
@@ -329,7 +328,7 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                     _ ->
                         error "Grace.Normalize.evaluate: && arguments must be boolean values"
 
-            Syntax.Operator{ operator = Syntax.Or, .. } -> do
+            Syntax.Operator{ operator = Syntax.Or, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
@@ -339,19 +338,19 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                     _ ->
                         error "Grace.Normalize.evaluate: || arguments must be boolean values"
 
-            Syntax.Operator{ operator = Syntax.Equal, .. } -> do
+            Syntax.Operator{ operator = Syntax.Equal, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
                 return (Value.Scalar (Bool (left' == right')))
 
-            Syntax.Operator{ operator = Syntax.NotEqual, .. } -> do
+            Syntax.Operator{ operator = Syntax.NotEqual, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
                 return (Value.Scalar (Bool (left' /= right')))
 
-            Syntax.Operator{ operator = Syntax.LessThan, .. } -> do
+            Syntax.Operator{ operator = Syntax.LessThan, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
@@ -366,7 +365,7 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                         error "Grace.Normalize.evaluate: < arguments must be numeric values of the same type"
 
 
-            Syntax.Operator{ operator = Syntax.LessThanOrEqual, .. } -> do
+            Syntax.Operator{ operator = Syntax.LessThanOrEqual, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
@@ -380,7 +379,7 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                     _ ->
                         error "Grace.Normalize.evaluate: <= arguments must be numeric values of the same type"
 
-            Syntax.Operator{ operator = Syntax.GreaterThan, .. } -> do
+            Syntax.Operator{ operator = Syntax.GreaterThan, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
@@ -394,7 +393,7 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                     _ ->
                         error "Grace.Normalize.evaluate: > arguments must be numeric values of the same type"
 
-            Syntax.Operator{ operator = Syntax.GreaterThanOrEqual, .. } -> do
+            Syntax.Operator{ operator = Syntax.GreaterThanOrEqual, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
@@ -408,7 +407,7 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                     _ ->
                         error "Grace.Normalize.evaluate: >= arguments must be numeric values of the same type"
 
-            Syntax.Operator{ operator = Syntax.Times, .. } -> do
+            Syntax.Operator{ operator = Syntax.Times, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
@@ -422,7 +421,7 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                     _ ->
                         error "Grace.Normalize.evaluate: * arguments must be numeric values of the same type"
 
-            Syntax.Operator{ operator = Syntax.Plus, .. } -> do
+            Syntax.Operator{ operator = Syntax.Plus, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
@@ -440,7 +439,7 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                     _ ->
                         error "Grace.Normalize.evaluate: + arguments must be numeric values of the same type"
 
-            Syntax.Operator{ operator = Syntax.Minus, .. } -> do
+            Syntax.Operator{ operator = Syntax.Minus, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
@@ -454,7 +453,7 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                     _ ->
                         error "Grace.Normalize.evaluate: - arguments must be numeric values of the same type"
 
-            Syntax.Operator{ operator = Syntax.Modulus, .. } -> do
+            Syntax.Operator{ operator = Syntax.Modulus, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
@@ -497,7 +496,7 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                         , ("remainder", remainder)
                         ]
 
-            Syntax.Operator{ operator = Syntax.Divide, .. } -> do
+            Syntax.Operator{ operator = Syntax.Divide, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
@@ -516,7 +515,7 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
 
                     Value.Scalar (Real (Scientific.fromFloatDigits (numerator / denominator :: Double)))
 
-            Syntax.Builtin{..} ->
+            Syntax.Builtin{ builtin } ->
                 pure (Value.Builtin builtin)
 
             Syntax.Embed{ embedded } ->
@@ -723,9 +722,9 @@ quote value = case value of
                     }
 
         newLambda = Syntax.Lambda
-            { nameBinding
+            { location
+            , nameBinding
             , body = first (\_ -> location) body₀
-            , ..
             }
 
         toBinding n v = Syntax.Binding
@@ -753,36 +752,36 @@ quote value = case value of
 
     Value.Application function argument ->
         Syntax.Application
-            { function = quote function
+            { location
+            , function = quote function
             , argument = quote argument
-            , ..
             }
 
     Value.List elements ->
-        Syntax.List{ elements = fmap quote elements, .. }
+        Syntax.List{ location, elements = fmap quote elements }
 
     Value.Record fieldValues ->
         Syntax.Record
-            { fieldValues = map adapt (HashMap.toList fieldValues)
-            , ..
+            { location
+            , fieldValues = map adapt (HashMap.toList fieldValues)
             }
       where
         adapt (field, value_) = (field, quote value_)
 
     Value.Alternative name ->
-        Syntax.Alternative{..}
+        Syntax.Alternative{ location, name }
 
     Value.Fold handlers ->
-        Syntax.Fold{ handlers = quote handlers, .. }
+        Syntax.Fold{ location, handlers = quote handlers }
 
     Value.Text text ->
-        Syntax.Text{ chunks = Syntax.Chunks text [], .. }
+        Syntax.Text{ location, chunks = Syntax.Chunks text [] }
 
     Value.Scalar scalar ->
-        Syntax.Scalar{..}
+        Syntax.Scalar{ location, scalar }
 
     Value.Builtin builtin ->
-        Syntax.Builtin{..}
+        Syntax.Builtin{ location, builtin }
   where
     location = ()
 
@@ -812,7 +811,7 @@ data JSONDecodingFailed = JSONDecodingFailed
     } deriving stock (Show)
 
 instance Exception JSONDecodingFailed where
-    displayException JSONDecodingFailed{..} =
+    displayException JSONDecodingFailed{ message, text } =
         "Failed to decode output as JSON\n\
         \\n\
         \The HTTP request produced the following output:\n\

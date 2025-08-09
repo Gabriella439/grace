@@ -1,5 +1,3 @@
-{-# LANGUAGE RecordWildCards #-}
-
 -- | This module contains the import resolution logic
 module Grace.Import
     ( -- * Import resolution
@@ -82,7 +80,7 @@ resolve input = case input of
                         , location = 0
                         }
 
-            let locate offset = Location{ code = text, .. }
+            let locate offset = Location{ name, code = text, offset }
 
             return (first locate result)
 
@@ -112,7 +110,7 @@ resolve input = case input of
                                 , location = 0
                                 }
 
-                    let locate offset = Location{ code = text, .. }
+                    let locate offset = Location{ name, code = text, offset }
 
                     return (first locate result)
                 Left True -> do
@@ -145,7 +143,7 @@ resolve input = case input of
             Left e -> Exception.throw e
             Right result -> return result
 
-        let locate offset = Location{..}
+        let locate offset = Location{ name, code, offset }
 
         return (first locate result)
   where
@@ -162,7 +160,7 @@ resolve input = case input of
                     , location = 0
                     }
 
-        let locate offset = Location{ name = path, code = text, ..}
+        let locate offset = Location{ name = path, code = text, offset }
 
         return (first locate result)
 
@@ -206,7 +204,7 @@ data ImportError = ImportError
     } deriving stock (Show)
 
 instance Exception ImportError where
-    displayException ImportError{..} =
+    displayException ImportError{ input, resolutionError } =
         Text.unpack
             ("Import resolution failed: " <> renderedInput <> "\n\
             \\n\
