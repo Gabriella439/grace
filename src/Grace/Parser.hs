@@ -1,5 +1,4 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE RecordWildCards  #-}
 {-# LANGUAGE RecursiveDo      #-}
 
 {-| This module contains the logic for lexing and parsing Grace files
@@ -188,7 +187,7 @@ lexLocatedToken :: Lexer LocatedToken
 lexLocatedToken = do
     state <- Megaparsec.getParserState
     token <- lexToken
-    return LocatedToken{..}
+    return LocatedToken{ token, state }
 
 lexLocatedTokens :: Lexer [LocatedToken]
 lexLocatedTokens = do
@@ -203,12 +202,12 @@ lex :: String
     -> Either ParseError [LocatedToken]
 lex name code =
     case Megaparsec.parse lexLocatedTokens name code of
-        Left ParseErrorBundle{..} -> do
+        Left ParseErrorBundle{ bundleErrors } -> do
             let bundleError :| _ = bundleErrors
 
             let offset = Offset (Error.errorOffset bundleError)
 
-            Left (LexingFailed (Location{..}))
+            Left (LexingFailed (Location{ name, code, offset }))
         Right tokens -> do
             return tokens
 
@@ -764,7 +763,7 @@ locatedToken :: Token -> Parser r Offset
 locatedToken expectedToken =
     Earley.terminal capture <?> render expectedToken
   where
-    capture LocatedToken{ token = actualToken, .. }
+    capture LocatedToken{ token = actualToken, state }
         | expectedToken == actualToken = Just (Offset (stateOffset state))
         | otherwise                    = Nothing
 
@@ -846,34 +845,63 @@ grammar endsWithBrace = mdo
     nameBinding <- rule do
         let annotated = do
                 parseToken Grace.Parser.OpenParenthesis
+
                 ~(nameLocation, name) <- locatedLabel
-                annotation <- optional (do parseToken Grace.Parser.Colon; r <- quantifiedType; pure r)
-                assignment <- optional (do parseToken Grace.Parser.Equals; r <- expression; pure r)
+
+                annotation <- optional do
+                    parseToken Grace.Parser.Colon
+
+                    r <- quantifiedType
+
+                    pure r
+
+                assignment <- optional do
+                    parseToken Grace.Parser.Equals
+
+                    r <- expression
+
+                    pure r
+
                 parseToken Grace.Parser.CloseParenthesis
+
                 pure NameBinding{ nameLocation, name, annotation, assignment }
 
         let unannotated = do
                 ~(nameLocation, name) <- locatedLabel
-                pure NameBinding{ nameLocation, name, annotation = Nothing, assignment = Nothing }
+
+                pure NameBinding
+                    { nameLocation
+                    , name
+                    , annotation = Nothing
+                    , assignment = Nothing
+                    }
 
         let fields = do
                 let parseAnnotation = do
                         parseToken Grace.Parser.Colon
+
                         annotation <- quantifiedType
+
                         pure annotation
 
                 let parseAssignment = do
                         parseToken Grace.Parser.Equals
+
                         assignment <- expression
+
                         pure assignment
 
                 let parseFieldName = do
                         ~(fieldNameLocation, name) <- locatedLabel
+
                         annotation <- optional parseAnnotation
+
                         assignment <- optional parseAssignment
+
                         return FieldName{ fieldNameLocation, name, annotation, assignment }
 
                 fieldNamesLocation <- locatedToken Grace.Parser.OpenBrace
+
                 fieldNames <- parseFieldName `sepBy` parseToken Grace.Parser.Comma
                 parseToken Grace.Parser.CloseBrace
 
@@ -883,65 +911,107 @@ grammar endsWithBrace = mdo
 
     expression <- rule
         (   do  location <- locatedToken Grace.Parser.Lambda
+
                 nameBindings <- some1 nameBinding
+
                 parseToken Grace.Parser.Arrow
+
                 body0 <- expression
 
                 return do
-                    let cons nameBinding_ body = Syntax.Lambda{ nameBinding = nameBinding_, ..}
+                    let cons nameBinding_ body = Syntax.Lambda
+                            { location
+                            , nameBinding = nameBinding_
+                            , body
+                            }
                     foldr cons body0 nameBindings
 
         <|> do  bindings <- some1 binding
+
                 parseToken Grace.Parser.In
+
                 body <- expression
 
                 return do
                     let Syntax.Binding{ nameLocation = location } =
                             NonEmpty.head bindings
-                    Syntax.Let{..}
+                    Syntax.Let{ location, bindings, body }
 
         <|> do  location <- locatedToken Grace.Parser.If
+
                 predicate <- expression
+
                 parseToken Grace.Parser.Then
+
                 ifTrue <- expression
+
                 parseToken Grace.Parser.Else
+
                 ifFalse <- expression
 
-                return Syntax.If{..}
+                return Syntax.If{ location, predicate, ifTrue, ifFalse }
 
         <|> do  let annotatedFile = do
                         ~(location, file) <- locatedFile
-                        return Syntax.Embed{ embedded = Path file AsCode, .. }
+
+                        return Syntax.Embed
+                            { location
+                            , embedded = Path file AsCode
+                            }
 
                 let annotatedURI = do
                         ~(location, uri) <- locatedURI
-                        return Syntax.Embed{ embedded = Grace.Input.URI uri AsText, .. }
+
+                        return Syntax.Embed
+                            { location
+                            , embedded = Grace.Input.URI uri AsText
+                            }
+
                 let annotatedPrompt = do
                         location <- locatedToken Grace.Parser.Prompt
 
                         arguments <- projectExpression
 
-                        return Syntax.Prompt{ schema = Nothing, ..}
+                        return Syntax.Prompt
+                            { location
+                            , arguments
+                            , schema = Nothing
+                            }
 
                 let annotatedHTTP = do
                         location <- locatedToken Grace.Parser.HTTP
 
                         arguments <- projectExpression
 
-                        return Syntax.HTTP{ schema = Nothing, ..}
+                        return Syntax.HTTP
+                            { location
+                            , arguments
+                            , schema = Nothing
+                            }
 
-                let adapt Syntax.Embed{ embedded = Path file AsCode, .. } Type.Scalar{ scalar = Monotype.Text } =
-                        Syntax.Embed{ embedded = Path file AsText, .. }
-                    adapt Syntax.Embed{ embedded = Grace.Input.URI uri AsCode, .. } Type.Scalar{ scalar = Monotype.Text } =
-                        Syntax.Embed{ embedded = Grace.Input.URI uri AsText, .. }
-                    adapt Syntax.Prompt{ schema = Nothing, .. } annotation =
-                        Syntax.Prompt{ schema = Just annotation, .. }
-                    adapt Syntax.HTTP{ schema = Nothing, .. } annotation =
-                        Syntax.HTTP{ schema = Just annotation, .. }
+                let adapt Syntax.Embed{ location, embedded = Path file AsCode } Type.Scalar{ scalar = Monotype.Text } =
+                        Syntax.Embed{ location, embedded = Path file AsText }
+                    adapt Syntax.Embed{ location, embedded = Grace.Input.URI uri AsCode } Type.Scalar{ scalar = Monotype.Text } =
+                        Syntax.Embed
+                            { location
+                            , embedded = Grace.Input.URI uri AsText
+                            }
+                    adapt Syntax.Prompt{ location, arguments, schema = Nothing } annotation =
+                        Syntax.Prompt
+                            { location
+                            , arguments, schema = Just annotation
+                            }
+                    adapt Syntax.HTTP{ location, arguments, schema = Nothing } annotation =
+                        Syntax.HTTP
+                            { location
+                            , arguments
+                            , schema = Just annotation
+                            }
                     adapt annotated annotation =
                         Syntax.Annotation
                             { location = Syntax.location annotated
-                            , ..
+                            , annotated
+                            , annotation
                             }
 
                 annotated <- annotatedFile <|> annotatedURI <|> annotatedPrompt <|> annotatedHTTP <|> operatorExpression
@@ -958,14 +1028,21 @@ grammar endsWithBrace = mdo
     operatorExpression <- rule orExpression
 
     let op token_ operator subExpression = do
-            let snoc left (operatorLocation, right) =
-                    Syntax.Operator{ location = Syntax.location left, ..}
+            let snoc left (operatorLocation, right) = Syntax.Operator
+                    { location = Syntax.location left
+                    , left
+                    , operatorLocation
+                    , operator
+                    , right
+                    }
 
             e0 <- subExpression
 
             ses <- many do
                 s <- locatedToken token_
+
                 e <- subExpression;
+
                 return (s, e)
 
             return (foldl snoc e0 ses)
@@ -996,27 +1073,30 @@ grammar endsWithBrace = mdo
 
     divideExpression <- rule (op Grace.Parser.ForwardSlash Syntax.Divide applicationExpression)
 
-    let application function argument =
-            Syntax.Application{ location = Syntax.location function, .. }
+    let application function argument = Syntax.Application
+            { location = Syntax.location function
+            , function
+            , argument
+            }
 
     applicationExpression <- rule do
         e <-  (   do  location <- locatedToken Grace.Parser.Prompt
 
                       arguments <- projectExpression
 
-                      return Syntax.Prompt{ schema = Nothing, ..  }
+                      return Syntax.Prompt{ location, arguments, schema = Nothing }
 
               <|> do  location <- locatedToken Grace.Parser.HTTP
 
                       arguments <- projectExpression
 
-                      return Syntax.HTTP{ schema = Nothing, ..  }
+                      return Syntax.HTTP{ location, arguments, schema = Nothing }
 
               <|> do  location <- locatedToken Grace.Parser.Fold
 
                       handlers <- projectExpression
 
-                      return Syntax.Fold{..}
+                      return Syntax.Fold{ location, handlers }
 
               <|> do  projectExpression
               )
@@ -1073,7 +1153,11 @@ grammar endsWithBrace = mdo
                 parseToken Grace.Parser.CloseBracket
 
                 return \location larger ->
-                    Syntax.Project{ location, larger, smaller = Slice{ begin, end } }
+                    Syntax.Project
+                        { location
+                        , larger
+                        , smaller = Slice{ begin, end }
+                        }
 
         let parseDotAccess = do
                 smaller <- parseIndex <|> (parseToken Grace.Parser.Dot *> (parseSingle <|> parseMultiple))
@@ -1093,39 +1177,47 @@ grammar endsWithBrace = mdo
     primitiveExpression <- rule
         (   do  ~(location, name) <- locatedLabel
 
-                return Syntax.Variable{..}
+                return Syntax.Variable{ location, name }
 
         <|> do  ~(location, name) <- locatedAlternative
 
-                return Syntax.Alternative{..}
+                return Syntax.Alternative{ location, name }
 
         <|> do  location <- locatedToken Grace.Parser.OpenBracket
+
                 optional (parseToken Grace.Parser.Comma)
+
                 elements <- expression `sepBy` parseToken Grace.Parser.Comma
+
                 optional (parseToken Grace.Parser.Comma)
+
                 parseToken Grace.Parser.CloseBracket
 
-                return Syntax.List{ elements = Seq.fromList elements, .. }
+                return Syntax.List{ location, elements = Seq.fromList elements }
 
         <|> do  location <- locatedToken Grace.Parser.OpenBrace
+
                 optional (parseToken Grace.Parser.Comma)
+
                 fieldValues <- fieldValue `sepBy` parseToken Grace.Parser.Comma
+
                 optional (parseToken Grace.Parser.Comma)
+
                 parseToken Grace.Parser.CloseBrace
 
-                return Syntax.Record{..}
+                return Syntax.Record{ location, fieldValues }
 
         <|> do  location <- locatedToken Grace.Parser.True_
 
-                return Syntax.Scalar{ scalar = Syntax.Bool True, .. }
+                return Syntax.Scalar{ location, scalar = Syntax.Bool True }
 
         <|> do  location <- locatedToken Grace.Parser.False_
 
-                return Syntax.Scalar{ scalar = Syntax.Bool False, .. }
+                return Syntax.Scalar{ location, scalar = Syntax.Bool False }
 
         <|> do  location <- locatedToken Grace.Parser.Null
 
-                return Syntax.Scalar{ scalar = Syntax.Null, .. }
+                return Syntax.Scalar{ location, scalar = Syntax.Null }
 
         <|> do  let withSign Unsigned n = Syntax.Real n
                     withSign Positive n = Syntax.Real n
@@ -1133,7 +1225,7 @@ grammar endsWithBrace = mdo
 
                 ~(location, (sign, n)) <- locatedReal
 
-                return Syntax.Scalar{ scalar = withSign sign n, .. }
+                return Syntax.Scalar{ location, scalar = withSign sign n }
 
         <|> do  let withSign Unsigned n = Syntax.Natural (fromIntegral n)
                     withSign Positive n = Syntax.Integer (fromIntegral n)
@@ -1141,82 +1233,104 @@ grammar endsWithBrace = mdo
 
                 ~(location, (sign, n)) <- locatedInt
 
-                return Syntax.Scalar
-                    { scalar = withSign sign n
-                    , ..
-                    }
+                return Syntax.Scalar{ location, scalar = withSign sign n }
 
         <|> do  location <- locatedToken Grace.Parser.Some
 
-                return Syntax.Builtin{ builtin = Syntax.Some, .. }
+                return Syntax.Builtin{ location, builtin = Syntax.Some }
 
         <|> do  location <- locatedToken Grace.Parser.Show
 
-                return Syntax.Builtin{ builtin = Syntax.Show, .. }
+                return Syntax.Builtin{ location, builtin = Syntax.Show }
 
         <|> do  location <- locatedToken Grace.Parser.YAML
 
-                return Syntax.Builtin{ builtin = Syntax.YAML, .. }
+                return Syntax.Builtin{ location, builtin = Syntax.YAML }
 
         <|> do  location <- locatedToken Grace.Parser.Indexed
 
-                return Syntax.Builtin{ builtin = Syntax.Indexed, .. }
+                return Syntax.Builtin{ location, builtin = Syntax.Indexed }
 
         <|> do  location <- locatedToken Grace.Parser.Length
 
-                return Syntax.Builtin{ builtin = Syntax.Length, .. }
+                return Syntax.Builtin{ location, builtin = Syntax.Length }
 
         <|> do  location <- locatedToken Grace.Parser.Map
 
-                return Syntax.Builtin{ builtin = Syntax.Map, .. }
+                return Syntax.Builtin{ location, builtin = Syntax.Map }
 
         <|> do  location <- locatedToken Grace.Parser.Abs
 
-                return Syntax.Builtin{ builtin = Syntax.Abs, .. }
+                return Syntax.Builtin{ location, builtin = Syntax.Abs }
 
         <|> do  location <- locatedToken Grace.Parser.Reveal
 
-                return Syntax.Builtin{ builtin = Syntax.Reveal, .. }
+                return Syntax.Builtin{ location, builtin = Syntax.Reveal }
 
         <|> do  ~(location, chunks) <- locatedChunks
 
-                return Syntax.Text{..}
+                return Syntax.Text{ location, chunks }
 
         <|> do  ~(location, file) <- locatedFile
 
-                return Syntax.Embed{ embedded = Path file AsCode, .. }
+                return Syntax.Embed{ location, embedded = Path file AsCode }
 
         <|> do  ~(location, uri) <- locatedURI
 
-                return Syntax.Embed{ embedded = Grace.Input.URI uri AsCode, .. }
+                return Syntax.Embed
+                    { location
+                    , embedded = Grace.Input.URI uri AsCode
+                    }
 
         <|> do  parseToken Grace.Parser.OpenParenthesis
+
                 e <- expression
+
                 parseToken Grace.Parser.CloseParenthesis
+
                 return e
         )
 
     binding <- rule
         (   do  nameLocation <- locatedToken Grace.Parser.Let
+
                 name <- label
+
                 nameBindings <- many nameBinding
+
                 parseToken Grace.Parser.Equals
+
                 assignment <- expression
 
-                return do
-                    let annotation = Nothing
-
-                    Syntax.Binding{..}
+                return Syntax.Binding
+                    { nameLocation
+                    , name
+                    , nameBindings
+                    , annotation = Nothing
+                    , assignment
+                    }
 
         <|> do  nameLocation <- locatedToken Grace.Parser.Let
+
                 name <- label
+
                 nameBindings <- many nameBinding
+
                 parseToken Grace.Parser.Colon
+
                 annotation <- fmap Just quantifiedType
+
                 parseToken Grace.Parser.Equals
+
                 assignment <- expression
 
-                return Syntax.Binding{..}
+                return Syntax.Binding
+                    { nameLocation
+                    , name
+                    , nameBindings
+                    , annotation
+                    , assignment
+                    }
         )
 
     recordLabel <- rule (reservedLabel <|> label <|> alternative <|> text)
@@ -1231,82 +1345,124 @@ grammar endsWithBrace = mdo
     fieldValue <- rule do
         let setting = do
                 name <- recordLabel
+
                 parseToken Grace.Parser.Colon
+
                 value <- expression
+
                 return (name, value)
 
         let pun = do
                 ~(location, name) <- locatedRecordLabel
-                pure (name, Syntax.Variable{..})
+
+                pure (name, Syntax.Variable{ location, name })
 
         setting <|> pun
 
     domain <- rule
         (   do  parseToken Grace.Parser.Type
+
                 return Domain.Type
+
         <|> do  parseToken Grace.Parser.Fields
+
                 return Domain.Fields
+
         <|> do  parseToken Grace.Parser.Alternatives
+
                 return Domain.Alternatives
         )
 
     quantifiedType <- rule do
         fss <- many
             (   do  location <- locatedToken Grace.Parser.Forall
+
                     fs <- some do
                         parseToken Grace.Parser.OpenParenthesis
+
                         ~(typeVariableOffset, typeVariable) <- locatedLabel
+
                         parseToken Grace.Parser.Colon
+
                         domain_ <- domain
+
                         parseToken Grace.Parser.CloseParenthesis
-                        return \location_ -> Type.Forall location_ typeVariableOffset typeVariable domain_
+
+                        return \location_ type_ -> Type.Forall
+                            { location = location_
+                            , nameLocation = typeVariableOffset
+                            , name = typeVariable
+                            , domain = domain_
+                            , type_
+                            }
+
                     parseToken Grace.Parser.Dot
+
                     return (map ($ location) fs)
             )
+
         t <- functionType
+
         return (foldr ($) t (concat fss))
 
     functionType <- rule do
         let function input output =
-                Type.Function{ location = Type.location input, ..}
+                Type.Function{ location = Type.location input, input, output }
 
         ts <- applicationType `sepBy1` parseToken Grace.Parser.Arrow
+
         return (foldr function (NonEmpty.last ts) (NonEmpty.init ts))
 
     applicationType <- rule
         (   do  location <- locatedToken Grace.Parser.List
+
                 type_ <- primitiveType
 
-                return Type.List{..}
+                return Type.List{ location, type_ }
 
         <|> do  location <- locatedToken Grace.Parser.Optional
+
                 type_ <- primitiveType
 
-                return Type.Optional{..}
+                return Type.Optional{ location, type_ }
 
         <|> do  primitiveType
         )
 
     primitiveType <- rule
         (   do  location <- locatedToken Grace.Parser.Bool
-                return Type.Scalar{ scalar = Monotype.Bool, .. }
-        <|> do  location <- locatedToken Grace.Parser.Real
-                return Type.Scalar{ scalar = Monotype.Real, .. }
-        <|> do  location <- locatedToken Grace.Parser.Integer
-                return Type.Scalar{ scalar = Monotype.Integer, .. }
-        <|> do  location <- locatedToken Grace.Parser.JSON
-                return Type.Scalar{ scalar = Monotype.JSON, .. }
-        <|> do  location <- locatedToken Grace.Parser.Natural
-                return Type.Scalar{ scalar = Monotype.Natural, .. }
-        <|> do  location <- locatedToken Grace.Parser.Text
-                return Type.Scalar{ scalar = Monotype.Text, .. }
-        <|> do  location <- locatedToken Grace.Parser.Key
-                return Type.Scalar{ scalar = Monotype.Key, .. }
-        <|> do  ~(location, name) <- locatedLabel
-                return Type.VariableType{..}
-        <|> do  let record location fields = Type.Record{..}
 
-                locatedOpenBrace <- locatedToken Grace.Parser.OpenBrace
+                return Type.Scalar{ location, scalar = Monotype.Bool }
+
+        <|> do  location <- locatedToken Grace.Parser.Real
+
+                return Type.Scalar{ location, scalar = Monotype.Real }
+
+        <|> do  location <- locatedToken Grace.Parser.Integer
+
+                return Type.Scalar{ location, scalar = Monotype.Integer }
+
+        <|> do  location <- locatedToken Grace.Parser.JSON
+
+                return Type.Scalar{ location, scalar = Monotype.JSON }
+
+        <|> do  location <- locatedToken Grace.Parser.Natural
+
+                return Type.Scalar{ location, scalar = Monotype.Natural }
+
+        <|> do  location <- locatedToken Grace.Parser.Text
+
+                return Type.Scalar{ location, scalar = Monotype.Text }
+
+        <|> do  location <- locatedToken Grace.Parser.Key
+
+                return Type.Scalar{ location, scalar = Monotype.Key }
+
+        <|> do  ~(location, name) <- locatedLabel
+
+                return Type.VariableType{ location, name }
+
+        <|> do  locatedOpenBrace <- locatedToken Grace.Parser.OpenBrace
 
                 optional (parseToken Grace.Parser.Comma)
 
@@ -1314,9 +1470,13 @@ grammar endsWithBrace = mdo
 
                 toFields <-
                     (   do  text_ <- recordLabel
+
                             pure (\fs -> Type.Fields fs (Monotype.VariableFields text_))
+
                     <|> do  pure (\fs -> Type.Fields fs Monotype.EmptyFields)
+
                     <|> do  f <- fieldType
+
                             pure (\fs -> Type.Fields (fs <> [ f ]) Monotype.EmptyFields)
                     )
 
@@ -1324,10 +1484,12 @@ grammar endsWithBrace = mdo
 
                 parseToken Grace.Parser.CloseBrace
 
-                return (record locatedOpenBrace (toFields fieldTypes))
-        <|> do  let union location alternatives = Type.Union{..}
+                return Type.Record
+                    { location = locatedOpenBrace
+                    , fields = toFields fieldTypes
+                    }
 
-                locatedOpenAngle <- locatedToken Grace.Parser.OpenAngle
+        <|> do  locatedOpenAngle <- locatedToken Grace.Parser.OpenAngle
 
                 optional (parseToken Grace.Parser.Bar)
 
@@ -1335,8 +1497,11 @@ grammar endsWithBrace = mdo
 
                 toAlternatives <-
                     (   do  text_ <- label
+
                             return (\as -> Type.Alternatives as (Monotype.VariableAlternatives text_))
+
                     <|> do  pure (\as -> Type.Alternatives as Monotype.EmptyAlternatives)
+
                     <|> do  a <- alternativeType
                             return (\as -> Type.Alternatives (as <> [ a ]) Monotype.EmptyAlternatives)
                     )
@@ -1344,29 +1509,45 @@ grammar endsWithBrace = mdo
                 optional (parseToken Grace.Parser.Bar)
 
                 parseToken Grace.Parser.CloseAngle
-                return (union locatedOpenAngle (toAlternatives alternativeTypes))
+
+                return Type.Union
+                    { location = locatedOpenAngle
+                    , alternatives = toAlternatives alternativeTypes
+                    }
+
         <|> do  parseToken Grace.Parser.OpenParenthesis
+
                 t <- quantifiedType
+
                 parseToken Grace.Parser.CloseParenthesis
+
                 return t
         )
 
     fieldType <- rule do
         field <- recordLabel
+
         parseToken Grace.Parser.Colon
+
         t <- quantifiedType
+
         return (field, t)
 
     alternativeType <- rule do
         a <- alternative
+
         parseToken Grace.Parser.Colon
+
         t <- quantifiedType
+
         return (a, t)
 
     -- Used for parsing a string interpolation
     expressionEndingWithBrace <- rule do
         a <- expression
+
         parseToken Grace.Parser.CloseBrace
+
         return a
 
     return (if endsWithBrace then expressionEndingWithBrace else expression)
@@ -1382,7 +1563,7 @@ parse name code = do
     tokens <- lex name code
 
     case Earley.fullParses (Earley.parser (grammar False)) tokens of
-        ([], Report{..}) -> do
+        ([], Report{ unconsumed }) -> do
             let offset =
                     case unconsumed of
                         [] ->
@@ -1390,7 +1571,7 @@ parse name code = do
                         locatedToken_ : _ ->
                             Offset (stateOffset (state locatedToken_))
 
-            Left (ParsingFailed (Location{..}))
+            Left (ParsingFailed Location{ name, code, offset })
 
         (result : _, _) -> do
             return result

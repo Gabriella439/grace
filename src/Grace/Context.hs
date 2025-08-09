@@ -1,7 +1,4 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE RecordWildCards  #-}
-
-{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 {-| A `Context` is an ordered list of `Entry`s used as the state for the
     bidirectional type-checking algorithm
@@ -10,6 +7,7 @@ module Grace.Context
     ( -- * Types
       Entry(..)
     , Context
+
       -- * Utilities
     , lookup
     , splitOnUnsolvedType
@@ -272,7 +270,7 @@ solveRecord context oldFields = newFields
         error "Grace.Context.solveRecord: Internal error - Missing location field"
 
     newFields =
-        case solveType context Type.Record{ fields = oldFields, .. } of
+        case solveType context Type.Record{ fields = oldFields, location } of
             Type.Record{ fields } -> fields
             _ -> error "Grace.Context.solveRecord: Internal Error - solveType changed a record into something else"
 
@@ -297,7 +295,7 @@ solveUnion context oldAlternatives = newAlternatives
         error "Grace.Context.solveUnion: Internal error - Missing location field"
 
     newAlternatives =
-        case solveType context Type.Union{ alternatives = oldAlternatives, .. } of
+        case solveType context Type.Union{ alternatives = oldAlternatives, location } of
             Type.Union{ alternatives } -> alternatives
             _ -> error "Grace.Context.solveUnion: Internal error - solveType changed a union into something else"
 
@@ -348,8 +346,16 @@ complete context type0 = do
         let solution = Monotype.VariableType name
 
         if Type.typeFreeIn name₀ type_
-            then return Type.Forall{ type_ = Type.solveType name₀ solution type_, .. }
-            else return type_
+            then do
+                return Type.Forall
+                    { location
+                    , nameLocation
+                    , name
+                    , domain
+                    , type_ = Type.solveType name₀ solution type_
+                    }
+            else do
+                return type_
     snoc action (UnsolvedFields name₀) = do
         n <- State.get
 
@@ -368,8 +374,16 @@ complete context type0 = do
         let solution = Monotype.Fields [] (Monotype.VariableFields name)
 
         if Type.fieldsFreeIn name₀ type_
-            then return Type.Forall{ type_ = Type.solveFields name₀ solution type_, .. }
-            else return type_
+            then do
+                return Type.Forall
+                    { location
+                    , nameLocation
+                    , name
+                    , domain
+                    , type_ = Type.solveFields name₀ solution type_
+                    }
+            else do
+                return type_
     snoc action (UnsolvedAlternatives name₀) = do
         n <- State.get
 
@@ -388,8 +402,16 @@ complete context type0 = do
         let solution = Monotype.Alternatives [] (Monotype.VariableAlternatives name)
 
         if Type.alternativesFreeIn name₀ type_
-            then return Type.Forall{ type_ = Type.solveAlternatives name₀ solution type_, .. }
-            else return type_
+            then do
+                return Type.Forall
+                    { location
+                    , nameLocation
+                    , name
+                    , domain
+                    , type_ = Type.solveAlternatives name₀ solution type_
+                    }
+            else do
+                return type_
     snoc action _ = do
         action
 
