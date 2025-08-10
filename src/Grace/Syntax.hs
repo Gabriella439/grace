@@ -1,6 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedLists   #-}
-{-# LANGUAGE RecordWildCards   #-}
 
 {-| This module contains the syntax tree used for the surface syntax (i.e. the
     result of parsing), representing the code as the user wrote it.
@@ -153,175 +152,386 @@ instance Applicative (Syntax ()) where
     (<*>) = Monad.ap
 
 instance Monad (Syntax ()) where
-    Variable{..} >>= _ =
-        Variable{..}
-    Lambda{ body, nameBinding, .. } >>= f =
-        Lambda{ body = body >>= f, nameBinding = onNameBinding nameBinding, .. }
+    Variable{ location, name } >>= _ =
+        Variable{ location, name }
+
+    Lambda{ location, nameBinding, body } >>= f = Lambda
+        { location
+        , nameBinding = onNameBinding nameBinding
+        , body = body >>= f
+        }
       where
-        onNameBinding NameBinding{..} =
-            NameBinding{ assignment = fmap (>>= f) assignment, .. }
+        onNameBinding NameBinding{ nameLocation, name, annotation, assignment} =
+            NameBinding
+                { nameLocation
+                , name
+                , annotation
+                , assignment = fmap (>>= f) assignment
+                }
         onNameBinding FieldNamesBinding{ fieldNamesLocation, fieldNames } =
-            FieldNamesBinding{ fieldNamesLocation, fieldNames = fmap onFieldName fieldNames }
+            FieldNamesBinding
+                { fieldNamesLocation
+                , fieldNames = fmap onFieldName fieldNames
+                }
 
-        onFieldName FieldName{ assignment, ..} =
-            FieldName{ assignment = fmap (>>= f) assignment, .. }
-    Application{ function, argument, .. } >>= f =
-        Application{ function = function >>= f, argument = argument >>= f, .. }
-    Annotation{ annotated, .. } >>= f =
-        Annotation{ annotated = annotated >>= f, .. }
-    Let{ bindings, body, .. } >>= f =
-        Let{ bindings = fmap onBinding bindings, body = body >>= f, .. }
+        onFieldName
+            FieldName{ fieldNameLocation, name, annotation, assignment } =
+                FieldName
+                    { fieldNameLocation
+                    , name
+                    , annotation
+                    , assignment = fmap (>>= f) assignment
+                    }
+    Application{ location, function, argument } >>= f = Application
+        { location
+        , function = function >>= f
+        , argument = argument >>= f
+        }
+
+    Annotation{ location, annotated, annotation } >>= f =
+        Annotation{ location, annotated = annotated >>= f, annotation }
+
+    Let{ location, bindings, body } >>= f =
+        Let{ location, bindings = fmap onBinding bindings, body = body >>= f }
       where
-        onBinding Binding{ assignment, nameBindings, .. } =
-            Binding{ assignment = assignment >>= f, nameBindings = fmap onNameBinding nameBindings, .. }
+        onBinding
+            Binding{ nameLocation, name, nameBindings, annotation, assignment } =
+                Binding
+                    { name
+                    , nameLocation
+                    , nameBindings = fmap onNameBinding nameBindings
+                    , annotation
+                    , assignment = assignment >>= f
+                    }
 
-        onNameBinding NameBinding{..} =
-            NameBinding{ assignment = fmap (>>= f) assignment, .. }
+        onNameBinding
+            NameBinding{ nameLocation, name, annotation, assignment } =
+                NameBinding
+                    { nameLocation
+                    , name
+                    , annotation
+                    , assignment = fmap (>>= f) assignment
+                    }
         onNameBinding FieldNamesBinding{ fieldNamesLocation, fieldNames } =
-            FieldNamesBinding{ fieldNamesLocation, fieldNames = fmap onFieldName fieldNames }
+            FieldNamesBinding
+                { fieldNamesLocation
+                , fieldNames = fmap onFieldName fieldNames
+                }
 
-        onFieldName FieldName{ assignment, ..} =
-            FieldName{ assignment = fmap (>>= f) assignment, .. }
-    List{ elements, .. } >>= f =
-        List{ elements = fmap (>>= f) elements, .. }
-    Record{ fieldValues, .. } >>= f =
-        Record{ fieldValues = fmap (fmap (>>= f)) fieldValues, .. }
-    Project{ larger, .. } >>= f =
-        Project{ larger = larger >>= f, .. }
-    Alternative{..} >>= _ =
-        Alternative{..}
-    Fold{ handlers, .. } >>= f =
-        Fold{ handlers = handlers >>= f, .. }
-    If{ predicate, ifTrue, ifFalse, .. } >>= f =
-        If  { predicate = predicate >>= f
-            , ifTrue = ifTrue >>= f
-            , ifFalse = ifFalse >>= f
-            , ..
-            }
-    Text{ chunks = Chunks text₀ rest, .. } >>= f =
-        Text{ chunks = Chunks text₀ (fmap onChunk rest), .. }
+        onFieldName
+            FieldName{ fieldNameLocation, name, annotation, assignment } =
+                FieldName
+                    { fieldNameLocation
+                    , name
+                    , annotation
+                    , assignment = fmap (>>= f) assignment
+                    }
+
+    List{ location, elements } >>= f =
+        List{ location, elements = fmap (>>= f) elements }
+
+    Record{ location, fieldValues } >>= f =
+        Record{ location, fieldValues = fmap (fmap (>>= f)) fieldValues }
+
+    Project{ location, larger, smaller } >>= f =
+        Project{ location, larger = larger >>= f, smaller }
+
+    Alternative{ location, name} >>= _ =
+        Alternative{ location, name }
+
+    Fold{ location, handlers } >>= f =
+        Fold{ location, handlers = handlers >>= f }
+
+    If{ location, predicate, ifTrue, ifFalse } >>= f = If
+        { location
+        , predicate = predicate >>= f
+        , ifTrue = ifTrue >>= f
+        , ifFalse = ifFalse >>= f
+        }
+
+    Text{ location, chunks = Chunks text₀ rest } >>= f =
+        Text{ location, chunks = Chunks text₀ (fmap onChunk rest) }
       where
         onChunk (interpolation, text) = (interpolation >>= f, text)
-    Prompt{ arguments, ..} >>= f =
-        Prompt{ arguments = arguments >>= f, ..}
-    HTTP{ arguments, ..} >>= f =
-        HTTP{ arguments = arguments >>= f, ..}
-    Scalar{..} >>= _ =
-        Scalar{..}
-    Operator{ left, right, .. } >>= f =
-        Operator{ left = left >>= f, right = right >>= f, .. }
-    Builtin{..} >>= _ =
-        Builtin{..}
+
+    Prompt{ location, arguments, schema } >>= f =
+        Prompt{ location, arguments = arguments >>= f, schema }
+
+    HTTP{ location, arguments, schema } >>= f =
+        HTTP{ location, arguments = arguments >>= f, schema }
+
+    Scalar{ location, scalar } >>= _ =
+        Scalar{ location, scalar }
+
+    Operator{ location, left, operatorLocation, operator, right } >>= f =
+        Operator
+            { location
+            , left = left >>= f
+            , operatorLocation
+            , operator
+            , right = right >>= f
+            }
+
+    Builtin{ location, builtin } >>= _ =
+        Builtin{ location, builtin }
+
     Embed{ embedded } >>= f =
         f embedded
 
 instance Plated (Syntax s a) where
     plate onSyntax syntax =
         case syntax of
-            Variable{..} -> do
-                pure Variable{..}
-            Lambda{ body = oldBody, ..} -> do
-                newBody <- onSyntax oldBody
-                return Lambda{ body = newBody, .. }
-            Application{ function = oldFunction, argument = oldArgument, .. } -> do
-                newFunction <- onSyntax oldFunction
-                newArgument <- onSyntax oldArgument
-                return Application{ function = newFunction, argument = newArgument, .. }
-            Annotation{ annotated = oldAnnotated, .. } -> do
-                newAnnotated <- onSyntax oldAnnotated
-                return Annotation{ annotated = newAnnotated, .. }
-            Let{ bindings = oldBindings, body = oldBody, .. } -> do
-                let onBinding Binding{ assignment = oldAssignment, .. } = do
-                        newAssignment <- onSyntax oldAssignment
-                        return Binding{ assignment = newAssignment, .. }
-                newBindings <- traverse onBinding oldBindings
-                newBody <- onSyntax oldBody
-                return Let{ bindings = newBindings, body = newBody, .. }
-            List{ elements = oldElements, .. } -> do
-                newElements <- traverse onSyntax oldElements
-                return List{ elements = newElements, .. }
-            Record{ fieldValues = oldFieldValues, .. } -> do
-                let onPair (field, oldValue) = do
-                        newValue <- onSyntax oldValue
+            Variable{ location, name } -> do
+                pure Variable{ location, name }
+
+            Lambda{ location, nameBinding, body } -> do
+                newBody <- onSyntax body
+
+                return Lambda{ location, nameBinding, body = newBody }
+
+            Application{ location, function, argument } -> do
+                newFunction <- onSyntax function
+                newArgument <- onSyntax argument
+
+                return Application
+                    { location
+                    , function = newFunction
+                    , argument = newArgument
+                    }
+
+            Annotation{ location, annotated, annotation } -> do
+                newAnnotated <- onSyntax annotated
+
+                return Annotation
+                    { location
+                    , annotated = newAnnotated
+                    , annotation
+                    }
+
+            Let{ location, bindings, body } -> do
+                let onFieldName
+                        FieldName{ fieldNameLocation, name, annotation, assignment } = do
+                            newAssignment <- traverse onSyntax assignment
+
+                            return FieldName
+                                { fieldNameLocation
+                                , name
+                                , annotation
+                                , assignment = newAssignment
+                                }
+
+                let onNameBinding
+                        NameBinding{ nameLocation, name, annotation, assignment } = do
+                            newAssignment <- traverse onSyntax assignment
+
+                            return NameBinding
+                                { nameLocation
+                                , name
+                                , annotation
+                                , assignment = newAssignment
+                                }
+
+                    onNameBinding
+                        FieldNamesBinding{ fieldNamesLocation, fieldNames } = do
+                            newFieldNames <- traverse onFieldName fieldNames
+
+                            return FieldNamesBinding
+                                { fieldNamesLocation
+                                , fieldNames = newFieldNames
+                                }
+
+                let onBinding
+                        Binding{ nameLocation, name, nameBindings, annotation, assignment } = do
+                            newAssignment <- onSyntax assignment
+
+                            newNameBindings <- traverse onNameBinding nameBindings
+
+                            return Binding
+                                { nameLocation
+                                , name
+                                , nameBindings = newNameBindings
+                                , annotation
+                                , assignment = newAssignment
+                                }
+
+                newBindings <- traverse onBinding bindings
+
+                newBody <- onSyntax body
+
+                return Let
+                    { location
+                    , bindings = newBindings
+                    , body = newBody
+                    }
+
+            List{ location, elements } -> do
+                newElements <- traverse onSyntax elements
+
+                return List{ location, elements = newElements }
+
+            Record{ location, fieldValues } -> do
+                let onPair (field, value) = do
+                        newValue <- onSyntax value
+
                         return (field, newValue)
 
-                newFieldValues <- traverse onPair oldFieldValues
-                return Record{ fieldValues = newFieldValues, .. }
-            Project{ larger = oldLarger, .. } -> do
-                newLarger <- onSyntax oldLarger
-                return Project{ larger = newLarger, .. }
-            Alternative{..} -> do
-                pure Alternative{..}
-            Fold{ handlers = oldHandlers, .. } -> do
-                newHandlers <- onSyntax oldHandlers
-                return Fold{ handlers = newHandlers, .. }
-            If{ predicate = oldPredicate, ifTrue = oldIfTrue, ifFalse = oldIfFalse, .. } -> do
-                newPredicate <- onSyntax oldPredicate
-                newIfTrue <- onSyntax oldIfTrue
-                newIfFalse <- onSyntax oldIfFalse
-                return If{ predicate = newPredicate, ifTrue = newIfTrue, ifFalse = newIfFalse, .. }
-            Text{ chunks = Chunks text₀ rest, .. } -> do
+                newFieldValues <- traverse onPair fieldValues
+
+                return Record{ location, fieldValues = newFieldValues }
+
+            Project{ location, larger, smaller } -> do
+                newLarger <- onSyntax larger
+
+                return Project{ location, larger = newLarger, smaller }
+
+            Alternative{ location, name } -> do
+                pure Alternative{ name, location }
+
+            Fold{ location, handlers } -> do
+                newHandlers <- onSyntax handlers
+
+                return Fold{ location, handlers = newHandlers }
+
+            If{ location, predicate, ifTrue, ifFalse } -> do
+                newPredicate <- onSyntax predicate
+                newIfTrue    <- onSyntax ifTrue
+                newIfFalse   <- onSyntax ifFalse
+
+                return If
+                    { location
+                    , predicate = newPredicate
+                    , ifTrue = newIfTrue
+                    , ifFalse = newIfFalse
+                    }
+
+            Text{ location, chunks = Chunks text₀ rest } -> do
                 let onChunk (interpolation, text) = do
                         newInterpolation <- onSyntax interpolation
+
                         return (newInterpolation, text)
+
                 newRest <- traverse onChunk rest
-                return Text{ chunks = Chunks text₀ newRest, .. }
-            Prompt{ arguments = oldArguments, .. } -> do
-                newArguments <- onSyntax oldArguments
-                return Prompt{ arguments = newArguments, .. }
-            HTTP{ arguments = oldArguments, .. } -> do
-                newArguments <- onSyntax oldArguments
-                return HTTP{ arguments = newArguments, .. }
-            Scalar{..} -> do
-                pure Scalar{..}
-            Operator{ left = oldLeft, right = oldRight, .. } -> do
-                newLeft <- onSyntax oldLeft
-                newRight <- onSyntax oldRight
-                return Operator{ left = newLeft, right = newRight, .. }
-            Builtin{..} -> do
-                pure Builtin{..}
-            Embed{..} -> do
-                pure Embed{..}
+
+                return Text{ location, chunks = Chunks text₀ newRest }
+
+            Prompt{ location, arguments, schema } -> do
+                newArguments <- onSyntax arguments
+
+                return Prompt{ location, arguments = newArguments, schema }
+
+            HTTP{ location, arguments, schema } -> do
+                newArguments <- onSyntax arguments
+
+                return HTTP{ location, arguments = newArguments, schema }
+
+            Scalar{ location, scalar } -> do
+                pure Scalar{ location, scalar }
+
+            Operator{ location, left, operatorLocation, operator, right } -> do
+                newLeft  <- onSyntax left
+                newRight <- onSyntax right
+
+                return Operator
+                    { location
+                    , left = newLeft
+                    , operatorLocation
+                    , operator
+                    , right = newRight
+                    }
+
+            Builtin{ location, builtin } -> do
+                pure Builtin{ location, builtin }
+
+            Embed{ location, embedded } -> do
+                pure Embed{ location, embedded }
 
 instance Bifunctor Syntax where
-    first f Variable{..} =
-        Variable{ location = f location, ..}
-    first f Lambda{..} =
-        Lambda{ location = f location, nameBinding = first f nameBinding, body = first f body, .. }
-    first f Application{..} =
-        Application{ location = f location, function = first f function, argument = first f argument, .. }
-    first f Annotation{..} =
-        Annotation{ location = f location, annotated = first f annotated, annotation = fmap f annotation, .. }
-    first f Let{..} =
-        Let{ location = f location, bindings = fmap (first f) bindings, body = first f body, .. }
-    first f List{..} =
-        List{ location = f location, elements = fmap (first f) elements, .. }
-    first f Record{..} =
-        Record{ location = f location, fieldValues = fmap adapt fieldValues, .. }
+    first f Variable{ location, name } =
+        Variable{ name, location = f location }
+
+    first f Lambda{ location, nameBinding, body } = Lambda
+        { location = f location
+        , nameBinding = first f nameBinding
+        , body = first f body
+        }
+
+    first f Application{ location, function, argument } = Application
+        { location = f location
+        , function = first f function
+        , argument = first f argument
+        }
+
+    first f Annotation{ location, annotated, annotation } = Annotation
+        { location = f location
+        , annotated = first f annotated
+        , annotation = fmap f annotation
+        }
+
+    first f Let{ location, bindings, body } = Let
+        { location = f location
+        , bindings = fmap (first f) bindings
+        , body = first f body
+        }
+
+    first f List{ location, elements } =
+        List{ location = f location, elements = fmap (first f) elements }
+
+    first f Record{ location, fieldValues } =
+        Record{ location = f location, fieldValues = fmap adapt fieldValues }
       where
         adapt (field, value) = (field, first f value)
-    first f Project{..} =
-        Project{ location = f location, larger = first f larger, smaller = fmap f smaller }
-    first f Alternative{..} =
-        Alternative{ location = f location, .. }
-    first f Fold{..} =
-        Fold{ location = f location, handlers = first f handlers, .. }
-    first f If{..} =
-        If{ location = f location, predicate = first f predicate, ifTrue = first f ifTrue, ifFalse = first f ifFalse, .. }
-    first f Text{..} =
+
+    first f Project{ location, larger, smaller } = Project
+        { location = f location
+        , larger = first f larger
+        , smaller = fmap f smaller
+        }
+
+    first f Alternative{ location, name } =
+        Alternative{ location = f location, name }
+
+    first f Fold{ location, handlers } =
+        Fold{ location = f location, handlers = first f handlers }
+
+    first f If{ location, predicate, ifTrue, ifFalse } = If
+        { location = f location
+        , predicate = first f predicate
+        , ifTrue = first f ifTrue
+        , ifFalse = first f ifFalse
+        }
+
+    first f Text{ location, chunks } =
         Text{ location = f location, chunks = first f chunks }
-    first f Prompt{..} =
-        Prompt{ location = f location, arguments = first f arguments, schema = fmap (fmap f) schema }
-    first f HTTP{..} =
-        HTTP{ location = f location, arguments = first f arguments, schema = fmap (fmap f) schema }
-    first f Scalar{..} =
-        Scalar{ location = f location, .. }
-    first f Operator{..} =
-        Operator{ location = f location, left = first f left, operatorLocation = f operatorLocation, right = first f right, .. }
-    first f Builtin{..} =
-        Builtin{ location = f location, .. }
-    first f Embed{..} =
-        Embed{ location = f location, .. }
+
+    first f Prompt{ location, arguments, schema } = Prompt
+        { location = f location
+        , arguments = first f arguments
+        , schema = fmap (fmap f) schema
+        }
+
+    first f HTTP{ location, arguments, schema } = HTTP
+        { location = f location
+        , arguments = first f arguments
+        , schema = fmap (fmap f) schema
+        }
+
+    first f Scalar{ location, scalar } =
+        Scalar{ location = f location, scalar }
+
+    first f Operator{ location, left, operatorLocation, operator, right } =
+        Operator
+            { location = f location
+            , left = first f left
+            , operatorLocation = f operatorLocation
+            , operator
+            , right = first f right
+            }
+
+    first f Builtin{ location, builtin } =
+        Builtin{ location = f location, builtin }
+
+    first f Embed{ location, embedded } =
+        Embed{ location = f location, embedded }
 
     second = fmap
 
@@ -463,20 +673,79 @@ instance IsString (Smaller ()) where
 
 -- | @Traversal'@ from a `Syntax` to its immediate `Type` annotations
 types :: Traversal' (Syntax s a) (Type s)
-types k Lambda{ nameBinding = NameBinding{ annotation = Just t, .. }, .. } =
-    fmap (\t' -> Lambda{ nameBinding = NameBinding{ annotation = Just t', .. }, .. }) (k t)
-types k Annotation{ annotation = t, .. } =
-    fmap (\t' -> Annotation{ annotation = t', .. }) (k t)
-types k Prompt{ schema = Just t, .. } =
-    fmap (\t' -> Prompt{ schema = Just t', .. }) (k t)
-types k HTTP{ schema = Just t, .. } =
-    fmap (\t' -> HTTP{ schema = Just t', .. }) (k t)
-types k Let{ bindings = bs, .. } =
-    fmap (\bs' -> Let{ bindings = bs', .. }) (traverse onBinding bs)
+types onType
+    Lambda{ location, nameBinding = NameBinding{ nameLocation, name, annotation, assignment }, body } = do
+        newAnnotation <- traverse onType annotation
+
+        return Lambda
+            { location
+            , nameBinding = NameBinding
+                { nameLocation
+                , name
+                , annotation = newAnnotation
+                , assignment
+                }
+            , body
+            }
+types onType Annotation{ location, annotated, annotation } = do
+    newAnnotation <- onType annotation
+
+    return Annotation{ location, annotated, annotation = newAnnotation }
+types onType Prompt{ location, arguments, schema } = do
+    newSchema <- traverse onType schema
+
+    return Prompt{ location, arguments, schema = newSchema }
+types onType HTTP{ location, arguments, schema } = do
+    newSchema <- traverse onType schema
+
+    return HTTP{ location, arguments, schema = newSchema }
+types onType Let{ location, bindings, body } = do
+    newBindings <- traverse onBinding bindings
+
+    return Let{ location, bindings = newBindings, body }
   where
-    onBinding Binding{ annotation = Just t, .. } =
-        fmap (\t' -> Binding{ annotation = Just t', .. }) (k t)
-    onBinding binding = pure binding
+    onBinding
+        Binding{ nameLocation, name, nameBindings, annotation, assignment } = do
+            newNameBindings <- traverse onNameBinding nameBindings
+
+            newAnnotation <- traverse onType annotation
+
+            return Binding
+                { nameLocation
+                , name
+                , nameBindings = newNameBindings
+                , annotation = newAnnotation
+                , assignment
+                }
+
+    onNameBinding NameBinding{ nameLocation, name, annotation, assignment } = do
+        newAnnotation <- traverse onType annotation
+
+        return NameBinding
+            { nameLocation
+            , name
+            , annotation = newAnnotation
+            , assignment
+            }
+    onNameBinding FieldNamesBinding{ fieldNamesLocation, fieldNames } = do
+        newFieldNames <- traverse onFieldName fieldNames
+
+        return FieldNamesBinding
+            { fieldNamesLocation
+            , fieldNames = newFieldNames
+            }
+
+    onFieldName
+        FieldName{ fieldNameLocation, name, annotation, assignment } = do
+            newAnnotation <- traverse onType annotation
+
+            return FieldName
+                { fieldNameLocation
+                , name
+                , annotation = newAnnotation
+                , assignment
+                }
+
 types _ e = pure e
 
 -- | A scalar value
@@ -653,7 +922,7 @@ prettyExpression expression@Lambda{} =
 
     long = prettyLong expression
 
-    prettyShort Lambda{..} =
+    prettyShort Lambda{ nameBinding, body } =
             pretty nameBinding
         <>  " "
         <>  prettyShort body
@@ -662,7 +931,7 @@ prettyExpression expression@Lambda{} =
         <>  " "
         <>  prettyExpression body
 
-    prettyLong Lambda{..} =
+    prettyLong Lambda{ nameBinding, body } =
             punctuation "\\"
         <>  pretty nameBinding
         <>  " "
@@ -672,7 +941,8 @@ prettyExpression expression@Lambda{} =
     prettyLong body =
         "  " <> Pretty.nest 2 (prettyExpression body)
 
-prettyExpression Let{..} = Pretty.group (Pretty.flatAlt long short)
+prettyExpression Let{ bindings, body }
+    = Pretty.group (Pretty.flatAlt long short)
   where
     short = foldMap (\binding -> pretty binding <> " ") bindings
         <>  keyword "in"
@@ -683,7 +953,7 @@ prettyExpression Let{..} = Pretty.group (Pretty.flatAlt long short)
         <>  keyword "in"
         <>  "  "
         <>  Pretty.nest 4 (prettyExpression body)
-prettyExpression If{..} =
+prettyExpression If{ predicate, ifTrue, ifFalse } =
     Pretty.group (Pretty.flatAlt long short)
   where
     short = keyword "if"
@@ -711,7 +981,8 @@ prettyExpression If{..} =
         <>  Pretty.hardline
         <>  "  "
         <>  Pretty.nest 2 (prettyExpression ifFalse)
-prettyExpression Prompt{ schema = Just schema, ..} = Pretty.group (Pretty.flatAlt long short)
+prettyExpression Prompt{ arguments, schema = Just schema } =
+    Pretty.group (Pretty.flatAlt long short)
   where
     short = keyword "prompt"
         <>  " "
@@ -730,7 +1001,8 @@ prettyExpression Prompt{ schema = Just schema, ..} = Pretty.group (Pretty.flatAl
         <>  Pretty.operator ":"
         <>  " "
         <>  Pretty.nest 4 (pretty schema)
-prettyExpression HTTP{ schema = Just schema, ..} = Pretty.group (Pretty.flatAlt long short)
+prettyExpression HTTP{ arguments, schema = Just schema } =
+    Pretty.group (Pretty.flatAlt long short)
   where
     short = keyword "http"
         <>  " "
@@ -749,7 +1021,7 @@ prettyExpression HTTP{ schema = Just schema, ..} = Pretty.group (Pretty.flatAlt 
         <>  Pretty.operator ":"
         <>  " "
         <>  Pretty.nest 4 (pretty schema)
-prettyExpression Annotation{..} =
+prettyExpression Annotation{ annotated, annotation } =
     Pretty.group (Pretty.flatAlt long short)
   where
     short = prettyOperatorExpression annotated
@@ -779,7 +1051,7 @@ prettyOperator operator0 prettyNext expression@Operator{ operator = operator1 }
 
     long = pretty (Text.replicate indent " ") <> prettyLong expression
 
-    prettyShort Operator{..}
+    prettyShort Operator{ left, operator, right }
         | operator0 == operator =
                 prettyShort left
             <>  " "
@@ -789,7 +1061,7 @@ prettyOperator operator0 prettyNext expression@Operator{ operator = operator1 }
     prettyShort other =
         prettyNext other
 
-    prettyLong Operator{..}
+    prettyLong Operator{ left, operator, right }
         | operator0 == operator =
                 Pretty.nest indent (prettyLong left)
             <>  Pretty.hardline
@@ -869,37 +1141,37 @@ prettyApplicationExpression expression
 
     long = prettyLong expression
 
-    prettyShort Application{..} =
+    prettyShort Application{ function, argument } =
             prettyShort function
         <>  " "
         <>  prettyProjectExpression argument
-    prettyShort Fold{..} =
+    prettyShort Fold{ handlers } =
             keyword "fold" <> " " <> prettyProjectExpression handlers
-    prettyShort Prompt{ schema = Nothing, .. } =
+    prettyShort Prompt{ arguments, schema = Nothing } =
             keyword "prompt" <> " " <> prettyProjectExpression arguments
-    prettyShort HTTP{ schema = Nothing, .. } =
+    prettyShort HTTP{ arguments, schema = Nothing } =
                 keyword "http"
             <>  " "
             <>  prettyProjectExpression arguments
     prettyShort other =
         prettyProjectExpression other
 
-    prettyLong Application{..} =
+    prettyLong Application{ function, argument } =
             prettyLong function
         <>  Pretty.hardline
         <>  "  "
         <>  Pretty.nest 2 (prettyProjectExpression argument)
-    prettyLong Fold{..} =
+    prettyLong Fold{ handlers } =
             keyword "fold"
         <>  Pretty.hardline
         <>  "  "
         <>  Pretty.nest 2 (prettyProjectExpression handlers)
-    prettyLong Prompt{..} =
+    prettyLong Prompt{ arguments } =
             keyword "prompt"
         <>  Pretty.hardline
         <>  "  "
         <>  Pretty.nest 2 (prettyProjectExpression arguments)
-    prettyLong HTTP{..} =
+    prettyLong HTTP{ arguments } =
             keyword "http"
         <>  Pretty.hardline
         <>  "  "
@@ -980,9 +1252,9 @@ prettyProjectExpression expression = case expression of
         prettyPrimitiveExpression record
 
 prettyPrimitiveExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
-prettyPrimitiveExpression Variable{..} =
+prettyPrimitiveExpression Variable{ name } =
     label (pretty name)
-prettyPrimitiveExpression Alternative{..} =
+prettyPrimitiveExpression Alternative{ name } =
     Type.prettyAlternativeLabel name
 prettyPrimitiveExpression List{ elements = [] } =
     punctuation "[" <> " " <> punctuation "]"
@@ -1034,12 +1306,12 @@ prettyPrimitiveExpression Record { fieldValues = fieldValue : fieldValues } =
         <>  "    "
         <>  Pretty.nest 4 (prettyExpression value)
         <>  Pretty.hardline
-prettyPrimitiveExpression Builtin{..} =
+prettyPrimitiveExpression Builtin{ builtin } =
     pretty builtin
-prettyPrimitiveExpression Scalar{..} =
+prettyPrimitiveExpression Scalar{ scalar } =
     pretty scalar
-prettyPrimitiveExpression Text{..} = pretty chunks
-prettyPrimitiveExpression Embed{..} =
+prettyPrimitiveExpression Text{ chunks } = pretty chunks
+prettyPrimitiveExpression Embed{ embedded } =
     pretty embedded
 prettyPrimitiveExpression other = Pretty.group (Pretty.flatAlt long short)
   where
@@ -1146,9 +1418,9 @@ instance IsString (NameBinding () a) where
             }
 
 instance Pretty a => Pretty (NameBinding s a) where
-    pretty NameBinding{ annotation = Nothing, assignment = Nothing, .. } =
+    pretty NameBinding{ name, annotation = Nothing, assignment = Nothing } =
         label (pretty name)
-    pretty NameBinding{ annotation, assignment, .. } =
+    pretty NameBinding{ name, annotation, assignment } =
             punctuation "("
         <>  label (pretty name)
         <>  foldMap renderAnnotation annotation
@@ -1192,18 +1464,20 @@ data Binding s a = Binding
     } deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
 
 instance Bifunctor Binding where
-    first f Binding{ nameLocation, annotation, assignment, .. } =
-        Binding
-            { nameLocation = f nameLocation
-            , nameBindings = fmap (first f) nameBindings
-            , annotation = fmap (fmap f) annotation
-            , assignment = first f assignment
-            , ..
-            }
+    first f
+        Binding{ nameLocation, name, nameBindings, annotation, assignment } =
+            Binding
+                { nameLocation = f nameLocation
+                , name
+                , nameBindings = fmap (first f) nameBindings
+                , annotation = fmap (fmap f) annotation
+                , assignment = first f assignment
+                }
+
     second = fmap
 
 instance Pretty a => Pretty (Binding s a) where
-    pretty Binding{ annotation = Nothing, .. } =
+    pretty Binding{ name, nameBindings, annotation = Nothing, assignment } =
         Pretty.group (Pretty.flatAlt long short)
       where
         long =  keyword "let"
@@ -1224,7 +1498,7 @@ instance Pretty a => Pretty (Binding s a) where
             <>  punctuation "="
             <>  " "
             <>  pretty assignment
-    pretty Binding{ annotation = Just type_, .. } =
+    pretty Binding{ name, nameBindings, annotation = Just type_, assignment } =
         Pretty.group (Pretty.flatAlt long short)
       where
         long =  keyword "let"
