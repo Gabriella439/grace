@@ -17,9 +17,15 @@ module Grace.HTTP
 import Control.Exception.Safe (Exception(..))
 import Data.Text (Text)
 import GHCJS.Fetch.Types (JSResponse)
-import Grace.HTTP.Type (Header(..), HTTP(..), Parameter(..), completeHeaders)
 import OpenAI.V1.Chat.Completions (ChatCompletionObject, CreateChatCompletion)
 
+import Grace.HTTP.Type
+    ( Header(..)
+    , HTTP(..)
+    , Parameter(..)
+    , completeHeaders
+    , organization
+    )
 import GHCJS.Fetch
     ( Request(..)
     , RequestCredentials(..)
@@ -152,6 +158,10 @@ createChatCompletion key createChatCompletion_ = do
         Left exception -> Exception.throwIO exception
         Right text -> return (Text.unpack text)
 
+    let organizationHeader = case organization of
+            Nothing -> []
+            Just o  -> [("OpenAI-Organization", Encoding.encodeUtf8 o)]
+
     let request = Request
             { reqUrl = "https://api.openai.com/v1/chat/completions"
             , reqOptions = Fetch.defaultRequestOptions
@@ -159,7 +169,7 @@ createChatCompletion key createChatCompletion_ = do
                 , reqOptHeaders =
                     [ ("Content-Type", "application/json")
                     , ("Authorization", "Bearer " <> keyBytes)
-                    ]
+                    ] <> organizationHeader
                 , reqOptBody = Just (Prim.toJSString body)
                 }
             }

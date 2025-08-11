@@ -18,10 +18,16 @@ import Control.Concurrent.MVar (MVar)
 import Control.Exception.Safe (Exception(..))
 import Data.Text (Text)
 import Data.Text.Encoding.Error (UnicodeException)
-import Grace.HTTP.Type (Header(..), HTTP(..), Parameter(..), completeHeaders)
 import OpenAI.V1 (Methods(..))
 import OpenAI.V1.Chat.Completions (ChatCompletionObject, CreateChatCompletion)
 
+import Grace.HTTP.Type
+    ( Header(..)
+    , HTTP(..)
+    , Parameter(..)
+    , completeHeaders
+    , organization
+    )
 import Network.HTTP.Client
     ( HttpExceptionContent(..)
     , Manager
@@ -230,7 +236,7 @@ getMethods :: IO (Text -> Methods)
 getMethods = do
     clientEnv <- OpenAI.getClientEnv "https://api.openai.com"
 
-    return (OpenAI.makeMethods clientEnv)
+    return (\key -> OpenAI.makeMethods clientEnv key organization Nothing)
 
 -- | This powers the @prompt@ keyword
 createChatCompletion

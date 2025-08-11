@@ -53,3 +53,6 @@ completeHeaders headers = do
     defaultedHeaders = case headers of
         Nothing -> []
         Just h -> h
+
+organization :: Maybe Text
+organization = Nothing
