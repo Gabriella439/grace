@@ -409,7 +409,7 @@ prompt generateContext location Prompt{ key = Grace.Decode.Key{ text = key }, te
                     let extract text_ = do
                             v <- decode_ text_
 
-                            case Value.fromJSON defaultedSchema v of
+                            case Value.checkJSON defaultedSchema v of
                                 Left invalidJSON -> Exception.throwIO invalidJSON
                                 Right e -> return e
 
@@ -430,7 +430,7 @@ prompt generateContext location Prompt{ key = Grace.Decode.Key{ text = key }, te
                     let extract text_ = do
                             v <- decode_ text_
 
-                            expression <- case Value.fromJSON adjustedSchema v of
+                            expression <- case Value.checkJSON adjustedSchema v of
                                 Left invalidJSON -> Exception.throwIO invalidJSON
                                 Right expression -> return expression
 

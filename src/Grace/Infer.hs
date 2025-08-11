@@ -1928,7 +1928,7 @@ infer e₀ = do
         Syntax.Prompt{ arguments, .. } -> do
             newArguments <- check arguments (fmap (\_ -> location) (expected @Prompt))
 
-            type_ <- case schema of
+            newSchema <- case schema of
                 Just t -> do
                     return t
                 Nothing -> do
@@ -1938,9 +1938,9 @@ infer e₀ = do
 
                     return Type.UnsolvedType{..}
 
-            _Γ <- get
+            context <- get
 
-            return (type_, Syntax.Prompt{ arguments = solveSyntax _Γ newArguments, schema = Just type_, .. })
+            return (newSchema, Syntax.Prompt{ arguments = solveSyntax context newArguments, schema = Just newSchema, .. })
 
         Syntax.HTTP{ location, arguments, schema } -> do
             let input = fmap (\_ -> location) (expected @HTTP)
@@ -1954,6 +1954,19 @@ infer e₀ = do
             context <- get
 
             return (newSchema, Syntax.HTTP{ arguments = solveSyntax context newArguments, schema = Just newSchema, .. })
+
+        Syntax.Read{ location, arguments, schema } -> do
+            let input = fmap (\_ -> location) (expected @Text)
+
+            newArguments <- check arguments input
+
+            let newSchema = case schema of
+                    Just output -> output
+                    Nothing -> Type.Scalar{ scalar = Monotype.JSON, .. }
+
+            context <- get
+
+            return (newSchema, Syntax.Read{ arguments = solveSyntax context newArguments, schema = Just newSchema, .. })
 
         -- All the type inference rules for scalars go here.  This part is
         -- pretty self-explanatory: a scalar literal returns the matching
@@ -3181,6 +3194,17 @@ check Syntax.HTTP{ schema = Nothing, .. } annotation = do
     context₁ <- get
 
     return Syntax.HTTP{ arguments = newArguments, schema = Just (Context.solveType context₁ annotation), .. }
+
+check Syntax.Read{ schema = Nothing, .. } annotation = do
+    newArguments <- check arguments (fmap (\_ -> location) (expected @Text))
+
+    context₀ <- get
+
+    subtype (Context.solveType context₀ annotation) Type.Scalar{ location, scalar = Monotype.JSON }
+
+    context₁ <- get
+
+    return Syntax.Read{ arguments = newArguments, schema = Just (Context.solveType context₁ annotation), .. }
 
 check Syntax.List{..} annotation@Type.Scalar{ scalar = Monotype.JSON } = do
     newElements <- traverse (`check` annotation) elements

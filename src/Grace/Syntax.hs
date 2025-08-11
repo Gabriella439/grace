@@ -135,6 +135,7 @@ data Syntax s a
     --   "a${x}b"
     | Prompt{ location :: s, arguments :: Syntax s a, schema :: Maybe (Type s) }
     | HTTP{ location :: s, arguments :: Syntax s a, schema :: Maybe (Type s) }
+    | Read{ location :: s, arguments :: Syntax s a, schema :: Maybe (Type s) }
     | Scalar { location :: s, scalar :: Scalar }
     | Operator { location :: s, left :: Syntax s a, operatorLocation :: s, operator :: Operator, right :: Syntax s a }
     -- ^
@@ -259,6 +260,9 @@ instance Monad (Syntax ()) where
 
     HTTP{ location, arguments, schema } >>= f =
         HTTP{ location, arguments = arguments >>= f, schema }
+
+    Read{ location, arguments, schema } >>= f =
+        Read{ location, arguments = arguments >>= f, schema }
 
     Scalar{ location, scalar } >>= _ =
         Scalar{ location, scalar }
@@ -424,6 +428,11 @@ instance Plated (Syntax s a) where
 
                 return HTTP{ location, arguments = newArguments, schema }
 
+            Read{ location, arguments, schema } -> do
+                newArguments <- onSyntax arguments
+
+                return Read{ location, arguments = newArguments, schema }
+
             Scalar{ location, scalar } -> do
                 pure Scalar{ location, scalar }
 
@@ -515,6 +524,12 @@ instance Bifunctor Syntax where
         , schema = fmap (fmap f) schema
         }
 
+    first f Read{ location, arguments, schema } = Read
+        { location = f location
+        , arguments = first f arguments
+        , schema = fmap (fmap f) schema
+        }
+
     first f Scalar{ location, scalar } =
         Scalar{ location = f location, scalar }
 
@@ -579,6 +594,8 @@ usedIn _ Scalar{ } =
 usedIn name₀ Prompt{ arguments } =
     usedIn name₀ arguments
 usedIn name₀ HTTP{ arguments } =
+    usedIn name₀ arguments
+usedIn name₀ Read{ arguments } =
     usedIn name₀ arguments
 usedIn name₀ Operator{ left, right } =
     usedIn name₀ left && usedIn name₀ right
@@ -699,6 +716,10 @@ types onType HTTP{ location, arguments, schema } = do
     newSchema <- traverse onType schema
 
     return HTTP{ location, arguments, schema = newSchema }
+types onType Read{ location, arguments, schema } = do
+    newSchema <- traverse onType schema
+
+    return Read{ location, arguments, schema = newSchema }
 types onType Let{ location, bindings, body } = do
     newBindings <- traverse onBinding bindings
 
@@ -1021,6 +1042,26 @@ prettyExpression HTTP{ arguments, schema = Just schema } =
         <>  Pretty.operator ":"
         <>  " "
         <>  Pretty.nest 4 (pretty schema)
+prettyExpression Read{ arguments, schema = Just schema } =
+    Pretty.group (Pretty.flatAlt long short)
+  where
+    short = keyword "read"
+        <>  " "
+        <>  prettyProjectExpression arguments
+        <>  " "
+        <>  Pretty.operator ":"
+        <>  " "
+        <>  pretty schema
+
+    long =  keyword "read"
+        <>  Pretty.hardline
+        <>  "  "
+        <>  Pretty.nest 2 (prettyProjectExpression arguments)
+        <>  Pretty.hardline
+        <>  "  "
+        <>  Pretty.operator ":"
+        <>  " "
+        <>  Pretty.nest 4 (pretty schema)
 prettyExpression Annotation{ annotated, annotation } =
     Pretty.group (Pretty.flatAlt long short)
   where
@@ -1135,6 +1176,7 @@ prettyApplicationExpression expression
     isApplication Fold{}        = True
     isApplication Prompt{}      = True
     isApplication HTTP{}        = True
+    isApplication Read{}        = True
     isApplication _             = False
 
     short = prettyShort expression
@@ -1150,9 +1192,9 @@ prettyApplicationExpression expression
     prettyShort Prompt{ arguments, schema = Nothing } =
             keyword "prompt" <> " " <> prettyProjectExpression arguments
     prettyShort HTTP{ arguments, schema = Nothing } =
-                keyword "http"
-            <>  " "
-            <>  prettyProjectExpression arguments
+            keyword "http" <> " " <> prettyProjectExpression arguments
+    prettyShort Read{ arguments, schema = Nothing } =
+            keyword "read" <> " " <> prettyProjectExpression arguments
     prettyShort other =
         prettyProjectExpression other
 
@@ -1173,6 +1215,11 @@ prettyApplicationExpression expression
         <>  Pretty.nest 2 (prettyProjectExpression arguments)
     prettyLong HTTP{ arguments } =
             keyword "http"
+        <>  Pretty.hardline
+        <>  "  "
+        <>  Pretty.nest 2 (prettyProjectExpression arguments)
+    prettyLong Read{ arguments } =
+            keyword "read"
         <>  Pretty.hardline
         <>  "  "
         <>  Pretty.nest 2 (prettyProjectExpression arguments)

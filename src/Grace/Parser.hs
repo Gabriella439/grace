@@ -133,18 +133,19 @@ lexToken =
             ] Megaparsec.<?> "built-in value"
 
         , Combinators.choice
-            [ Grace.Parser.Forall       <$ symbol "forall"
-            , Grace.Parser.Let          <$ symbol "let"
-            , Grace.Parser.In           <$ symbol "in"
-            , Grace.Parser.If           <$ symbol "if"
-            , Grace.Parser.Then         <$ symbol "then"
-            , Grace.Parser.Else         <$ symbol "else"
+            [ Grace.Parser.Else         <$ symbol "else"
+            , Grace.Parser.Forall       <$ symbol "forall"
             , Grace.Parser.Fold         <$ symbol "fold"
             , Grace.Parser.HTTP         <$ symbol "http"
+            , Grace.Parser.Read         <$ symbol "read"
+            , Grace.Parser.If           <$ symbol "if"
+            , Grace.Parser.In           <$ symbol "in"
+            , Grace.Parser.Let          <$ symbol "let"
             , Grace.Parser.Prompt       <$ symbol "prompt"
-            , Grace.Parser.Type         <$ symbol "Type"
-            , Grace.Parser.Fields       <$ symbol "Fields"
+            , Grace.Parser.Then         <$ symbol "then"
             , Grace.Parser.Alternatives <$ symbol "Alternatives"
+            , Grace.Parser.Fields       <$ symbol "Fields"
+            , Grace.Parser.Type         <$ symbol "Type"
             ] Megaparsec.<?> "keyword"
 
         , Combinators.choice
@@ -482,6 +483,7 @@ reserved =
         , "false"
         , "fold"
         , "forall"
+        , "http"
         , "if"
         , "in"
         , "indexed"
@@ -489,8 +491,8 @@ reserved =
         , "let"
         , "map"
         , "null"
-        , "http"
         , "prompt"
+        , "read"
         , "reveal"
         , "show"
         , "some"
@@ -616,6 +618,7 @@ data Token
     | Plus
     | HTTP
     | Prompt
+    | Read
     | Real
     | RealLiteral Sign Scientific
     | Reveal
@@ -826,6 +829,7 @@ render t = case t of
     Grace.Parser.Plus               -> "+"
     Grace.Parser.HTTP               -> "http"
     Grace.Parser.Prompt             -> "prompt"
+    Grace.Parser.Read               -> "read"
     Grace.Parser.Real               -> "Real"
     Grace.Parser.RealLiteral _ _    -> "a real number literal"
     Grace.Parser.Reveal             -> "reveal"
@@ -989,6 +993,17 @@ grammar endsWithBrace = mdo
                             , schema = Nothing
                             }
 
+                let annotatedRead = do
+                        location <- locatedToken Grace.Parser.Read
+
+                        arguments <- projectExpression
+
+                        return Syntax.Read
+                            { location
+                            , arguments
+                            , schema = Nothing
+                            }
+
                 let adapt Syntax.Embed{ location, embedded = Path file AsCode } Type.Scalar{ scalar = Monotype.Text } =
                         Syntax.Embed{ location, embedded = Path file AsText }
                     adapt Syntax.Embed{ location, embedded = Grace.Input.URI uri AsCode } Type.Scalar{ scalar = Monotype.Text } =
@@ -1007,6 +1022,12 @@ grammar endsWithBrace = mdo
                             , arguments
                             , schema = Just annotation
                             }
+                    adapt Syntax.Read{ location, arguments, schema = Nothing } annotation =
+                        Syntax.Read
+                            { location
+                            , arguments
+                            , schema = Just annotation
+                            }
                     adapt annotated annotation =
                         Syntax.Annotation
                             { location = Syntax.location annotated
@@ -1014,7 +1035,14 @@ grammar endsWithBrace = mdo
                             , annotation
                             }
 
-                annotated <- annotatedFile <|> annotatedURI <|> annotatedPrompt <|> annotatedHTTP <|> operatorExpression
+                annotated <-
+                    (   annotatedFile
+                    <|> annotatedURI
+                    <|> annotatedPrompt
+                    <|> annotatedHTTP
+                    <|> annotatedRead
+                    <|> operatorExpression
+                    )
 
                 parseToken Grace.Parser.Colon
 
@@ -1091,6 +1119,12 @@ grammar endsWithBrace = mdo
                       arguments <- projectExpression
 
                       return Syntax.HTTP{ location, arguments, schema = Nothing }
+
+              <|> do  location <- locatedToken Grace.Parser.Read
+
+                      arguments <- projectExpression
+
+                      return Syntax.Read{ location, arguments, schema = Nothing }
 
               <|> do  location <- locatedToken Grace.Parser.Fold
 
