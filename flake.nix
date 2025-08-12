@@ -1,256 +1,214 @@
 {
   inputs = {
     nixpkgs.url = github:NixOS/nixpkgs/22.05;
+
     utils.url = github:numtide/flake-utils;
   };
 
-  outputs = { nixpkgs, utils, ... }:
-    utils.lib.eachDefaultSystem (system:
-      let withCompiler = compiler:
-            let overlay = pkgsNew: pkgsOld: {
-                  codemirror = pkgsNew.fetchzip {
-                    url = "https://codemirror.net/5/codemirror.zip";
-                    sha256 = "sha256-G8m2Ba+wSkk0u4Ux7dokA3TuP/SIfgN/TLiqUNLW8e0=";
-                  };
+  outputs = { nixpkgs, utils, self }: utils.lib.eachDefaultSystem (system:
+    let
+      withCompiler = compiler:
+        let
+          overlay = self: super: {
+            codemirror = self.fetchzip {
+              url = "https://codemirror.net/5/codemirror.zip";
+              sha256 = "sha256-G8m2Ba+wSkk0u4Ux7dokA3TuP/SIfgN/TLiqUNLW8e0=";
+            };
 
-                  haskell = pkgsOld.haskell // {
-                    packages = pkgsOld.haskell.packages // {
-                      "${compiler}" = pkgsOld.haskell.packages."${compiler}".override (old: {
-                        overrides =
-                          let
-                            oldOverrides = old.overrides or (_: _: {});
+            haskell = super.haskell // {
+              packages = super.haskell.packages // {
+                "${compiler}" = super.haskell.packages."${compiler}".override (old: {
+                  overrides =
+                    let
+                      hlib = self.haskell.lib;
 
-                            manualOverrides = haskellPackagesNew: haskellPackagesOld: {
-                              ghcjs-fetch =
-                                pkgsNew.haskell.lib.addBuildDepend
-                                  (pkgsNew.haskell.lib.doJailbreak
-                                    (pkgsNew.haskell.lib.dontCheck haskellPackagesOld.ghcjs-fetch)
-                                  )
-                                  [ haskellPackagesNew.ghcjs-base ];
+                      mass = f:
+                        self.lib.fold
+                          (name:
+                            self.lib.composeExtensions
+                              (hself: hsuper: {
+                                "${name}" = f hsuper."${name}";
+                              })
+                          )
+                          (_: _: { });
 
-                              grace =
-                                pkgsNew.haskell.lib.overrideCabal
-                                  haskellPackagesOld.grace
-                                  (old: {
-                                    doCheck = false;
+                      manualOverrides = hself: hsuper: {
+                        grace =
+                          hlib.justStaticExecutables
+                            (hlib.overrideCabal hsuper.grace (old: {
+                              doCheck = false;
 
-                                    doHaddock = false;
+                              src =
+                                self.lib.cleanSourceWith
+                                  { inherit (old) src;
 
-                                    src =
-                                      pkgsNew.lib.cleanSourceWith
-                                        { inherit (old) src;
+                                    filter = path: type:
+                                          self.lib.cleanSourceFilter path type
+                                      &&  ! (  (   type == "regular"
+                                               &&  (   self.lib.hasSuffix ".nix" (baseNameOf path)
+                                                   ||  self.lib.hasSuffix ".md" (baseNameOf path)
+                                                   ||  baseNameOf path == "cabal.project.local"
+                                                   )
+                                               )
+                                            || (   type == "directory"
+                                               &&  (builtins.elem (baseNameOf path) [
+                                                     "dist"
+                                                     "dist-newstyle"
+                                                     "examples"
+                                                     "prelude"
+                                                     "website"
+                                                   ])
+                                               )
+                                            );
+                                  };
+                            }));
+                      };
 
-                                          filter = path: type:
-                                                pkgsNew.lib.cleanSourceFilter path type
-                                            &&  (!((pkgsNew.lib.hasPrefix "result" (baseNameOf path) && type == "symlink")
-                                                || (pkgsNew.lib.hasSuffix ".nix" (baseNameOf path) && type == "regular")
-                                                || (pkgsNew.lib.hasSuffix ".md" (baseNameOf path) && type == "regular")
-                                                || (baseNameOf path == "cabal.project.local" && type == "regular")
-                                                || (baseNameOf path == "dist" && type == "directory")
-                                                || (baseNameOf path == "dist-newstyle" && type == "directory")
-                                                || (baseNameOf path == "examples" && type == "directory")
-                                                || (baseNameOf path == "prelude" && type == "directory")
-                                                || (baseNameOf path == "website" && type == "directory")
-                                                ));
-                                        };
-                                  });
+                      ghcjsOverrides =
+                        self.lib.fold self.lib.composeExtensions (_: _: { }) [
+                          (mass hlib.dontCheck [
+                            "asn1-encoding"
+                            "bsb-http-chunked"
+                            "commonmark"
+                            "conduit"
+                            "cryptonite"
+                            "foldl"
+                            "ghcjs-fetch"
+                            "hedgehog"
+                            "http-date"
+                            "hourglass"
+                            "insert-ordered-containers"
+                            "iproute"
+                            "memory"
+                            "mono-traversable"
+                            "network-byte-order"
+                            "prettyprinter-ansi-terminal"
+                            "servant-client"
+                            "streaming-commons"
+                            "text-short"
+                            "unix-time"
+                            "vector"
+                            "x509"
+                            "x509-store"
+                            "yaml"
+                            "zlib"
+                          ])
 
-                              aeson = haskellPackagesNew.aeson_1_5_6_0;
+                          (mass hlib.dontHaddock [
+                            "grace"
+                            "openai"
+                          ])
 
-                              asn1-encoding =
-                                pkgsNew.haskell.lib.dontCheck
-                                  haskellPackagesOld.asn1-encoding;
+                          (mass hlib.doJailbreak [
+                            "ghcjs-fetch"
+                            "openai"
+                          ])
 
-                              bsb-http-chunked =
-                                pkgsNew.haskell.lib.dontCheck
-                                  haskellPackagesOld.bsb-http-chunked;
+                          (hself: hsuper: {
+                            ghcjs-fetch =
+                              hlib.addBuildDepends
+                                hsuper.ghcjs-fetch
+                                [ hself.ghcjs-base ];
 
-                              commonmark =
-                                pkgsNew.haskell.lib.dontCheck
-                                  haskellPackagesOld.commonmark;
+                            aeson = hself.aeson_1_5_6_0;
 
-                              conduit =
-                                pkgsNew.haskell.lib.dontCheck
-                                  haskellPackagesOld.conduit;
+                            entropy =
+                              hlib.addBuildDepends
+                                hsuper.entropy
+                                [ hself.ghcjs-dom
+                                  hself.jsaddle
+                                ];
 
-                              cryptonite =
-                                pkgsNew.haskell.lib.dontCheck
-                                  haskellPackagesOld.cryptonite;
+                            haskeline = hself.haskeline_0_8_2;
 
-                              entropy =
-                                pkgsNew.haskell.lib.addBuildDepends
-                                  haskellPackagesOld.entropy
-                                  [ haskellPackagesNew.ghcjs-dom
-                                    haskellPackagesNew.jsaddle
-                                  ];
+                            network = hsuper.network.overrideAttrs (old: {
+                              dontUpdateAutotoolsGnuConfigScripts = true;
+                            });
 
-                              foldl =
-                                pkgsNew.haskell.lib.dontCheck
-                                  haskellPackagesOld.foldl;
+                            servant-multipart-client =
+                              hsuper.servant-multipart-client.override (old: {
+                                servant-multipart = null;
 
-                              haskeline = haskellPackagesNew.haskeline_0_8_2;
+                                servant-server = null;
 
-                              hedgehog =
-                                pkgsNew.haskell.lib.dontCheck
-                                  haskellPackagesOld.hedgehog;
+                                warp = null;
+                              });
 
-                              http-date =
-                                pkgsNew.haskell.lib.dontCheck
-                                  haskellPackagesOld.http-date;
+                          })
+                        ];
 
-                              hourglass =
-                                pkgsNew.haskell.lib.dontCheck
-                                  haskellPackagesOld.hourglass;
+                      sourceOverrides = hlib.packageSourceOverrides {
+                        grace = ./.;
+                      };
 
-                              insert-ordered-containers =
-                                pkgsNew.haskell.lib.dontCheck
-                                  haskellPackagesOld.insert-ordered-containers;
+                      directoryOverrides = hlib.packagesFromDirectory {
+                        directory = ./dependencies;
+                      };
 
-                              iproute =
-                                pkgsNew.haskell.lib.dontCheck
-                                  haskellPackagesOld.iproute;
+                      oldOverrides = old.overrides or (_: _: {});
 
-                              memory =
-                                pkgsNew.haskell.lib.dontCheck
-                                  haskellPackagesOld.memory;
+                    in
+                      self.lib.fold self.lib.composeExtensions oldOverrides
+                        (   [ sourceOverrides
+                              directoryOverrides
+                              manualOverrides
+                            ]
+                        ++  self.lib.optional (compiler == "ghcjs") ghcjsOverrides
+                        );
+                });
+              };
+            };
 
-                              mono-traversable =
-                                pkgsNew.haskell.lib.dontCheck
-                                  haskellPackagesOld.mono-traversable;
+            website = self.runCommand "try-grace" { nativeBuildInputs = [ self.rsync ]; } ''
+              mkdir -p $out/{css,js,prelude,prompts,examples}
+              rsync --recursive ${./website}/ $out
+              rsync --recursive ${./prelude}/ $out/prelude
+              rsync --recursive ${./prompts}/ $out/prompts
+              rsync --recursive ${./examples}/ $out/examples
+              ln --symbolic ${self.codemirror}/lib/codemirror.css --target-directory=$out/css
+              ln --symbolic ${self.codemirror}/lib/codemirror.js --target-directory=$out/js
+              ln --symbolic ${self.codemirror}/mode/python/python.js --target-directory=$out/js
+              ln --symbolic ${self.haskell.packages."${compiler}".grace}/bin/try-grace.jsexe/all.js --target-directory=$out/js
+            '';
+          };
 
-                              network =
-                                  haskellPackagesOld.network.overrideAttrs (old: {
-                                    dontUpdateAutotoolsGnuConfigScripts = true;
-                                  });
+          config.allowBroken = true;
 
-                              network-byte-order =
-                                pkgsNew.haskell.lib.dontCheck
-                                  haskellPackagesOld.network-byte-order;
+          pkgs = import nixpkgs {
+            inherit config system;
 
-                              openai =
-                                pkgsNew.haskell.lib.doJailbreak
-                                  (pkgsNew.haskell.lib.dontHaddock
-                                    haskellPackagesOld.openai
-                                  );
+            overlays = [ overlay ];
+          };
 
-                              prettyprinter-ansi-terminal =
-                                pkgsNew.haskell.lib.dontCheck
-                                  haskellPackagesOld.prettyprinter-ansi-terminal;
+          grace = pkgs.haskell.packages."${compiler}".grace;
 
-                              servant-client =
-                                pkgsNew.haskell.lib.dontCheck
-                                  haskellPackagesOld.servant-client;
+          website = pkgs.website;
 
-                              servant-multipart-client =
-                                haskellPackagesOld.servant-multipart-client.override (old: {
-                                  servant-multipart = null;
+        in
+          { inherit grace website; };
 
-                                  servant-server = null;
+      ghc = withCompiler "ghc902";
 
-                                  warp = null;
-                                });
+      ghcjs = withCompiler "ghcjs";
 
-                              streaming-commons =
-                                pkgsNew.haskell.lib.dontCheck
-                                  haskellPackagesOld.streaming-commons;
+    in
+      { packages = {
+          default = ghc.grace;
 
-                              text-short =
-                                pkgsNew.haskell.lib.dontCheck
-                                  haskellPackagesOld.text-short;
-
-                              unix-time =
-                                pkgsNew.haskell.lib.dontCheck
-                                  haskellPackagesOld.unix-time;
-
-                              vector =
-                                pkgsNew.haskell.lib.dontCheck
-                                  haskellPackagesOld.vector;
-
-                              x509 =
-                                pkgsNew.haskell.lib.dontCheck
-                                  haskellPackagesOld.x509;
-
-                              x509-store =
-                                pkgsNew.haskell.lib.dontCheck
-                                  haskellPackagesOld.x509-store;
-
-                              yaml =
-                                pkgsNew.haskell.lib.dontCheck
-                                  haskellPackagesOld.yaml;
-
-                              zlib =
-                                pkgsNew.haskell.lib.dontCheck
-                                  haskellPackagesOld.zlib;
-                            };
-
-                            sourceOverrides = pkgsNew.haskell.lib.packageSourceOverrides {
-                              grace = ./.;
-                            };
-
-                            directoryOverrides = pkgsNew.haskell.lib.packagesFromDirectory {
-                              directory = ./dependencies;
-                            };
-
-                          in
-                            pkgsNew.lib.fold pkgsNew.lib.composeExtensions oldOverrides
-                              (   [ sourceOverrides
-                                    directoryOverrides
-                                  ]
-                              ++  pkgsNew.lib.optional (compiler == "ghcjs") manualOverrides
-                              );
-                      });
-                    };
-                  };
-
-                  website = pkgsNew.runCommand "try-grace" { nativeBuildInputs = [ pkgsNew.rsync ]; } ''
-                    mkdir -p $out/{css,js,prelude,prompts,examples}
-                    rsync --recursive ${./website}/ $out
-                    rsync --recursive ${./prelude}/ $out/prelude
-                    rsync --recursive ${./prompts}/ $out/prompts
-                    rsync --recursive ${./examples}/ $out/examples
-                    ln --symbolic ${pkgsNew.codemirror}/lib/codemirror.css --target-directory=$out/css
-                    ln --symbolic ${pkgsNew.codemirror}/lib/codemirror.js --target-directory=$out/js
-                    ln --symbolic ${pkgsNew.codemirror}/mode/python/python.js --target-directory=$out/js
-                    ln --symbolic ${pkgsNew.haskell.packages."${compiler}".grace}/bin/try-grace.jsexe/all.js --target-directory=$out/js
-                  '';
-                };
-                config.allowBroken = true;
-                pkgs = import nixpkgs { inherit config system; overlays = [ overlay ]; };
-
-                grace = pkgs.haskell.packages."${compiler}".grace;
-
-                graceMinimal =
-                  pkgs.haskell.lib.justStaticExecutables
-                    (grace.overrideAttrs (_: { doCheck = false; }));
-
-                website = pkgs.website;
-             in
-            { inherit grace graceMinimal website; };
-
-          withDefaultCompiler = withCompiler "ghc902";
-          withghcjs = withCompiler "ghcjs";
-       in
-      rec {
-        packages = {
-          default = withDefaultCompiler.graceMinimal;
-          website = withghcjs.website;
+          website = ghcjs.website;
         };
-
-        defaultPackage = packages.default;
 
         apps.default = {
           type = "app";
-          program = "${withDefaultCompiler.graceMinimal}/bin/grace";
-        };
 
-        defaultApp = apps.default;
+          program = nixpkgs.lib.getExe self.packages."${system}".default;
+        };
 
         devShells = {
-          default = withDefaultCompiler.grace.env;
-          ghcjs = withghcjs.grace.env;
-        };
+          default = ghc.grace.env;
 
-        devShell = devShells.default;
+          ghcjs = ghcjs.grace.env;
+        };
       });
 
   nixConfig = {
