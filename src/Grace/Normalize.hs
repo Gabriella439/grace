@@ -95,6 +95,19 @@ evaluate
     -- ^ Result, free of reducible sub-expressions
 evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
   where
+    generateContext location = do
+        let infer (name, assignment) = do
+                let expression :: Syntax Location Input
+                    expression = first (\_ -> location) (fmap Void.absurd (quote assignment))
+
+                let input = Code "(intermediate value)" (Pretty.toSmart expression)
+
+                (type_, _) <- Infer.typeOf input expression
+
+                return (name, type_, assignment)
+
+        traverse infer env₀
+
     loop
         :: [(Text, Value)]
         -> Syntax Location Void
@@ -268,26 +281,13 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
             Syntax.Prompt{ schema = Nothing } -> do
                 Concurrently (Exception.throwIO MissingSchema)
             Syntax.Prompt{ location, arguments, schema = Just schema } -> Concurrently do
-                let generateContext = do
-                        let infer (name, assignment) = do
-                                let expression :: Syntax Location Input
-                                    expression = first (\_ -> Unknown) (fmap Void.absurd (quote assignment))
-
-                                let input = Code "(intermediate value)" (Pretty.toSmart expression)
-
-                                (type_, _) <- Infer.typeOf input expression
-
-                                return (name, type_, assignment)
-
-                        traverse infer env
-
                 newArguments <- runConcurrently (loop env arguments)
 
                 prompt <- case decode newArguments of
                     Left exception -> Exception.throwIO exception
                     Right prompt -> return prompt
 
-                liftIO (Prompt.prompt generateContext location prompt schema)
+                liftIO (Prompt.prompt (generateContext location) location prompt schema)
 
             Syntax.HTTP{ schema = Nothing } -> do
                 Concurrently (Exception.throwIO MissingSchema)
@@ -311,9 +311,51 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                 let defaultedSchema =
                         Lens.transform (Type.defaultTo Type.Scalar{ location, scalar = Monotype.JSON }) schema
 
-                case Value.fromJSON defaultedSchema responseValue of
+                case Value.checkJSON defaultedSchema responseValue of
                     Left exception -> Exception.throwIO exception
                     Right value    -> return value
+
+            Syntax.Read{ schema = Nothing } -> do
+                Concurrently (Exception.throwIO MissingSchema)
+            Syntax.Read{ arguments, schema = Just schema } -> Concurrently do
+                newArguments <- runConcurrently (loop env arguments)
+
+                text <- case decode newArguments of
+                    Left exception -> Exception.throwIO exception
+                    Right text -> return text
+
+                let bytes = ByteString.Lazy.fromStrict (Encoding.encodeUtf8 text)
+
+                aesonValue <- case Aeson.eitherDecode bytes of
+                    Left message -> do
+                        Exception.throwIO JSONDecodingFailed{ message, text }
+                    Right aesonValue -> do
+                        return aesonValue
+
+                case Value.checkJSON schema aesonValue of
+                    Left exception -> do
+                        let value = Value.inferJSON aesonValue
+
+                        let annotated =
+                                first (\_ -> Unknown)
+                                    (fmap Void.absurd (quote value))
+
+                        let expression = Syntax.Annotation
+                                { location = Unknown
+                                , annotated
+                                , annotation = schema
+                                }
+
+                        let input =
+                                Code "(read)" (Pretty.toSmart @(Syntax Location Input) expression)
+
+                        -- Turn the conversion error into a nicer type error
+                        _ <- Infer.typeOf input expression
+
+                        Exception.throwIO exception
+
+                    Right value -> do
+                        return value
 
             Syntax.Scalar{ scalar } ->
                 pure (Value.Scalar scalar)
@@ -814,17 +856,17 @@ instance Exception JSONDecodingFailed where
     displayException JSONDecodingFailed{ message, text } =
         "Failed to decode output as JSON\n\
         \\n\
-        \The HTTP request produced the following output:\n\
+        \The following text:\n\
         \\n\
         \" <> Text.unpack text <> "\n\
         \\n\
-        \… which failed to decode as JSON.\n\
+        \… to decode as JSON.\n\
         \\n\
         \Decoding error message:\n\
         \\n\
         \" <> message
 
--- | Elaboration didn't infer a schema for the @prompt@ keyword
+-- | Elaboration didn't infer a schema
 data MissingSchema = MissingSchema
     deriving stock (Show)
 
