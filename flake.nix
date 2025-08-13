@@ -159,6 +159,13 @@
               };
             };
 
+            haskell-language-server =
+              super.haskell-language-server.override (old: {
+                haskellPackages = super.haskell.packages."${compiler}";
+
+                supportedGhcVersions = [ "902" ];
+              });
+
             website = self.runCommand "try-grace" { nativeBuildInputs = [ self.rsync ]; } ''
               mkdir -p $out/{css,js,prelude,prompts,examples}
               rsync --recursive ${./website}/ $out
@@ -184,8 +191,18 @@
 
           website = pkgs.website;
 
+          shell = pkgs.haskell.packages."${compiler}".shellFor {
+            packages = hpkgs: [ hpkgs.grace ];
+
+            nativeBuildInputs = [ pkgs.haskell-language-server ];
+
+            withHoogle = true;
+
+            doBenchmark = true;
+          };
+
         in
-          { inherit grace website; };
+          { inherit grace shell website; };
 
       ghc = withCompiler "ghc902";
 
@@ -205,9 +222,9 @@
         };
 
         devShells = {
-          default = ghc.grace.env;
+          default = ghc.shell;
 
-          ghcjs = ghcjs.grace.env;
+          ghcjs = ghcjs.shell;
         };
       });
 
