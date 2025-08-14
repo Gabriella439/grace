@@ -227,7 +227,7 @@
             devShells = {
               default = ghc.shell;
 
-              ghcjs = ghcjs.shell;
+              ghcjs = ghcjs.grace.env;
             };
           }) // {
             overlays = nixpkgs.lib.genAttrs [ "ghc902" "ghcjs" ] overlay;
