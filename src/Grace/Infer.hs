@@ -1468,11 +1468,7 @@ infer e₀ = do
 
                     context <- get
 
-                    let inferred = Type.Function
-                            { location
-                            , input = Context.solveType context input
-                            , output
-                            }
+                    let inferred = Type.Function{ location, input, output }
 
                     let newLambda = Syntax.Lambda
                             { location
@@ -1606,12 +1602,12 @@ infer e₀ = do
 
             fieldTypeValues <- traverse process fieldValues
 
+            context <- get
+
             let fieldTypes = do
                     (field, type_, _) <- fieldTypeValues
 
                     return (field, type_)
-
-            context <- get
 
             let newFieldValues = do
                     (field, _, newValue) <- fieldTypeValues
@@ -1653,16 +1649,7 @@ infer e₀ = do
             return (inferred, newAlternative)
 
         Syntax.Fold{ location, handlers } -> do
-            fields <- fresh
-
-            push (Context.UnsolvedFields fields)
-
-            let recordType = Type.Record
-                    { location = Syntax.location handlers
-                    , fields = Type.Fields [] (Monotype.UnsolvedFields fields)
-                    }
-
-            newHandlers <- check handlers recordType
+            (recordType,newHandlers) <- infer handlers
 
             context <- get
 

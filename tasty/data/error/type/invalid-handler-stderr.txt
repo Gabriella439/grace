@@ -5,9 +5,9 @@ but you provided a handler of the following type:
 
   Natural
 
-tasty/data/error/type/invalid-handler-input.ffg:1:6: 
+tasty/data/error/type/invalid-handler-input.ffg:1:11: 
   │
 1 │ fold { x: 1 }
-  │      ↑
+  │           ↑
 
 … which is not a function type.
