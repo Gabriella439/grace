@@ -76,7 +76,7 @@ data Value
     | Application Value Value
     | List (Seq Value)
     | Record (InsOrdHashMap Text Value)
-    | Alternative Text
+    | Alternative Text Value
     | Fold Value
     | Text Text
     | Builtin Builtin
@@ -97,8 +97,9 @@ instance Plated Value where
         Record fieldValues -> do
             newFieldValues <- traverse onValue fieldValues
             return (Record newFieldValues)
-        Alternative text -> do
-            pure (Alternative text)
+        Alternative text argument -> do
+            newArgument <- onValue argument
+            pure (Alternative text newArgument)
         Fold handlers -> do
             newHandlers <- onValue handlers
             return (Fold newHandlers)
@@ -147,7 +148,7 @@ toJSON _ = do
 -- | Convert from JSON, inferring the value purely from the JSON data
 inferJSON :: Aeson.Value -> Value
 inferJSON (Aeson.Object [("contents", contents), ("tag", Aeson.String tag)]) =
-    Application (Alternative tag) value
+    Alternative tag value
   where
     value = inferJSON contents
 inferJSON (Aeson.Object object) = Record (HashMap.fromList textValues)
@@ -181,7 +182,7 @@ checkJSON = loop []
         | Just alternativeType <- Prelude.lookup tag alternativeTypes = do
             value <- loop ("contents" : path) alternativeType contents
 
-            return (Application (Alternative tag) value)
+            return (Alternative tag value)
     loop path Type.Record{ Type.fields = Type.Fields fieldTypes _ } (Aeson.Object object) = do
         let properties = HashMap.toList (Compat.fromAesonMap object)
 

@@ -1626,25 +1626,25 @@ infer e₀ = do
 
             return (inferred, newRecord)
 
-        Syntax.Alternative{ location, name } -> do
-            existential  <- fresh
+        Syntax.Alternative{ location, name, argument } -> do
+            (argumentType, newArgument) <- infer argument
+
             alternatives <- fresh
 
-            push (Context.UnsolvedType existential)
             push (Context.UnsolvedAlternatives alternatives)
 
-            let unsolved = Type.UnsolvedType{ location, existential }
+            let inferred = Type.Union
+                    { location
+                    , alternatives = Type.Alternatives
+                        [(name, argumentType)]
+                        (Monotype.UnsolvedAlternatives alternatives)
+                    }
 
-            let inferred =
-                        unsolved
-                    ~>  Type.Union
-                          { location
-                          , alternatives = Type.Alternatives
-                              [(name, unsolved)]
-                              (Monotype.UnsolvedAlternatives alternatives)
-                          }
-
-            let newAlternative = Syntax.Alternative{ location, name }
+            let newAlternative = Syntax.Alternative
+                    { location
+                    , name
+                    , argument = newArgument
+                    }
 
             return (inferred, newAlternative)
 
@@ -3042,7 +3042,7 @@ check e Type.Forall{..} = do
     scoped (Context.Variable domain name) do
         check e type_
 
-check Syntax.Application{ location = location₀, function = Syntax.Alternative{ location = location₁, name }, argument } annotation@Type.Union{ alternatives = Type.Alternatives alternativeTypes remainingAlternatives } = do
+check Syntax.Alternative{ location, name , argument } annotation@Type.Union{ alternatives = Type.Alternatives alternativeTypes remainingAlternatives } = do
     existential <- fresh
 
     push (Context.UnsolvedAlternatives existential)
@@ -3051,14 +3051,7 @@ check Syntax.Application{ location = location₀, function = Syntax.Alternative{
         Just innerType₁ -> do
             newArgument <- check argument innerType₁
 
-            return Syntax.Application
-                { location = location₀
-                , function = Syntax.Alternative
-                    { location = location₀
-                    , name
-                    }
-                , argument = newArgument
-                }
+            return Syntax.Alternative{ location, name, argument = newArgument }
 
         Nothing -> do
             (innerType₀, newArgument) <- infer argument
@@ -3067,18 +3060,15 @@ check Syntax.Application{ location = location₀, function = Syntax.Alternative{
                     [ (name, innerType₀) ]
                     (Monotype.UnsolvedAlternatives existential)
 
-            let actual = Type.Union{ location = location₁, alternatives }
+            let actual = Type.Union{ location, alternatives }
 
             case remainingAlternatives of
                 Monotype.UnsolvedAlternatives p -> do
-                    instantiateAlternativesR location₁ alternatives p
+                    instantiateAlternativesR location alternatives p
 
-                    return Syntax.Application
-                        { location = location₀
-                        , function = Syntax.Alternative
-                            { location = location₀
-                            , name
-                            }
+                    return Syntax.Alternative
+                        { location
+                        , name
                         , argument = newArgument
                         }
 

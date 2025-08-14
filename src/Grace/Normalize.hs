@@ -259,8 +259,10 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                     _ ->
                         error "Grace.Normalize.evaluate: invalid projection"
 
-            Syntax.Alternative{ name } ->
-                pure (Value.Alternative name)
+            Syntax.Alternative{ name, argument } -> do
+                newArgument <- loop env argument
+
+                pure (Value.Alternative name newArgument)
 
             Syntax.Fold{ handlers } -> do
                 newHandlers <- loop env handlers
@@ -682,7 +684,7 @@ apply keyToMethods function₀ argument₀ = runConcurrently (loop function₀ a
             pure v
     loop
         (Value.Fold (Value.Record alternativeHandlers))
-        (Value.Application (Value.Alternative alternative) x)
+        (Value.Alternative alternative x)
         | Just f <- HashMap.lookup alternative alternativeHandlers =
             loop f x
     loop (Value.Builtin Indexed) (Value.List elements) =
@@ -810,8 +812,8 @@ quote value = case value of
       where
         adapt (field, value_) = (field, quote value_)
 
-    Value.Alternative name ->
-        Syntax.Alternative{ location, name }
+    Value.Alternative name argument ->
+        Syntax.Alternative{ location, name, argument  = quote argument }
 
     Value.Fold handlers ->
         Syntax.Fold{ location, handlers = quote handlers }

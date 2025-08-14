@@ -466,7 +466,7 @@ renderValue keyToMethods ref parent outer (Value.Record keyValues) = do
 renderValue keyToMethods ref parent outer (Application (Value.Builtin Syntax.Some) value) = do
     renderValue keyToMethods ref parent outer value
 
-renderValue keyToMethods ref parent outer (Application (Value.Alternative alternative) value) = do
+renderValue keyToMethods ref parent outer (Value.Alternative alternative value) = do
     inner <- case outer of
             Type.Union{ alternatives = Type.Alternatives keyTypes _ } ->
                 case lookup alternative keyTypes of
@@ -790,7 +790,7 @@ renderInput keyToMethods ref Type.Union{ alternatives = Type.Alternatives keyTyp
                 let get = do
                         value <- nestedGet
 
-                        return (Application (Alternative key) value)
+                        return (Alternative key value)
 
                 return (div, fieldset, getChecked input, get, refreshInner)
 

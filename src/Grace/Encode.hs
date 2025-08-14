@@ -242,10 +242,8 @@ instance (Constructor c₀, Constructor c₁, GenericToGrace f₀, GenericToGrac
         let encode₀ = State.evalState genericEncode 0
         let encode₁ = State.evalState genericEncode 0
 
-        let encode_ (L1 (M1 f)) =
-                Value.Application (Value.Alternative name₀) (encode₀ f)
-            encode_ (R1 (M1 f)) =
-                Value.Application (Value.Alternative name₁) (encode₁ f)
+        let encode_ (L1 (M1 f)) = Value.Alternative name₀ (encode₀ f)
+            encode_ (R1 (M1 f)) = Value.Alternative name₁ (encode₁ f)
 
         return encode_
 
@@ -256,10 +254,8 @@ instance (Constructor c, GenericToGrace f₀, GenericToGrace (f₁ :+: f₂)) =>
         let encode₀ = State.evalState genericEncode 0
         let encode₁ = State.evalState genericEncode 0
 
-        let encode_ (L1 (M1 f)) =
-                Value.Application (Value.Alternative name) (encode₀ f)
-            encode_ (R1 f) =
-                encode₁ f
+        let encode_ (L1 (M1 f)) = Value.Alternative name (encode₀ f)
+            encode_ (R1     f ) = encode₁ f
 
         return encode_
 
@@ -270,10 +266,8 @@ instance (Constructor c, GenericToGrace (f₀ :+: f₁), GenericToGrace f₂) =>
         let encode₀ = State.evalState genericEncode 0
         let encode₁ = State.evalState genericEncode 0
 
-        let encode_ (L1 f) =
-                encode₀ f
-            encode_ (R1 (M1 f)) =
-                Value.Application (Value.Alternative name) (encode₁ f)
+        let encode_ (L1     f ) = encode₀ f
+            encode_ (R1 (M1 f)) = Value.Alternative name (encode₁ f)
 
         return encode_
 

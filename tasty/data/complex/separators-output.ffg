@@ -1,7 +1,7 @@
 { "example0":
     [ 1, 2, 3 ]
 , "example1":
-    { "x": 1, "y": True }
+    { "x": 1, "y": true }
 , "example2":
     \x -> x
 , "example3":

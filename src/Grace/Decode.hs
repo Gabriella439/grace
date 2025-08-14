@@ -464,7 +464,7 @@ instance (Constructor c₀, Constructor c₁, GenericFromGrace f₀, GenericFrom
         let decode₀ = State.evalState genericDecode 0
         let decode₁ = State.evalState genericDecode 0
 
-        let decode_ (Value.Application (Value.Alternative name) value)
+        let decode_ (Value.Alternative name value)
                 | name == name₀ = fmap (L1 . M1) (decode₀ value)
                 | name == name₁ = fmap (R1 . M1) (decode₁ value)
                 | otherwise = Left TypeError
@@ -493,7 +493,7 @@ instance (Constructor c, GenericFromGrace f₀, GenericFromGrace (f₁ :+: f₂)
         let decode₀ = State.evalState genericDecode 0
         let decode₁ = State.evalState genericDecode 0
 
-        let decode_ (Value.Application (Value.Alternative name) value₀)
+        let decode_ (Value.Alternative name value₀)
                 | name == name₀ = fmap (L1 . M1) (decode₀ value₀)
             decode_ value₁ = fmap R1 (decode₁ value₁)
 
@@ -519,7 +519,7 @@ instance (Constructor c, GenericFromGrace (f₀ :+: f₁), GenericFromGrace f₂
         let decode₀ = State.evalState genericDecode 0
         let decode₁ = State.evalState genericDecode 0
 
-        let decode_ (Value.Application (Value.Alternative name) value₁)
+        let decode_ (Value.Alternative name value₁)
                 | name == name₁ = fmap (R1 . M1) (decode₁ value₁)
             decode_ value₀ = fmap L1 (decode₀ value₀)
 
