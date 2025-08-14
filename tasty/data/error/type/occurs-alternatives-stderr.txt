@@ -2,7 +2,7 @@ Not a subtype
 
 The following type:
 
-  < C: a? | d? >
+  < C: a? | c? >
 
 tasty/data/error/type/occurs-alternatives-input.ffg:2:12: 
   │

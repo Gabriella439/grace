@@ -1,0 +1,3 @@
+# The purpose of this test is to verify that alternatives behind to their
+# arguments more tightly than function application
+\f -> f Point{ x: 1, y: 2 }

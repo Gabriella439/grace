@@ -1,0 +1,3 @@
+forall (a : Type) .
+forall (b : Alternatives) .
+  (< Point: { x: Natural, y: Natural } | b > -> a) -> a

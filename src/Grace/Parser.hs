@@ -1145,7 +1145,7 @@ grammar endsWithBrace = mdo
 
                 pure smaller
 
-        record <- primitiveExpression
+        record <- alternativeExpression
 
         projections <- many
             (do smaller <- parseSlice <|> parseDotAccess
@@ -1155,6 +1155,17 @@ grammar endsWithBrace = mdo
 
         return (foldl (snoc (Syntax.location record)) record projections)
 
+    alternativeExpression <- rule
+        (   do  ~(location, name) <- locatedAlternative
+
+                argument <- primitiveExpression
+
+                return Syntax.Alternative{ location, name, argument }
+
+        <|>     primitiveExpression
+        )
+
+
     primitiveExpression <- rule
         (   do  ~(location, name) <- locatedLabel
 
@@ -1162,7 +1173,9 @@ grammar endsWithBrace = mdo
 
         <|> do  ~(location, name) <- locatedAlternative
 
-                return Syntax.Alternative{ location, name }
+                argument <- primitiveExpression
+
+                return Syntax.Alternative{ location, name, argument }
 
         <|> do  location <- locatedToken Grace.Parser.OpenBracket
 

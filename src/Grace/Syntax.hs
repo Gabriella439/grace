@@ -115,10 +115,10 @@ data Syntax s a
     -- ^
     --   >>> pretty @(Syntax () Void) (Project () "x" "a")
     --   x.a
-    | Alternative { location :: s, name :: Text }
+    | Alternative { location :: s, name :: Text, argument :: Syntax s a }
     -- ^
-    --   >>> pretty @(Syntax () Void) (Alternative () "Nil")
-    --   Nil
+    --   >>> pretty @(Syntax () Void) (Alternative () "Foo" "a")
+    --   Foo a
     | Fold { location :: s, handlers :: Syntax s a }
     -- ^
     --   >>> pretty @(Syntax () Void) (Fold () "x")
@@ -237,8 +237,8 @@ instance Monad (Syntax ()) where
     Project{ location, larger, smaller } >>= f =
         Project{ location, larger = larger >>= f, smaller }
 
-    Alternative{ location, name} >>= _ =
-        Alternative{ location, name }
+    Alternative{ location, name, argument } >>= f =
+        Alternative{ location, name, argument = argument >>= f }
 
     Fold{ location, handlers } >>= f =
         Fold{ location, handlers = handlers >>= f }
@@ -388,8 +388,10 @@ instance Plated (Syntax s a) where
 
                 return Project{ location, larger = newLarger, smaller }
 
-            Alternative{ location, name } -> do
-                pure Alternative{ name, location }
+            Alternative{ location, name, argument } -> do
+                newArgument <- onSyntax argument
+
+                pure Alternative{ name, location, argument = newArgument }
 
             Fold{ location, handlers } -> do
                 newHandlers <- onSyntax handlers
@@ -496,8 +498,8 @@ instance Bifunctor Syntax where
         , smaller = fmap f smaller
         }
 
-    first f Alternative{ location, name } =
-        Alternative{ location = f location, name }
+    first f Alternative{ location, name, argument } =
+        Alternative{ location = f location, name, argument = first f argument }
 
     first f Fold{ location, handlers } =
         Fold{ location = f location, handlers = first f handlers }
@@ -581,8 +583,8 @@ usedIn name₀ Record{ fieldValues } =
     any (usedIn name₀ . snd) fieldValues
 usedIn name₀ Project{ larger } =
     usedIn name₀ larger
-usedIn _ Alternative{ } =
-    False
+usedIn name₀ Alternative{ argument } =
+    usedIn name₀ argument
 usedIn name₀ Fold{ handlers } =
     usedIn name₀ handlers
 usedIn name₀ If{ predicate, ifTrue, ifFalse } =
@@ -1229,7 +1231,7 @@ prettyApplicationExpression expression
 prettyProjectExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
 prettyProjectExpression expression = case expression of
     Project{ } -> Pretty.group (Pretty.flatAlt long short)
-    _          -> prettyPrimitiveExpression expression
+    _          -> prettyAlternativeExpression expression
   where
     short = prettyShort expression
 
@@ -1259,7 +1261,7 @@ prettyProjectExpression expression = case expression of
         <>  Pretty.operator "."
         <>  Pretty.scalar (pretty index)
     prettyShort other =
-        prettyPrimitiveExpression other
+        prettyAlternativeExpression other
 
     prettyLong Project{ larger, smaller = Single{ single = Field{ field } } } =
             prettyLong larger
@@ -1296,13 +1298,36 @@ prettyProjectExpression expression = case expression of
         <>  Pretty.operator "."
         <>  Pretty.scalar (pretty index)
     prettyLong record =
-        prettyPrimitiveExpression record
+        prettyAlternativeExpression record
+
+prettyAlternativeExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
+prettyAlternativeExpression Alternative{ name, argument = argument@Record{ } } =
+    Pretty.group (Pretty.flatAlt long short)
+  where
+    short = Type.prettyAlternativeLabel name
+        <>  prettyPrimitiveExpression argument
+
+    long =  Type.prettyAlternativeLabel name
+        <>  Pretty.hardline
+        <>  "  "
+        <>  Pretty.nest 2 (prettyPrimitiveExpression argument)
+prettyAlternativeExpression Alternative{ name, argument } =
+    Pretty.group (Pretty.flatAlt long short)
+  where
+    short = Type.prettyAlternativeLabel name
+        <>  " "
+        <>  prettyPrimitiveExpression argument
+
+    long =  Type.prettyAlternativeLabel name
+        <>  Pretty.hardline
+        <>  "  "
+        <>  Pretty.nest 2 (prettyPrimitiveExpression argument)
+prettyAlternativeExpression other =
+    prettyPrimitiveExpression other
 
 prettyPrimitiveExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
 prettyPrimitiveExpression Variable{ name } =
     label (pretty name)
-prettyPrimitiveExpression Alternative{ name } =
-    Type.prettyAlternativeLabel name
 prettyPrimitiveExpression List{ elements = [] } =
     punctuation "[" <> " " <> punctuation "]"
 prettyPrimitiveExpression List{ elements = element :<| elements } =
