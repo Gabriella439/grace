@@ -1888,23 +1888,33 @@ infer e₀ = do
 
             case smaller of
                 Syntax.Single{ single } -> do
-                    p <- fresh
+                    let Syntax.Field{ fieldLocation, field } = single
 
-                    push (Context.UnsolvedFields p)
+                    context <- get
 
-                    let Syntax.Field{ fieldLocation } = single
+                    (largerType, newLarger₀) <- infer larger
 
-                    fieldType@(_, type_) <- processField single
+                    case largerType of
+                        Type.Record{ fields = Type.Fields fieldTypes _ }
+                            | Just type_ <- lookup field fieldTypes -> do
+                                return (type_, Syntax.Project{ location, larger = newLarger₀, smaller })
 
-                    newLarger <- check larger Type.Record
-                        { fields =
-                            Type.Fields [fieldType] (Monotype.UnsolvedFields p)
-                        , location = fieldLocation
-                        }
+                        _ -> do
+                            set context
 
-                    _Γ <- get
+                            p <- fresh
 
-                    return (type_, Syntax.Project{ larger = solveSyntax _Γ newLarger, .. })
+                            push (Context.UnsolvedFields p)
+
+                            fieldType@(_, type_) <- processField single
+
+                            newLarger₁ <- check larger Type.Record
+                                { fields =
+                                    Type.Fields [fieldType] (Monotype.UnsolvedFields p)
+                                , location = fieldLocation
+                                }
+
+                            return (type_, Syntax.Project{ larger = newLarger₁, .. })
 
                 Syntax.Multiple{ multipleLocation, multiple } -> do
                     p <- fresh
@@ -3209,19 +3219,32 @@ check e@Syntax.Record{ fieldValues } _B@Type.Record{ fields = Type.Fields fieldT
 
 check Syntax.Project{ location, larger, smaller } annotation
     | Syntax.Single{ single = Syntax.Field{ fieldLocation, field } } <- smaller = do
-        p <- fresh
+        context <- get
 
-        push (Context.UnsolvedFields p)
+        (recordType, newLarger₀) <- infer larger
 
-        newLarger <- check larger Type.Record
-            { fields =
-                Type.Fields [(field, annotation)] (Monotype.UnsolvedFields p)
-            , location = fieldLocation
-            }
+        case recordType of
+            Type.Record{ fields = Type.Fields fieldTypes _ }
+                | Just fieldType <- lookup field fieldTypes -> do
+                    subtype fieldType annotation
 
-        _Γ <- get
+                    return Syntax.Project{ location, larger = newLarger₀, smaller }
 
-        return Syntax.Project{ larger = solveSyntax _Γ newLarger, .. }
+            _ -> do
+                set context
+
+                fields <- fresh
+
+                push (Context.UnsolvedFields fields)
+
+                newLarger₁ <- check larger Type.Record
+                    { fields = Type.Fields
+                        [(field, annotation)]
+                        (Monotype.UnsolvedFields fields)
+                    , location = fieldLocation
+                    }
+
+                return Syntax.Project{ location, larger = newLarger₁, smaller }
 
 check Syntax.Text{ chunks = Syntax.Chunks text₀ rest, .. } Type.Scalar{ scalar = Monotype.Text } = do
     let process (interpolation, text) = do
