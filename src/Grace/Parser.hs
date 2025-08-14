@@ -971,62 +971,12 @@ grammar endsWithBrace = mdo
                             , embedded = Grace.Input.URI uri AsText
                             }
 
-                let annotatedPrompt = do
-                        location <- locatedToken Grace.Parser.Prompt
-
-                        arguments <- projectExpression
-
-                        return Syntax.Prompt
-                            { location
-                            , arguments
-                            , schema = Nothing
-                            }
-
-                let annotatedHTTP = do
-                        location <- locatedToken Grace.Parser.HTTP
-
-                        arguments <- projectExpression
-
-                        return Syntax.HTTP
-                            { location
-                            , arguments
-                            , schema = Nothing
-                            }
-
-                let annotatedRead = do
-                        location <- locatedToken Grace.Parser.Read
-
-                        arguments <- projectExpression
-
-                        return Syntax.Read
-                            { location
-                            , arguments
-                            , schema = Nothing
-                            }
-
                 let adapt Syntax.Embed{ location, embedded = Path file AsCode } Type.Scalar{ scalar = Monotype.Text } =
                         Syntax.Embed{ location, embedded = Path file AsText }
                     adapt Syntax.Embed{ location, embedded = Grace.Input.URI uri AsCode } Type.Scalar{ scalar = Monotype.Text } =
                         Syntax.Embed
                             { location
                             , embedded = Grace.Input.URI uri AsText
-                            }
-                    adapt Syntax.Prompt{ location, arguments, schema = Nothing } annotation =
-                        Syntax.Prompt
-                            { location
-                            , arguments, schema = Just annotation
-                            }
-                    adapt Syntax.HTTP{ location, arguments, schema = Nothing } annotation =
-                        Syntax.HTTP
-                            { location
-                            , arguments
-                            , schema = Just annotation
-                            }
-                    adapt Syntax.Read{ location, arguments, schema = Nothing } annotation =
-                        Syntax.Read
-                            { location
-                            , arguments
-                            , schema = Just annotation
                             }
                     adapt annotated annotation =
                         Syntax.Annotation
@@ -1038,9 +988,6 @@ grammar endsWithBrace = mdo
                 annotated <-
                     (   annotatedFile
                     <|> annotatedURI
-                    <|> annotatedPrompt
-                    <|> annotatedHTTP
-                    <|> annotatedRead
                     <|> operatorExpression
                     )
 
