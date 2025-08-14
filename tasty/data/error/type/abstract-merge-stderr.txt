@@ -1,13 +1,13 @@
-Must fold a concrete record
+Must fold a record
 
-The first argument to a fold must be a record where all fields are statically
-known.  However, you provided an argument of type:
+The first argument to a fold must be a record, but you provided an expression of
+the following type:
 
-  { c? }
+  a?
 
-tasty/data/error/type/abstract-merge-input.ffg:1:12: 
+tasty/data/error/type/abstract-merge-input.ffg:1:2: 
   │
 1 │ \x -> fold x
-  │            ↑
+  │  ↑
 
-… where not all fields could be inferred.
+… which is not a record type.

@@ -1,6 +1,7 @@
-Not a subtype
+Must fold a record
 
-The following type:
+The first argument to a fold must be a record, but you provided an expression of
+the following type:
 
   Natural
 
@@ -9,11 +10,4 @@ tasty/data/error/type/merge-wrong-type-input.ffg:1:6:
 1 │ fold 1
   │      ↑
 
-… cannot be a subtype of:
-
-  { a? }
-
-tasty/data/error/type/merge-wrong-type-input.ffg:1:6: 
-  │
-1 │ fold 1
-  │      ↑
+… which is not a record type.

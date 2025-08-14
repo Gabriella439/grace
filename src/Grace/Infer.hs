@@ -1252,23 +1252,27 @@ infer e₀ = do
 
     case e₀ of
         -- Var
-        Syntax.Variable{..} -> do
+        Syntax.Variable{ location, name } -> do
             _Γ <- get
 
-            type_ <- Context.lookup name _Γ `orDie` UnboundVariable location name
-            return (type_, Syntax.Variable{..})
+            inferred <- Context.lookup name _Γ `orDie` UnboundVariable location name
+
+            return (inferred, Syntax.Variable{ location, name })
 
         -- →I⇒
         Syntax.Lambda{ location, nameBinding, body } -> do
-            (entries, input, newNameBinding) <- case nameBinding of
+            (input, entries, newNameBinding) <- case nameBinding of
                 Syntax.NameBinding{ nameLocation, name, annotation = Nothing, assignment = Nothing } -> do
                     existential <- fresh
 
                     push (Context.UnsolvedType existential)
 
-                    let input =
-                            Type.UnsolvedType
-                                { existential, location = nameLocation }
+                    let input = Type.UnsolvedType
+                            { location = nameLocation
+                            , existential
+                            }
+
+                    let entries = [Context.Annotation name input]
 
                     let newNameBinding = Syntax.NameBinding
                             { nameLocation
@@ -1277,9 +1281,11 @@ infer e₀ = do
                             , assignment = Nothing
                             }
 
-                    return ([Context.Annotation name input], input, newNameBinding)
+                    return (input, entries, newNameBinding)
 
                 Syntax.NameBinding{ nameLocation, name, annotation = Just input, assignment = Nothing } -> do
+                    let entries = [Context.Annotation name input]
+
                     let newNameBinding = Syntax.NameBinding
                             { nameLocation
                             , name
@@ -1287,7 +1293,7 @@ infer e₀ = do
                             , assignment = Nothing
                             }
 
-                    return ([Context.Annotation name input], input, newNameBinding)
+                    return (input, entries, newNameBinding)
 
                 Syntax.NameBinding{ nameLocation, name, annotation = Nothing, assignment = Just assignment } -> do
                     (input₀, newAssignment) <- infer assignment
@@ -1297,6 +1303,8 @@ infer e₀ = do
                             , type_ = input₀
                             }
 
+                    let entries = [Context.Annotation name input₀]
+
                     let newNameBinding = Syntax.NameBinding
                             { nameLocation
                             , name
@@ -1304,24 +1312,30 @@ infer e₀ = do
                             , assignment = Just newAssignment
                             }
 
-                    return ([Context.Annotation name input₀], input₁, newNameBinding)
+                    return (input₁, entries, newNameBinding)
 
                 Syntax.NameBinding{ nameLocation, name, annotation = Just input₀, assignment = Just assignment } -> do
                     newAssignment <- check assignment input₀
 
-                    let input₁ = Type.Optional
+                    context <- get
+
+                    let input₁ = Context.solveType context input₀
+
+                    let input₂ = Type.Optional
                             { location = Syntax.location assignment
-                            , type_ = input₀
+                            , type_ = input₁
                             }
+
+                    let entries = [Context.Annotation name input₁]
 
                     let newNameBinding = Syntax.NameBinding
                             { nameLocation
                             , name
-                            , annotation = Just input₀
+                            , annotation = Just input₁
                             , assignment = Just newAssignment
                             }
 
-                    return ([Context.Annotation name input₀], input₁, newNameBinding)
+                    return (input₂, entries, newNameBinding)
 
                 Syntax.FieldNamesBinding{ fieldNamesLocation, fieldNames } -> do
                     let process Syntax.FieldName{ fieldNameLocation, name, annotation = Nothing, assignment = Nothing } = do
@@ -1329,15 +1343,14 @@ infer e₀ = do
 
                             push (Context.UnsolvedType existential)
 
-                            let annotation =
-                                    Type.UnsolvedType
-                                        { existential
-                                        , location = fieldNameLocation
-                                        }
-
-                            let entry = Context.Annotation name annotation
+                            let annotation = Type.UnsolvedType
+                                    { location = fieldNameLocation
+                                    , existential
+                                    }
 
                             let fieldType = (name, annotation)
+
+                            let entry = Context.Annotation name annotation
 
                             let newFieldName = Syntax.FieldName
                                     { fieldNameLocation
@@ -1346,12 +1359,12 @@ infer e₀ = do
                                     , assignment = Nothing
                                     }
 
-                            return (entry, fieldType, newFieldName)
+                            return (fieldType, entry, newFieldName)
 
                         process Syntax.FieldName{ fieldNameLocation, name, annotation = Just annotation, assignment = Nothing } = do
-                            let entry = Context.Annotation name annotation
-
                             let fieldType = (name, annotation)
+
+                            let entry = Context.Annotation name annotation
 
                             let newFieldName = Syntax.FieldName
                                     { fieldNameLocation
@@ -1360,12 +1373,10 @@ infer e₀ = do
                                     , assignment = Nothing
                                     }
 
-                            return (entry, fieldType, newFieldName)
+                            return (fieldType, entry, newFieldName)
 
                         process Syntax.FieldName{ fieldNameLocation, name, annotation = Nothing, assignment = Just assignment } = do
                             (annotation₀, newAssignment) <- infer assignment
-
-                            let entry = Context.Annotation name annotation₀
 
                             let annotation₁ = Type.Optional
                                     { location = Syntax.location assignment
@@ -1373,6 +1384,8 @@ infer e₀ = do
                                     }
 
                             let fieldType = (name, annotation₁)
+
+                            let entry = Context.Annotation name annotation₀
 
                             let newFieldName = Syntax.FieldName
                                     { fieldNameLocation
@@ -1381,11 +1394,9 @@ infer e₀ = do
                                     , assignment = Just newAssignment
                                     }
 
-                            return (entry, fieldType, newFieldName)
+                            return (fieldType, entry, newFieldName)
 
                         process Syntax.FieldName{ fieldNameLocation, name, annotation = Just annotation₀, assignment = Just assignment } = do
-                            let entry = Context.Annotation name annotation₀
-
                             let annotation₁ = Type.Optional
                                     { location = Syntax.location assignment
                                     , type_ = annotation₀
@@ -1393,7 +1404,11 @@ infer e₀ = do
 
                             let fieldType = (name, annotation₁)
 
-                            newAssignment <- check assignment annotation₀
+                            let entry = Context.Annotation name annotation₀
+
+                            context <- get
+
+                            newAssignment <- check assignment (Context.solveType context annotation₀)
 
                             let newFieldName = Syntax.FieldName
                                     { fieldNameLocation
@@ -1402,24 +1417,24 @@ infer e₀ = do
                                     , assignment = Just newAssignment
                                     }
 
-                            return (entry, fieldType, newFieldName)
+                            return (fieldType, entry, newFieldName)
 
                     tuples <- traverse process fieldNames
 
-                    let entries = do
-                            (entry, _, _) <- tuples
-
-                            return entry
-
                     let fieldTypes = do
-                            (_, fieldType, _) <- tuples
+                            (fieldType, _, _) <- tuples
 
                             return fieldType
 
-                    let newFieldNames = do
-                            (_, _, fieldName) <- tuples
+                    let entries = do
+                            (_, entry, _) <- tuples
 
-                            return fieldName
+                            return entry
+
+                    let newFieldNames = do
+                            (_, _, newFieldName) <- tuples
+
+                            return newFieldName
 
                     existential <- fresh
 
@@ -1436,40 +1451,57 @@ infer e₀ = do
                             , fieldNames = newFieldNames
                             }
 
-                    return (entries, annotation, newNameBinding)
+                    return (annotation, entries, newNameBinding)
 
             output <- do
                 existential <- fresh
 
                 push (Context.UnsolvedType existential)
 
-                return Type.UnsolvedType{ location = Syntax.location body, .. }
+                return Type.UnsolvedType
+                    { location = Syntax.location body
+                    , existential
+                    }
 
             let done = do
                     newBody <- check body output
 
-                    _Γ <- get
+                    context <- get
 
-                    return (Type.Function{ location, input, output }, Syntax.Lambda{ body = solveSyntax _Γ newBody, nameBinding = newNameBinding, .. })
+                    let inferred = Type.Function{ location, input, output }
+
+                    let newLambda = Syntax.Lambda
+                            { location
+                            , nameBinding = newNameBinding
+                            , body = newBody
+                            }
+
+                    -- TODO: Only `solveSyntax` `newNameBinding`
+                    return (inferred, solveSyntax context newLambda)
 
             foldr scoped done entries
 
-        -- →E
-        Syntax.Application{..} -> do
-            (_A, newFunction) <- infer function
+        Syntax.Application{ location, function, argument } -> do
+            (functionType, newFunction) <- infer function
 
-            _Θ <- get
+            context₀ <- get
 
-            (type_, newArgument) <- inferApplication (Context.solveType _Θ _A) argument
+            (inferred, newArgument) <- inferApplication (Context.solveType context₀ functionType) argument
 
-            _Γ <- get
+            context₁ <- get
 
-            return (type_, Syntax.Application{ function = solveSyntax _Γ newFunction, argument = solveSyntax _Γ newArgument, .. })
+            let syntax = Syntax.Application
+                    { location
+                    , function = solveSyntax context₁ newFunction
+                    , argument = newArgument
+                    }
+
+            return (inferred, syntax)
 
         Syntax.Annotation{ annotated = annotated₀, annotation, location } -> do
-            _Γ <- get
+            context <- get
 
-            wellFormed _Γ annotation
+            wellFormed context annotation
 
             annotated₁ <- check annotated₀ annotation
 
@@ -1479,72 +1511,90 @@ infer e₀ = do
                 _ -> do
                     return (annotation, Syntax.Annotation{ annotated = annotated₁, annotation, location })
 
-        Syntax.Let{..} -> do
+        Syntax.Let{ location, bindings, body } -> do
             b <- fresh
 
             push (Context.UnsolvedType b)
 
-            let cons Syntax.Binding{ nameLocation = nameLocation₀, nameBindings = nameBindings₀, ..} action newBindings = do
+            let cons Syntax.Binding{ nameLocation = nameLocation₀, name, nameBindings = nameBindings₀, annotation, assignment } action newBindings = do
                     let annotatedAssignment = case annotation of
-                            Nothing -> assignment
-                            Just _A₀ -> Syntax.Annotation
-                                { annotated = assignment
-                                , annotation = _A₀
-                                , location = nameLocation₀
-                                }
+                            Nothing ->
+                                assignment
+                            Just type_ ->
+                                Syntax.Annotation
+                                    { annotated = assignment
+                                    , annotation = type_
+                                    , location = nameLocation₀
+                                    }
 
                     let toLambda (nameBinding : nameBindings) =
-                            Syntax.Lambda{ location = nameLocation₀, body = toLambda nameBindings, .. }
+                            Syntax.Lambda
+                                { location = nameLocation₀
+                                , nameBinding
+                                , body = toLambda nameBindings
+                                }
                         toLambda [] =
                             annotatedAssignment
 
-                    (_A, newAssignment) <- infer (toLambda nameBindings₀)
+                    (assignmentType, newAssignment) <- infer (toLambda nameBindings₀)
 
                     let newBinding = Syntax.Binding
-                            { annotation
-                            , nameBindings = []
-                            , assignment = newAssignment
+                            { name
                             , nameLocation = nameLocation₀
-                            , ..
+                            , nameBindings = []
+                            , annotation = Nothing
+                            , assignment = newAssignment
                             }
 
-                    scoped (Context.Annotation name _A) do
+                    scoped (Context.Annotation name assignmentType) do
                         action (newBinding : newBindings)
 
             let nil newBindings = do
-                    let output = Type.UnsolvedType{ location = Syntax.location body, existential = b }
+                    let output = Type.UnsolvedType
+                            { location = Syntax.location body
+                            , existential = b
+                            }
 
                     newBody <- check body output
 
-                    _Γ <- get
+                    context <- get
 
-                    return (output, solveSyntax _Γ Syntax.Let{ bindings = NonEmpty.fromList (reverse newBindings), body = newBody, .. })
+                    return (output, solveSyntax context Syntax.Let{ location, bindings = NonEmpty.fromList (reverse newBindings), body = newBody })
 
             foldr cons nil bindings []
 
-        Syntax.List{..} -> do
-            case Seq.viewl elements of
+        Syntax.List{ location, elements = elements₀ } -> do
+            case Seq.viewl elements₀ of
                 EmptyL -> do
                     existential <- fresh
 
                     push (Context.UnsolvedType existential)
 
-                    return (Type.List{ type_ = Type.UnsolvedType{..}, .. }, Syntax.List{ elements = Seq.empty, .. })
-                y :< ys -> do
-                    (type_, newY) <- infer y
+                    return (Type.List{ location, type_ = Type.UnsolvedType{..} }, Syntax.List{ location, elements = Seq.empty })
+
+                element₀ :< elements -> do
+                    (type_, newElement₀) <- infer element₀
 
                     let process element = do
-                            _Γ <- get
+                            context <- get
 
-                            check element (Context.solveType _Γ type_)
+                            check element (Context.solveType context type_)
 
-                    newYs <- traverse process ys
+                    newElements <- traverse process elements
 
-                    _Γ <- get
+                    context <- get
 
-                    return (Type.List{..}, Syntax.List{ elements = fmap (solveSyntax _Γ) (newY <| newYs), .. })
+                    let inferred = Type.List{ location, type_ }
 
-        Syntax.Record{..} -> do
+                    let newList = Syntax.List
+                            { location
+                            , elements =
+                                fmap (solveSyntax context) (newElement₀ <| newElements)
+                            }
+
+                    return (inferred, newList)
+
+        Syntax.Record{ location, fieldValues } -> do
             let process (field, value) = do
                     (type_, newValue) <- infer value
 
@@ -1552,52 +1602,58 @@ infer e₀ = do
 
             fieldTypeValues <- traverse process fieldValues
 
+            context <- get
+
             let fieldTypes = do
                     (field, type_, _) <- fieldTypeValues
 
                     return (field, type_)
 
-            _Γ <- get
-
             let newFieldValues = do
                     (field, _, newValue) <- fieldTypeValues
 
-                    return (field, solveSyntax _Γ newValue)
+                    return (field, solveSyntax context newValue)
 
-            return (Type.Record{ fields = Type.Fields fieldTypes Monotype.EmptyFields, .. }, Syntax.Record{ fieldValues = newFieldValues, .. })
+            let inferred = Type.Record
+                    { location
+                    , fields = Type.Fields fieldTypes Monotype.EmptyFields
+                    }
 
-        Syntax.Alternative{..} -> do
-            existential <- fresh
-            p           <- fresh
+            let newRecord = Syntax.Record
+                    { location
+                    , fieldValues = newFieldValues
+                    }
+
+            return (inferred, newRecord)
+
+        Syntax.Alternative{ location, name } -> do
+            existential  <- fresh
+            alternatives <- fresh
 
             push (Context.UnsolvedType existential)
-            push (Context.UnsolvedAlternatives p)
+            push (Context.UnsolvedAlternatives alternatives)
 
-            return
-                (   Type.UnsolvedType{..}
-                ~>  Type.Union
-                        { alternatives = Type.Alternatives
-                            [( name, Type.UnsolvedType{..})]
-                            (Monotype.UnsolvedAlternatives p)
-                        , ..
-                        }
-                , Syntax.Alternative{..}
-                )
+            let unsolved = Type.UnsolvedType{ location, existential }
 
-        Syntax.Fold{..} -> do
-            p <- fresh
+            let inferred =
+                        unsolved
+                    ~>  Type.Union
+                          { location
+                          , alternatives = Type.Alternatives
+                              [(name, unsolved)]
+                              (Monotype.UnsolvedAlternatives alternatives)
+                          }
 
-            push (Context.UnsolvedFields p)
+            let newAlternative = Syntax.Alternative{ location, name }
 
-            let _R = Type.Record{ location = Syntax.location handlers , fields = Type.Fields [] (Monotype.UnsolvedFields p) }
+            return (inferred, newAlternative)
 
-            newHandlers <- check handlers _R
+        Syntax.Fold{ location, handlers } -> do
+            (recordType,newHandlers) <- infer handlers
 
-            _Γ <- get
+            context <- get
 
-            let _R' = Context.solveType _Γ _R
-
-            case _R' of
+            case Context.solveType context recordType  of
                 Type.Record{ fields = Type.Fields (List.sortBy (Ord.comparing fst) -> [("false", falseHandler), ("true", trueHandler)]) Monotype.EmptyFields } -> do
                     let bool = falseHandler
 
@@ -1612,7 +1668,7 @@ infer e₀ = do
                                 }
                             , output = bool
                             }
-                        , Syntax.Fold{ handlers = solveSyntax _Γ newHandlers, .. }
+                        , Syntax.Fold{ handlers = solveSyntax context newHandlers, .. }
                         )
 
                 Type.Record{ fields = Type.Fields (List.sortBy (Ord.comparing fst) -> [("succ", succHandler), ("zero", zeroHandler)]) Monotype.EmptyFields } -> do
@@ -1633,7 +1689,7 @@ infer e₀ = do
                                 }
                             , output = natural
                             }
-                        , Syntax.Fold{ handlers = solveSyntax _Γ newHandlers, .. }
+                        , Syntax.Fold{ handlers = solveSyntax context newHandlers, .. }
                         )
 
                 Type.Record{ fields = Type.Fields (List.sortBy (Ord.comparing fst) -> [("null", nullHandler), ("some", someHandler)]) Monotype.EmptyFields } -> do
@@ -1663,7 +1719,7 @@ infer e₀ = do
                                   }
                               , output = optional
                               }
-                        , Syntax.Fold{ handlers = solveSyntax _Γ newHandlers, .. }
+                        , Syntax.Fold{ handlers = solveSyntax context newHandlers, .. }
                         )
 
                 Type.Record{ fields = Type.Fields (List.sortBy (Ord.comparing fst) -> [("cons", consHandler), ("nil", nilHandler)]) Monotype.EmptyFields } -> do
@@ -1697,7 +1753,7 @@ infer e₀ = do
                                 }
                             , output = list
                             }
-                        , Syntax.Fold{ handlers = solveSyntax _Γ newHandlers, .. }
+                        , Syntax.Fold{ handlers = solveSyntax context newHandlers, .. }
                         )
 
                 Type.Record{ fields = Type.Fields (List.sortBy (Ord.comparing fst) -> [("array", arrayHandler), ("bool", boolHandler), ("integer", integerHandler), ("natural", naturalHandler), ("null", nullHandler), ("object", objectHandler), ("real", realHandler), ("string", stringHandler)]) Monotype.EmptyFields } -> do
@@ -1781,7 +1837,7 @@ infer e₀ = do
                                 }
                             , output = json
                             }
-                        , Syntax.Fold{ handlers = solveSyntax _Γ newHandlers, .. }
+                        , Syntax.Fold{ handlers = solveSyntax context newHandlers, .. }
                         )
 
                 Type.Record{ fields = Type.Fields keyTypes Monotype.EmptyFields } -> do
@@ -1817,10 +1873,10 @@ infer e₀ = do
                         )
 
                 Type.Record{} -> do
-                    Exception.throwIO (FoldConcreteRecord (Type.location _R) _R)
+                    Exception.throwIO (FoldConcreteRecord (Type.location recordType) recordType)
 
                 _ -> do
-                    Exception.throwIO (FoldRecord (Type.location _R) _R)
+                    Exception.throwIO (FoldRecord (Type.location recordType) recordType)
 
         Syntax.Project{ location, larger, smaller } -> do
             let processField Syntax.Field{ fieldLocation, field } = do
@@ -1832,23 +1888,33 @@ infer e₀ = do
 
             case smaller of
                 Syntax.Single{ single } -> do
-                    p <- fresh
+                    let Syntax.Field{ fieldLocation, field } = single
 
-                    push (Context.UnsolvedFields p)
+                    context <- get
 
-                    let Syntax.Field{ fieldLocation } = single
+                    (largerType, newLarger₀) <- infer larger
 
-                    fieldType@(_, type_) <- processField single
+                    case largerType of
+                        Type.Record{ fields = Type.Fields fieldTypes _ }
+                            | Just type_ <- lookup field fieldTypes -> do
+                                return (type_, Syntax.Project{ location, larger = newLarger₀, smaller })
 
-                    newLarger <- check larger Type.Record
-                        { fields =
-                            Type.Fields [fieldType] (Monotype.UnsolvedFields p)
-                        , location = fieldLocation
-                        }
+                        _ -> do
+                            set context
 
-                    _Γ <- get
+                            p <- fresh
 
-                    return (type_, Syntax.Project{ larger = solveSyntax _Γ newLarger, .. })
+                            push (Context.UnsolvedFields p)
+
+                            fieldType@(_, type_) <- processField single
+
+                            newLarger₁ <- check larger Type.Record
+                                { fields =
+                                    Type.Fields [fieldType] (Monotype.UnsolvedFields p)
+                                , location = fieldLocation
+                                }
+
+                            return (type_, Syntax.Project{ larger = newLarger₁, .. })
 
                 Syntax.Multiple{ multipleLocation, multiple } -> do
                     p <- fresh
@@ -3153,19 +3219,32 @@ check e@Syntax.Record{ fieldValues } _B@Type.Record{ fields = Type.Fields fieldT
 
 check Syntax.Project{ location, larger, smaller } annotation
     | Syntax.Single{ single = Syntax.Field{ fieldLocation, field } } <- smaller = do
-        p <- fresh
+        context <- get
 
-        push (Context.UnsolvedFields p)
+        (recordType, newLarger₀) <- infer larger
 
-        newLarger <- check larger Type.Record
-            { fields =
-                Type.Fields [(field, annotation)] (Monotype.UnsolvedFields p)
-            , location = fieldLocation
-            }
+        case recordType of
+            Type.Record{ fields = Type.Fields fieldTypes _ }
+                | Just fieldType <- lookup field fieldTypes -> do
+                    subtype fieldType annotation
 
-        _Γ <- get
+                    return Syntax.Project{ location, larger = newLarger₀, smaller }
 
-        return Syntax.Project{ larger = solveSyntax _Γ newLarger, .. }
+            _ -> do
+                set context
+
+                fields <- fresh
+
+                push (Context.UnsolvedFields fields)
+
+                newLarger₁ <- check larger Type.Record
+                    { fields = Type.Fields
+                        [(field, annotation)]
+                        (Monotype.UnsolvedFields fields)
+                    , location = fieldLocation
+                    }
+
+                return Syntax.Project{ location, larger = newLarger₁, smaller }
 
 check Syntax.Text{ chunks = Syntax.Chunks text₀ rest, .. } Type.Scalar{ scalar = Monotype.Text } = do
     let process (interpolation, text) = do
