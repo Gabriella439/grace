@@ -1,11 +1,13 @@
 {
   inputs = {
+    garnix-lib.url = "github:garnix-io/garnix-lib";
+
     nixpkgs.url = github:NixOS/nixpkgs/22.05;
 
     utils.url = github:numtide/flake-utils;
   };
 
-  outputs = { nixpkgs, utils, self }:
+  outputs = { garnix-lib, nixpkgs, utils, self }:
     let
       overlay = compiler: self: super: {
         codemirror = self.fetchzip {
@@ -231,6 +233,89 @@
             };
           }) // {
             overlays = nixpkgs.lib.genAttrs [ "ghc902" "ghcjs" ] overlay;
+
+            nixosConfigurations.default = nixpkgs.lib.nixosSystem {
+              system = "x86_64-linux";
+
+              modules = [
+                garnix-lib.nixosModules.garnix
+
+                ({ pkgs, ... }: {
+                  garnix.server = {
+                    enable = true;
+
+                    persistence = {
+                      enable = true;
+
+                      name = "main";
+                    };
+                  };
+
+                  nixpkgs.overlays = [ self.overlays.ghcjs ];
+
+                  security = {
+                    acme = {
+                      acceptTerms = true;
+
+                      email = "GenuineGabriella@gmail.com";
+                    };
+
+                    sudo.wheelNeedsPassword = false;
+                  };
+
+                  services = {
+                    nginx = {
+                      enable = true;
+
+                      recommendedGzipSettings = true;
+
+                      recommendedOptimisation = true;
+
+                      recommendedTlsSettings = true;
+
+                      recommendedProxySettings = true;
+
+                      virtualHosts = {
+                        "trygrace.dev" = {
+                          default = true;
+
+                          forceSSL = true;
+
+                          enableACME = true;
+
+                          locations."/" = {
+                            index = "index.html";
+
+                            root = pkgs.website;
+                          };
+                        };
+                      };
+                    };
+
+                    openssh.enable = true;
+                  };
+
+                  system.stateVersion = "22.05";
+
+                  time.timeZone = "America/Los_Angeles";
+
+                  users = {
+                    mutableUsers = false;
+
+                    users.gabriella = {
+                      isNormalUser = true;
+
+                      extraGroups = [ "wheel" ];
+
+                      openssh.authorizedKeys.keys = [
+                        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMuH6HDuoMlK7b2Ovm5VKt9P3aRrJ2HeUPptKG+21kjL gabriella@Gabriellas-MacBook-Pro.local"
+                        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPy4Sk/dOZJDGgLShhs6QDYEAFKHLuoyUKfHY/MU2EZp gabriella@Gabriellas-MacBook-Pro.local"
+                      ];
+                    };
+                  };
+                })
+              ];
+            };
           };
 
   nixConfig = {
