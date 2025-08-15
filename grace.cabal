@@ -132,7 +132,6 @@ executable try-grace
   build-depends:       base
                      , aeson
                      , async
-                     , commonmark
                      , containers
                      , filepath
                      , ghcjs-base
@@ -149,7 +148,7 @@ executable try-grace
 
   hs-source-dirs:      try-grace
 
-  ghc-options:         -Wall +RTS -K0 -RTS
+  ghc-options:         -Wall
 
   default-language:    Haskell2010
   if !(impl(ghcjs) || os(ghcjs))

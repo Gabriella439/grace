@@ -7,7 +7,6 @@
 
 module Main where
 
-import Commonmark (Html)
 import Control.Applicative (empty)
 import Control.Concurrent.Async (Async)
 import Control.Exception.Safe (Exception(..), SomeException)
@@ -33,7 +32,6 @@ import Numeric.Natural (Natural)
 import Prelude hiding (div, error, id, span, subtract)
 import System.FilePath ((</>))
 
-import qualified Commonmark
 import qualified Control.Concurrent.Async as Async
 import qualified Control.Concurrent.STM as STM
 import qualified Control.Concurrent.STM.TVar as TVar
@@ -114,6 +112,12 @@ setInnerHTML a b = liftIO (setInnerHTML_ a (fromText b))
 
 foreign import javascript unsafe "$1.style.display = $2"
     setDisplay_ :: JSVal -> JSString -> IO ()
+
+foreign import javascript unsafe "converter.makeHtml($1)"
+    markdownToHTML_ :: JSString -> JSString
+
+markdownToHTML :: Text -> Text
+markdownToHTML a = toText (markdownToHTML_ (fromText a))
 
 setDisplay :: MonadIO io => JSVal -> Text -> io ()
 setDisplay a b = liftIO (setDisplay_ a (fromText b))
@@ -337,11 +341,7 @@ renderValue keyToMethods ref parent Type.Optional{ type_ } value =
     renderValue keyToMethods ref parent type_ value
 
 renderValue _ _ parent _ (Value.Text text) = do
-    case Commonmark.commonmark "(input)" text of
-            Left _ ->
-                setInnerText parent text
-            Right html ->
-                setInnerHTML parent (Text.Lazy.toStrict (Commonmark.renderHtml (html :: Html ())))
+    setInnerHTML parent (markdownToHTML text)
 
     mempty
 

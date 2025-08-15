@@ -69,7 +69,6 @@
                       (mass hlib.dontCheck [
                         "asn1-encoding"
                         "bsb-http-chunked"
-                        "commonmark"
                         "conduit"
                         "cryptonite"
                         "foldl"
