@@ -1,0 +1,49 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix (with Garnix cache)
+        uses: DeterminateSystems/nix-installer-action@v19
+        with:
+          extra-conf: |
+            extra-substituters = https://cache.garnix.io
+            extra-trusted-public-keys = cache.garnix.io:CTFPyKSLcx5RMJKfLo5EEPUObbA78b0YQ2DTCJXqr9g=
+
+      - name: Wait for Garnix
+        uses: lewagon/wait-on-check-action@v1.4.0
+        with:
+          ref: ${{ github.ref }}
+          check-name: "All Garnix checks"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 3
+          verbose: false
+
+      - name: Build and deploy to Cloudflare Pages
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -eu
+
+          nix build .#website
+
+          npx --yes wrangler@latest pages deploy ./result \
+            --project-name grace \
+            --branch "${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"

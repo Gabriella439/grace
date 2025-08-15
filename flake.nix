@@ -52,6 +52,7 @@
                                            &&  (builtins.elem (baseNameOf path) [
                                                  "dist"
                                                  "dist-newstyle"
+                                                 ".github"
                                                  "examples"
                                                  "prelude"
                                                  "website"
