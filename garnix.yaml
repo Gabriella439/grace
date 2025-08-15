@@ -18,6 +18,3 @@ servers:
   deployment:
     type: on-branch
     branch: main
-- configuration: default
-  deployment:
-    type: on-pull-request
