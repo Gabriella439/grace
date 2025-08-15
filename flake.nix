@@ -170,10 +170,10 @@
           rsync --recursive ${./prelude}/ $out/prelude
           rsync --recursive ${./prompts}/ $out/prompts
           rsync --recursive ${./examples}/ $out/examples
-          ln --symbolic ${self.codemirror}/lib/codemirror.css --target-directory=$out/css
-          ln --symbolic ${self.codemirror}/lib/codemirror.js --target-directory=$out/js
-          ln --symbolic ${self.codemirror}/mode/python/python.js --target-directory=$out/js
-          ln --symbolic ${self.haskell.packages."${compiler}".grace}/bin/try-grace.jsexe/all.js --target-directory=$out/js
+          cp ${self.codemirror}/lib/codemirror.css --target-directory=$out/css
+          cp ${self.codemirror}/lib/codemirror.js --target-directory=$out/js
+          cp ${self.codemirror}/mode/python/python.js --target-directory=$out/js
+          cp ${self.haskell.packages."${compiler}".grace}/bin/try-grace.jsexe/all.js --target-directory=$out/js
         '';
       };
 
