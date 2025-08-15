@@ -251,7 +251,11 @@
                     };
                   };
 
-                  nixpkgs.overlays = [ self.overlays.ghcjs ];
+                  nixpkgs = {
+                    config.allowBroken = true;
+
+                    overlays = [ self.overlays.ghcjs ];
+                  };
 
                   security = {
                     acme = {
