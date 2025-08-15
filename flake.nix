@@ -251,6 +251,12 @@
                     };
                   };
 
+                  networking = {
+                    firewall.allowedTCPPorts = [ 80 443 ];
+
+                    hostName = "trygrace";
+                  };
+
                   nixpkgs = {
                     config.allowBroken = true;
 
