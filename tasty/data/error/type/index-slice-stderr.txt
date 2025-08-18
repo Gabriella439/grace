@@ -1,0 +1,19 @@
+Not a subtype
+
+The following type:
+
+  Optional (List { })
+
+tasty/data/error/type/index-slice-input.ffg:2:1: 
+  │
+2 │ [{ }][0:].0
+  │ ↑
+
+… cannot be a subtype of:
+
+  List a?
+
+tasty/data/error/type/index-slice-input.ffg:2:1: 
+  │
+2 │ [{ }][0:].0
+  │ ↑

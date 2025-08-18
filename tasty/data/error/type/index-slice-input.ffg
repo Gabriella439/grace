@@ -1,0 +1,2 @@
+# This should fail because a slice returns an `Optional`
+[{ }][0:].0

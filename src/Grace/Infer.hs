@@ -1960,11 +1960,13 @@ infer e₀ = do
 
                     let element = Type.UnsolvedType{ location, existential }
 
-                    let listType = Type.List{ location, type_ = element }
+                    let list = Type.List{ location, type_ = element }
 
-                    newLarger <- check larger listType
+                    let optional = Type.Optional{ location, type_ = list }
 
-                    return (listType, Syntax.Project{ location, larger = newLarger, .. })
+                    newLarger <- check larger list
+
+                    return (optional, Syntax.Project{ location, larger = newLarger, .. })
 
         Syntax.If{..} -> do
             newPredicate <- check predicate Type.Scalar{ scalar = Monotype.Bool, .. }
