@@ -47,6 +47,7 @@
                                   &&  ! (  (   type == "regular"
                                            &&  (   self.lib.hasSuffix ".nix" (baseNameOf path)
                                                ||  self.lib.hasSuffix ".md" (baseNameOf path)
+                                               ||  self.lib.hasSuffix ".yaml" (baseNameOf path)
                                                ||  baseNameOf path == "cabal.project.local"
                                                )
                                            )
