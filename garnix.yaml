@@ -4,6 +4,7 @@ builds:
  - packages.aarch64-darwin.default
  - packages.x86_64-linux.default
  - packages.aarch64-linux.default
+ - packages.x86_64-linux.docker-image
  - devShells.aarch64-darwin.default
  - devShells.x86_64-linux.default
  - devShells.aarch64-linux.default

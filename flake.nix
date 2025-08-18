@@ -166,16 +166,34 @@
             supportedGhcVersions = [ "902" ];
           });
 
+        docker-image = self.dockerTools.buildLayeredImage {
+          name = "grace";
+
+          tag = "latest";
+
+          config = {
+            Cmd = [
+              (self.lib.getExe self.busybox)
+              "httpd"
+              "-f"
+              "-p" "8080"
+              "-h" self.website
+            ];
+
+            User = "65534:65534";
+          };
+        };
+
         website = self.runCommand "try-grace" { nativeBuildInputs = [ self.rsync ]; } ''
           mkdir -p $out/{css,js,prelude,prompts,examples}
           rsync --recursive ${./website}/ $out
           rsync --recursive ${./prelude}/ $out/prelude
           rsync --recursive ${./prompts}/ $out/prompts
           rsync --recursive ${./examples}/ $out/examples
-          ln --symbolic ${self.codemirror}/lib/codemirror.css --target-directory=$out/css
-          ln --symbolic ${self.codemirror}/lib/codemirror.js --target-directory=$out/js
-          ln --symbolic ${self.codemirror}/mode/python/python.js --target-directory=$out/js
-          ln --symbolic ${self.haskell.packages."${compiler}".grace}/bin/try-grace.jsexe/all.js --target-directory=$out/js
+          cp ${self.codemirror}/lib/codemirror.css --target-directory=$out/css
+          cp ${self.codemirror}/lib/codemirror.js --target-directory=$out/js
+          cp ${self.codemirror}/mode/python/python.js --target-directory=$out/js
+          cp ${self.haskell.packages."${compiler}".grace}/bin/try-grace.jsexe/all.js --target-directory=$out/js
         '';
       };
 
@@ -194,8 +212,6 @@
 
               grace = pkgs.haskell.packages."${compiler}".grace;
 
-              website = pkgs.website;
-
               shell = pkgs.haskell.packages."${compiler}".shellFor {
                 packages = hpkgs: [ hpkgs.grace ];
 
@@ -207,7 +223,10 @@
               };
 
             in
-              { inherit grace shell website; };
+              { inherit grace shell;
+
+                inherit (pkgs) docker-image website;
+              };
 
           ghc = withCompiler "ghc902";
 
@@ -216,6 +235,8 @@
         in
           { packages = {
               default = ghc.grace;
+
+              docker-image = ghcjs.docker-image;
 
               website = ghcjs.website;
             };
