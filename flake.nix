@@ -166,23 +166,33 @@
             supportedGhcVersions = [ "902" ];
           });
 
-        docker-image = self.dockerTools.buildLayeredImage {
-          name = "grace";
+        docker-stream =
+          let
+            args = {
+              name = "grace";
 
-          tag = "latest";
+              tag = "latest";
 
-          config = {
-            Cmd = [
-              (self.lib.getExe self.busybox)
-              "httpd"
-              "-f"
-              "-p" "8080"
-              "-h" self.website
-            ];
+              config = {
+                Cmd = [
+                  (self.lib.getExe self.busybox)
+                  "httpd"
+                  "-f"
+                  "-p" "8080"
+                  "-h" self.website
+                ];
 
-            User = "65534:65534";
-          };
-        };
+                User = "65534:65534";
+              };
+            };
+
+          in
+            self.dockerTools.streamLayeredImage (args // {
+              passthru = { inherit args; };
+            });
+
+        docker-image =
+          self.dockerTools.buildLayeredImage self.docker-stream.passthru.args;
 
         website = self.runCommand "try-grace" { nativeBuildInputs = [ self.rsync ]; } ''
           mkdir -p $out/{css,js,prelude,prompts,examples}
@@ -225,7 +235,7 @@
             in
               { inherit grace shell;
 
-                inherit (pkgs) docker-image website;
+                inherit (pkgs) docker-image docker-stream website;
               };
 
           ghc = withCompiler "ghc902";
@@ -237,6 +247,8 @@
               default = ghc.grace;
 
               docker-image = ghcjs.docker-image;
+
+              docker-stream = ghcjs.docker-stream;
 
               website = ghcjs.website;
             };
