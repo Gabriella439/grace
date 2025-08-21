@@ -138,7 +138,6 @@
                     ];
 
                   sourceOverrides = hlib.packageSourceOverrides {
-                    grace = ./.;
                   };
 
                   directoryOverrides = hlib.packagesFromDirectory {
