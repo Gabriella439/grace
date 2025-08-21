@@ -253,10 +253,18 @@
               website = ghcjs.website;
             };
 
-            apps.default = {
-              type = "app";
+            apps = {
+              default = {
+                type = "app";
 
-              program = nixpkgs.lib.getExe self.packages."${system}".default;
+                program = nixpkgs.lib.getExe self.packages."${system}".default;
+              };
+
+              docker-stream = {
+                type = "app";
+
+                program = "${self.packages."${system}".docker-stream}";
+              };
             };
 
             devShells = {
