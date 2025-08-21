@@ -9,7 +9,7 @@
 
   outputs = { garnix-lib, nixpkgs, utils, self }:
     let
-      overlay = compiler: self: super: {
+      overlay = compiler: self: super: { hostPkgs ? self }: {
         codemirror = self.fetchzip {
           url = "https://codemirror.net/5/codemirror.zip";
           sha256 = "sha256-TS4JVTRIwdWj/CihELhhC3Rte9DT0Tv239eZKR6MT6w=";
@@ -33,6 +33,9 @@
                       (_: _: { });
 
                   manualOverrides = hself: hsuper: {
+                    callCabal2nix = name: src: args:
+                      hostPkgs.haskellPackages.callCabal2nix name src args;
+
                     grace =
                       hlib.justStaticExecutables
                         (hlib.overrideCabal hsuper.grace (old: {
@@ -210,14 +213,18 @@
    in
       utils.lib.eachDefaultSystem (system:
         let
-          withCompiler = compiler:
+          hostPkgs = nixpkgs.legacyPackages.${system};
+
+          withCompiler = system: compiler:
             let
               config.allowBroken = true;
 
               pkgs = import nixpkgs {
                 inherit config system;
 
-                overlays = [ (overlay compiler) ];
+                overlays = [
+                  (self: super: overlay compiler self super { inherit hostPkgs; })
+                ];
               };
 
               grace = pkgs.haskell.packages."${compiler}".grace;
@@ -238,17 +245,19 @@
                 inherit (pkgs) docker-image docker-stream website;
               };
 
-          ghc = withCompiler "ghc902";
+          ghc = withCompiler system "ghc902";
 
-          ghcjs = withCompiler "ghcjs";
+          ghcjs = withCompiler system "ghcjs";
+
+          ghcjs-linux = withCompiler "x86_64-linux" "ghcjs";
 
         in
           { packages = {
               default = ghc.grace;
 
-              docker-image = ghcjs.docker-image;
+              docker-image = ghcjs-linux.docker-image;
 
-              docker-stream = ghcjs.docker-stream;
+              docker-stream = ghcjs-linux.docker-stream;
 
               website = ghcjs.website;
             };
@@ -265,7 +274,9 @@
               ghcjs = ghcjs.grace.env;
             };
           }) // {
-            overlays = nixpkgs.lib.genAttrs [ "ghc902" "ghcjs" ] overlay;
+            overlays =
+              nixpkgs.lib.genAttrs [ "ghc902" "ghcjs" ]
+                (compiler: self: super: overlay compiler self super { });
 
             nixosConfigurations.default = nixpkgs.lib.nixosSystem {
               system = "x86_64-linux";
