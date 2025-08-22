@@ -105,11 +105,6 @@
                       ])
 
                       (hself: hsuper: {
-                        ghcjs-fetch =
-                          hlib.addBuildDepends
-                            hsuper.ghcjs-fetch
-                            [ hself.ghcjs-base ];
-
                         aeson = hself.aeson_1_5_6_0;
 
                         entropy =
@@ -118,6 +113,13 @@
                             [ hself.ghcjs-dom
                               hself.jsaddle
                             ];
+
+                        grace = hself.grace-ghcjs;
+
+                        ghcjs-fetch =
+                          hlib.addBuildDepends
+                            hsuper.ghcjs-fetch
+                            [ hself.ghcjs-base ];
 
                         haskeline = hself.haskeline_0_8_2;
 
@@ -138,7 +140,6 @@
                     ];
 
                   sourceOverrides = hlib.packageSourceOverrides {
-                    grace = ./.;
                   };
 
                   directoryOverrides = hlib.packagesFromDirectory {
