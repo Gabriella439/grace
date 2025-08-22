@@ -169,19 +169,45 @@
 
         docker-stream =
           let
+            configuration = self.writeText "nginx.conf"
+              ''
+              events {
+              }
+
+              http {
+                access_log /dev/stdout;
+                error_log  /dev/stderr;
+
+                server {
+                  listen 8080;
+
+                  root ${self.website};
+
+                  index index.html;
+
+                  add_header X-Content-Type-Options nosniff;
+                  add_header X-Frame-Options SAMEORIGIN;
+
+                  gzip on;
+                  gzip_types application/javascript;
+
+                  location ~ \.js$ {
+                    add_header Cache-Control "public, max-age=31536000, immutable";
+                  }
+
+                }
+              }
+
+              daemon off;
+              '';
+
             args = {
               name = "grace";
 
               tag = "latest";
 
               config = {
-                Cmd = [
-                  (self.lib.getExe self.busybox)
-                  "httpd"
-                  "-f"
-                  "-p" "8080"
-                  "-h" self.website
-                ];
+                Cmd = [ (self.lib.getExe self.nginx) "-c" configuration ];
 
                 User = "65534:65534";
               };
@@ -196,15 +222,21 @@
           self.dockerTools.buildLayeredImage self.docker-stream.passthru.args;
 
         website = self.runCommand "try-grace" { nativeBuildInputs = [ self.rsync ]; } ''
-          mkdir -p $out/{css,js,prelude,prompts,examples}
+          js=js/''${out:11:32}
+
+          mkdir -p $out/{css,prelude,prompts,examples} $out/$js
+
           rsync --recursive ${./website}/ $out
           rsync --recursive ${./prelude}/ $out/prelude
           rsync --recursive ${./prompts}/ $out/prompts
           rsync --recursive ${./examples}/ $out/examples
+
           cp ${self.codemirror}/lib/codemirror.css --target-directory=$out/css
-          cp ${self.codemirror}/lib/codemirror.js --target-directory=$out/js
-          cp ${self.codemirror}/mode/python/python.js --target-directory=$out/js
-          cp ${self.haskell.packages."${compiler}".grace}/bin/try-grace.jsexe/all.js --target-directory=$out/js
+          cp ${self.codemirror}/lib/codemirror.js --target-directory=$out/$js
+          cp ${self.codemirror}/mode/python/python.js --target-directory=$out/$js
+          cp ${self.haskell.packages."${compiler}".grace}/bin/try-grace.jsexe/all.js --target-directory=$out/$js
+
+          sed --in-place 's!src="js/!src="'"$js"'/!g' $out/index.html
         '';
       };
 
