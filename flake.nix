@@ -179,6 +179,10 @@
               http {
                 access_log /dev/stdout;
 
+                include ${self.nginx}/conf/mime.types;
+
+                default_type  application/octet-stream;
+
                 server {
                   listen 8080;
 
