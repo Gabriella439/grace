@@ -174,9 +174,10 @@
               events {
               }
 
+              error_log  /dev/stderr;
+
               http {
                 access_log /dev/stdout;
-                error_log  /dev/stderr;
 
                 server {
                   listen 8080;
@@ -194,7 +195,6 @@
                   location ~ \.js$ {
                     add_header Cache-Control "public, max-age=31536000, immutable";
                   }
-
                 }
               }
 
@@ -211,6 +211,20 @@
 
                 User = "65534:65534";
               };
+
+              enableFakechroot = true;
+
+              fakeRootCommands =
+                ''
+                paths=(
+                  /var/cache/nginx/{client_body,proxy,fastcgi,uwsgi,scgi}
+                  /var/log/nginx
+                )
+
+                mkdir -p "''${paths[@]}"
+
+                chown -R 65534:65534 "''${paths[@]}"
+                '';
             };
 
           in
