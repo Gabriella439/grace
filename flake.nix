@@ -274,7 +274,7 @@
               grace = pkgs.haskell.packages."${compiler}".grace;
 
               shell = pkgs.haskell.packages."${compiler}".shellFor {
-                packages = hpkgs: [ hpkgs.grace ];
+                packages = hpkgs: [ (pkgs.haskell.lib.doCheck hpkgs.grace) ];
 
                 nativeBuildInputs = [ pkgs.haskell-language-server ];
 
