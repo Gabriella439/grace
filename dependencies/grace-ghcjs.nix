@@ -1,10 +1,11 @@
 { mkDerivation, aeson, aeson-pretty, aeson-yaml, async, base
-, binary, bytestring, case-insensitive, containers, Earley
-, filepath, generic-lens, ghcjs-base, ghcjs-fetch, ghcjs-prim
-, http-types, insert-ordered-containers, lens, lib, megaparsec
-, modern-uri, mtl, openai, parser-combinators, prettyprinter
-, prettyprinter-ansi-terminal, safe-exceptions, scientific, stm
-, string-interpolate, template-haskell, text, transformers
+, binary, bytestring, case-insensitive, containers, directory
+, doctest, Earley, filepath, generic-lens, ghcjs-base, ghcjs-fetch
+, ghcjs-prim, http-types, insert-ordered-containers, lens, lib
+, megaparsec, modern-uri, mtl, openai, parser-combinators
+, prettyprinter, prettyprinter-ansi-terminal, safe-exceptions
+, scientific, stm, string-interpolate, tasty, tasty-hunit
+, tasty-silver, template-haskell, text, these, transformers
 , unordered-containers, uri-encode, vector
 }:
 mkDerivation {
@@ -25,7 +26,11 @@ mkDerivation {
   executableHaskellDepends = [
     aeson async base containers filepath ghcjs-base
     insert-ordered-containers lens mtl safe-exceptions scientific stm
-    text transformers uri-encode
+    text these transformers uri-encode
+  ];
+  testHaskellDepends = [
+    base directory doctest filepath mtl prettyprinter safe-exceptions
+    tasty tasty-hunit tasty-silver text
   ];
   doHaddock = false;
   doCheck = false;
