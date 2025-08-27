@@ -142,6 +142,7 @@ executable try-grace
                      , safe-exceptions
                      , scientific
                      , stm
+                     , these
                      , text
                      , transformers
                      , uri-encode
