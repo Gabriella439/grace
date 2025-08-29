@@ -76,14 +76,14 @@ Grace.
 - Code generation
 
   You can ask the LLM to generate a Grace expression of any desired type; even
-  functions!
+  functions (using the `import` keyword)!
 
   For example, if we ask the model to generate the following function
 
   ```haskell
   >>> :let key = ./openai-key.txt
 
-  >>> prompt{ key, code: true, text: "Greet every name" } : List { name : Text } -> List Text
+  >>> import prompt{ key, text: "Greet every name" } : List { name : Text } -> List Text
   ```
 
   … then the model generates code equivalent to what we wrote:
@@ -100,7 +100,7 @@ Grace.
   let names = prompt{ key }
 
   let process{ names: List{ name: Text } } : List Text =
-          prompt{ key, code: true, text: "Greet every name" } names
+          import prompt{ key, text: "Greet every name" } names
 
   in  process{ names }
   ```

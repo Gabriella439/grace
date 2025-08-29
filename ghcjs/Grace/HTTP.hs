@@ -74,8 +74,8 @@ responseToText response = do
     return (Text.pack (JSString.unpack jsString))
 
 -- | Make an HTTP request
-http :: HTTP -> IO Text
-http GET{ url, headers, parameters } = do
+http :: Bool -> HTTP -> IO Text
+http import_ GET{ url, headers, parameters } = do
     reqUrl <- case parameters of
         Nothing -> do
             return (JSString.pack (Text.unpack url))
@@ -97,9 +97,8 @@ http GET{ url, headers, parameters } = do
           return (JSString.pack (Text.unpack (url <> query)))
 
     let reqOptions = Fetch.defaultRequestOptions
-            { reqOptHeaders = completeHeaders headers
+            { reqOptHeaders = completeHeaders import_ headers
             , reqOptMethod = HTTP.Types.methodGet
-            , reqOptCredentials = CredInclude
             }
 
     let request = Request{ reqUrl, reqOptions }
@@ -108,13 +107,12 @@ http GET{ url, headers, parameters } = do
 
     responseToText response
 
-http POST{ url, headers, request } = do
+http import_ POST{ url, headers, request } = do
     let reqUrl = JSString.pack (Text.unpack url)
 
     let reqOptions₀ = Fetch.defaultRequestOptions
-            { reqOptHeaders = completeHeaders headers
+            { reqOptHeaders = completeHeaders import_ headers
             , reqOptMethod = HTTP.Types.methodPost
-            , reqOptCredentials = CredInclude
             }
 
     reqOptions <- case request of

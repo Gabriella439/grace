@@ -7,6 +7,7 @@ import GHC.Generics (Generic)
 import Grace.Decode (FromGrace)
 
 import qualified Data.CaseInsensitive as CaseInsensitive
+import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
 import qualified Network.HTTP.Types as HTTP.Types
 
@@ -35,20 +36,23 @@ data HTTP
     deriving stock (Generic)
     deriving anyclass (FromGrace)
 
-completeHeaders :: Maybe [Header] -> [HTTP.Types.Header]
-completeHeaders headers = do
+completeHeaders :: Bool -> Maybe [Header] -> [HTTP.Types.Header]
+completeHeaders import_ headers = do
     Header{ header, value } <- requiredHeaders <> defaultedHeaders
 
     let headerBytes = CaseInsensitive.mk (Encoding.encodeUtf8 header)
 
-    let valueBytes = Encoding.encodeUtf8 value
+    let valueBytes = Encoding.encodeUtf8 (Text.strip value)
 
     return (headerBytes, valueBytes)
   where
-    requiredHeaders =
-        [ Header{ header = "Content-Type", value = "application/json" }
-        , Header{ header = "Accept"      , value = "application/json" }
-        ]
+    requiredHeaders
+        | import_ =
+            [ ]
+        | otherwise =
+            [ Header{ header = "Content-Type", value = "application/json" }
+            , Header{ header = "Accept"      , value = "application/json" }
+            ]
 
     defaultedHeaders = case headers of
         Nothing -> []

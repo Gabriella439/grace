@@ -139,6 +139,7 @@ lexToken =
             , Grace.Parser.HTTP         <$ symbol "http"
             , Grace.Parser.Read         <$ symbol "read"
             , Grace.Parser.If           <$ symbol "if"
+            , Grace.Parser.Import       <$ symbol "import"
             , Grace.Parser.In           <$ symbol "in"
             , Grace.Parser.Let          <$ symbol "let"
             , Grace.Parser.Prompt       <$ symbol "prompt"
@@ -485,6 +486,7 @@ reserved =
         , "forall"
         , "http"
         , "if"
+        , "import"
         , "in"
         , "indexed"
         , "length"
@@ -592,6 +594,7 @@ data Token
     | ForwardSlash
     | GreaterThanOrEqual
     | If
+    | Import
     | In
     | Indexed
     | Int Sign Natural
@@ -803,6 +806,7 @@ render t = case t of
     Grace.Parser.ForwardSlash       -> "/"
     Grace.Parser.GreaterThanOrEqual -> ">="
     Grace.Parser.If                 -> "if"
+    Grace.Parser.Import             -> "import"
     Grace.Parser.In                 -> "in"
     Grace.Parser.Indexed            -> "indexed"
     Grace.Parser.Int _ _            -> "an integer literal"
@@ -1055,23 +1059,27 @@ grammar endsWithBrace = mdo
             }
 
     applicationExpression <- rule do
-        e <-  (   do  location <- locatedToken Grace.Parser.Prompt
+        e <-  (   do  i <- (True <$ locatedToken Grace.Parser.Import) <|> pure False
+                      f <-  (   do  location <- locatedToken Grace.Parser.Prompt
 
-                      arguments <- projectExpression
+                                    arguments <- projectExpression
 
-                      return Syntax.Prompt{ location, arguments, schema = Nothing }
+                                    return \import_ -> Syntax.Prompt{ location, import_, arguments, schema = Nothing }
 
-              <|> do  location <- locatedToken Grace.Parser.HTTP
+                            <|> do  location <- locatedToken Grace.Parser.HTTP
 
-                      arguments <- projectExpression
+                                    arguments <- projectExpression
 
-                      return Syntax.HTTP{ location, arguments, schema = Nothing }
+                                    return \import_ -> Syntax.HTTP{ location, import_, arguments, schema = Nothing }
 
-              <|> do  location <- locatedToken Grace.Parser.Read
+                            <|> do  location <- locatedToken Grace.Parser.Read
 
-                      arguments <- projectExpression
+                                    arguments <- projectExpression
 
-                      return Syntax.Read{ location, arguments, schema = Nothing }
+                                    return \import_ -> Syntax.Read{ location, import_, arguments, schema = Nothing }
+                            )
+
+                      pure (f i)
 
               <|> do  location <- locatedToken Grace.Parser.Fold
 

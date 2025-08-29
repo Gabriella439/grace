@@ -103,15 +103,15 @@ fetch url = do
         Right lazyText -> return (Text.Lazy.toStrict lazyText)
 
 -- | Make a POST request
-http :: HTTP -> IO Text
-http GET{ url, headers, parameters } = do
+http :: Bool -> HTTP -> IO Text
+http import_ GET{ url, headers, parameters } = do
     manager <- newManager
 
     request₀ <- HTTP.parseUrlThrow (Text.unpack url)
 
     let request₁ = request₀
             { method = HTTP.Types.methodGet
-            , requestHeaders = completeHeaders headers
+            , requestHeaders = completeHeaders import_ headers
             }
 
     let request₂ = case parameters of
@@ -133,14 +133,14 @@ http GET{ url, headers, parameters } = do
         Left exception -> Exception.throwIO (NotUTF8 exception)
         Right lazyText -> return (Text.Lazy.toStrict lazyText)
 
-http POST{ url, headers, request } = do
+http import_ POST{ url, headers, request } = do
     manager <- newManager
 
     request₀ <- HTTP.parseUrlThrow (Text.unpack url)
 
     let request₁ = request₀
             { method = HTTP.Types.methodPost
-            , requestHeaders = completeHeaders headers
+            , requestHeaders = completeHeaders import_ headers
             }
 
     let request₂ = case request of

@@ -32,6 +32,8 @@ import Grace.Syntax (Builtin(..), Scalar(..), Syntax)
 import Grace.Value (Value)
 import Prelude hiding (lookup, null, succ)
 
+import {-# SOURCE #-} qualified Grace.Interpret as Interpret
+
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
 import qualified Control.Monad as Monad
@@ -282,82 +284,100 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
 
             Syntax.Prompt{ schema = Nothing } -> do
                 Concurrently (Exception.throwIO MissingSchema)
-            Syntax.Prompt{ location, arguments, schema = Just schema } -> Concurrently do
+            Syntax.Prompt{ location, import_, arguments, schema = Just schema } -> Concurrently do
                 newArguments <- runConcurrently (loop env arguments)
 
                 prompt <- case decode newArguments of
                     Left exception -> Exception.throwIO exception
                     Right prompt -> return prompt
 
-                liftIO (Prompt.prompt (generateContext location) location prompt schema)
+                liftIO (Prompt.prompt (generateContext location) location import_ prompt schema)
 
             Syntax.HTTP{ schema = Nothing } -> do
                 Concurrently (Exception.throwIO MissingSchema)
-            Syntax.HTTP{ location, arguments, schema = Just schema } -> Concurrently do
+            Syntax.HTTP{ location, import_, arguments, schema = Just schema } -> Concurrently do
                 newArguments <- runConcurrently (loop env arguments)
 
                 http <- case decode newArguments of
                     Left exception -> Exception.throwIO exception
                     Right http -> return http
 
-                responseBody <- liftIO (HTTP.http http)
+                responseBody <- liftIO (HTTP.http import_ http)
 
-                let bytes = ByteString.Lazy.fromStrict (Encoding.encodeUtf8 responseBody)
+                if import_
+                    then do
+                        context <- generateContext location
 
-                responseValue <- case Aeson.eitherDecode bytes of
-                    Left message_ ->
-                        Exception.throwIO JSONDecodingFailed{ message = message_, text = responseBody }
-                    Right responseValue ->
-                        return responseValue
+                        (_, value) <- Interpret.interpretWith keyToMethods context (Just schema) (Code (Text.unpack (HTTP.url http)) responseBody)
 
-                let defaultedSchema =
-                        Lens.transform (Type.defaultTo Type.Scalar{ location, scalar = Monotype.JSON }) schema
+                        return value
 
-                case Value.checkJSON defaultedSchema responseValue of
-                    Left exception -> Exception.throwIO exception
-                    Right value    -> return value
+                    else do
+                        let bytes = ByteString.Lazy.fromStrict (Encoding.encodeUtf8 responseBody)
+
+                        responseValue <- case Aeson.eitherDecode bytes of
+                            Left message_ ->
+                                Exception.throwIO JSONDecodingFailed{ message = message_, text = responseBody }
+                            Right responseValue ->
+                                return responseValue
+
+                        let defaultedSchema =
+                                Lens.transform (Type.defaultTo Type.Scalar{ location, scalar = Monotype.JSON }) schema
+
+                        case Value.checkJSON defaultedSchema responseValue of
+                            Left exception -> Exception.throwIO exception
+                            Right value    -> return value
 
             Syntax.Read{ schema = Nothing } -> do
                 Concurrently (Exception.throwIO MissingSchema)
-            Syntax.Read{ arguments, schema = Just schema } -> Concurrently do
+            Syntax.Read{ location, import_, arguments, schema = Just schema } -> Concurrently do
                 newArguments <- runConcurrently (loop env arguments)
 
                 text <- case decode newArguments of
                     Left exception -> Exception.throwIO exception
                     Right text -> return text
 
-                let bytes = ByteString.Lazy.fromStrict (Encoding.encodeUtf8 text)
+                if import_
+                    then do
+                        context <- generateContext location
 
-                aesonValue <- case Aeson.eitherDecode bytes of
-                    Left message -> do
-                        Exception.throwIO JSONDecodingFailed{ message, text }
-                    Right aesonValue -> do
-                        return aesonValue
+                        (_, value) <- Interpret.interpretWith keyToMethods context (Just schema) (Code "(read)" text)
 
-                case Value.checkJSON schema aesonValue of
-                    Left exception -> do
-                        let value = Value.inferJSON aesonValue
-
-                        let annotated =
-                                first (\_ -> Unknown)
-                                    (fmap Void.absurd (quote value))
-
-                        let expression = Syntax.Annotation
-                                { location = Unknown
-                                , annotated
-                                , annotation = schema
-                                }
-
-                        let input =
-                                Code "(read)" (Pretty.toSmart @(Syntax Location Input) expression)
-
-                        -- Turn the conversion error into a nicer type error
-                        _ <- Infer.typeOf input expression
-
-                        Exception.throwIO exception
-
-                    Right value -> do
                         return value
+
+                    else do
+                        let bytes = ByteString.Lazy.fromStrict (Encoding.encodeUtf8 text)
+
+                        aesonValue <- case Aeson.eitherDecode bytes of
+                            Left message -> do
+                                Exception.throwIO JSONDecodingFailed{ message, text }
+                            Right aesonValue -> do
+                                return aesonValue
+
+                        case Value.checkJSON schema aesonValue of
+                            Left exception -> do
+                                let value = Value.inferJSON aesonValue
+
+                                let annotated =
+                                        first (\_ -> Unknown)
+                                            (fmap Void.absurd (quote value))
+
+                                let expression = Syntax.Annotation
+                                        { location = Unknown
+                                        , annotated
+                                        , annotation = schema
+                                        }
+
+                                let input =
+                                        Code "(read)" (Pretty.toSmart @(Syntax Location Input) expression)
+
+                                -- Turn the conversion error into a nicer type error
+                                _ <- Infer.typeOf input expression
+
+                                Exception.throwIO exception
+
+                            Right value -> do
+                                return value
 
             Syntax.Scalar{ scalar } ->
                 pure (Value.Scalar scalar)

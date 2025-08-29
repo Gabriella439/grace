@@ -216,7 +216,6 @@ data Prompt = Prompt
     { key :: Grace.Decode.Key
     , text :: Maybe Text
     , model :: Maybe Text
-    , code :: Maybe Bool
     , search :: Maybe Bool
     , effort :: Maybe Effort
     } deriving stock (Generic)
@@ -226,10 +225,11 @@ data Prompt = Prompt
 prompt
     :: IO [(Text, Type Location, Value)]
     -> Location
+    -> Bool
     -> Prompt
     -> Type Location
     -> IO Value
-prompt generateContext location Prompt{ key = Grace.Decode.Key{ text = key }, text, model, code, search, effort } schema = do
+prompt generateContext location import_ Prompt{ key = Grace.Decode.Key{ text = key }, text, model, search, effort } schema = do
     keyToMethods <- HTTP.getMethods
 
     let methods = keyToMethods (Text.strip key)
@@ -249,10 +249,6 @@ prompt generateContext location Prompt{ key = Grace.Decode.Key{ text = key }, te
             Just m -> m
             _ | defaultedSearch -> "gpt-4o-search-preview"
               | otherwise -> "o4-mini"
-
-    let defaultedCode = case code of
-            Just c -> c
-            Nothing -> False
 
     let reasoning_effort = case effort of
             Nothing
@@ -280,7 +276,7 @@ prompt generateContext location Prompt{ key = Grace.Decode.Key{ text = key }, te
         toOutput ChatCompletionObject{ choices } = do
             Exception.throwIO UnexpectedModelResponse{ choices }
 
-    if defaultedCode
+    if import_
         then do
             let retry :: [(Text, SomeException)] -> IO (Type Location, Value)
                 retry errors
@@ -358,7 +354,7 @@ prompt generateContext location Prompt{ key = Grace.Decode.Key{ text = key }, te
 
                         output <- toOutput chatCompletionObject
 
-                        Interpret.interpretWith keyToMethods context (Just schema) (Code "(generated)" output)
+                        Interpret.interpretWith keyToMethods context (Just schema) (Code "(prompt)" output)
                             `Exception.catch` \interpretError -> do
                                 retry ((output, interpretError) : errors)
 
