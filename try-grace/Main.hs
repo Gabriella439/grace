@@ -355,6 +355,23 @@ getSessionStorage a = liftIO do
         then return Nothing
         else return (Just (JSString.Text.textFromJSVal jsVal))
 
+foreign import javascript unsafe "localStorage.setItem($1, $2)"
+    setLocalStorage_ :: JSString -> JSString -> IO ()
+
+setLocalStorage :: MonadIO io => Text -> Text -> io ()
+setLocalStorage a b = liftIO (setLocalStorage_ (fromText a) (fromText b))
+
+foreign import javascript unsafe "localStorage.getItem($1)"
+    getLocalStorage_ :: JSString -> IO JSVal
+
+getLocalStorage :: MonadIO io => Text -> io (Maybe Text)
+getLocalStorage a = liftIO do
+    jsVal <- getLocalStorage_ (fromText a)
+
+    if GHCJS.Types.isNull jsVal
+        then return Nothing
+        else return (Just (JSString.Text.textFromJSVal jsVal))
+
 toText :: JSString -> Text
 toText = Text.pack . JSString.unpack
 
@@ -880,7 +897,7 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Text } = do
         return (input, invoke, mempty)
 
 renderInput path type_@Type.Scalar{ scalar = Monotype.Key } = do
-    maybeText <- getSessionStorage (renderPath path type_)
+    maybeText <- getLocalStorage (renderPath path type_)
 
     maybeKey <- fromStorage maybeText
 
@@ -900,7 +917,7 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Key } = do
         let get = do
                 key <- toValue input
 
-                setSessionStorage (renderPath path type_) (toStorage key)
+                setLocalStorage (renderPath path type_) (toStorage key)
 
                 return (Value.Scalar (Key key))
 
