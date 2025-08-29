@@ -958,7 +958,7 @@ renderInput path Type.Record{ fields = Type.Fields keyTypes _ } = do
 
                             renderOutput x (Value.Record m)
 
-                (inputField, invokeField, refreshField) <- Reader.withReaderT nest reader
+                (inputField, _, refreshField) <- Reader.withReaderT nest reader
 
                 dt <- createElement "dt"
 
@@ -978,17 +978,22 @@ renderInput path Type.Record{ fields = Type.Fields keyTypes _ } = do
 
                 replaceChildren dl (Array.fromList [ dt, dd ])
 
-                return (dl, invokeField, refreshField)
+                return (dl, refreshField)
 
         results <- traverse inner keyReaders
 
-        let (children, invokes, refreshOutputs) = unzip3 results
+        let (children, refreshOutputs) = unzip results
 
         div <- createElement "div"
 
         replaceChildren div (Array.fromList children)
 
-        let invoke = sequence_ invokes
+        RenderInput{ renderOutput } <- Reader.ask
+
+        let invoke = do
+                m <- IORef.readIORef ref
+
+                renderOutput (Value.Record m)
 
         let refreshOutput = sequence_ refreshOutputs
 
@@ -1286,21 +1291,17 @@ renderInput path listType@Type.List{ type_ } = do
 
         addEventListener plus "click" insertCallback
 
-        let nest x = x{ renderOutput = newRenderOutput }
-              where
-                newRenderOutput _ = do
-                    children <- IORef.readIORef childrenRef
+        RenderInput{ renderOutput } <- Reader.ask
 
-                    let values = do
-                            Child{ value = Just v } <- toList children
+        let invoke = do
+                children <- IORef.readIORef childrenRef
 
-                            return v
+                let values = do
+                        Child{ value = Just v } <- toList children
 
-                    renderOutput x (Value.List (Seq.fromList values))
+                        return v
 
-        (_, reader) <- liftIO (renderInput ("*" : path) type_)
-
-        (_, invoke, _) <- Reader.withReaderT nest reader
+                renderOutput (Value.List (Seq.fromList values))
 
         delete <- (liftIO . Callback.asyncCallback) do
             children <- IORef.readIORef childrenRef
