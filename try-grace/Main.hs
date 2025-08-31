@@ -1,31 +1,28 @@
-{-# LANGUAGE BlockArguments      #-}
-{-# LANGUAGE DataKinds           #-}
-{-# LANGUAGE NamedFieldPuns      #-}
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE MultiWayIf          #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE BlockArguments    #-}
+{-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE NamedFieldPuns    #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE MultiWayIf        #-}
+{-# LANGUAGE TypeApplications  #-}
 
 module Main where
 
 import Control.Applicative (empty)
 import Control.Concurrent.Async (Async)
-import Control.Exception.Safe (catch, Exception(..), SomeException)
+import Control.Exception.Safe (Exception(..), SomeException)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Maybe (MaybeT)
 import Control.Monad.Trans.Reader (ReaderT)
 import Data.Foldable (toList, traverse_)
 import Data.IORef (IORef)
 import Data.JSString (JSString)
-import Data.Sequence (ViewR(..), (|>))
+import Data.These (These(..))
 import Data.Text (Text)
 import Data.Traversable (forM)
 import Grace.Type (Type(..))
 import GHCJS.Foreign.Callback (Callback)
 import GHCJS.Types (JSVal)
-import Grace.Decode (FromGrace)
 import Grace.Domain (Domain(..))
-import Grace.Encode (ToGrace(..))
 import Grace.HTTP (Methods)
 import Grace.Input (Input(..))
 import Grace.Location (Location)
@@ -34,7 +31,7 @@ import Grace.Syntax (Scalar(..))
 import Grace.Value (Value(..))
 import JavaScript.Array (JSArray)
 import Numeric.Natural (Natural)
-import Prelude hiding (div, error, id, length, span, subtract)
+import Prelude hiding (div, error, id, span, subtract)
 import System.FilePath ((</>))
 
 import qualified Control.Concurrent.Async as Async
@@ -48,19 +45,16 @@ import qualified Control.Monad.Trans.Maybe as Maybe
 import qualified Control.Monad.Trans.Reader as Reader
 import qualified Data.Aeson as Aeson
 import qualified Data.HashMap.Strict.InsOrd as HashMap
+import qualified Data.IntMap as IntMap
 import qualified Data.IORef as IORef
 import qualified Data.JSString as JSString
-import qualified Data.JSString.Text as JSString.Text
-import qualified Data.List as List
 import qualified Data.Scientific as Scientific
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as Text.Lazy
 import qualified Data.Text.Lazy.Encoding as Text.Encoding
 import qualified GHCJS.Foreign.Callback as Callback
-import qualified GHCJS.Types
 import qualified Grace.DataFile as DataFile
-import qualified Grace.Decode as Decode
 import qualified Grace.HTTP as HTTP
 import qualified Grace.Import as Import
 import qualified Grace.Infer as Infer
@@ -86,23 +80,8 @@ foreign import javascript unsafe "$1.value"
 toValue :: MonadIO io => JSVal -> io Text
 toValue a = liftIO (fmap toText (toValue_ a))
 
-foreign import javascript unsafe "$1.value = $2"
-    setValue_ :: JSVal -> JSString -> IO ()
-
-setValue :: MonadIO io => JSVal -> Text -> io ()
-setValue a b = liftIO (setValue_ a (fromText b))
-
 toIntegerValue :: MonadIO io => JSVal -> io Integer
 toIntegerValue a = liftIO (fmap (read . JSString.unpack) (toValue_ a))
-
-setIntegerValue :: MonadIO io => JSVal -> Integer -> io ()
-setIntegerValue a b = liftIO (setValue_ a (JSString.pack (show b)))
-
-toNaturalValue :: MonadIO io => JSVal -> io Natural
-toNaturalValue a = liftIO (fmap (read . JSString.unpack) (toValue_ a))
-
-setNaturalValue :: MonadIO io => JSVal -> Natural -> io ()
-setNaturalValue a b = liftIO (setValue_ a (JSString.pack (show b)))
 
 foreign import javascript unsafe "$1.value"
     toDoubleValue_ :: JSVal -> IO Double
@@ -110,23 +89,11 @@ foreign import javascript unsafe "$1.value"
 toDoubleValue :: MonadIO io => JSVal -> io Double
 toDoubleValue a = liftIO (toDoubleValue_ a)
 
-foreign import javascript unsafe "$1.value = $2"
-    setDoubleValue_ :: JSVal -> Double -> IO ()
-
-setDoubleValue :: MonadIO io => JSVal -> Double -> io ()
-setDoubleValue a b = liftIO (setDoubleValue_ a b)
-
 foreign import javascript unsafe "$1.checked"
     getChecked_ :: JSVal -> IO Bool
 
 getChecked :: MonadIO io => JSVal -> io Bool
 getChecked a = liftIO (getChecked_ a)
-
-foreign import javascript unsafe "$1.checked = $2"
-    setChecked_ :: JSVal -> Bool -> IO ()
-
-setChecked :: MonadIO io => JSVal -> Bool -> io ()
-setChecked a b = liftIO (setChecked_ a b)
 
 foreign import javascript unsafe "$1.textContent = $2"
     setTextContent_ :: JSVal -> JSString -> IO ()
@@ -302,10 +269,10 @@ onChange :: MonadIO io => JSVal -> Callback (IO ()) -> io ()
 onChange a b = liftIO (onChange_ a b)
 
 foreign import javascript unsafe "$1.setValue($2)"
-    setCodeValue_ :: JSVal -> JSString -> IO ()
+    setValue_ :: JSVal -> JSString -> IO ()
 
-setCodeValue :: MonadIO io => JSVal -> Text -> io ()
-setCodeValue a b = liftIO (setCodeValue_ a (fromText b))
+setValue :: MonadIO io => JSVal -> Text -> io ()
+setValue a b = liftIO (setValue_ a (fromText b))
 
 foreign import javascript unsafe "$1.getValue()"
     getValue_ :: JSVal -> IO JSString
@@ -337,40 +304,6 @@ foreign import javascript unsafe "$1.focus()"
 
 focus :: MonadIO io => JSVal -> io ()
 focus a = liftIO (focus_ a)
-
-foreign import javascript unsafe "sessionStorage.setItem($1, $2)"
-    setSessionStorage_ :: JSString -> JSString -> IO ()
-
-setSessionStorage :: MonadIO io => Text -> Text -> io ()
-setSessionStorage a b = liftIO (setSessionStorage_ (fromText a) (fromText b))
-
-foreign import javascript unsafe "sessionStorage.getItem($1)"
-    getSessionStorage_ :: JSString -> IO JSVal
-
-getSessionStorage :: MonadIO io => Text -> io (Maybe Text)
-getSessionStorage a = liftIO do
-    jsVal <- getSessionStorage_ (fromText a)
-
-    if GHCJS.Types.isNull jsVal
-        then return Nothing
-        else return (Just (JSString.Text.textFromJSVal jsVal))
-
-foreign import javascript unsafe "localStorage.setItem($1, $2)"
-    setLocalStorage_ :: JSString -> JSString -> IO ()
-
-setLocalStorage :: MonadIO io => Text -> Text -> io ()
-setLocalStorage a b = liftIO (setLocalStorage_ (fromText a) (fromText b))
-
-foreign import javascript unsafe "localStorage.getItem($1)"
-    getLocalStorage_ :: JSString -> IO JSVal
-
-getLocalStorage :: MonadIO io => Text -> io (Maybe Text)
-getLocalStorage a = liftIO do
-    jsVal <- getLocalStorage_ (fromText a)
-
-    if GHCJS.Types.isNull jsVal
-        then return Nothing
-        else return (Just (JSString.Text.textFromJSVal jsVal))
 
 toText :: JSString -> Text
 toText = Text.pack . JSString.unpack
@@ -579,7 +512,7 @@ renderValue keyToMethods counter parent Type.Function{ input, output } function 
 
     if Lens.has Value.effects function
         then do
-            (_, reader) <- renderInput [] input
+            let (_, reader) = renderInput input
 
             result <- Maybe.runMaybeT (Reader.runReaderT reader RenderInput
                 { keyToMethods
@@ -613,7 +546,7 @@ renderValue keyToMethods counter parent Type.Function{ input, output } function 
                     return refreshOutput
 
         else do
-            (_, reader) <- renderInput [] input
+            let (_, reader) = renderInput input
 
             result <- Maybe.runMaybeT (Reader.runReaderT reader RenderInput
                 { keyToMethods
@@ -678,48 +611,15 @@ register input get = do
 
         return invoke
 
-renderPath :: [Text] -> Type Location -> Text
-renderPath path type_ = (prefix <> " : " <> suffix)
-  where
-    prefix =
-        Text.intercalate "."
-            (fmap (Pretty.toText . Type.prettyRecordLabel False) path)
-
-    suffix = Pretty.toText type_
-
-fromStorage :: FromGrace a => Maybe Text -> IO (Maybe a)
-fromStorage Nothing = do
-    return Nothing
-fromStorage (Just text) = do
-    load `catch` \(_ :: SomeException) -> return Nothing
-  where
-    load = do
-        a <- Interpret.load (Code "(storage)" text)
-        return (Just a)
-
-toStorage :: ToGrace a => a -> Text
-toStorage a = Pretty.toText (Normalize.quote (encode a))
-
 renderInput
-    :: [Text]
-    -> Type Location
-    -> IO (Value, ReaderT RenderInput (MaybeT IO) (JSVal, IO (), IO ()))
-renderInput path type_@Type.Scalar{ scalar = Monotype.Bool } = do
-    maybeText <- getSessionStorage (renderPath path type_)
-
-    maybeBool <- fromStorage maybeText
-
-    let bool₀ = case maybeBool of
-            Just b -> b
-            Nothing -> False
-
-    return $ (,) (Value.Scalar (Bool bool₀)) do
+    :: Type Location
+    -> (Value, ReaderT RenderInput (MaybeT IO) (JSVal, IO (), IO ()))
+renderInput Type.Scalar{ scalar = Monotype.Bool } = do
+    (,) (Value.Scalar (Bool False)) do
         input <- createElement "input"
 
         setAttribute input "type"  "checkbox"
         setAttribute input "class" "form-check-input"
-
-        setChecked input bool₀
 
         span <- createElement "span"
 
@@ -731,24 +631,14 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Bool } = do
         let get = do
                 bool <- getChecked input
 
-                setSessionStorage (renderPath path type_) (toStorage bool)
-
                 return (Value.Scalar (Bool bool))
 
         invoke <- register input get
 
         return (span, invoke, mempty)
 
-renderInput path type_@Type.Scalar{ scalar = Monotype.Real } = do
-    maybeText <- getSessionStorage (renderPath path type_)
-
-    maybeScientific <- fromStorage maybeText
-
-    let scientific₀ = case maybeScientific of
-            Just s -> s
-            Nothing -> 0
-
-    return $ (,) (Value.Scalar (Real scientific₀)) do
+renderInput Type.Scalar{ scalar = Monotype.Real } = do
+    (,) (Value.Scalar (Real 0)) do
         input <- createElement "input"
 
         setAttribute input "class" "form-control"
@@ -756,12 +646,8 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Real } = do
         setAttribute input "step"  "any"
         setAttribute input "value" "0"
 
-        setDoubleValue input (Scientific.toRealFloat scientific₀)
-
         let get = do
                 double <- toDoubleValue input
-
-                setSessionStorage (renderPath path type_) (toStorage double)
 
                 return (Value.Scalar (Real (Scientific.fromFloatDigits double)))
 
@@ -769,28 +655,16 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Real } = do
 
         return (input, invoke, mempty)
 
-renderInput path type_@Type.Scalar{ scalar = Monotype.Integer } = do
-    maybeText <- getSessionStorage (renderPath path type_)
-
-    maybeInteger <- fromStorage maybeText
-
-    let integer₀ = case maybeInteger of
-            Just i -> i
-            Nothing -> 0
-
-    return $ (,) (Value.Scalar (Integer integer₀)) do
+renderInput Type.Scalar{ scalar = Monotype.Integer } = do
+    (,) (Value.Scalar (Integer 0)) do
         input <- createElement "input"
 
         setAttribute input "class" "form-control"
         setAttribute input "type"  "number"
         setAttribute input "value" "0"
 
-        setIntegerValue input integer₀
-
         let get = do
                 integer <- toIntegerValue input
-
-                setSessionStorage (renderPath path type_) (toStorage integer)
 
                 return (Value.Scalar (Integer integer))
 
@@ -798,16 +672,8 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Integer } = do
 
         return (input, invoke, mempty)
 
-renderInput path type_@Type.Scalar{ scalar = Monotype.Natural } = do
-    maybeText <- getSessionStorage (renderPath path type_)
-
-    maybeNatural <- fromStorage maybeText
-
-    let natural₀ = case maybeNatural of
-            Just n -> n
-            Nothing -> 0
-
-    return $ (,) (Value.Scalar (Natural natural₀)) do
+renderInput Type.Scalar{ scalar = Monotype.Natural } = do
+    (,) (Value.Scalar (Natural 0)) do
         input <- createElement "input"
 
         setAttribute input "class" "form-control"
@@ -815,39 +681,24 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Natural } = do
         setAttribute input "value" "0"
         setAttribute input "min"   "0"
 
-        setNaturalValue input natural₀
-
         let get = do
-                natural <- toNaturalValue input
+                integer <- toIntegerValue input
 
-                setSessionStorage (renderPath path type_) (toStorage natural)
-
-                return (Value.Scalar (Natural natural))
+                return (Value.Scalar (Natural (fromInteger integer)))
 
         invoke <- register input get
 
         return (input, invoke, mempty)
 
-renderInput path type_@Type.Scalar{ scalar = Monotype.JSON } = do
-    maybeText <- getSessionStorage (renderPath path type_)
-
-    maybeTextValue <- fromStorage maybeText
-
-    let text₀ = case maybeTextValue of
-            Just t -> t
-            Nothing -> "null"
-
-    return $ (,) (Value.Text text₀) do
+renderInput Type.Scalar{ scalar = Monotype.JSON } = do
+    (,) (Value.Scalar Null) do
         input <- createElement "input"
 
         setAttribute input "class" "form-control"
-
-        setValue input text₀
+        setAttribute input "value" "null"
 
         let get = do
                 strictText <- toValue input
-
-                setSessionStorage (renderPath path type_) (toStorage strictText)
 
                 let lazyText = Text.Lazy.fromStrict strictText
 
@@ -866,16 +717,8 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.JSON } = do
 
         return (input, invoke, mempty)
 
-renderInput path type_@Type.Scalar{ scalar = Monotype.Text } = do
-    maybeText <- getSessionStorage (renderPath path type_)
-
-    maybeTextValue <- fromStorage maybeText
-
-    let text₀ = case maybeTextValue of
-            Just t -> t
-            Nothing -> ""
-
-    return $ (,) (Value.Text text₀) do
+renderInput Type.Scalar{ scalar = Monotype.Text } = do
+    (,) (Value.Text "") do
         input <- createElement "textarea"
 
         setAttribute input "class" "form-control"
@@ -883,12 +726,8 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Text } = do
 
         autoResize input
 
-        setValue input text₀
-
         let get = do
                 text <- toValue input
-
-                setSessionStorage (renderPath path type_) (toStorage text)
 
                 return (Value.Text text)
 
@@ -896,28 +735,16 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Text } = do
 
         return (input, invoke, mempty)
 
-renderInput path type_@Type.Scalar{ scalar = Monotype.Key } = do
-    maybeText <- getLocalStorage (renderPath path type_)
-
-    maybeKey <- fromStorage maybeText
-
-    let key₀ = case maybeKey of
-            Just (Decode.Key k) -> k
-            Nothing -> ""
-
-    return $ (,) (Value.Scalar (Key key₀)) do
+renderInput Type.Scalar{ scalar = Monotype.Key } = do
+    (,) (Value.Scalar (Key "")) do
         input <- createElement "input"
 
         setAttribute input "type" "password"
         setAttribute input "class" "form-control"
         setAttribute input "rows" "1"
 
-        setValue input key₀
-
         let get = do
                 key <- toValue input
-
-                setLocalStorage (renderPath path type_) (toStorage key)
 
                 return (Value.Scalar (Key key))
 
@@ -925,13 +752,13 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Key } = do
 
         return (input, invoke, mempty)
 
-renderInput path Type.Record{ fields = Type.Fields keyTypes _ } = do
-    let outer (key, type_) = do
-            (start, reader) <- renderInput (key : path) type_
+renderInput Type.Record{ fields = Type.Fields keyTypes _ } = do
+    let triples = do
+            (key, type_) <- keyTypes
+
+            let (start, reader) = renderInput type_
 
             return (key, start, reader)
-
-    triples <- traverse outer keyTypes
 
     let hashMap = HashMap.fromList do
             (key, start, _) <- triples
@@ -943,10 +770,10 @@ renderInput path Type.Record{ fields = Type.Fields keyTypes _ } = do
 
             return (key, reader)
 
-    return $ (,) (Value.Record hashMap) do
+    (,) (Value.Record hashMap) do
         ref <- liftIO (IORef.newIORef hashMap)
 
-        let inner (key, reader) = do
+        let process (key, reader) = do
                 let nest x = x{ renderOutput = newRenderOutput }
                       where
                         newRenderOutput value = do
@@ -958,7 +785,7 @@ renderInput path Type.Record{ fields = Type.Fields keyTypes _ } = do
 
                             renderOutput x (Value.Record m)
 
-                (inputField, _, refreshField) <- Reader.withReaderT nest reader
+                (inputField, invokeField, refreshField) <- Reader.withReaderT nest reader
 
                 dt <- createElement "dt"
 
@@ -978,159 +805,127 @@ renderInput path Type.Record{ fields = Type.Fields keyTypes _ } = do
 
                 replaceChildren dl (Array.fromList [ dt, dd ])
 
-                return (dl, refreshField)
+                return (dl, invokeField, refreshField)
 
-        results <- traverse inner keyReaders
+        results <- traverse process keyReaders
 
-        let (children, refreshOutputs) = unzip results
+        let (children, invokes, refreshOutputs) = unzip3 results
 
         div <- createElement "div"
 
         replaceChildren div (Array.fromList children)
 
-        RenderInput{ renderOutput } <- Reader.ask
-
-        let invoke = do
-                m <- IORef.readIORef ref
-
-                renderOutput (Value.Record m)
+        let invoke = sequence_ invokes
 
         let refreshOutput = sequence_ refreshOutputs
 
         return (div, invoke, refreshOutput)
 
-renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ } = do
-    maybeAlternative <- getSessionStorage (renderPath path type_)
+renderInput Type.Union{ alternatives = Type.Alternatives keyTypes _ }
+    | (key₀, type_₀) : _ <- keyTypes = do
+        let (start, _) = renderInput type_₀
 
-    let predicate = case maybeAlternative of
-            Nothing -> \_ -> True
-            Just a  -> \(k, _) -> k == a
+        (,) (Value.Alternative key₀ start) do
+            RenderInput{ live, counter } <- Reader.ask
 
-    case List.find predicate keyTypes of
-        Nothing -> do
-            renderInputDefault path type_
+            n <- liftIO (IORef.atomicModifyIORef' counter (\a -> (a + 1, a)))
 
-        Just (key₀, type_₀) -> do
-            (start, _) <- renderInput (key₀ : path) type_₀
+            checkedValRef <- liftIO (IORef.newIORef Nothing)
 
-            return $ (,) (Value.Alternative key₀ start) do
-                RenderInput{ live, counter } <- Reader.ask
+            let process (checked, (key, type_)) = do
+                    input <- createElement "input"
 
-                n <- liftIO (IORef.atomicModifyIORef' counter (\a -> (a + 1, a)))
+                    let name = "radio" <> Text.pack (show n)
 
-                checkedValRef <- liftIO (IORef.newIORef Nothing)
+                    let id = name <> "-" <> key
 
-                let process (key, alternativeType) = do
-                        let checked = key == key₀
+                    setAttribute input "class" "form-check-input"
+                    setAttribute input "type"  "radio"
+                    setAttribute input "name"  name
+                    setAttribute input "id"    id
 
-                        input <- createElement "input"
+                    Monad.when checked (setAttribute input "checked" "")
 
-                        let name = "radio" <> Text.pack (show n)
+                    label <- createElement "label"
 
-                        let id = name <> "-" <> key
+                    setAttribute label "class" "form-check-label"
+                    setAttribute label "for"   id
 
-                        setAttribute input "class" "form-check-input"
-                        setAttribute input "type"  "radio"
-                        setAttribute input "name"  name
-                        setAttribute input "id"    id
-
-                        Monad.when checked (setAttribute input "checked" "")
-
-                        label <- createElement "label"
-
-                        setAttribute label "class" "form-check-label"
-                        setAttribute label "for"   id
-
-                        case alternativeType of
-                            Type.Record{ fields = Type.Fields kts _ } | null kts -> do
-                                setTextContent label key
-                            _ -> do
-                                setTextContent label (key <> ":")
+                    case type_ of
+                        Type.Record{ fields = Type.Fields kts _ } | null kts -> do
+                            setTextContent label key
+                        _ -> do
+                            setTextContent label (key <> ":")
 
 
-                        fieldset <- createElement "fieldset"
+                    fieldset <- createElement "fieldset"
 
-                        setDisabled fieldset (not checked)
+                    setDisabled fieldset (not checked)
 
-                        liftIO (Monad.when checked (IORef.writeIORef checkedValRef (Just fieldset)))
+                    liftIO (Monad.when checked (IORef.writeIORef checkedValRef (Just fieldset)))
 
-                        let nest x = x{ renderOutput = newRenderOutput }
-                              where
-                                newRenderOutput value = do
-                                    enabled <- getChecked input
-
-                                    Monad.when enabled (renderOutput x (Alternative key value))
-
-                        (_, reader) <- liftIO (renderInput (key : path) alternativeType)
-
-                        (nestedInput, nestedInvoke, nestedRefresh) <- Reader.withReaderT nest reader
-
-                        replaceChild fieldset nestedInput
-
-                        div <- createElement "div"
-
-                        setAttribute div "class" "form-check"
-
-                        replaceChildren div (Array.fromList [ input, label, fieldset ])
-
-                        liftIO do
-                            let update = do
-                                    setSessionStorage (renderPath path type_) key
-
-                                    let adapt m = (Just fieldset, m)
-
-                                    oldFieldset <- IORef.atomicModifyIORef' checkedValRef adapt
-
-                                    traverse_ (\x -> setDisabled x True) oldFieldset
-
-                                    setDisabled fieldset False
-
-                                    Monad.when live nestedInvoke
-
-                            callback <- Callback.asyncCallback update
-
-                            addEventListener input "input" callback
-
-                        let invoke = do
+                    let nest x = x{ renderOutput = newRenderOutput }
+                          where
+                            newRenderOutput value = do
                                 enabled <- getChecked input
 
-                                Monad.when enabled nestedInvoke
+                                Monad.when enabled (renderOutput x (Alternative key value))
 
-                        return (div, invoke, nestedRefresh)
+                    let (_, reader) = renderInput type_
 
-                results <- traverse process keyTypes
+                    (nestedInput, nestedInvoke, nestedRefresh) <- Reader.withReaderT nest reader
 
-                let (children, invokes, refreshOutputs) = unzip3 results
+                    replaceChild fieldset nestedInput
 
-                div <- createElement "div"
+                    div <- createElement "div"
 
-                replaceChildren div (Array.fromList children)
+                    setAttribute div "class" "form-check"
 
-                let invoke = sequence_ invokes
+                    replaceChildren div (Array.fromList [ input, label, fieldset ])
 
-                let refreshOutput = sequence_ refreshOutputs
+                    liftIO do
+                        let update = do
+                                let adapt m = (Just fieldset, m)
 
-                liftIO (Monad.when live invoke)
+                                oldFieldset <- IORef.atomicModifyIORef' checkedValRef adapt
 
-                return (div, invoke, refreshOutput)
+                                traverse_ (\x -> setDisabled x True) oldFieldset
 
-renderInput path optionalType@Type.Optional{ type_ } = do
-    maybeText <- getSessionStorage (renderPath path optionalType)
+                                setDisabled fieldset False
 
-    maybeEnabled <- fromStorage maybeText
+                                Monad.when live nestedInvoke
 
-    let enabled = case maybeEnabled of
-            Just b -> b
-            Nothing -> False
+                        callback <- Callback.asyncCallback update
 
-    (start, reader) <- renderInput ("?" : path) type_
+                        addEventListener input "input" callback
 
-    let value₀ =
-            if enabled
-            then Application (Value.Builtin Syntax.Some) start
-            else Value.Scalar Null
+                    let invoke = do
+                            enabled <- getChecked input
 
-    return $ (,) value₀ do
+                            Monad.when enabled nestedInvoke
+
+                    return (div, invoke, nestedRefresh)
+
+            results <- traverse process (zip (True : repeat False) keyTypes)
+
+            let (children, invokes, refreshOutputs) = unzip3 results
+
+            div <- createElement "div"
+
+            replaceChildren div (Array.fromList children)
+
+            let invoke = sequence_ invokes
+
+            let refreshOutput = sequence_ refreshOutputs
+
+            liftIO (Monad.when live invoke)
+
+            return (div, invoke, refreshOutput)
+
+renderInput Type.Optional{ type_ } = do
+    let (_, reader) = renderInput type_
+
+    (,) (Value.Scalar Null) do
         RenderInput{ live } <- Reader.ask
 
         input <- createElement "input"
@@ -1138,13 +933,10 @@ renderInput path optionalType@Type.Optional{ type_ } = do
         setAttribute input "type"  "checkbox"
         setAttribute input "class" "form-check-input"
 
-        setChecked input enabled
-
         let nest x = x{ renderOutput = newRenderOutput }
               where
                 newRenderOutput value = do
                     checked <- getChecked input
-
                     if checked
                         then do
                             renderOutput x (Application (Value.Builtin Syntax.Some) value)
@@ -1165,8 +957,6 @@ renderInput path optionalType@Type.Optional{ type_ } = do
             let update = do
                     checked <- getChecked input
 
-                    setSessionStorage (renderPath path optionalType) (toStorage checked)
-
                     setDisabled fieldset (not checked)
 
                     Monad.when live nestedInvoke
@@ -1179,28 +969,11 @@ renderInput path optionalType@Type.Optional{ type_ } = do
 
         return (div, nestedInvoke, nestedRefresh)
 
-renderInput path listType@Type.List{ type_ } = do
-    maybeText <- getSessionStorage (renderPath path listType)
+renderInput Type.List{ type_ } = do
+    let (_, reader) = renderInput type_
 
-    maybeIndex <- fromStorage maybeText
-
-    let length = case maybeIndex of
-            Just n -> n :: Natural
-            Nothing -> 0
-
-    let process index = do
-            renderInput (Text.pack (show (index :: Integer)) : path) type_
-
-    results <- traverse process [ 0 .. (fromIntegral length - 1) ]
-
-    let (starts, readers) = unzip results
-
-    let seq₀ = Seq.fromList starts
-
-    return $ (,) (Value.List seq₀) do
+    (,) (Value.List mempty) do
         RenderInput{ live } <- Reader.ask
-
-        childrenRef <- liftIO (IORef.newIORef Seq.empty)
 
         plus <- createElement "button"
 
@@ -1209,158 +982,131 @@ renderInput path listType@Type.List{ type_ } = do
 
         setTextContent plus "+"
 
-        minus <- createElement "button"
+        add <- createElement "li"
 
-        setAttribute minus "type"    "button"
-        setAttribute minus "class"   "btn btn-danger"
-        setDisplay minus "none"
+        replaceChild add plus
 
-        setTextContent minus "-"
+        childrenRef <- liftIO (IORef.newIORef IntMap.empty)
 
-        buttons <- createElement "li"
+        input <- Reader.ask
 
-        replaceChildren buttons (Array.fromList [ plus, minus ])
+        insert <- (liftIO . Callback.asyncCallback) do
+            minus <- createElement "button"
+
+            setAttribute minus "type"    "button"
+            setAttribute minus "class"   "btn btn-danger"
+            setAttribute minus "display" "inline"
+
+            setTextContent minus "-"
+
+            span <- createElement "span"
+
+            setTextContent span " "
+
+            li <- createElement "li"
+
+            i <- do
+                children <- IORef.readIORef childrenRef
+
+                return case IntMap.lookupMax children of
+                    Nothing -> 0
+                    Just (n, _) -> n + 1
+
+            delete <- Callback.asyncCallback do
+                IORef.atomicModifyIORef' childrenRef (\m -> (IntMap.delete i m, ()))
+
+                remove li
+
+            addEventListener minus "click" delete
+
+            let nest x = x{ renderOutput = newRenderOutput }
+                  where
+                    newRenderOutput value = do
+                        let update m = case IntMap.lookup i m of
+                                Nothing ->
+                                    IntMap.insert i (This value) m
+
+                                Just (This _) ->
+                                    IntMap.insert i (This value) m
+                                Just (That (invoke, refreshOutput)) ->
+                                    IntMap.insert i (These value (invoke, refreshOutput)) m
+                                Just (These _ (invoke, refreshOutput)) ->
+                                    IntMap.insert i (These value (invoke, refreshOutput)) m
+
+                        let adapt m = let m' = update m in (m', m')
+
+                        children <- IORef.atomicModifyIORef' childrenRef adapt
+
+                        let values = do
+                                these <- IntMap.elems children
+
+                                case these of
+                                    This v -> return v
+                                    That _ -> []
+                                    These v _ -> return v
+
+                        renderOutput x (Value.List (Seq.fromList values))
+
+            result <- Maybe.runMaybeT (Reader.runReaderT reader (nest input))
+
+            case result of
+                Nothing -> do
+                    replaceChildren li (Array.fromList [ minus ])
+
+                Just (nestedInput, nestedInvoke, nestedRefresh) -> do
+                    let update m = case IntMap.lookup i m of
+                            Nothing ->
+                                IntMap.insert i (That (nestedInvoke, nestedRefresh)) m
+
+                            Just (This value) ->
+                                IntMap.insert i (These value (nestedInvoke, nestedRefresh)) m
+                            Just (That _)  ->
+                                IntMap.insert i (That (nestedInvoke, nestedRefresh)) m
+                            Just (These value _) ->
+                                IntMap.insert i (These value (nestedInvoke, nestedRefresh)) m
+
+                    IORef.atomicModifyIORef' childrenRef (\m -> (update m, ()))
+
+                    replaceChildren li (Array.fromList [ minus, span, nestedInput ])
+
+                    Monad.when live nestedInvoke
+
+            before add li
+
+        addEventListener plus "click" insert
 
         ul <- createElement "ul"
 
         setAttribute ul "class" "list-unstyled"
 
-        replaceChild ul buttons
-
-        input <- Reader.ask
-
-        let insert maybeReader = do
-                setDisplay minus "inline"
-
-                children₀ <- IORef.readIORef childrenRef
-
-                let index = Seq.length children₀
-
-                reader <-  case maybeReader of
-                        Just reader -> do
-                            return reader
-                        Nothing -> do
-                            (_, reader) <- process (fromIntegral index)
-
-                            return reader
-
-                IORef.atomicModifyIORef' childrenRef (\s -> (s |> _Child, ()))
-
-                setSessionStorage (renderPath path listType) (toStorage (fromIntegral index + 1 :: Natural))
-
-                let nest x = x{ renderOutput = newRenderOutput }
-                      where
-                        newRenderOutput value = do
-                            let adjust =
-                                    Seq.adjust (\c -> c{ value = Just value }) index
-
-                            let adapt s = let s' = adjust s in (s', s')
-
-                            children <- IORef.atomicModifyIORef' childrenRef adapt
-
-                            let values = do
-                                    Child{ value = Just v } <- toList children
-
-                                    return v
-
-                            renderOutput x (Value.List (Seq.fromList values))
-
-                result <- Maybe.runMaybeT (Reader.runReaderT reader (nest input))
-
-                li <- createElement "li"
-
-                case result of
-                    Nothing -> do
-                        return ()
-
-                    Just (nestedInput, nestedInvoke, nestedRefresh) -> do
-                        replaceChild li nestedInput
-
-                        let adjust =
-                                Seq.adjust (\c -> c{ refreshOutput = nestedRefresh, li = Just li }) index
-
-                        IORef.atomicModifyIORef' childrenRef (\m -> (adjust m, ()))
-
-                        Monad.when live nestedInvoke
-
-                before buttons li
-
-        liftIO (traverse_ (insert . Just) readers)
-
-        insertCallback <- (liftIO . Callback.asyncCallback) (insert Nothing)
-
-        addEventListener plus "click" insertCallback
-
-        RenderInput{ renderOutput } <- Reader.ask
+        replaceChild ul add
 
         let invoke = do
                 children <- IORef.readIORef childrenRef
 
-                let values = do
-                        Child{ value = Just v } <- toList children
+                sequence_ do
+                    these <- IntMap.elems children
 
-                        return v
-
-                renderOutput (Value.List (Seq.fromList values))
-
-        delete <- (liftIO . Callback.asyncCallback) do
-            children <- IORef.readIORef childrenRef
-
-            case Seq.viewr children of
-                prefix :> Child{ li } -> do
-                    Monad.when (Seq.null prefix) (setDisplay minus "none")
-
-                    setSessionStorage (renderPath path listType) (toStorage (fromIntegral (Seq.length prefix) :: Natural))
-
-                    traverse_ remove li
-
-                    IORef.writeIORef childrenRef prefix
-
-                    Monad.when live invoke
-
-                EmptyR -> do
-                    return ()
-
-        addEventListener minus "click" delete
+                    return case these of
+                        This _ -> mempty
+                        That (nestedInvoke, _) -> nestedInvoke
+                        These _ (nestedInvoke, _) -> nestedInvoke
 
         let refreshOutput = do
                 children <- IORef.readIORef childrenRef
 
                 sequence_ do
-                    Child{ refreshOutput  = nestedRefresh } <- children
+                    these <- IntMap.elems children
 
-                    return nestedRefresh
+                    return case these of
+                        This _ -> mempty
+                        That (_, nestedRefresh) -> nestedRefresh
+                        These _ (_, nestedRefresh) -> nestedRefresh
 
         return (ul, invoke, refreshOutput)
 
-renderInput path type_ = do
-    renderInputDefault path type_
-
-data Child = Child
-    { value :: Maybe Value
-    , refreshOutput :: IO ()
-    , li :: Maybe JSVal
-    }
-
-_Child :: Child
-_Child = Child
-    { value = Nothing
-    , refreshOutput = mempty
-    , li = Nothing
-    }
-
-renderInputDefault
-    :: [Text]
-    -> Type Location
-    -> IO (Value, ReaderT RenderInput (MaybeT IO) (JSVal, IO (), IO ()))
-renderInputDefault path type_ = do
-    maybeText <- getSessionStorage (renderPath path type_)
-
-    let text₀ = case maybeText of
-            Just t -> t
-            Nothing -> ""
-
-    return $ (,) (Value.Scalar Null) do
+renderInput type_ = do
+    (,) (Value.Scalar Null) do
         RenderInput{ keyToMethods, live, renderOutput } <- Reader.ask
 
         textarea <- createElement "textarea"
@@ -1377,12 +1123,8 @@ renderInputDefault path type_ = do
 
         codeInput <- setupCodemirrorInput textarea
 
-        setCodeValue codeInput text₀
-
         let get = do
                 text <- getValue codeInput
-
-                setSessionStorage (renderPath path type_) text
 
                 let input_ = Code "(input)" text
 
@@ -1563,8 +1305,8 @@ createForm showTabs output = do
             replaceChild output error
 
     let setSuccess type_ value render = do
-            setCodeValue codeOutput (valueToText value)
-            setCodeValue typeOutput (typeToText type_)
+            setValue codeOutput (valueToText value)
+            setValue typeOutput (typeToText type_)
 
             refreshInput <- render htmlWrapper
 
@@ -1691,7 +1433,7 @@ main = do
                     replaceChild li a
 
                     callback <- (liftIO . Callback.asyncCallback) do
-                        setCodeValue codeInput code
+                        setValue codeInput code
 
                         elements <- getElementsByClassName "example-tab"
 
@@ -1702,7 +1444,7 @@ main = do
 
                         addClass element "active"
 
-                    Monad.when active (setCodeValue codeInput code)
+                    Monad.when active (setValue codeInput code)
 
                     addEventListener a "click" callback
 
@@ -1785,6 +1527,6 @@ main = do
     Monad.when hasExpression do
         expression <- getParam params "expression"
 
-        setCodeValue codeInput (URI.Encode.decodeText expression)
+        setValue codeInput (URI.Encode.decodeText expression)
 
     debouncedInterpret ()
