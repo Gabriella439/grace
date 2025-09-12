@@ -575,16 +575,18 @@ renderValue keyToMethods counter parent Type.Function{ input, output } function 
                 Right r -> do
                     return r
 
-    renderOutput <- debounce render
+    debouncedRender <- debounce render
 
     if Lens.has Value.effects function
         then do
             (_, reader) <- renderInput [] input
 
+            let renderOutput Submit = debouncedRender
+                renderOutput Change = mempty
+
             result <- Maybe.runMaybeT (Reader.runReaderT reader RenderInput
                 { keyToMethods
                 , renderOutput
-                , live = False
                 , counter
                 })
 
@@ -604,7 +606,7 @@ renderValue keyToMethods counter parent Type.Function{ input, output } function 
 
                     hr <- createElement "hr"
 
-                    callback <- Callback.asyncCallback invoke
+                    callback <- Callback.asyncCallback (invoke Submit)
 
                     addEventListener button "click" callback
 
@@ -615,10 +617,11 @@ renderValue keyToMethods counter parent Type.Function{ input, output } function 
         else do
             (_, reader) <- renderInput [] input
 
+            let renderOutput _ = debouncedRender
+
             result <- Maybe.runMaybeT (Reader.runReaderT reader RenderInput
                 { keyToMethods
                 , renderOutput
-                , live = True
                 , counter
                 })
 
@@ -629,7 +632,7 @@ renderValue keyToMethods counter parent Type.Function{ input, output } function 
                     mempty
 
                 Just (inputVal, invoke, refreshOutput) -> do
-                    invoke
+                    invoke Submit
 
                     hr <- createElement "hr"
 
@@ -653,28 +656,33 @@ renderDefault parent value = do
 
     mempty
 
+data Mode
+    = Change
+    -- ^ The function is being run in response to a form input changing
+    | Submit
+    -- ^ The function is being run in response to form submission
+
 data RenderInput = RenderInput
     { keyToMethods :: Text -> Methods
-    , renderOutput :: Value -> IO ()
-    , live :: Bool
+    , renderOutput :: Mode -> Value -> IO ()
     , counter :: IORef Natural
     }
 
 register
-    :: MonadIO m => JSVal -> MaybeT IO Value -> ReaderT RenderInput m (IO ())
+    :: MonadIO m
+    => JSVal -> MaybeT IO Value -> ReaderT RenderInput m (Mode -> IO ())
 register input get = do
-    RenderInput{ live, renderOutput } <- Reader.ask
+    RenderInput{ renderOutput } <- Reader.ask
 
     liftIO do
-        let invoke = do
+        let invoke mode = do
                 maybeValue <- Maybe.runMaybeT get
 
-                traverse_ renderOutput maybeValue
+                traverse_ (renderOutput mode) maybeValue
 
-        Monad.when live do
-            callback <- Callback.asyncCallback invoke
+        callback <- Callback.asyncCallback (invoke Change)
 
-            addEventListener input "input" callback
+        addEventListener input "input" callback
 
         return invoke
 
@@ -703,7 +711,7 @@ toStorage a = Pretty.toText (Normalize.quote (encode a))
 renderInput
     :: [Text]
     -> Type Location
-    -> IO (Value, ReaderT RenderInput (MaybeT IO) (JSVal, IO (), IO ()))
+    -> IO (Value, ReaderT RenderInput (MaybeT IO) (JSVal, Mode -> IO (), IO ()))
 renderInput path type_@Type.Scalar{ scalar = Monotype.Bool } = do
     maybeText <- getSessionStorage (renderPath path type_)
 
@@ -949,14 +957,14 @@ renderInput path Type.Record{ fields = Type.Fields keyTypes _ } = do
         let inner (key, reader) = do
                 let nest x = x{ renderOutput = newRenderOutput }
                       where
-                        newRenderOutput value = do
+                        newRenderOutput mode value = do
                             let update m = (m', m')
                                   where
                                     m' = HashMap.insert key value m
 
                             m <- liftIO (IORef.atomicModifyIORef' ref update)
 
-                            renderOutput x (Value.Record m)
+                            renderOutput x mode (Value.Record m)
 
                 (inputField, _, refreshField) <- Reader.withReaderT nest reader
 
@@ -990,10 +998,10 @@ renderInput path Type.Record{ fields = Type.Fields keyTypes _ } = do
 
         RenderInput{ renderOutput } <- Reader.ask
 
-        let invoke = do
+        let invoke mode = do
                 m <- IORef.readIORef ref
 
-                renderOutput (Value.Record m)
+                renderOutput mode (Value.Record m)
 
         let refreshOutput = sequence_ refreshOutputs
 
@@ -1014,7 +1022,7 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
             (start, _) <- renderInput (key₀ : path) type_₀
 
             return $ (,) (Value.Alternative key₀ start) do
-                RenderInput{ live, counter } <- Reader.ask
+                RenderInput{ counter } <- Reader.ask
 
                 n <- liftIO (IORef.atomicModifyIORef' counter (\a -> (a + 1, a)))
 
@@ -1056,10 +1064,10 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
 
                         let nest x = x{ renderOutput = newRenderOutput }
                               where
-                                newRenderOutput value = do
+                                newRenderOutput mode value = do
                                     enabled <- getChecked input
 
-                                    Monad.when enabled (renderOutput x (Alternative key value))
+                                    Monad.when enabled (renderOutput x mode (Alternative key value))
 
                         (_, reader) <- liftIO (renderInput (key : path) alternativeType)
 
@@ -1074,7 +1082,7 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
                         replaceChildren div (Array.fromList [ input, label, fieldset ])
 
                         liftIO do
-                            let update = do
+                            let update mode = do
                                     setSessionStorage (renderPath path type_) key
 
                                     let adapt m = (Just fieldset, m)
@@ -1085,16 +1093,16 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
 
                                     setDisabled fieldset False
 
-                                    Monad.when live nestedInvoke
+                                    nestedInvoke mode
 
-                            callback <- Callback.asyncCallback update
+                            callback <- Callback.asyncCallback (update Change)
 
                             addEventListener input "input" callback
 
-                        let invoke = do
+                        let invoke mode = do
                                 enabled <- getChecked input
 
-                                Monad.when enabled nestedInvoke
+                                Monad.when enabled (nestedInvoke mode)
 
                         return (div, invoke, nestedRefresh)
 
@@ -1106,11 +1114,11 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
 
                 replaceChildren div (Array.fromList children)
 
-                let invoke = sequence_ invokes
+                let invoke mode = sequence_ (map ($ mode) invokes)
 
                 let refreshOutput = sequence_ refreshOutputs
 
-                liftIO (Monad.when live invoke)
+                liftIO (invoke Change)
 
                 return (div, invoke, refreshOutput)
 
@@ -1131,8 +1139,6 @@ renderInput path optionalType@Type.Optional{ type_ } = do
             else Value.Scalar Null
 
     return $ (,) value₀ do
-        RenderInput{ live } <- Reader.ask
-
         input <- createElement "input"
 
         setAttribute input "type"  "checkbox"
@@ -1142,14 +1148,14 @@ renderInput path optionalType@Type.Optional{ type_ } = do
 
         let nest x = x{ renderOutput = newRenderOutput }
               where
-                newRenderOutput value = do
+                newRenderOutput mode value = do
                     checked <- getChecked input
 
                     if checked
                         then do
-                            renderOutput x (Application (Value.Builtin Syntax.Some) value)
+                            renderOutput x mode (Application (Value.Builtin Syntax.Some) value)
                         else do
-                            renderOutput x (Value.Scalar Null)
+                            renderOutput x mode (Value.Scalar Null)
 
         (nestedInput, nestedInvoke, nestedRefresh) <- Reader.withReaderT nest reader
 
@@ -1162,20 +1168,20 @@ renderInput path optionalType@Type.Optional{ type_ } = do
         replaceChildren div (Array.fromList [input, fieldset])
 
         liftIO do
-            let update = do
+            let update mode = do
                     checked <- getChecked input
 
                     setSessionStorage (renderPath path optionalType) (toStorage checked)
 
                     setDisabled fieldset (not checked)
 
-                    Monad.when live nestedInvoke
+                    nestedInvoke mode
 
-            callback <- Callback.asyncCallback update
+            callback <- Callback.asyncCallback (update Change)
 
             addEventListener input "input" callback
 
-            update
+            update Change
 
         return (div, nestedInvoke, nestedRefresh)
 
@@ -1198,8 +1204,6 @@ renderInput path listType@Type.List{ type_ } = do
     let seq₀ = Seq.fromList starts
 
     return $ (,) (Value.List seq₀) do
-        RenderInput{ live } <- Reader.ask
-
         childrenRef <- liftIO (IORef.newIORef Seq.empty)
 
         plus <- createElement "button"
@@ -1250,7 +1254,7 @@ renderInput path listType@Type.List{ type_ } = do
 
                 let nest x = x{ renderOutput = newRenderOutput }
                       where
-                        newRenderOutput value = do
+                        newRenderOutput mode value = do
                             let adjust =
                                     Seq.adjust (\c -> c{ value = Just value }) index
 
@@ -1263,7 +1267,7 @@ renderInput path listType@Type.List{ type_ } = do
 
                                     return v
 
-                            renderOutput x (Value.List (Seq.fromList values))
+                            renderOutput x mode (Value.List (Seq.fromList values))
 
                 result <- Maybe.runMaybeT (Reader.runReaderT reader (nest input))
 
@@ -1281,7 +1285,7 @@ renderInput path listType@Type.List{ type_ } = do
 
                         IORef.atomicModifyIORef' childrenRef (\m -> (adjust m, ()))
 
-                        Monad.when live nestedInvoke
+                        nestedInvoke Change
 
                 before buttons li
 
@@ -1293,7 +1297,7 @@ renderInput path listType@Type.List{ type_ } = do
 
         RenderInput{ renderOutput } <- Reader.ask
 
-        let invoke = do
+        let invoke mode = do
                 children <- IORef.readIORef childrenRef
 
                 let values = do
@@ -1301,7 +1305,7 @@ renderInput path listType@Type.List{ type_ } = do
 
                         return v
 
-                renderOutput (Value.List (Seq.fromList values))
+                renderOutput mode (Value.List (Seq.fromList values))
 
         delete <- (liftIO . Callback.asyncCallback) do
             children <- IORef.readIORef childrenRef
@@ -1316,7 +1320,7 @@ renderInput path listType@Type.List{ type_ } = do
 
                     IORef.writeIORef childrenRef prefix
 
-                    Monad.when live invoke
+                    invoke Change
 
                 EmptyR -> do
                     return ()
@@ -1352,7 +1356,7 @@ _Child = Child
 renderInputDefault
     :: [Text]
     -> Type Location
-    -> IO (Value, ReaderT RenderInput (MaybeT IO) (JSVal, IO (), IO ()))
+    -> IO (Value, ReaderT RenderInput (MaybeT IO) (JSVal, Mode -> IO (), IO ()))
 renderInputDefault path type_ = do
     maybeText <- getSessionStorage (renderPath path type_)
 
@@ -1361,7 +1365,7 @@ renderInputDefault path type_ = do
             Nothing -> ""
 
     return $ (,) (Value.Scalar Null) do
-        RenderInput{ keyToMethods, live, renderOutput } <- Reader.ask
+        RenderInput{ keyToMethods, renderOutput } <- Reader.ask
 
         textarea <- createElement "textarea"
 
@@ -1411,15 +1415,14 @@ renderInputDefault path type_ = do
                         return value
 
         liftIO do
-            let invoke = do
+            let invoke mode = do
                     maybeValue <- Maybe.runMaybeT get
 
-                    traverse_ renderOutput maybeValue
+                    traverse_ (renderOutput mode) maybeValue
 
-            Monad.when live do
-                callback <- Callback.asyncCallback invoke
+            callback <- Callback.asyncCallback (invoke Change)
 
-                onChange codeInput callback
+            onChange codeInput callback
 
             return (div, invoke, refresh codeInput)
 
