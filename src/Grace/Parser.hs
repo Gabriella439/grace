@@ -977,10 +977,17 @@ grammar endsWithBrace = mdo
 
                 let adapt Syntax.Embed{ location, embedded = Path file AsCode } Type.Scalar{ scalar = Monotype.Text } =
                         Syntax.Embed{ location, embedded = Path file AsText }
+                    adapt Syntax.Embed{ location, embedded = Path file AsCode } Type.Scalar{ scalar = Monotype.Key } =
+                        Syntax.Embed{ location, embedded = Path file AsKey }
                     adapt Syntax.Embed{ location, embedded = Grace.Input.URI uri AsCode } Type.Scalar{ scalar = Monotype.Text } =
                         Syntax.Embed
                             { location
                             , embedded = Grace.Input.URI uri AsText
+                            }
+                    adapt Syntax.Embed{ location, embedded = Grace.Input.URI uri AsCode } Type.Scalar{ scalar = Monotype.Key } =
+                        Syntax.Embed
+                            { location
+                            , embedded = Grace.Input.URI uri AsKey
                             }
                     adapt annotated annotation =
                         Syntax.Annotation

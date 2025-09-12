@@ -79,6 +79,11 @@ resolve input = case input of
                         { chunks = Syntax.Chunks text []
                         , location = 0
                         }
+                AsKey -> do
+                    return Syntax.Scalar
+                        { scalar = Syntax.Key text
+                        , location = 0
+                        }
 
             let locate offset = Location{ name, code = text, offset }
 
@@ -107,6 +112,11 @@ resolve input = case input of
                         AsText -> do
                             return Syntax.Text
                                 { chunks = Syntax.Chunks text []
+                                , location = 0
+                                }
+                        AsKey -> do
+                            return Syntax.Scalar
+                                { scalar = Syntax.Key text
                                 , location = 0
                                 }
 
@@ -157,6 +167,11 @@ resolve input = case input of
             AsText -> do
                 return Syntax.Text
                     { chunks = Syntax.Chunks text []
+                    , location = 0
+                    }
+            AsKey -> do
+                return Syntax.Scalar
+                    { scalar = Syntax.Key text
                     , location = 0
                     }
 
@@ -214,9 +229,11 @@ instance Exception ImportError where
         renderedInput = case input of
             URI  uri AsCode -> URI.render uri
             URI  uri AsText -> URI.render uri <> " : Text"
+            URI  uri AsKey  -> URI.render uri <> " : Key"
 
             Path path AsCode -> Text.pack path
             Path path AsText -> Text.pack path <> " : Text"
+            Path path AsKey  -> Text.pack path <> " : Key"
 
             Code _ _  -> "(input)"
 

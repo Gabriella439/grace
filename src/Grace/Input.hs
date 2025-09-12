@@ -69,9 +69,13 @@ data Mode
     -- ^ Interpret the string as Grace code (the default)
     | AsText
     -- ^ Interpret the string as raw text
+    | AsKey
+    -- ^ Interpret the string as raw text
     deriving stock (Eq, Show)
 
 instance Pretty Mode where
     pretty AsCode = mempty
     pretty AsText =
         " " <> Pretty.punctuation ":" <> " " <> Pretty.builtin "Text"
+    pretty AsKey =
+        " " <> Pretty.punctuation ":" <> " " <> Pretty.builtin "Key"
