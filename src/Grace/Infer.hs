@@ -2010,31 +2010,49 @@ infer e₀ = do
 
             return (newSchema, Syntax.Prompt{ arguments = solveSyntax context newArguments, schema = Just newSchema, .. })
 
-        Syntax.HTTP{ location, arguments, schema } -> do
+        Syntax.HTTP{ location, import_, arguments, schema } -> do
             let input = fmap (\_ -> location) (expected @HTTP)
 
             newArguments <- check arguments input
 
-            let newSchema = case schema of
-                    Just output -> output
-                    Nothing -> Type.Scalar{ scalar = Monotype.JSON, .. }
+            newSchema <- case schema of
+                    Just output -> do
+                        return output
+                    Nothing
+                        | import_ -> do
+                            existential <- fresh
+
+                            push (Context.UnsolvedType existential)
+
+                            return Type.UnsolvedType{..}
+                        | otherwise -> do
+                            return Type.Scalar{ scalar = Monotype.JSON, .. }
 
             context <- get
 
-            return (newSchema, Syntax.HTTP{ arguments = solveSyntax context newArguments, schema = Just newSchema, .. })
+            return (newSchema, Syntax.HTTP{ import_, arguments = solveSyntax context newArguments, schema = Just newSchema, .. })
 
-        Syntax.Read{ location, arguments, schema } -> do
+        Syntax.Read{ location, import_, arguments, schema } -> do
             let input = fmap (\_ -> location) (expected @Text)
 
             newArguments <- check arguments input
 
-            let newSchema = case schema of
-                    Just output -> output
-                    Nothing -> Type.Scalar{ scalar = Monotype.JSON, .. }
+            newSchema <- case schema of
+                    Just output -> do
+                        return output
+                    Nothing
+                        | import_ -> do
+                            existential <- fresh
+
+                            push (Context.UnsolvedType existential)
+
+                            return Type.UnsolvedType{..}
+                        | otherwise -> do
+                            return Type.Scalar{ scalar = Monotype.JSON, .. }
 
             context <- get
 
-            return (newSchema, Syntax.Read{ arguments = solveSyntax context newArguments, schema = Just newSchema, .. })
+            return (newSchema, Syntax.Read{ import_, arguments = solveSyntax context newArguments, schema = Just newSchema, .. })
 
         -- All the type inference rules for scalars go here.  This part is
         -- pretty self-explanatory: a scalar literal returns the matching
@@ -3253,25 +3271,27 @@ check Syntax.Prompt{ schema = Nothing, .. } annotation = do
 
     return Syntax.Prompt{ arguments = newArguments, schema = Just annotation, .. }
 
-check Syntax.HTTP{ schema = Nothing, .. } annotation = do
+check Syntax.HTTP{ import_, schema = Nothing, .. } annotation = do
     let input = fmap (\_ -> location) (expected @HTTP)
 
     newArguments <- check arguments input
 
     context₀ <- get
 
-    subtype (Context.solveType context₀ annotation) Type.Scalar{ location, scalar = Monotype.JSON }
+    Monad.unless import_ do
+        subtype (Context.solveType context₀ annotation) Type.Scalar{ location, scalar = Monotype.JSON }
 
     context₁ <- get
 
     return Syntax.HTTP{ arguments = newArguments, schema = Just (Context.solveType context₁ annotation), .. }
 
-check Syntax.Read{ schema = Nothing, .. } annotation = do
+check Syntax.Read{ import_, schema = Nothing, .. } annotation = do
     newArguments <- check arguments (fmap (\_ -> location) (expected @Text))
 
     context₀ <- get
 
-    subtype (Context.solveType context₀ annotation) Type.Scalar{ location, scalar = Monotype.JSON }
+    Monad.unless import_ do
+        subtype (Context.solveType context₀ annotation) Type.Scalar{ location, scalar = Monotype.JSON }
 
     context₁ <- get
 

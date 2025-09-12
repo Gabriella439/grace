@@ -102,18 +102,31 @@ operator
 
 application
   ; Keyword to prompt an LLM to generate a plain value (the default) or Grace
-  ; code (when given `code: true` as an argument)
+  ; code (when preceded with `import`)
   ;
   ; The `prompt` keyword technically only takes one argument.  Arguments after
   ; the first one are treated as ordinary function applications (which comes in
   ; handy if you're generating Grace code for a function)
-  = "prompt" 1*projection
+  = [ "import" ] "prompt" projection
+
+  ; Keyword to make an HTTP request to fetch a JSON value (the default) or Grace
+  ; code (when preceded with `import`)
+  ;
+  ; Just like the `prompt` keyword, the `http` keyword only takes one argument
+  ; and subsequent arguments are ordinary function applications
+  = [ "import" ] "http" projection
+
+  ; Keyword to convert text to a JSON value (the default) or Grace code (when
+  ; preceded with `import`)
+  ;
+  ; Just like the `prompt` keyword, the `read` keyword only takes one argument
+  ; and subsequent arguments are ordinary function applications
+  = [ "import" ] "read" projection
 
   ; Keyword to pattern match on a union
   ;
-  ; Just like the `prompt` keyword, the `fold` keyword
-  ; only takes one argument and subsequent arguments are
-  ; ordinary function applications
+  ; Just like the `prompt` keyword, the `fold` keyword only takes one argument
+  ; and subsequent arguments are ordinary function applications
   / "fold" 1*projection
 
   ; Ordinary function application

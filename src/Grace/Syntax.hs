@@ -133,9 +133,9 @@ data Syntax s a
     --   "a"
     --   >>> pretty @(Syntax () Void) (Text () (Chunks "a" [("x", "b")]))
     --   "a${x}b"
-    | Prompt{ location :: s, arguments :: Syntax s a, schema :: Maybe (Type s) }
-    | HTTP{ location :: s, arguments :: Syntax s a, schema :: Maybe (Type s) }
-    | Read{ location :: s, arguments :: Syntax s a, schema :: Maybe (Type s) }
+    | Prompt{ location :: s, import_ :: Bool, arguments :: Syntax s a, schema :: Maybe (Type s) }
+    | HTTP{ location :: s, import_ :: Bool, arguments :: Syntax s a, schema :: Maybe (Type s) }
+    | Read{ location :: s, import_ :: Bool, arguments :: Syntax s a, schema :: Maybe (Type s) }
     | Scalar { location :: s, scalar :: Scalar }
     | Operator { location :: s, left :: Syntax s a, operatorLocation :: s, operator :: Operator, right :: Syntax s a }
     -- ^
@@ -255,14 +255,14 @@ instance Monad (Syntax ()) where
       where
         onChunk (interpolation, text) = (interpolation >>= f, text)
 
-    Prompt{ location, arguments, schema } >>= f =
-        Prompt{ location, arguments = arguments >>= f, schema }
+    Prompt{ location, import_, arguments, schema } >>= f =
+        Prompt{ location, import_, arguments = arguments >>= f, schema }
 
-    HTTP{ location, arguments, schema } >>= f =
-        HTTP{ location, arguments = arguments >>= f, schema }
+    HTTP{ location, import_, arguments, schema } >>= f =
+        HTTP{ location, import_, arguments = arguments >>= f, schema }
 
-    Read{ location, arguments, schema } >>= f =
-        Read{ location, arguments = arguments >>= f, schema }
+    Read{ location, import_, arguments, schema } >>= f =
+        Read{ location, import_, arguments = arguments >>= f, schema }
 
     Scalar{ location, scalar } >>= _ =
         Scalar{ location, scalar }
@@ -420,20 +420,20 @@ instance Plated (Syntax s a) where
 
                 return Text{ location, chunks = Chunks text₀ newRest }
 
-            Prompt{ location, arguments, schema } -> do
+            Prompt{ location, import_, arguments, schema } -> do
                 newArguments <- onSyntax arguments
 
-                return Prompt{ location, arguments = newArguments, schema }
+                return Prompt{ location, import_, arguments = newArguments, schema }
 
-            HTTP{ location, arguments, schema } -> do
+            HTTP{ location, import_, arguments, schema } -> do
                 newArguments <- onSyntax arguments
 
-                return HTTP{ location, arguments = newArguments, schema }
+                return HTTP{ location, import_, arguments = newArguments, schema }
 
-            Read{ location, arguments, schema } -> do
+            Read{ location, import_, arguments, schema } -> do
                 newArguments <- onSyntax arguments
 
-                return Read{ location, arguments = newArguments, schema }
+                return Read{ location, import_, arguments = newArguments, schema }
 
             Scalar{ location, scalar } -> do
                 pure Scalar{ location, scalar }
@@ -514,20 +514,23 @@ instance Bifunctor Syntax where
     first f Text{ location, chunks } =
         Text{ location = f location, chunks = first f chunks }
 
-    first f Prompt{ location, arguments, schema } = Prompt
+    first f Prompt{ location, import_, arguments, schema } = Prompt
         { location = f location
+        , import_
         , arguments = first f arguments
         , schema = fmap (fmap f) schema
         }
 
-    first f HTTP{ location, arguments, schema } = HTTP
+    first f HTTP{ location, import_, arguments, schema } = HTTP
         { location = f location
+        , import_
         , arguments = first f arguments
         , schema = fmap (fmap f) schema
         }
 
-    first f Read{ location, arguments, schema } = Read
+    first f Read{ location, import_, arguments, schema } = Read
         { location = f location
+        , import_
         , arguments = first f arguments
         , schema = fmap (fmap f) schema
         }
@@ -710,18 +713,18 @@ types onType Annotation{ location, annotated, annotation } = do
     newAnnotation <- onType annotation
 
     return Annotation{ location, annotated, annotation = newAnnotation }
-types onType Prompt{ location, arguments, schema } = do
+types onType Prompt{ location, import_, arguments, schema } = do
     newSchema <- traverse onType schema
 
-    return Prompt{ location, arguments, schema = newSchema }
-types onType HTTP{ location, arguments, schema } = do
+    return Prompt{ location, import_, arguments, schema = newSchema }
+types onType HTTP{ location, import_, arguments, schema } = do
     newSchema <- traverse onType schema
 
-    return HTTP{ location, arguments, schema = newSchema }
-types onType Read{ location, arguments, schema } = do
+    return HTTP{ location, import_, arguments, schema = newSchema }
+types onType Read{ location, import_, arguments, schema } = do
     newSchema <- traverse onType schema
 
-    return Read{ location, arguments, schema = newSchema }
+    return Read{ location, import_, arguments, schema = newSchema }
 types onType Let{ location, bindings, body } = do
     newBindings <- traverse onBinding bindings
 
@@ -1004,10 +1007,11 @@ prettyExpression If{ predicate, ifTrue, ifFalse } =
         <>  Pretty.hardline
         <>  "  "
         <>  Pretty.nest 2 (prettyExpression ifFalse)
-prettyExpression Prompt{ arguments, schema = Just schema } =
+prettyExpression Prompt{ arguments, import_, schema = Just schema } =
     Pretty.group (Pretty.flatAlt long short)
   where
-    short = keyword "prompt"
+    short = prefix
+        <>  keyword "prompt"
         <>  " "
         <>  prettyProjectExpression arguments
         <>  " "
@@ -1015,7 +1019,8 @@ prettyExpression Prompt{ arguments, schema = Just schema } =
         <>  " "
         <>  pretty schema
 
-    long =  keyword "prompt"
+    long =  prefix
+        <>  keyword "prompt"
         <>  Pretty.hardline
         <>  "  "
         <>  Pretty.nest 2 (prettyProjectExpression arguments)
@@ -1024,10 +1029,13 @@ prettyExpression Prompt{ arguments, schema = Just schema } =
         <>  Pretty.operator ":"
         <>  " "
         <>  Pretty.nest 4 (pretty schema)
-prettyExpression HTTP{ arguments, schema = Just schema } =
+
+    prefix = if import_ then keyword "import" <> " " else mempty
+prettyExpression HTTP{ arguments, import_, schema = Just schema } =
     Pretty.group (Pretty.flatAlt long short)
   where
-    short = keyword "http"
+    short = prefix
+        <>  keyword "http"
         <>  " "
         <>  prettyProjectExpression arguments
         <>  " "
@@ -1035,7 +1043,8 @@ prettyExpression HTTP{ arguments, schema = Just schema } =
         <>  " "
         <>  pretty schema
 
-    long =  keyword "http"
+    long =  prefix
+        <>  keyword "http"
         <>  Pretty.hardline
         <>  "  "
         <>  Pretty.nest 2 (prettyProjectExpression arguments)
@@ -1044,10 +1053,13 @@ prettyExpression HTTP{ arguments, schema = Just schema } =
         <>  Pretty.operator ":"
         <>  " "
         <>  Pretty.nest 4 (pretty schema)
-prettyExpression Read{ arguments, schema = Just schema } =
+
+    prefix = if import_ then keyword "import" <> " " else mempty
+prettyExpression Read{ arguments, import_, schema = Just schema } =
     Pretty.group (Pretty.flatAlt long short)
   where
-    short = keyword "read"
+    short = prefix
+        <>  keyword "read"
         <>  " "
         <>  prettyProjectExpression arguments
         <>  " "
@@ -1064,6 +1076,8 @@ prettyExpression Read{ arguments, schema = Just schema } =
         <>  Pretty.operator ":"
         <>  " "
         <>  Pretty.nest 4 (pretty schema)
+
+    prefix = if import_ then keyword "import" <> " " else mempty
 prettyExpression Annotation{ annotated, annotation } =
     Pretty.group (Pretty.flatAlt long short)
   where
@@ -1190,13 +1204,19 @@ prettyApplicationExpression expression
         <>  " "
         <>  prettyProjectExpression argument
     prettyShort Fold{ handlers } =
-            keyword "fold" <> " " <> prettyProjectExpression handlers
-    prettyShort Prompt{ arguments, schema = Nothing } =
-            keyword "prompt" <> " " <> prettyProjectExpression arguments
-    prettyShort HTTP{ arguments, schema = Nothing } =
-            keyword "http" <> " " <> prettyProjectExpression arguments
-    prettyShort Read{ arguments, schema = Nothing } =
-            keyword "read" <> " " <> prettyProjectExpression arguments
+        keyword "fold" <> " " <> prettyProjectExpression handlers
+    prettyShort Prompt{ arguments, import_, schema = Nothing } =
+        prefix <> keyword "prompt" <> " " <> prettyProjectExpression arguments
+      where
+        prefix = if import_ then keyword "import" <> " " else mempty
+    prettyShort HTTP{ arguments, import_, schema = Nothing } =
+        prefix <> keyword "http" <> " " <> prettyProjectExpression arguments
+      where
+        prefix = if import_ then keyword "import" <> " " else mempty
+    prettyShort Read{ arguments, import_, schema = Nothing } =
+        prefix <> keyword "read" <> " " <> prettyProjectExpression arguments
+      where
+        prefix = if import_ then keyword "import" <> " " else mempty
     prettyShort other =
         prettyProjectExpression other
 
@@ -1210,21 +1230,30 @@ prettyApplicationExpression expression
         <>  Pretty.hardline
         <>  "  "
         <>  Pretty.nest 2 (prettyProjectExpression handlers)
-    prettyLong Prompt{ arguments } =
-            keyword "prompt"
+    prettyLong Prompt{ import_, arguments } =
+            prefix
+        <>  keyword "prompt"
         <>  Pretty.hardline
         <>  "  "
         <>  Pretty.nest 2 (prettyProjectExpression arguments)
-    prettyLong HTTP{ arguments } =
-            keyword "http"
+      where
+        prefix = if import_ then keyword "import" <> " " else mempty
+    prettyLong HTTP{ import_, arguments } =
+            prefix
+        <>  keyword "http"
         <>  Pretty.hardline
         <>  "  "
         <>  Pretty.nest 2 (prettyProjectExpression arguments)
-    prettyLong Read{ arguments } =
-            keyword "read"
+      where
+        prefix = if import_ then keyword "import" <> " " else mempty
+    prettyLong Read{ import_, arguments } =
+            prefix
+        <>  keyword "read"
         <>  Pretty.hardline
         <>  "  "
         <>  Pretty.nest 2 (prettyProjectExpression arguments)
+      where
+        prefix = if import_ then keyword "import" <> " " else mempty
     prettyLong other =
         prettyProjectExpression other
 

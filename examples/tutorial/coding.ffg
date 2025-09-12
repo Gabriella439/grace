@@ -3,7 +3,7 @@
 let key = arguments."OpenAI key" in
 
 # What do you think this code will do?  Run it to test your guess:
-prompt{ key, code: true }
+import prompt{ key }
     : { jobDescription: Text } -> { isFinance : Bool, rationale : Text }
 # You can read the above type as "a function whose input is a record (with a
 # `jobDescription` field) and whose output is a record (with `isFinance` and
