@@ -25,6 +25,7 @@ module Grace.Parser
     , ParseError(..)
       -- * Utilities
     , reserved
+    , validLabel
     , validRecordLabel
     , validAlternativeLabel
     ) where
@@ -435,6 +436,17 @@ isLabel0 c = Char.isLower c || c == '_'
 isLabel :: Char -> Bool
 isLabel c = Char.isAlphaNum c || c == '_' || c == '-' || c == '/'
 
+-- | Returns `True` if the given label is valid when unquoted
+validLabel :: Text -> Bool
+validLabel text_ =
+    case Text.uncons text_ of
+        Nothing ->
+            False
+        Just (h, t) ->
+                isLabel0 h
+            &&  Text.all isLabel t
+            &&  not (HashSet.member text_ reserved)
+
 -- | Returns `True` if the given record label is valid when unquoted
 validRecordLabel :: Text -> Bool
 validRecordLabel text_ =
@@ -451,7 +463,7 @@ validRecordLabel text_ =
             ||  text_ == "true"
             ||  text_ == "false"
 
--- | Returns `True` if the given alternative label is a valid when unquoted
+-- | Returns `True` if the given alternative label is valid when unquoted
 validAlternativeLabel :: Text -> Bool
 validAlternativeLabel text_ =
     case Text.uncons text_ of
@@ -504,16 +516,27 @@ reserved =
         ]
 
 lexLabel :: Lexer Token
-lexLabel = (lexeme . try) do
+lexLabel = lexeme (try lexUnquotedLabel <|> try lexQuotedLabel)
+
+lexUnquotedLabel :: Lexer Token
+lexUnquotedLabel = do
     c0 <- Megaparsec.satisfy isLabel0 Megaparsec.<?> "label character"
 
     cs <- Megaparsec.takeWhileP (Just "label character") isLabel
 
-    let result = Text.cons c0 cs
+    let name = Text.cons c0 cs
 
-    Monad.guard (not (HashSet.member result reserved))
+    Monad.guard (not (HashSet.member name reserved))
 
-    return (Label result)
+    return (Label name)
+
+lexQuotedLabel :: Lexer Token
+lexQuotedLabel = do
+    "."
+
+    name <- lexSingleQuoted
+
+    return (Label name)
 
 lexAlternative :: Lexer Token
 lexAlternative = lexeme do
@@ -523,8 +546,8 @@ lexAlternative = lexeme do
 
     return (Grace.Parser.Alternative (Text.cons c0 cs))
 
-lexQuotedAlternative :: Lexer Token
-lexQuotedAlternative = lexeme do
+lexSingleQuoted :: Lexer Text
+lexSingleQuoted = lexeme do
     "'"
 
     let isText c =
@@ -562,7 +585,13 @@ lexQuotedAlternative = lexeme do
 
     "'"
 
-    return (Grace.Parser.Alternative (Text.concat texts))
+    return (Text.concat texts)
+
+lexQuotedAlternative :: Lexer Token
+lexQuotedAlternative = do
+    name <- lexSingleQuoted
+
+    return (Grace.Parser.Alternative name)
 
 -- | Tokens produced by lexing
 data Token

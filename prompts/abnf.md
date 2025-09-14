@@ -13,6 +13,9 @@ identifier
   ; Variable names begin with a lowercase letter or "_"
   = (LOWER / "_") *(ALPHANUM / "_" / "-" / "/")
 
+  ; Quoted variable names begin with `.` and are surrounded with single quotes
+  / "." single-quoted
+
 lambda = "\" 1*name-binding "->" expression
 
 ; One or more names bound as arguments for a lambda or named functions
@@ -286,15 +289,17 @@ alternative
   = UPPER *(ALPHANUM / "_" / "-" / "/")
 
   ; Quoted alternative names are surrounded with single quotes
-  / "'" (alternative-character / alternative-escape) "'"
+  / single-quoted
+
+single-quoted = "'" (single-quoted-character / single-quoted-escape) "'"
 
 ; A character other than ' or \
-alternative-character = %x20-26 / %x28-5B / %x5D-10FFFF
+single-quoted-character = %x20-26 / %x28-5B / %x5D-10FFFF
 
 ; Similar to the rule for "escape" except replacing " with ' and also not
 ; including an escape sequence for $ (since it's not necessary because a quoted
 ; alternative name can't include an interpolation).
-alternative-escape =
+single-quoted-escape =
   "\\" ( "'" / "\\" / "/" / "n" / "t" / "r" / "b" / "f" / ("u" 4HEXDIG) )
 
 ; Lists allow optional leading/trailing commas.

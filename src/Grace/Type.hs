@@ -27,6 +27,7 @@ module Grace.Type
       -- * Pretty-printing
     , prettyRecordLabel
     , prettyAlternativeLabel
+    , prettyLabel
     , prettyTextLiteral
     , prettyTextBody
     ) where
@@ -761,3 +762,13 @@ prettyAlternativeLabel alternative
         label (pretty alternative)
     | otherwise =
         label (prettyQuotedAlternative alternative)
+
+-- | Pretty-print a label
+prettyLabel
+    :: Text
+    -> Doc AnsiStyle
+prettyLabel name
+    | Parser.validLabel name =
+        label (pretty name)
+    | otherwise =
+        punctuation "." <> label (prettyQuotedAlternative name)
