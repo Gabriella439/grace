@@ -529,7 +529,7 @@ lexQuotedAlternative = lexeme do
 
     let isText c =
                 ('\x20' <= c && c <=     '\x26')
-            ||  ('\x28' <= c && c <=     '\x5b')
+            ||  ('\x28' <= c && c <=     '\x5c')
             ||  ('\x5d' <= c && c <= '\x10FFFF')
 
     let unescaped = Megaparsec.takeWhile1P (Just "alternative character") isText
