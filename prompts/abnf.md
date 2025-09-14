@@ -6,44 +6,65 @@ expression
   = lambda
   / let
   / if
-  / annotation
-  / operator
+  / annotation  ; Everything else (operators, projections, literals, etc.)
 
 ; A variable name (e.g. `x`)
-identifier  = (LOWER / "_") *(ALPHANUM / "_" / "-" / "/")
-
-; A name for one of the alternatives of a union
-alternative = (UPPER / "_") *(ALPHANUM / "_" / "-" / "/")
+identifier
+  ; Variable names begin with a lowercase letter or "_"
+  = (LOWER / "_") *(ALPHANUM / "_" / "-" / "/")
 
 lambda = "\" 1*name-binding "->" expression
 
-; If you annotate a function argument with a type you have to parenthesize the
-; annotation.
-;
-; BAD:
-;
-; ```
-; \x : Natural ->
-;     let f y : Natural : Natural = x + y
-;     in  f 2
-; ```
-;
-; GOOD:
-;
-; ```
-; \(x : Natural) ->
-;     let f (y : Natural) : Natural = x + y
-;     in  f 2
-; ```
+; One or more names bound as arguments for a lambda or named functions
 name-binding
-  ; plain bound variable: `\x -> …`
+  ; Plain bound variable:
+  ;
+  ;     \x -> …
+  ;
+  ;     let f x = … in …
   = identifier
 
-  ; bound variable with a type annotation: `\(x : T) -> …`
-  / "(" identifier ":" type ")"
+  ; Bound variable with an optional type annotation and optional default value:
+  ;
+  ;     \(x : T = v) -> …
+  ;
+  ;     let f (x : T = v) = … in …
+  ;
+  ; You can have just the type annotation:
+  ;
+  ;     \(x : T) -> …
+  ;
+  ;     let f (x : T) = … in …
+  ;
+  ; … or just the default value:
+  ;
+  ;     \(x = v) -> …
+  ;
+  ;     let f (x = v) = … in …
+  ;
+  ; You can even omit both and just parenthesize the bound variable, although
+  ; this is not idiomatic since you'd usually omit the parentheses in that case:
+  ;
+  ;     \(x) -> …
+  ;
+  ;     let f (x) = … in …
+  / "(" identifier [ ":" type ] [ "=" expression ] ")"
 
-  ; destructure a record: `\{ x, y : Natural } -> …`
-  / "{" [ identifier [ ":" type ] *("," identifier [ ":" type ]) ] "}"
+  ; Destructure a record function argument:
+  ;
+  ;     \{ a, b } -> …
+  ;
+  ;     let f { a, b } = … in …
+  ;
+  ; Record fields destructured in this way can have optional type annotations
+  ; and optional default values:
+  ;
+  ;     \{ a, b : T0, c = v0, d : T1 = v1 } -> …
+  ;
+  ;     let f { a, b : T0, c = v0, d : T1 = v1 } = … in …
+  / "{" [ field-binding *( "," field-binding ) ] "}"
+
+field-binding = identifier [ ":" type ] [ "=" expression ]
 
 ; Note: Every sequence of `let`s (even top-level `let`s) must have a matching
 ; `in`.  Dangling `let`s are a parse error in any context.
@@ -65,26 +86,27 @@ let = 1*binding "in" expression
 ;
 ; BAD:
 ;
-; ```
-; let x = 2
-;     y = 3  # Missing `let`, so this is misparsed as `let x = 2 y = 3`
-; in  x + y
-; ```
+;     let x = 2
+;         y = 3  # Missing `let`, so this is misparsed as `let x = 2 y = 3`
+;     in  x + y
 ;
 ; GOOD:
 ;
-; ```
-; let x = 2
-; let y = 3
-; in  x + y
-; ```
+;     let x = 2
+;     let y = 3
+;     in  x + y
 binding = "let" identifier *name-binding [ ":" type ] "=" expression
 
 if = "if" expression "then" expression "else" expression
 
-annotation = application *( operator application ) ":" type
+; Optional type annotation:
+;
+;     e : T
+annotation = application *( operator application ) [ ":" type ]
 
 ; Operators in descending order of precedence
+;
+; This is the same precedence order as C operators
 operator
     = "/"
     / "%"
@@ -101,53 +123,47 @@ operator
     / "||"
 
 application
-  ; Keyword to prompt an LLM to generate a plain value (the default) or Grace
+  ; Keyword to prompt an LLM to generate a JSON value (the default) or Grace
   ; code (when preceded with `import`)
-  ;
-  ; The `prompt` keyword technically only takes one argument.  Arguments after
-  ; the first one are treated as ordinary function applications (which comes in
-  ; handy if you're generating Grace code for a function)
   = [ "import" ] "prompt" projection
 
   ; Keyword to make an HTTP request to fetch a JSON value (the default) or Grace
   ; code (when preceded with `import`)
-  ;
-  ; Just like the `prompt` keyword, the `http` keyword only takes one argument
-  ; and subsequent arguments are ordinary function applications
   = [ "import" ] "http" projection
 
   ; Keyword to convert text to a JSON value (the default) or Grace code (when
   ; preceded with `import`)
-  ;
-  ; Just like the `prompt` keyword, the `read` keyword only takes one argument
-  ; and subsequent arguments are ordinary function applications
   = [ "import" ] "read" projection
 
   ; Keyword to pattern match on a union
-  ;
-  ; Just like the `prompt` keyword, the `fold` keyword only takes one argument
-  ; and subsequent arguments are ordinary function applications
-  / "fold" 1*projection
+  / "fold" projection
 
-  ; Ordinary function application
-  / 1*projection
+  ; Ordinary function application (left-associative)
+  / application projection
 
+  / projection
+
+; Optionally project a field (from a record) or an element (from a list)
 projection = primitive *smaller
 
 smaller
+  ; You can access a record field using `record.field`.
   = "." field
 
-  ; You can also index into a list using dot notation (e.g. `list.index`).  Just
+  ; You can project multiple fields from a record
+  / "." "{" [ field *( "," field ) ] "}"
+
+  ; You can also index into a list using dot notation (e.g. `list.index`)  Just
   ; like Python, you can index from the end of the list using negative numbers
-  ; (e.g. `list.-1` to get the last element of the list)
+  ; (e.g. `list.-1` to get the last element of the list).
   / "." integer
 
-  ; You can slice into a list using `xs[m:n]` just like in Python
+  ; You can slice into a list using `xs[m:n]` just like in Python.  Slice
+  ; indices may also be negative and both indices are optional.
   / "[" [ integer ] ":" [ integer ] "]"
 
-
 primitive
-  = variable
+  = identifier  ; bound variable (e.g. `x`)
   / "null"
   / boolean
   / number
@@ -156,26 +172,18 @@ primitive
   / list
   / record
 
-  ; Note that all alternatives need an argument.  By itself, an alternative is
-  ; a function expecting one argument (the alternative's contents).  If an
-  ; alternative is empty you still need to store an empty record inside of it.
-  / alternative
+  ; NOTE: all alternatives need an argument.  If an alternative is empty you
+  ; still need to store an empty record inside of it (e.g. `Foo{ }`)
+  / alternative primitive
 
-  ; An absolute, relative, or home-anchored URI
+  ; An absolute path (beginning with `/`) or relative path (beginning with `../`
+  ; or `./`)
   / file
 
-  ; A URL
-  / url
+  ; A URI (supported schemes: `https` / `http` / `env` / `file`)
+  / uri
 
   / "(" expression ")"
-
-; The optional integer at the end is a "Namespaced De Bruijn index".  See:
-;
-; https://www.haskellforall.com/2021/08/namespaced-de-bruijn-indices.html
-;
-; The vast majority of the time you do *not* need to use this feature and it
-; solely exists so that you can reference shadowed-variables.
-variable = identifier [ "@" integer ]
 
 boolean = "true" / "false"
 
@@ -184,24 +192,33 @@ number = natural / integer / real
 ; Positive integers are parsed as `Natural` numbers
 natural = 1*DIGIT
 
-; Negative integers are parsed as `Integer`s
-integer = "-" natural
+; Signed integers are parsed as `Integer`s
+integer = ("+" / "-") natural
 
 ; All other numbers are parsed as `Real`s
-real = [ "-" ] 1*DIGIT "." 1*DIGIT
+real = [ ( "+" / "-" ) ] 1*DIGIT "." 1*DIGIT
 
-string = '"' *( character / interpolation / escape) '"'
-
-character = %x20-21 / %x23-5B / %x5D-7E
-
-; Interpolated expressions must have type `Text`.  Grace does *not* perform
-; any automatic conversion of interpolated values to `Text`.  If you want to
-; interpolate a number, then use:
+; Strings support two modes:
 ;
-; ```
-; "… ${show number} …"
-; ```
-interpolation = "${" expression "}"
+; - Single-line string literals, like:
+;
+;       "abc"
+;
+; - Multi-line string literals, like:
+;
+;       "
+;       Line 1
+;
+;       Line 3
+;       "
+string = single-line-string / multi-line-string
+
+; Single-line string literals only support escaped newlines (i.e. `\n`)
+single-line-string =
+  %x22 *( single-line-character / interpolation / single-line-escape) %x22
+
+; A character other than " or \
+single-line-character = %x20-21 / %x23-5B / %x5D-10FFFF
 
 ; NOTE: You can escape a string interpolation using a backslash like this:
 ;
@@ -212,16 +229,82 @@ interpolation = "${" expression "}"
 ; … if you don't want Grace to interpret the string interpolation.  This comes
 ; in handy if you, say, want to use Grace to generate a Bash script without
 ; interpreting Bash string interpolations.
-escape = "\\" ( %x22 / "\\" / "n" / "t" / "r" / "b" / "f" / "$")
+single-line-escape =
+  "\\" ( %x22 / "\\" / "/" / "n" / "t" / "r" / "b" / "f" / "$" / ("u" 4HEXDIG) )
 
-list = "[" [ expression *( "," expression ) ] "]"
+; These string literals can span multiple lines and leading indentation is
+; stripped.  For example, this:
+;
+;     let example =
+;             "
+;             Line 1
+;
+;             Line 3
+;             "
+;
+; … is the same thing as:
+;
+;     let example = "Line 1\n\nLine 3\n"
+;
+; The difference between a single-line string literal and a multi-line string
+; literal is that in a multi-line string literal the `"` is followed by a
+; newline (which must be present and is stripped).  For example, this:
+;
+;     let example =
+;             "
+;             Line 1"
+;
+; … is the same thing as:
+;
+;     let example = "Line 1"
+multi-line-string =
+  %x22 %x0A *( multi-line-character / interpolation / multi-line-escape) %x22
 
-record = "{" [ projection-value *( "," projection-value ) ] "}"
+; A character other than " or \
+;
+; Literal tabs and newlines are also permitted, unlike single-line strings.
+multi-line-character = %x09-0A / %x20-21 / %x23-5B / %x5D-10FFFF
+
+; NOTE: You cannot escape newlines or tabs in a multi-line string literal
+; (because you can and should use an actual newline or tab character instead of
+; an escaped one).
+multi-line-escape =
+  "\\" ( %x22 / "\\" / "/" / "r" / "b" / "f" / "$" / ("u" 4HEXDIG) )
+
+; Interpolated expressions must have type `Text`.  Grace does *not* perform
+; any automatic conversion of interpolated values to `Text`.  If you want to
+; interpolate a number, then use:
+;
+; ```
+; "… ${show number} …"
+; ```
+interpolation = "${" expression "}"
+
+; A name for one of the alternatives of a union
+alternative
+  ; Unquoted alternative names begin with an uppercase letter
+  = UPPER *(ALPHANUM / "_" / "-" / "/")
+
+  ; Quoted alternative names are surrounded with single quotes
+  / "'" (alternative-character / alternative-escape) "'"
+
+; A character other than ' or \
+alternative-character = %x20-26 / %x28-5B / %x5D-10FFFF
+
+; Similar to the rule for "escape" except replacing " with ' and also not
+; including an escape sequence for $ (since it's not necessary because a quoted
+; alternative name can't include an interpolation).
+alternative-escape =
+  "\\" ( "'" / "\\" / "/" / "n" / "t" / "r" / "b" / "f" / ("u" 4HEXDIG) )
+
+; Lists allow optional leading/trailing commas.
+list = "[" [ "," ] [ expression *( "," expression ) ] [ "," ] "]"
+
+; Records allow optional leading/trailing commas
+record = "{" [ "," ] [ projection-value *( "," projection-value ) ] [ "," ] "}"
 
 projection-value
-  ; Grace uses JSON syntax for projection values: ':' instead of '='.  This is
-  ; one way in which Grace differs from its predecessor (Dhall) because Grace
-  ; is intended to be JSON-compatible
+  ; Grace uses JSON syntax for projection values: ':' (not '=')
   = field ":" expression
 
   ; Field punning.  In other words, `{ x }` is the same thing as `{ x: x }`
@@ -241,11 +324,14 @@ field
   / string
 
 builtin
-    = "show "           ; JSON -> Text
-    / "indexed"         ; forall (a : Type) . List a -> List { index: Natural, value: a }
-    / "length"          ; forall (a : Type) . List a -> Natural
-    / "map"             ; forall (a : Type) (b : Type) . (a -> b) -> List a -> List b
-    / "abs"             ; Integer -> Natural
+    = "show"     ; JSON -> Text  ; Renders argument as JSON
+    / "yaml"     ; JSON -> Text  ; Renders argument as YAML
+    / "indexed"  ; forall (a : Type) . List a -> List { index: Natural, value: a }
+    / "length"   ; forall (a : Type) . List a -> Natural
+    / "map"      ; forall (a : Type) (b : Type) . (a -> b) -> List a -> List b
+    / "abs"      ; Integer -> Natural
+    / "reveal"   ; Key -> Text
+    / "some"     ; forall (a : Type) . a -> Optional a
 
 type = quantified-type
 
@@ -269,11 +355,26 @@ primitive-type
   / "Natural"
   / "Text"
   / "JSON"
+  / "Key"
   / record-type
   / union-type
   / "(" type ")"
 
-record-type = "{" [ field ":" type *( "," field ":" type ) ] [ "," identifier ] "}"
+; Records types allow optional leading/trailing commas
+record-type =
+    "{"
+    [ "," ]
+    [ field ":" type *( "," field ":" type ) ]
+    [ "," identifier ]  ; Fields variable (e.g. `{ x: Text, other }`
+    [ "," ]
+    "}"
 
-union-type = "<" [ alternative ":" type *( "|" alternative ":" type ) ] [ "|" identifier ] ">"
+; Union types allow optional leading/trailing bars
+union-type =
+    "<"
+    [ "|" ]
+    [ alternative ":" type *( "|" alternative ":" type ) ]
+    [ "|" identifier ]  ; Alternatives variable (e.g. `< Left: Natural | other >`)
+    [ "|" ]
+    ">"
 ```
