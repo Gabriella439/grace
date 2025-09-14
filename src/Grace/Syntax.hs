@@ -34,7 +34,7 @@ import Data.String (IsString(..))
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Grace.Compat ()  -- For an orphan instance for Lift (Seq a)
-import Grace.Pretty (Pretty(..), keyword, label, punctuation)
+import Grace.Pretty (Pretty(..), keyword, punctuation)
 import Grace.Type (Type)
 import Language.Haskell.TH.Syntax (Lift)
 import Numeric.Natural (Natural)
@@ -1355,8 +1355,7 @@ prettyAlternativeExpression other =
     prettyPrimitiveExpression other
 
 prettyPrimitiveExpression :: Pretty a => Syntax s a -> Doc AnsiStyle
-prettyPrimitiveExpression Variable{ name } =
-    label (pretty name)
+prettyPrimitiveExpression Variable{ name } = Type.prettyLabel name
 prettyPrimitiveExpression List{ elements = [] } =
     punctuation "[" <> " " <> punctuation "]"
 prettyPrimitiveExpression List{ elements = element :<| elements } =
@@ -1463,7 +1462,7 @@ instance IsString (FieldName () a) where
 
 instance Pretty a => Pretty (FieldName s a) where
     pretty FieldName{ name, annotation, assignment } =
-            label (pretty name)
+            Type.prettyLabel name
         <>  foldMap renderAnnotation annotation
         <>  foldMap renderAssignment assignment
       where
@@ -1520,10 +1519,10 @@ instance IsString (NameBinding () a) where
 
 instance Pretty a => Pretty (NameBinding s a) where
     pretty NameBinding{ name, annotation = Nothing, assignment = Nothing } =
-        label (pretty name)
+        Type.prettyLabel name
     pretty NameBinding{ name, annotation, assignment } =
             punctuation "("
-        <>  label (pretty name)
+        <>  Type.prettyLabel name
         <>  foldMap renderAnnotation annotation
         <>  foldMap renderAssignment assignment
         <>  punctuation ")"
@@ -1583,7 +1582,7 @@ instance Pretty a => Pretty (Binding s a) where
       where
         long =  keyword "let"
             <>  " "
-            <>  label (pretty name)
+            <>  Type.prettyLabel name
             <>  Pretty.hardline
             <>  foldMap (\nameBinding -> "      " <> Pretty.nest 6 (pretty nameBinding) <> Pretty.hardline) nameBindings
             <>  "      "
@@ -1593,7 +1592,7 @@ instance Pretty a => Pretty (Binding s a) where
 
         short = keyword "let"
             <>  " "
-            <>  label (pretty name)
+            <>  Type.prettyLabel name
             <>  " "
             <>  foldMap (\nameBinding -> pretty nameBinding <> " ") nameBindings
             <>  punctuation "="
@@ -1604,7 +1603,7 @@ instance Pretty a => Pretty (Binding s a) where
       where
         long =  keyword "let"
             <>  " "
-            <>  label (pretty name)
+            <>  Type.prettyLabel name
             <>  Pretty.hardline
             <>  foldMap (\nameBinding -> "      " <> Pretty.nest 6 (pretty nameBinding) <> Pretty.hardline) nameBindings
             <>  "      "
@@ -1619,7 +1618,7 @@ instance Pretty a => Pretty (Binding s a) where
 
         short = keyword "let"
             <>  " "
-            <>  label (pretty name)
+            <>  Type.prettyLabel name
             <>  " "
             <>  foldMap (\nameBinding -> pretty nameBinding <> " ") nameBindings
             <>  Pretty.operator ":"
