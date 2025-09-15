@@ -26,10 +26,10 @@ At [work](https://mercury.com/jobs) I've been researching how to improve the erg
 
 > Given this poem structure:
 > 
-> - Form: `${structure.form}`
-> - Stanzas: `${structure.stanzaCount}`
-> - Lines per stanza: `${structure.linesPerStanza}`
-> - Rhyme scheme: `${structure.rhymeScheme}`
+> - Form: `${structure."Form"}`
+> - Stanzas: `${structure."Stanza Count"}`
+> - Lines per stanza: `${structure."Lines per Stanza"}`
+> - Rhyme scheme: `${structure."Rhyme Scheme"}`
 > 
 > Choose a poetic style: tone, voice, and literary devices to emphasize
 
@@ -40,15 +40,15 @@ At [work](https://mercury.com/jobs) I've been researching how to improve the erg
 > `${idea}`
 > 
 > Structure:
-> - Form: `${structure.form}`
-> - Stanzas: `${structure.stanzaCount}`
-> - Lines per stanza: `${structure.linesPerStanza}`
-> - Rhyme scheme: `${structure.rhymeScheme}`
+> - Form: `${structure."Form"}`
+> - Stanzas: `${structure."Stanza Count"}`
+> - Lines per stanza: `${structure."Lines per Stanza"}`
+> - Rhyme scheme: `${structure."Rhyme Scheme"}`
 > 
 > Style:
-> - Tone: `${style.stone}`
-> - Voice: `${style.voice}`
-> - Literary Devices: `${style.literaryDevices}`
+> - Tone: `${style."Tone"}`
+> - Voice: `${style."Voice"}`
+> - Literary Devices: `${style."Literary Devices"}`
 
 Why might you want to do this?
 
@@ -87,14 +87,15 @@ So as a thought experiment I wanted to create a research prototype that handled 
 I'll cut to the case by showing the above prompt chain written as a program in this language:
 
 ```haskell
+\{ key } ->
+
 let concatSep =
       https://raw.githubusercontent.com/Gabriella439/grace/refs/heads/main/prelude/text/concatSep.ffg
 
-let lines = concatSep "\n"
-
 let generatePoem idea =
         let structure = prompt
-                { text: "
+                { key
+                , text: "
                     Plan the structure of a new poem based on this idea:
 
                     ${idea}
@@ -104,14 +105,15 @@ let generatePoem idea =
                 }
 
         let renderedStructure = "
-                - Form: ${structure.form}
-                - Stanzas: ${show (structure.stanzaCount : Text)}
-                - Lines per stanza: ${show (structure.linesPerStanza : Text)}
-                - Rhyme scheme: ${structure.rhymeScheme}
+                - Form: ${structure."Form"}
+                - Stanzas: ${show (structure."Stanza Count": Natural)}
+                - Lines per stanza: ${show (structure."Lines per Stanza" : Natural)}
+                - Rhyme scheme: ${structure."Rhyme Scheme"}
                 "
 
         let style = prompt
-                { text: "
+                { key
+                , text: "
                     Given this poem structure:
 
                     ${renderedStructure}
@@ -121,13 +123,14 @@ let generatePoem idea =
                 }
 
         let renderedStyle = "
-                - Tone: ${style.tone}
-                - Voice: ${style.voice}
-                - Literary Devices: ${concatSep ", " style.literaryDevices}
+                - Tone: ${style."Tone"}
+                - Voice: ${style."Voice"}
+                - Literary Devices: ${concatSep ", " style."Literary Devices"}
                 "
 
         let poem = prompt
-                { text: "
+                { key
+                , text: "
                     Write a complete poem based on this idea:
 
                     ${idea}
@@ -154,20 +157,20 @@ If you run the above example, you might get an output like this:
 ```json
 {
   "structure": {
-    "form": "Free verse with a sprinkle of rhyme",
-    "linesPerStanza": 4,
-    "rhymeScheme": "ABCB",
-    "stanzaCount": 5
+    "Form": "Free verse with a sprinkle of rhyme",
+    "Lines per Stanza": 4,
+    "Rhyme Scheme": "ABCB",
+    "Stanza Count": 5
   },
   "style": {
-    "literaryDevices": [
+    "Literary Devices": [
       "imagery",
       "alliteration",
       "personification",
       "enjambment"
     ],
-    "tone": "nostalgic",
-    "voice": "reflective"
+    "Tone": "nostalgic",
+    "Voice": "reflective"
   },
   "poem": "### The Stillness of Early Morning\n\n**I**  \nIn the gentle rise of dawn's embrace,  \nA whisper of winds through sleepy skies,  \nThe world lies suspended in an echo  \nOf yesterday's dreams, reluctantly saying goodbye.\n\n**II**  \nSoft orange light graces fields of dew,  \nCradling tenacious tendrils of the past.  \nMorning breathes upon the waiting world  \nWith promises that this serenity will last.\n\n**III**  \nWaves of silence surge across the meadow,  \nNature's symphony gently cradles rest.  \nA chorus of leaves sings its soft refrain,  \nComforted by morning's tender caress.\n\n**IV**  \nThe silence dips to caress weary trees,  \nWhose branches waltz to whispers soft and slow.  \nEach tendril holds close the morning's intention,  \nBefore the day's demands, the chaos, start to show.\n\n**V**  \nEarly rays dance upon a tranquil sea,  \nA canvas painted through a dreamy haze.  \nTime sits by, savoring the gentle hush,  \nAs the world awakens, stirs, and finally plays."
 }
@@ -214,7 +217,9 @@ The sample Grace program hardly specifies any types (mainly the final expected t
 I'll illustrate this with a contrived Grace example:
 
 ```haskell
-let numbers = prompt{ text: "Give me two numbers" }
+\{ key } ->
+
+let numbers = prompt{ key, text: "Give me two numbers" }
 
 in  { x: numbers.x
     , y: numbers.y
@@ -264,9 +269,9 @@ Of course, you *can* specify types if you want (and they're more lightweight tha
 
 ```bash
 $ grace repl
->>> prompt{ text: "Give me a first and last name" } : { first: Text, last: Text }
+>>> prompt{ key: ./openai.key : Key, text: "Give me a first and last name" } : { first: Text, last: Text }
 { "first": "Emily", "last": "Johnson" }
->>> prompt{ text: "Give me a list of names" } : List Text
+>>> prompt{ key: ./openai.key : Key, text: "Give me a list of names" } : List Text
 [ "Alice"
 , "Bob"
 , "Charlie"
@@ -284,7 +289,8 @@ However in our original example we don't need to specify intermediate types beca
 
 ```haskell
 let structure = prompt
-        { text: "
+        { key
+        , text: "
             Plan the structure of a new poem based on this idea:
 
             ${idea}
@@ -294,10 +300,10 @@ let structure = prompt
         }
 
 let renderedStructure = "
-        - Form: ${structure.form}
-        - Stanzas: ${show (structure.stanzaCount : Text)}
-        - Lines per stanza: ${show (structure.linesPerStanza : Text)}
-        - Rhyme scheme: ${structure.rhymeScheme}
+        - Form: ${structure."Form"}
+        - Stanzas: ${show (structure."Stanza Count" : Natural)}
+        - Lines per stanza: ${show (structure."Lines per Stanza" : Natural)}
+        - Rhyme scheme: ${structure."Rhyme Scheme"}
         "
 ```
 
@@ -306,16 +312,16 @@ let renderedStructure = "
 ```json
 { "type": "object",
   "properties": {
-    "form": { "type": "string" },
-    "stanzaCount": { "type": "integer" },
-    "linesPerStanza": { "type": "integer" },
-    "rhymeScheme": { "type": "string" }
+    "Form": { "type": "string" },
+    "Stanza Count": { "type": "integer" },
+    "Lines per Stanza": { "type": "integer" },
+    "Rhyme Scheme": { "type": "string" }
   },
   "required": [
-    "form",
-    "stanzaCount",
-    "linesPerStanza",
-    "rhymeScheme"
+    "Form",
+    "Stanza Count",
+    "Lines per Stanza",
+    "Rhyme Scheme"
     ],
   "additionalProperties": false
 }
@@ -328,6 +334,8 @@ Grace also supports generating *sum types* (a.k.a. tagged unions), and you can i
 For example, consider this Grace program:
 
 ```haskell
+\{ key } ->
+
 let concatSep = https://raw.githubusercontent.com/Gabriella439/grace/refs/heads/main/prelude/text/concatSep.ffg
 
 let call = fold
@@ -335,7 +343,7 @@ let call = fold
       , ShellCommand: \x -> concatSep " " ([ x.executable ] + x.arguments)
       }
 
-in  map call (prompt{ text: "Call some tools" })
+in  map call (prompt{ key, text: "Call some tools" })
 ```
 
 This doesn't actually *run* any tools (I haven't added any callable tools to my work-in-progress branch yet), but just renders the tool use as a string for now:
@@ -364,7 +372,7 @@ call : < HttpRequest: …, ShellCommand: … > -> Text
 … but since we `map` the `call` function over the output of the `prompt` the type checker infers that the `prompt` needs to generate a `List` of tool calls:
 
 ```haskell
-prompt{ text: "Call some tools" } : List < HttpRequest: …, ShellCommand: … >
+prompt{ key, text: "Call some tools" } : List < HttpRequest: …, ShellCommand: … >
 ```
 
 … and then Grace does some magic under the hood to convert that type to the equivalent JSON schema.
@@ -376,7 +384,7 @@ What's particularly neat about this example is that the prompt is so incredibly 
 We can explore this idea of using the schema to drive the prompt instead of prose using an example like this:
 
 ```haskell
-prompt{ text: "Generate some characters for a story" }
+prompt{ key: ./openai.key : Key, text: "Generate some characters for a story" }
   : List
     { "The character's name": Text
     , "The most memorable thing about the character": Text
