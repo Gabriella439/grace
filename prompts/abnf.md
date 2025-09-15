@@ -281,6 +281,16 @@ multi-line-escape =
 ; ```
 ; "… ${show number} …"
 ; ```
+;
+; Interpolated expressions do not need to be escaped:
+;
+; BAD:
+;
+;     \input -> "Hello, ${input.\"First Name\"}!"
+;
+; GOOD:
+;
+;     \input -> "Hello, ${input."First Name"}!"
 interpolation = "${" expression "}"
 
 ; A name for one of the alternatives of a union
