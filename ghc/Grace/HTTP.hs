@@ -15,11 +15,13 @@ module Grace.HTTP
     ) where
 
 import Control.Concurrent.MVar (MVar)
-import Control.Exception.Safe (Exception(..))
+import Control.Exception.Safe (Exception(..), Handler(..))
 import Data.Text (Text)
 import Data.Text.Encoding.Error (UnicodeException)
 import OpenAI.V1 (Methods(..))
 import OpenAI.V1.Chat.Completions (ChatCompletionObject, CreateChatCompletion)
+import Servant.Client.Core.ClientError (ClientError(..))
+import Servant.Client.Core.Response (ResponseF(..))
 
 import Grace.HTTP.Type
     ( Header(..)
@@ -39,15 +41,18 @@ import Network.HTTP.Client
 
 import qualified Control.Concurrent.MVar as MVar
 import qualified Control.Exception.Safe as Exception
+import qualified Control.Retry as Retry
 import qualified Data.Aeson as Aeson
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
 import qualified Data.Text.Lazy as Text.Lazy
 import qualified Data.Text.Lazy.Encoding as Lazy.Encoding
+import qualified Network.HTTP.Types.Status as Status
 import qualified Network.HTTP.Client as HTTP
 import qualified Network.HTTP.Client.TLS as TLS
 import qualified Network.HTTP.Types as HTTP.Types
 import qualified OpenAI.V1 as OpenAI
+import qualified Servant.Client as Client
 import qualified System.IO.Unsafe as Unsafe
 
 -- | Exception type thrown by `fetch` in the event of any failure
@@ -63,6 +68,23 @@ managerMVar :: MVar (Maybe Manager)
 managerMVar = Unsafe.unsafePerformIO (MVar.newMVar Nothing)
 {-# NOINLINE managerMVar #-}
 
+retry :: IO a -> IO a
+retry io =
+    Retry.recovering
+        retryPolicy
+        [ \_ -> Handler handler
+        ]
+        (\_ -> io)
+  where
+    retryPolicy = Retry.fullJitterBackoff 1000000
+
+    handler (FailureResponse _ Response{ responseStatusCode }) =
+        return (Status.statusIsServerError responseStatusCode)
+    handler (ConnectionError _) =
+        return True
+    handler _ =
+        return False
+
 -- | Acquire a new `Manager`
 --
 -- This is safe to call multiple times.  The `Manager` returned by the first
@@ -73,6 +95,14 @@ newManager = MVar.modifyMVar managerMVar \maybeManager -> do
         Nothing -> do
             TLS.newTlsManagerWith TLS.tlsManagerSettings
                 { managerResponseTimeout = HTTP.responseTimeoutNone
+                , managerRetryableException = \exception ->
+                    case Exception.fromException exception of
+                        Just (FailureResponse _ Response{ responseStatusCode }) ->
+                            Status.statusIsServerError responseStatusCode
+                        Just (ConnectionError _) ->
+                            True
+                        _ ->
+                            False
                 }
 
         Just manager -> do
@@ -234,7 +264,11 @@ renderError (NotUTF8 unicodeException) =
 -- | Initialize API for prompting
 getMethods :: IO (Text -> Methods)
 getMethods = do
-    clientEnv <- OpenAI.getClientEnv "https://api.openai.com"
+    baseUrl <- Client.parseBaseUrl "https://api.openai.com"
+
+    manager <- newManager
+
+    let clientEnv = Client.mkClientEnv manager baseUrl
 
     return (\key -> OpenAI.makeMethods clientEnv key organization Nothing)
 
@@ -243,4 +277,4 @@ createChatCompletion
     :: Methods
     -> CreateChatCompletion
     -> IO ChatCompletionObject
-createChatCompletion Methods{ createChatCompletion = c } = c
+createChatCompletion Methods{ createChatCompletion = c } x = retry (c x)
