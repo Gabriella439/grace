@@ -184,19 +184,20 @@ checkJSON = loop []
 
             return (Alternative tag value)
     loop path Type.Record{ Type.fields = Type.Fields fieldTypes _ } (Aeson.Object object) = do
-        let properties = HashMap.toList (Compat.fromAesonMap object)
+        let properties = Compat.fromAesonMap object
 
-        let process (key, property) = case Prelude.lookup key fieldTypes of
-                Just fieldType -> do
-                    expression <- loop (key : path) fieldType property
+        let process (field, type_) = do
+                let property = case HashMap.lookup field properties of
+                        Just p -> p
+                        Nothing -> Aeson.Null
 
-                    return [(key, expression)]
-                Nothing -> do
-                    return ([] :: [(Text, Value)])
+                expression <- loop (field : path) type_ property
 
-        textValuess <- traverse process properties
+                return (field, expression)
 
-        return (Record (HashMap.fromList (concat textValuess)))
+        fieldValues <- traverse process fieldTypes
+
+        return (Record (HashMap.fromList fieldValues))
     loop path type_@Type.Scalar{ scalar = Monotype.JSON } (Aeson.Object object) = do
         let properties = HashMap.toList (Compat.fromAesonMap object)
 
