@@ -3095,6 +3095,95 @@ check Syntax.Alternative{ location, name , argument } annotation@Type.Union{ alt
                 _ -> do
                     Exception.throwIO (UnionTypeMismatch actual annotation [ name ])
 
+check Syntax.Prompt{ schema = Nothing, .. } annotation = do
+    newArguments <- check arguments (fmap (\_ -> location) (expected @Prompt))
+
+    return Syntax.Prompt{ arguments = newArguments, schema = Just annotation, .. }
+
+check Syntax.HTTP{ import_, schema = Nothing, .. } annotation = do
+    let input = fmap (\_ -> location) (expected @HTTP)
+
+    newArguments <- check arguments input
+
+    context₀ <- get
+
+    Monad.unless import_ do
+        subtype (Context.solveType context₀ annotation) Type.Scalar{ location, scalar = Monotype.JSON }
+
+    context₁ <- get
+
+    return Syntax.HTTP{ arguments = newArguments, schema = Just (Context.solveType context₁ annotation), .. }
+
+check Syntax.Read{ import_, schema = Nothing, .. } annotation = do
+    newArguments <- check arguments (fmap (\_ -> location) (expected @Text))
+
+    context₀ <- get
+
+    Monad.unless import_ do
+        subtype (Context.solveType context₀ annotation) Type.Scalar{ location, scalar = Monotype.JSON }
+
+    context₁ <- get
+
+    return Syntax.Read{ arguments = newArguments, schema = Just (Context.solveType context₁ annotation), .. }
+
+check Syntax.Project{ location, larger, smaller = smaller@Syntax.Single{ single = Syntax.Field{ fieldLocation, field } } } annotation = do
+    context <- get
+
+    (recordType, newLarger₀) <- infer larger
+
+    case recordType of
+        Type.Record{ fields = Type.Fields fieldTypes _ }
+            | Just fieldType <- lookup field fieldTypes -> do
+                subtype fieldType annotation
+
+                return Syntax.Project{ location, larger = newLarger₀, smaller }
+
+        _ -> do
+            set context
+
+            fields <- fresh
+
+            push (Context.UnsolvedFields fields)
+
+            newLarger₁ <- check larger Type.Record
+                { fields = Type.Fields
+                    [(field, annotation)]
+                    (Monotype.UnsolvedFields fields)
+                , location = fieldLocation
+                }
+
+            return Syntax.Project{ location, larger = newLarger₁, smaller }
+
+check Syntax.Project{ location, larger, smaller = smaller@Syntax.Multiple{ multiple } } Type.Record{ location = recordLocation, fields = Type.Fields fieldTypes rest }
+    | let m₀ = Map.fromList do
+              Syntax.Field{ field } <- multiple
+
+              return (field, ())
+
+    , let m₁ = Map.fromList fieldTypes
+
+    , Map.null (Map.difference m₀ m₁) = do
+        let m = Map.intersectionWith (\_ type_ -> type_) m₀ m₁
+
+        let newAnnotation = Type.Record
+                { location = recordLocation
+                , fields = Type.Fields (Map.toList m) rest
+                }
+
+        newLarger <- check larger newAnnotation
+
+        return Syntax.Project{ location, larger = newLarger, smaller }
+
+check Syntax.Project{ location, larger, smaller = smaller@Syntax.Slice{ } } Type.Optional{ type_ } = do
+    newLarger <- check larger type_
+
+    return Syntax.Project{ location, larger = newLarger, smaller }
+
+check Syntax.Project{ location, larger, smaller = smaller@Syntax.Index{ } } Type.Optional{ type_ } = do
+    newLarger <- check larger Type.List{ location, type_ }
+
+    return Syntax.Project{ location, larger = newLarger, smaller }
+
 check Syntax.Scalar{ scalar = Syntax.Null, .. } Type.Optional{ } = do
     return Syntax.Scalar{ scalar = Syntax.Null, .. }
 
@@ -3227,35 +3316,6 @@ check e@Syntax.Record{ fieldValues } _B@Type.Record{ fields = Type.Fields fieldT
             other ->
                 return other
 
-check Syntax.Project{ location, larger, smaller } annotation
-    | Syntax.Single{ single = Syntax.Field{ fieldLocation, field } } <- smaller = do
-        context <- get
-
-        (recordType, newLarger₀) <- infer larger
-
-        case recordType of
-            Type.Record{ fields = Type.Fields fieldTypes _ }
-                | Just fieldType <- lookup field fieldTypes -> do
-                    subtype fieldType annotation
-
-                    return Syntax.Project{ location, larger = newLarger₀, smaller }
-
-            _ -> do
-                set context
-
-                fields <- fresh
-
-                push (Context.UnsolvedFields fields)
-
-                newLarger₁ <- check larger Type.Record
-                    { fields = Type.Fields
-                        [(field, annotation)]
-                        (Monotype.UnsolvedFields fields)
-                    , location = fieldLocation
-                    }
-
-                return Syntax.Project{ location, larger = newLarger₁, smaller }
-
 check Syntax.Text{ chunks = Syntax.Chunks text₀ rest, .. } Type.Scalar{ scalar = Monotype.Text } = do
     let process (interpolation, text) = do
             newInterpolation <- check interpolation Type.Scalar{ scalar = Monotype.Text, .. }
@@ -3265,37 +3325,6 @@ check Syntax.Text{ chunks = Syntax.Chunks text₀ rest, .. } Type.Scalar{ scalar
     newRest <- traverse process rest
 
     return Syntax.Text{ chunks = Syntax.Chunks text₀ newRest, .. }
-
-check Syntax.Prompt{ schema = Nothing, .. } annotation = do
-    newArguments <- check arguments (fmap (\_ -> location) (expected @Prompt))
-
-    return Syntax.Prompt{ arguments = newArguments, schema = Just annotation, .. }
-
-check Syntax.HTTP{ import_, schema = Nothing, .. } annotation = do
-    let input = fmap (\_ -> location) (expected @HTTP)
-
-    newArguments <- check arguments input
-
-    context₀ <- get
-
-    Monad.unless import_ do
-        subtype (Context.solveType context₀ annotation) Type.Scalar{ location, scalar = Monotype.JSON }
-
-    context₁ <- get
-
-    return Syntax.HTTP{ arguments = newArguments, schema = Just (Context.solveType context₁ annotation), .. }
-
-check Syntax.Read{ import_, schema = Nothing, .. } annotation = do
-    newArguments <- check arguments (fmap (\_ -> location) (expected @Text))
-
-    context₀ <- get
-
-    Monad.unless import_ do
-        subtype (Context.solveType context₀ annotation) Type.Scalar{ location, scalar = Monotype.JSON }
-
-    context₁ <- get
-
-    return Syntax.Read{ arguments = newArguments, schema = Just (Context.solveType context₁ annotation), .. }
 
 check Syntax.List{..} annotation@Type.Scalar{ scalar = Monotype.JSON } = do
     newElements <- traverse (`check` annotation) elements
