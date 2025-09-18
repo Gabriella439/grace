@@ -5,7 +5,7 @@
 , megaparsec, modern-uri, mtl, openai, parser-combinators
 , prettyprinter, prettyprinter-ansi-terminal, safe-exceptions
 , scientific, stm, string-interpolate, tasty, tasty-hunit
-, tasty-silver, template-haskell, text, these, transformers
+, tasty-silver, template-haskell, text, transformers
 , unordered-containers, uri-encode, vector
 }:
 mkDerivation {
@@ -26,7 +26,7 @@ mkDerivation {
   executableHaskellDepends = [
     aeson async base containers filepath ghcjs-base
     insert-ordered-containers lens mtl safe-exceptions scientific stm
-    text these transformers uri-encode
+    text transformers uri-encode
   ];
   testHaskellDepends = [
     base directory doctest filepath mtl prettyprinter safe-exceptions
