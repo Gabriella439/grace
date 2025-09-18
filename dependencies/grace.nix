@@ -4,8 +4,9 @@
 , http-client-tls, http-types, insert-ordered-containers, lens, lib
 , megaparsec, modern-uri, mtl, openai, optparse-applicative
 , parser-combinators, prettyprinter, prettyprinter-ansi-terminal
-, repline, safe-exceptions, scientific, string-interpolate, tasty
-, tasty-hunit, tasty-silver, template-haskell, terminal-size, text
+, repline, retry, safe-exceptions, scientific, servant-client
+, servant-client-core, string-interpolate, tasty, tasty-hunit
+, tasty-silver, template-haskell, terminal-size, text
 , unordered-containers, vector
 }:
 mkDerivation {
@@ -20,8 +21,9 @@ mkDerivation {
     http-client http-client-tls http-types insert-ordered-containers
     lens megaparsec modern-uri mtl openai optparse-applicative
     parser-combinators prettyprinter prettyprinter-ansi-terminal
-    repline safe-exceptions scientific string-interpolate
-    template-haskell terminal-size text unordered-containers vector
+    repline retry safe-exceptions scientific servant-client
+    servant-client-core string-interpolate template-haskell
+    terminal-size text unordered-containers vector
   ];
   executableHaskellDepends = [ base ];
   testHaskellDepends = [
