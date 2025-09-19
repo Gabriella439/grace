@@ -28,7 +28,7 @@ import Grace.HTTP.Type
     )
 import GHCJS.Fetch
     ( Request(..)
-    , RequestCredentials(..)
+    , RequestCacheMode(..)
     , RequestOptions(..)
     , JSPromiseException
     )
@@ -58,6 +58,7 @@ fetch url = do
             { reqUrl = JSString.pack (Text.unpack url)
             , reqOptions = Fetch.defaultRequestOptions
                 { reqOptMethod = HTTP.Types.methodGet
+                , reqOptCacheMode = NoStore
                 }
             }
 
@@ -99,6 +100,7 @@ http import_ GET{ url, headers, parameters } = do
     let reqOptions = Fetch.defaultRequestOptions
             { reqOptHeaders = completeHeaders import_ headers
             , reqOptMethod = HTTP.Types.methodGet
+            , reqOptCacheMode = NoStore
             }
 
     let request = Request{ reqUrl, reqOptions }
@@ -113,6 +115,7 @@ http import_ POST{ url, headers, request } = do
     let reqOptions₀ = Fetch.defaultRequestOptions
             { reqOptHeaders = completeHeaders import_ headers
             , reqOptMethod = HTTP.Types.methodPost
+            , reqOptCacheMode = NoStore
             }
 
     reqOptions <- case request of
@@ -169,6 +172,7 @@ createChatCompletion key createChatCompletion_ = do
                     , ("Authorization", "Bearer " <> keyBytes)
                     ] <> organizationHeader
                 , reqOptBody = Just (Prim.toJSString body)
+                , reqOptCacheMode = NoStore
                 }
             }
 
