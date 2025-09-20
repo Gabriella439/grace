@@ -1587,13 +1587,43 @@ main = do
 
     codeInput  <- setupCodemirrorInput inputArea
 
-    focus codeInput
-
     counter <- IORef.newIORef 0
 
     params <- getSearchParams
 
     hasTutorial <- hasParam params "tutorial"
+
+    hasExpression <- hasParam params "expression"
+
+    hasEdit <- hasParam params "edit"
+
+    edit <- if hasTutorial
+        then do
+            setParam params "edit" "true"
+
+            return True
+        else do
+            if hasEdit
+                then do
+                    return True
+                else do
+                    if hasExpression
+                        then do
+                            return False
+                        else do
+                            setParam params "edit" "true"
+
+                            return True
+
+    if edit
+        then do
+            title <- getElementById "title"
+
+            setDisplay title "block"
+
+            focus codeInput
+        else do
+            setDisplay (getWrapperElement codeInput) "none"
 
     tutorialRef <- IORef.newIORef hasTutorial
 
@@ -1601,7 +1631,7 @@ main = do
 
     output <- getElementById "output"
 
-    (setBusy, setSuccess, setError) <- createForm True output
+    (setBusy, setSuccess, setError) <- createForm edit output
 
     let interpret () = do
             text <- getValue codeInput
@@ -1782,8 +1812,6 @@ main = do
     addEventListener startTutorial "click" startTutorialCallback
 
     Monad.when hasTutorial enableTutorial
-
-    hasExpression <- hasParam params "expression"
 
     Monad.when hasExpression do
         expression <- getParam params "expression"
