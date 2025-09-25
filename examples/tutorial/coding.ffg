@@ -4,11 +4,10 @@ let key = arguments."OpenAI key" in
 
 # What do you think this code will do?  Run it to test your guess:
 import prompt{ key }
-    : { jobDescription: Text } -> { isFinance : Bool, rationale : Text }
+    : { "Job Description": Text } -> { "Is Finance?": Bool, "Rationale": Text }
 # You can read the above type as "a function whose input is a record (with a
-# `jobDescription` field) and whose output is a record (with `isFinance` and
-# `rationale` fields)
+# "Job Description" field) and whose output is a record (with "Is Finance?" and
+# "Rationale" fields)
 
-# The `code: true` argument instructs the model to generate Grace code matching
-# the expected type.  The generated Grace might use the `prompt` keyword, too!
-# Be sure to check out the "Code" tab to see what code the model generated
+# The `import` keyword instructs the model to generate Grace code matching the
+# expected type.  The generated Grace might use the `prompt` keyword, too!

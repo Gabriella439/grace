@@ -8,12 +8,15 @@ expression
   / if
   / annotation  ; Everything else (operators, projections, literals, etc.)
 
-; A variable name (e.g. `x`)
 identifier
-  ; Variable names begin with a lowercase letter or "_"
+  ; Naked variable names begin with a lowercase letter or "_"
+  ;
+  ; Examples: `x`, `name`, `toLicense`
   = (LOWER / "_") *(ALPHANUM / "_" / "-" / "/")
 
   ; Quoted variable names begin with `.` and are surrounded with single quotes
+  ;
+  ; Examples: `.'Rationale'`, `.'Section Header'`, `.'Website - Backend'`
   / "." single-quoted
 
 lambda = "\" 1*name-binding "->" expression
@@ -25,6 +28,9 @@ name-binding
   ;     \x -> …
   ;
   ;     let f x = … in …
+  ;
+  ;     let greet .'Name' = "Hi, ${.'Name'}!" in greet "Alice"
+  ;
   = identifier
 
   ; Bound variable with an optional type annotation and optional default value:
@@ -32,6 +38,8 @@ name-binding
   ;     \(x : T = v) -> …
   ;
   ;     let f (x : T = v) = … in …
+  ;
+  ;     let greet (.'Name' : Text = "Alice") = "Hi, ${.'Name'}!" in greet null
   ;
   ; You can have just the type annotation:
   ;
@@ -45,12 +53,17 @@ name-binding
   ;
   ;     let f (x = v) = … in …
   ;
+  ;     let greet (.'Name' : Text) = "Hi, ${.'Name'}!" in greet "Alice"
+  ;
   ; You can even omit both and just parenthesize the bound variable, although
   ; this is not idiomatic since you'd usually omit the parentheses in that case:
   ;
   ;     \(x) -> …
   ;
   ;     let f (x) = … in …
+  ;
+  ;     let greet (.'Name') = "Hi, ${.'Name'}!" in greet "Alice"
+  ;
   / "(" identifier [ ":" type ] [ "=" expression ] ")"
 
   ; Destructure a record function argument:
@@ -59,12 +72,20 @@ name-binding
   ;
   ;     let f { a, b } = … in …
   ;
+  ;     let greet { "Name" } = "Hi, ${.'Name'}!" in greet { "Name": "Alice" }
+  ;
+  ;     let greet { .'Name' } = "Hi, ${.'Name'}!" in greet { "Name": "Alice" }
+  ;
   ; Record fields destructured in this way can have optional type annotations
   ; and optional default values:
   ;
   ;     \{ a, b : T0, c = v0, d : T1 = v1 } -> …
   ;
   ;     let f { a, b : T0, c = v0, d : T1 = v1 } = … in …
+  ;
+  ;     let greet { "Name" : Text = "Alice" } = "Hi, ${.'Name'}!" in greet { }
+  ;
+  ;     let greet { .'Name' : Text = "Alice" } = "Hi, ${.'Name'}!" in greet { }
   / "{" [ field-binding *( "," field-binding ) ] "}"
 
 field-binding = identifier [ ":" type ] [ "=" expression ]
