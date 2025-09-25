@@ -1462,7 +1462,7 @@ instance IsString (FieldName () a) where
 
 instance Pretty a => Pretty (FieldName s a) where
     pretty FieldName{ name, annotation, assignment } =
-            Type.prettyLabel name
+            Type.prettyRecordLabel False name
         <>  foldMap renderAnnotation annotation
         <>  foldMap renderAssignment assignment
       where

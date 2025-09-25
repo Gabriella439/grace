@@ -929,7 +929,7 @@ grammar endsWithBrace = mdo
                         pure assignment
 
                 let parseFieldName = do
-                        ~(fieldNameLocation, name) <- locatedLabel
+                        ~(fieldNameLocation, name) <- locatedRecordLabel
 
                         annotation <- optional parseAnnotation
 
