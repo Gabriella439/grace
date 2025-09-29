@@ -101,6 +101,7 @@ library
                      , ghcjs-base
                      , ghcjs-fetch
                      , ghcjs-prim
+                     , time
   else
     hs-source-dirs:    ghc
     build-depends:     ansi-terminal
