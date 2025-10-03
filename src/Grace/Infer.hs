@@ -2723,92 +2723,25 @@ infer e₀ = do
                         Exception.throwIO (InvalidOperands "divide" (Syntax.location left) (Syntax.location right))
 
         Syntax.Operator{ operator = Syntax.Divide, .. } -> do
-            let natural = Type.Scalar
-                    { location = operatorLocation
-                    , scalar = Monotype.Natural
-                    }
-
-            let integer = Type.Scalar
-                    { location = operatorLocation
-                    , scalar = Monotype.Integer
-                    }
-
             let real = Type.Scalar
                     { location = operatorLocation
                     , scalar = Monotype.Real
                     }
 
-            newRight <- case right of
-                Syntax.Scalar{ scalar = Syntax.Natural 0 } -> do
-                    Exception.throwIO (ZeroDivisor (Syntax.location right))
-                Syntax.Scalar{ scalar = Syntax.Integer 0 } -> do
-                    Exception.throwIO (ZeroDivisor (Syntax.location right))
-                Syntax.Scalar{ scalar = Syntax.Real 0 } -> do
-                    Exception.throwIO (ZeroDivisor (Syntax.location right))
-                Syntax.Scalar{ scalar = Syntax.Natural n, location = l } -> do
-                    return Syntax.Scalar{ scalar = Syntax.Real (fromIntegral n), location = l }
-                Syntax.Scalar{ scalar = Syntax.Integer n, location = l } -> do
-                    return Syntax.Scalar{ scalar = Syntax.Real (fromInteger n), location = l }
-                Syntax.Scalar{ scalar = Syntax.Real n, location = l } -> do
-                    return Syntax.Scalar{ scalar = Syntax.Real n, location = l }
-                _ -> do
-                    Exception.throwIO (NeedConcreteDivisor (Syntax.location right))
+            newLeft  <- check left  real
+            newRight <- check right real
 
-            context₁ <- get
+            context <- get
 
-            let naturalArgument = do
-                    newLeft <- check left natural
+            let newOperator = Syntax.Operator
+                    { location
+                    , left = solveSyntax context newLeft
+                    , operatorLocation
+                    , operator = Syntax.Divide
+                    , right = solveSyntax context newRight
+                    }
 
-                    context₂ <- get
-
-                    let newOperator = Syntax.Operator
-                            { location
-                            , left = solveSyntax context₂ newLeft
-                            , operatorLocation
-                            , operator = Syntax.Divide
-                            , right = solveSyntax context₂ newRight
-                            }
-
-                    return (real, newOperator)
-
-            let integerArgument = do
-                    newLeft <- check left integer
-
-                    context₂ <- get
-
-                    let newOperator = Syntax.Operator
-                            { location
-                            , left = solveSyntax context₂ newLeft
-                            , operatorLocation
-                            , operator = Syntax.Divide
-                            , right = solveSyntax context₂ newRight
-                            }
-
-                    return (real, newOperator)
-
-            let realArgument = do
-                    newLeft <- check left real
-
-                    context₂ <- get
-
-                    let newOperator = Syntax.Operator
-                            { location
-                            , left = solveSyntax context₂ newLeft
-                            , operatorLocation
-                            , operator = Syntax.Divide
-                            , right = solveSyntax context₂ newRight
-                            }
-
-                    return (real, newOperator)
-
-            naturalArgument `Exception.catch` \(_ :: TypeInferenceError) -> do
-                set context₁
-
-                integerArgument `Exception.catch` \(_ :: TypeInferenceError) -> do
-                    set context₁
-
-                    realArgument `Exception.catch` \(_ :: TypeInferenceError) -> do
-                        Exception.throwIO (InvalidOperands "divide" (Syntax.location left) (Syntax.location right))
+            return (real, newOperator)
 
         Syntax.Builtin{ builtin = Syntax.Some, .. }-> do
             return
