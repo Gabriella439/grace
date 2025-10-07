@@ -29,6 +29,7 @@ import Grace.HTTP.Type
     , Parameter(..)
     , completeHeaders
     , organization
+    , renderQueryText
     )
 import Network.HTTP.Client
     ( HttpExceptionContent(..)
@@ -137,27 +138,19 @@ http :: Bool -> HTTP -> IO Text
 http import_ GET{ url, headers, parameters } = do
     manager <- newManager
 
-    request₀ <- HTTP.parseUrlThrow (Text.unpack url)
+    renderedURL <- renderQueryText url parameters
+
+    request₀ <- HTTP.parseUrlThrow (Text.unpack renderedURL)
 
     let request₁ = request₀
             { method = HTTP.Types.methodGet
-            , requestHeaders = completeHeaders import_ headers
+            , requestHeaders = completeHeaders import_ False headers
             }
-
-    let request₂ = case parameters of
-            Nothing ->
-                request₁
-            Just ps ->
-                let convertedParameters = do
-                        Parameter{ parameter, value } <- ps
-                        return (Encoding.encodeUtf8 parameter, fmap Encoding.encodeUtf8 value)
-
-                in  HTTP.setQueryString convertedParameters request₁
 
     let handler :: HTTP.HttpException -> IO a
         handler httpException = Exception.throwIO (HttpException httpException)
 
-    response <- Exception.handle handler (HTTP.httpLbs request₂ manager)
+    response <- Exception.handle handler (HTTP.httpLbs request₁ manager)
 
     case Lazy.Encoding.decodeUtf8' (HTTP.responseBody response) of
         Left exception -> Exception.throwIO (NotUTF8 exception)
@@ -170,8 +163,12 @@ http import_ POST{ url, headers, request } = do
 
     let request₁ = request₀
             { method = HTTP.Types.methodPost
-            , requestHeaders = completeHeaders import_ headers
+            , requestHeaders = completeHeaders import_ body headers
             }
+          where
+            body = case request of
+                Nothing -> False
+                Just _  -> True
 
     let request₂ = case request of
             Nothing ->

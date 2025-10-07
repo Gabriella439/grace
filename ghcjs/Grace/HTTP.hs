@@ -25,6 +25,7 @@ import Grace.HTTP.Type
     , Parameter(..)
     , completeHeaders
     , organization
+    , renderQueryText
     )
 import GHCJS.Fetch
     ( Request(..)
@@ -40,7 +41,6 @@ import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.JSString as JSString
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
-import qualified Data.Time.Clock.POSIX as Time
 import qualified GHCJS.Fetch as Fetch
 import qualified GHCJS.Prim as Prim
 import qualified Network.HTTP.Types as HTTP.Types
@@ -75,45 +75,6 @@ responseToText response = do
 
     return (Text.pack (JSString.unpack jsString))
 
-renderQueryText :: Text -> Maybe [Parameter] -> IO Text
-renderQueryText url parameters = do
-    let (intermediateURL, queryBytes) = Text.break (== '?') url
-
-    let oldQueryText =
-            HTTP.Types.parseQueryText (Encoding.encodeUtf8 queryBytes)
-
-    let oldParameters = do
-            (parameter, value) <- oldQueryText
-
-            return Parameter{ parameter, value }
-
-    currentTime <- Time.getPOSIXTime
-
-    let cacheBust =
-            [ Parameter
-                { parameter = "cachebust"
-                , value = Just (Text.pack (show currentTime))
-                }
-            ]
-
-    let finalParameters = case parameters of
-            Nothing -> oldParameters <> cacheBust
-            Just newParameters -> oldParameters <> newParameters <> cacheBust
-
-    let queryText = do
-            Parameter{ parameter, value } <- finalParameters
-
-            return (parameter, value)
-
-    let builder = HTTP.Types.renderQueryText True queryText
-
-    let bytes =
-            ByteString.Lazy.toStrict (Builder.toLazyByteString builder)
-
-    case Encoding.decodeUtf8' bytes of
-        Left exception -> Exception.throwIO exception
-        Right text -> return (intermediateURL <> text)
-
 -- | Make an HTTP request
 http :: Bool -> HTTP -> IO Text
 http import_ GET{ url, headers, parameters } = do
@@ -122,7 +83,7 @@ http import_ GET{ url, headers, parameters } = do
     let reqUrl = JSString.pack (Text.unpack newURL)
 
     let reqOptions = Fetch.defaultRequestOptions
-            { reqOptHeaders = completeHeaders import_ headers
+            { reqOptHeaders = completeHeaders import_ False headers
             , reqOptMethod = HTTP.Types.methodGet
             , reqOptCacheMode = NoStore
             }
@@ -139,10 +100,14 @@ http import_ POST{ url, headers, request } = do
     let reqUrl = JSString.pack (Text.unpack newURL)
 
     let reqOptions₀ = Fetch.defaultRequestOptions
-            { reqOptHeaders = completeHeaders import_ headers
+            { reqOptHeaders = completeHeaders import_ body headers
             , reqOptMethod = HTTP.Types.methodPost
             , reqOptCacheMode = NoStore
             }
+          where
+            body = case request of
+                Nothing -> False
+                Just _  -> True
 
     reqOptions <- case request of
             Nothing -> do

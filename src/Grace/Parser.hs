@@ -137,6 +137,7 @@ lexToken =
             [ Grace.Parser.Else         <$ symbol "else"
             , Grace.Parser.Forall       <$ symbol "forall"
             , Grace.Parser.Fold         <$ symbol "fold"
+            , Grace.Parser.GitHub       <$ symbol "github"
             , Grace.Parser.HTTP         <$ symbol "http"
             , Grace.Parser.Read         <$ symbol "read"
             , Grace.Parser.If           <$ symbol "if"
@@ -496,6 +497,7 @@ reserved =
         , "false"
         , "fold"
         , "forall"
+        , "github"
         , "http"
         , "if"
         , "import"
@@ -621,6 +623,7 @@ data Token
     | Fold
     | Forall
     | ForwardSlash
+    | GitHub
     | GreaterThanOrEqual
     | If
     | Import
@@ -833,6 +836,7 @@ render t = case t of
     Grace.Parser.Fold               -> "fold"
     Grace.Parser.Forall             -> "forall"
     Grace.Parser.ForwardSlash       -> "/"
+    Grace.Parser.GitHub             -> "github"
     Grace.Parser.GreaterThanOrEqual -> ">="
     Grace.Parser.If                 -> "if"
     Grace.Parser.Import             -> "import"
@@ -1113,6 +1117,12 @@ grammar endsWithBrace = mdo
                                     arguments <- projectExpression
 
                                     return \import_ -> Syntax.Read{ location, import_, arguments, schema = Nothing }
+
+                            <|> do  location <- locatedToken Grace.Parser.GitHub
+
+                                    arguments <- projectExpression
+
+                                    return \import_ -> Syntax.GitHub{ location, import_, arguments, schema = Nothing }
                             )
 
                       pure (f i)

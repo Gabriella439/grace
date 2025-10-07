@@ -24,6 +24,7 @@ import Data.List.NonEmpty (NonEmpty(..))
 import Data.Sequence (ViewL(..))
 import Data.Text (Text)
 import Data.Void (Void)
+import Grace.Aeson (JSONDecodingFailed(..))
 import Grace.Decode (FromGrace(..))
 import Grace.HTTP (Methods)
 import Grace.Input (Input(..))
@@ -48,6 +49,8 @@ import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
 import qualified Data.Void as Void
+import qualified Grace.Aeson
+import qualified Grace.GitHub as GitHub
 import qualified Grace.HTTP as HTTP
 import qualified Grace.Infer as Infer
 import qualified Grace.Monotype as Monotype
@@ -313,13 +316,7 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                         return value
 
                     else do
-                        let bytes = ByteString.Lazy.fromStrict (Encoding.encodeUtf8 responseBody)
-
-                        responseValue <- case Aeson.eitherDecode bytes of
-                            Left message_ ->
-                                Exception.throwIO JSONDecodingFailed{ message = message_, text = responseBody }
-                            Right responseValue ->
-                                return responseValue
+                        responseValue <- Grace.Aeson.decode responseBody
 
                         let defaultedSchema =
                                 Lens.transform (Type.defaultTo Type.Scalar{ location, scalar = Monotype.JSON }) schema
@@ -346,13 +343,7 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                         return value
 
                     else do
-                        let bytes = ByteString.Lazy.fromStrict (Encoding.encodeUtf8 text)
-
-                        aesonValue <- case Aeson.eitherDecode bytes of
-                            Left message -> do
-                                Exception.throwIO JSONDecodingFailed{ message, text }
-                            Right aesonValue -> do
-                                return aesonValue
+                        aesonValue <- Grace.Aeson.decode text
 
                         case Value.checkJSON schema aesonValue of
                             Left exception -> do
@@ -371,13 +362,62 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                                 let input =
                                         Code "(read)" (Pretty.toSmart @(Syntax Location Input) expression)
 
-                                -- Turn the conversion error into a nicer type error
                                 _ <- Infer.typeOf input expression
 
                                 Exception.throwIO exception
 
                             Right value -> do
                                 return value
+
+            Syntax.GitHub{ schema = Nothing } -> do
+                Concurrently (Exception.throwIO MissingSchema)
+            Syntax.GitHub{ location, import_, arguments, schema = Just schema } -> Concurrently do
+                newArguments <- runConcurrently (loop env arguments)
+
+                github <- case decode newArguments of
+                    Left exception -> Exception.throwIO exception
+                    Right http -> return http
+
+                (responseBody, url) <- liftIO (GitHub.github import_ github)
+
+                if import_
+                    then do
+                        context <- generateContext location
+
+                        (_, value) <- Interpret.interpretWith keyToMethods context (Just schema) (Code (Text.unpack url) responseBody)
+
+                        return value
+
+                    else do
+                        aesonValue <- Grace.Aeson.decode responseBody
+
+                        let defaultedSchema =
+                                Lens.transform (Type.defaultTo Type.Scalar{ location, scalar = Monotype.JSON }) schema
+
+                        case Value.checkJSON defaultedSchema aesonValue of
+                            Left exception -> do
+                                let value = Value.inferJSON aesonValue
+
+                                let annotated =
+                                        first (\_ -> Unknown)
+                                            (fmap Void.absurd (quote value))
+
+                                let expression = Syntax.Annotation
+                                        { location = Unknown
+                                        , annotated
+                                        , annotation = schema
+                                        }
+
+                                let input =
+                                        Code "(read)" (Pretty.toSmart @(Syntax Location Input) expression)
+
+                                _ <- Infer.typeOf input expression
+
+                                Exception.throwIO exception
+
+                            Right value -> do
+                                return value
+
 
             Syntax.Scalar{ scalar } ->
                 pure (Value.Scalar scalar)
@@ -867,26 +907,6 @@ instance Exception MissingCredentials where
         "Missing credentials\n\
         \\n\
         \You need to provide API credentials in order to use the prompt keyword"
-
--- | JSON decoding failed
-data JSONDecodingFailed = JSONDecodingFailed
-    { message :: String
-    , text :: Text
-    } deriving stock (Show)
-
-instance Exception JSONDecodingFailed where
-    displayException JSONDecodingFailed{ message, text } =
-        "Failed to decode output as JSON\n\
-        \\n\
-        \The following text:\n\
-        \\n\
-        \" <> Text.unpack text <> "\n\
-        \\n\
-        \… to decode as JSON.\n\
-        \\n\
-        \Decoding error message:\n\
-        \\n\
-        \" <> message
 
 -- | Elaboration didn't infer a schema
 data MissingSchema = MissingSchema

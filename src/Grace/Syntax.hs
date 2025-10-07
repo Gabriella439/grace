@@ -136,6 +136,7 @@ data Syntax s a
     | Prompt{ location :: s, import_ :: Bool, arguments :: Syntax s a, schema :: Maybe (Type s) }
     | HTTP{ location :: s, import_ :: Bool, arguments :: Syntax s a, schema :: Maybe (Type s) }
     | Read{ location :: s, import_ :: Bool, arguments :: Syntax s a, schema :: Maybe (Type s) }
+    | GitHub{ location :: s, import_ :: Bool, arguments :: Syntax s a, schema :: Maybe (Type s) }
     | Scalar { location :: s, scalar :: Scalar }
     | Operator { location :: s, left :: Syntax s a, operatorLocation :: s, operator :: Operator, right :: Syntax s a }
     -- ^
@@ -263,6 +264,9 @@ instance Monad (Syntax ()) where
 
     Read{ location, import_, arguments, schema } >>= f =
         Read{ location, import_, arguments = arguments >>= f, schema }
+
+    GitHub{ location, import_, arguments, schema } >>= f =
+        GitHub{ location, import_, arguments = arguments >>= f, schema }
 
     Scalar{ location, scalar } >>= _ =
         Scalar{ location, scalar }
@@ -435,6 +439,11 @@ instance Plated (Syntax s a) where
 
                 return Read{ location, import_, arguments = newArguments, schema }
 
+            GitHub{ location, import_, arguments, schema } -> do
+                newArguments <- onSyntax arguments
+
+                return GitHub{ location, import_, arguments = newArguments, schema }
+
             Scalar{ location, scalar } -> do
                 pure Scalar{ location, scalar }
 
@@ -535,6 +544,13 @@ instance Bifunctor Syntax where
         , schema = fmap (fmap f) schema
         }
 
+    first f GitHub{ location, import_, arguments, schema } = GitHub
+        { location = f location
+        , import_
+        , arguments = first f arguments
+        , schema = fmap (fmap f) schema
+        }
+
     first f Scalar{ location, scalar } =
         Scalar{ location = f location, scalar }
 
@@ -602,6 +618,8 @@ usedIn name₀ HTTP{ arguments } =
     usedIn name₀ arguments
 usedIn name₀ Read{ arguments } =
     usedIn name₀ arguments
+usedIn name₀ GitHub{ arguments } =
+    usedIn name₀ arguments
 usedIn name₀ Operator{ left, right } =
     usedIn name₀ left && usedIn name₀ right
 usedIn _ Builtin{ } =
@@ -615,6 +633,7 @@ effects =
       Lens.cosmos
     . (   (_As @"Prompt" . Lens.to (\_ -> ()))
       <>  (_As @"HTTP"   . Lens.to (\_ -> ()))
+      <>  (_As @"GitHub" . Lens.to (\_ -> ()))
       )
 
 -- | A text literal with interpolated expressions
@@ -725,6 +744,10 @@ types onType Read{ location, import_, arguments, schema } = do
     newSchema <- traverse onType schema
 
     return Read{ location, import_, arguments, schema = newSchema }
+types onType GitHub{ location, import_, arguments, schema } = do
+    newSchema <- traverse onType schema
+
+    return GitHub{ location, import_, arguments, schema = newSchema }
 types onType Let{ location, bindings, body } = do
     newBindings <- traverse onBinding bindings
 
@@ -1078,6 +1101,29 @@ prettyExpression Read{ arguments, import_, schema = Just schema } =
         <>  Pretty.nest 4 (pretty schema)
 
     prefix = if import_ then keyword "import" <> " " else mempty
+prettyExpression GitHub{ arguments, import_, schema = Just schema } =
+    Pretty.group (Pretty.flatAlt long short)
+  where
+    short = prefix
+        <>  keyword "github"
+        <>  " "
+        <>  prettyProjectExpression arguments
+        <>  " "
+        <>  Pretty.operator ":"
+        <>  " "
+        <>  pretty schema
+
+    long =  keyword "github"
+        <>  Pretty.hardline
+        <>  "  "
+        <>  Pretty.nest 2 (prettyProjectExpression arguments)
+        <>  Pretty.hardline
+        <>  "  "
+        <>  Pretty.operator ":"
+        <>  " "
+        <>  Pretty.nest 4 (pretty schema)
+
+    prefix = if import_ then keyword "import" <> " " else mempty
 prettyExpression Annotation{ annotated, annotation } =
     Pretty.group (Pretty.flatAlt long short)
   where
@@ -1193,6 +1239,7 @@ prettyApplicationExpression expression
     isApplication Prompt{}      = True
     isApplication HTTP{}        = True
     isApplication Read{}        = True
+    isApplication GitHub{}      = True
     isApplication _             = False
 
     short = prettyShort expression
@@ -1215,6 +1262,10 @@ prettyApplicationExpression expression
         prefix = if import_ then keyword "import" <> " " else mempty
     prettyShort Read{ arguments, import_, schema = Nothing } =
         prefix <> keyword "read" <> " " <> prettyProjectExpression arguments
+      where
+        prefix = if import_ then keyword "import" <> " " else mempty
+    prettyShort GitHub{ arguments, import_, schema = Nothing } =
+        prefix <> keyword "github" <> " " <> prettyProjectExpression arguments
       where
         prefix = if import_ then keyword "import" <> " " else mempty
     prettyShort other =
@@ -1247,6 +1298,14 @@ prettyApplicationExpression expression
       where
         prefix = if import_ then keyword "import" <> " " else mempty
     prettyLong Read{ import_, arguments } =
+            prefix
+        <>  keyword "read"
+        <>  Pretty.hardline
+        <>  "  "
+        <>  Pretty.nest 2 (prettyProjectExpression arguments)
+      where
+        prefix = if import_ then keyword "import" <> " " else mempty
+    prettyLong GitHub{ import_, arguments } =
             prefix
         <>  keyword "read"
         <>  Pretty.hardline
