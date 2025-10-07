@@ -159,6 +159,10 @@ application
   ; preceded with `import`)
   = [ "import" ] "read" projection
 
+  ; Keyword to fetch a JSON file from GitHub (the default) or Grace code (when
+  ; preceded with `import`)
+  = [ "import" ] "github" projection
+
   ; Keyword to pattern match on a union
   / "fold" projection
 

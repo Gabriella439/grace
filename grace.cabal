@@ -18,6 +18,7 @@ library
                      , aeson-pretty
                      , aeson-yaml
                      , async
+                     , binary
                      , bytestring
                      , containers
                      , case-insensitive
@@ -38,15 +39,18 @@ library
                      , string-interpolate
                      , template-haskell
                      , text >= 1.2.4.0
+                     , time
                      , unordered-containers
                      , vector
 
-  exposed-modules:     Grace.Context
+  exposed-modules:     Grace.Aeson
+                     , Grace.Context
                      , Grace.DataFile
                      , Grace.Decode
                      , Grace.Domain
                      , Grace.Encode
                      , Grace.Existential
+                     , Grace.GitHub
                      , Grace.HTTP
                      , Grace.Input
                      , Grace.Import
@@ -97,11 +101,9 @@ library
 
   if impl(ghcjs) || os(ghcjs)
     hs-source-dirs:    ghcjs
-    build-depends:     binary
-                     , ghcjs-base
+    build-depends:     ghcjs-base
                      , ghcjs-fetch
                      , ghcjs-prim
-                     , time
   else
     hs-source-dirs:    ghc
     build-depends:     ansi-terminal

@@ -6,9 +6,13 @@ import Data.Text (Text)
 import GHC.Generics (Generic)
 import Grace.Decode (FromGrace)
 
+import qualified Control.Exception.Safe as Exception
+import qualified Data.Binary.Builder as Builder
+import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.CaseInsensitive as CaseInsensitive
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
+import qualified Data.Time.Clock.POSIX as Time
 import qualified Network.HTTP.Types as HTTP.Types
 
 -- | An HTTP header
@@ -36,8 +40,8 @@ data HTTP
     deriving stock (Generic)
     deriving anyclass (FromGrace)
 
-completeHeaders :: Bool -> Maybe [Header] -> [HTTP.Types.Header]
-completeHeaders import_ headers = do
+completeHeaders :: Bool -> Bool -> Maybe [Header] -> [HTTP.Types.Header]
+completeHeaders import_ body headers = do
     Header{ header, value } <- requiredHeaders <> defaultedHeaders
 
     let headerBytes = CaseInsensitive.mk (Encoding.encodeUtf8 header)
@@ -50,9 +54,16 @@ completeHeaders import_ headers = do
         | import_ =
             [ ]
         | otherwise =
-            [ Header{ header = "Content-Type", value = "application/json" }
-            , Header{ header = "Accept"      , value = "application/json" }
-            ]
+            (   [ Header{ header = "Accept"      , value = "application/json" }
+                ]
+            <>  contentType
+            )
+      where
+        contentType
+            | body =
+                [ Header{ header = "Content-Type", value = "application/json" } ]
+            | otherwise =
+                [ ]
 
     defaultedHeaders = case headers of
         Nothing -> []
@@ -60,3 +71,41 @@ completeHeaders import_ headers = do
 
 organization :: Maybe Text
 organization = Nothing
+
+renderQueryText :: Text -> Maybe [Parameter] -> IO Text
+renderQueryText url parameters = do
+    let (intermediateURL, queryBytes) = Text.break (== '?') url
+
+    let oldQueryText =
+            HTTP.Types.parseQueryText (Encoding.encodeUtf8 queryBytes)
+
+    let oldParameters = do
+            (parameter, value) <- oldQueryText
+
+            return Parameter{ parameter, value }
+
+    currentTime <- Time.getPOSIXTime
+
+    let cacheBust =
+            [ Parameter
+                { parameter = "cachebust"
+                , value = Just (Text.pack (show currentTime))
+                }
+            ]
+
+    let finalParameters = case parameters of
+            Nothing -> oldParameters <> cacheBust
+            Just newParameters -> oldParameters <> newParameters <> cacheBust
+
+    let queryText = do
+            Parameter{ parameter, value } <- finalParameters
+
+            return (parameter, value)
+
+    let builder = HTTP.Types.renderQueryText True queryText
+
+    let bytes = ByteString.Lazy.toStrict (Builder.toLazyByteString builder)
+
+    case Encoding.decodeUtf8' bytes of
+        Left exception -> Exception.throwIO exception
+        Right text -> return (intermediateURL <> text)

@@ -37,7 +37,8 @@ import Data.Void (Void)
 import Grace.Context (Context, Entry)
 import Grace.Decode (FromGrace(..))
 import Grace.Existential (Existential)
-import Grace.HTTP (HTTP(..))
+import Grace.GitHub (GitHub(..))
+import Grace.HTTP.Type (HTTP(..))
 import Grace.Input (Input)
 import Grace.Location (Location(..))
 import Grace.Monotype (Monotype)
@@ -2053,6 +2054,28 @@ infer e₀ = do
             context <- get
 
             return (newSchema, Syntax.Read{ import_, arguments = solveSyntax context newArguments, schema = Just newSchema, .. })
+
+        Syntax.GitHub{ location, import_, arguments, schema } -> do
+            let input = fmap (\_ -> location) (expected @GitHub)
+
+            newArguments <- check arguments input
+
+            newSchema <- case schema of
+                    Just output -> do
+                        return output
+                    Nothing
+                        | import_ -> do
+                            existential <- fresh
+
+                            push (Context.UnsolvedType existential)
+
+                            return Type.UnsolvedType{..}
+                        | otherwise -> do
+                            return Type.Scalar{ scalar = Monotype.JSON, .. }
+
+            context <- get
+
+            return (newSchema, Syntax.GitHub{ import_, arguments = solveSyntax context newArguments, schema = Just newSchema, .. })
 
         -- All the type inference rules for scalars go here.  This part is
         -- pretty self-explanatory: a scalar literal returns the matching
