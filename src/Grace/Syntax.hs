@@ -9,11 +9,12 @@ module Grace.Syntax
     ( -- * Syntax
       Syntax(..)
     , usedIn
+    , cosmos
     , effects
+    , types
     , Chunks(..)
     , Field(..)
     , Smaller(..)
-    , types
     , Scalar(..)
     , Operator(..)
     , Builtin(..)
@@ -627,14 +628,18 @@ usedIn _ Builtin{ } =
 usedIn _ Embed{ } =
     False
 
--- | Matches all effects within a `Syntax` tree
+-- | `Lens.cosmos` as a @Traversal'@
+cosmos :: Plated a => Traversal' a a
+cosmos f s = f s *> plate (cosmos f) s
+
+-- | `Getting` that matches all effects within a `Syntax` tree
 effects :: Getting Any (Syntax s a) ()
-effects =
-      Lens.cosmos
-    . (   (_As @"Prompt" . Lens.to (\_ -> ()))
-      <>  (_As @"HTTP"   . Lens.to (\_ -> ()))
-      <>  (_As @"GitHub" . Lens.to (\_ -> ()))
-      )
+effects = cosmos . effect
+  where
+    effect =
+            (_As @"Prompt" . Lens.to (\_ -> ()))
+        <>  (_As @"HTTP"   . Lens.to (\_ -> ()))
+        <>  (_As @"GitHub" . Lens.to (\_ -> ()))
 
 -- | A text literal with interpolated expressions
 data Chunks s a = Chunks Text [(Syntax s a, Text)]
@@ -712,90 +717,91 @@ data Smaller s
 instance IsString (Smaller ()) where
     fromString string = Single{ single = fromString string }
 
--- | @Traversal'@ from a `Syntax` to its immediate `Type` annotations
+-- | @Traversal'@ from a `Syntax` to all of its `Type` annotations
 types :: Traversal' (Syntax s a) (Type s)
-types onType
-    Lambda{ location, nameBinding = NameBinding{ nameLocation, name, annotation, assignment }, body } = do
-        newAnnotation <- traverse onType annotation
-
-        return Lambda
-            { location
-            , nameBinding = NameBinding
-                { nameLocation
-                , name
-                , annotation = newAnnotation
-                , assignment
-                }
-            , body
-            }
-types onType Annotation{ location, annotated, annotation } = do
-    newAnnotation <- onType annotation
-
-    return Annotation{ location, annotated, annotation = newAnnotation }
-types onType Prompt{ location, import_, arguments, schema } = do
-    newSchema <- traverse onType schema
-
-    return Prompt{ location, import_, arguments, schema = newSchema }
-types onType HTTP{ location, import_, arguments, schema } = do
-    newSchema <- traverse onType schema
-
-    return HTTP{ location, import_, arguments, schema = newSchema }
-types onType Read{ location, import_, arguments, schema } = do
-    newSchema <- traverse onType schema
-
-    return Read{ location, import_, arguments, schema = newSchema }
-types onType GitHub{ location, import_, arguments, schema } = do
-    newSchema <- traverse onType schema
-
-    return GitHub{ location, import_, arguments, schema = newSchema }
-types onType Let{ location, bindings, body } = do
-    newBindings <- traverse onBinding bindings
-
-    return Let{ location, bindings = newBindings, body }
+types = cosmos . type_
   where
-    onBinding
-        Binding{ nameLocation, name, nameBindings, annotation, assignment } = do
-            newNameBindings <- traverse onNameBinding nameBindings
-
+    type_ onType
+        Lambda{ location, nameBinding = NameBinding{ nameLocation, name, annotation, assignment }, body } = do
             newAnnotation <- traverse onType annotation
 
-            return Binding
+            return Lambda
+                { location
+                , nameBinding = NameBinding
+                    { nameLocation
+                    , name
+                    , annotation = newAnnotation
+                    , assignment
+                    }
+                , body
+                }
+    type_ onType Annotation{ location, annotated, annotation } = do
+        newAnnotation <- onType annotation
+
+        return Annotation{ location, annotated, annotation = newAnnotation }
+    type_ onType Prompt{ location, import_, arguments, schema } = do
+        newSchema <- traverse onType schema
+
+        return Prompt{ location, import_, arguments, schema = newSchema }
+    type_ onType HTTP{ location, import_, arguments, schema } = do
+        newSchema <- traverse onType schema
+
+        return HTTP{ location, import_, arguments, schema = newSchema }
+    type_ onType Read{ location, import_, arguments, schema } = do
+        newSchema <- traverse onType schema
+
+        return Read{ location, import_, arguments, schema = newSchema }
+    type_ onType GitHub{ location, import_, arguments, schema } = do
+        newSchema <- traverse onType schema
+
+        return GitHub{ location, import_, arguments, schema = newSchema }
+    type_ onType Let{ location, bindings, body } = do
+        newBindings <- traverse onBinding bindings
+
+        return Let{ location, bindings = newBindings, body }
+      where
+        onBinding
+            Binding{ nameLocation, name, nameBindings, annotation, assignment } = do
+                newNameBindings <- traverse onNameBinding nameBindings
+
+                newAnnotation <- traverse onType annotation
+
+                return Binding
+                    { nameLocation
+                    , name
+                    , nameBindings = newNameBindings
+                    , annotation = newAnnotation
+                    , assignment
+                    }
+
+        onNameBinding NameBinding{ nameLocation, name, annotation, assignment } = do
+            newAnnotation <- traverse onType annotation
+
+            return NameBinding
                 { nameLocation
                 , name
-                , nameBindings = newNameBindings
                 , annotation = newAnnotation
                 , assignment
                 }
+        onNameBinding FieldNamesBinding{ fieldNamesLocation, fieldNames } = do
+            newFieldNames <- traverse onFieldName fieldNames
 
-    onNameBinding NameBinding{ nameLocation, name, annotation, assignment } = do
-        newAnnotation <- traverse onType annotation
-
-        return NameBinding
-            { nameLocation
-            , name
-            , annotation = newAnnotation
-            , assignment
-            }
-    onNameBinding FieldNamesBinding{ fieldNamesLocation, fieldNames } = do
-        newFieldNames <- traverse onFieldName fieldNames
-
-        return FieldNamesBinding
-            { fieldNamesLocation
-            , fieldNames = newFieldNames
-            }
-
-    onFieldName
-        FieldName{ fieldNameLocation, name, annotation, assignment } = do
-            newAnnotation <- traverse onType annotation
-
-            return FieldName
-                { fieldNameLocation
-                , name
-                , annotation = newAnnotation
-                , assignment
+            return FieldNamesBinding
+                { fieldNamesLocation
+                , fieldNames = newFieldNames
                 }
 
-types _ e = pure e
+        onFieldName
+            FieldName{ fieldNameLocation, name, annotation, assignment } = do
+                newAnnotation <- traverse onType annotation
+
+                return FieldName
+                    { fieldNameLocation
+                    , name
+                    , annotation = newAnnotation
+                    , assignment
+                    }
+    type_ _ e = pure e
 
 -- | A scalar value
 data Scalar

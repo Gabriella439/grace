@@ -27,6 +27,7 @@ import Data.Void (Void)
 import Grace.Aeson (JSONDecodingFailed(..))
 import Grace.Decode (FromGrace(..))
 import Grace.HTTP (Methods)
+import Grace.Infer (Status)
 import Grace.Input (Input(..))
 import Grace.Location (Location(..))
 import Grace.Syntax (Builtin(..), Scalar(..), Syntax)
@@ -92,13 +93,15 @@ sorted = List.sortBy (Ord.comparing fst) . HashMap.toList
 evaluate
     :: (Text -> Methods)
     -- ^ OpenAI methods
+    -> Status
+    -- ^ Type-checking status
     -> [(Text, Value)]
     -- ^ Evaluation environment (starting at @[]@ for a top-level expression)
     -> Syntax Location Void
     -- ^ Surface syntax
     -> IO Value
     -- ^ Result, free of reducible sub-expressions
-evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
+evaluate keyToMethods status env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
   where
     generateContext location = do
         let infer (name, assignment) = do
@@ -126,7 +129,7 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                 io <- runConcurrently do
                     function' <- loop env function
                     argument' <- loop env argument
-                    return (apply keyToMethods function' argument')
+                    return (apply keyToMethods status function' argument')
 
                 io
 
@@ -285,16 +288,14 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                     Value.Scalar (Bool False) -> ifFalse'
                     _ -> error "Grace.Normalize.evaluate: if predicate must be a boolean value"
 
-            Syntax.Prompt{ schema = Nothing } -> do
-                Concurrently (Exception.throwIO MissingSchema)
-            Syntax.Prompt{ location, import_, arguments, schema = Just schema } -> Concurrently do
+            Syntax.Prompt{ location, import_, arguments, schema } -> Concurrently do
                 newArguments <- runConcurrently (loop env arguments)
 
                 prompt <- case decode newArguments of
                     Left exception -> Exception.throwIO exception
                     Right prompt -> return prompt
 
-                liftIO (Prompt.prompt (generateContext location) location import_ prompt schema)
+                liftIO (Prompt.prompt status (generateContext location) import_ prompt schema)
 
             Syntax.HTTP{ schema = Nothing } -> do
                 Concurrently (Exception.throwIO MissingSchema)
@@ -309,9 +310,9 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
 
                 if import_
                     then do
-                        context <- generateContext location
+                        bindings <- generateContext location
 
-                        (_, value) <- Interpret.interpretWith keyToMethods context (Just schema) (Code (Text.unpack (HTTP.url http)) responseBody)
+                        (_, value) <- Interpret.interpretWith keyToMethods status bindings (Just schema) (Code (Text.unpack (HTTP.url http)) responseBody)
 
                         return value
 
@@ -336,9 +337,9 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
 
                 if import_
                     then do
-                        context <- generateContext location
+                        bindings <- generateContext location
 
-                        (_, value) <- Interpret.interpretWith keyToMethods context (Just schema) (Code "(read)" text)
+                        (_, value) <- Interpret.interpretWith keyToMethods status bindings (Just schema) (Code "(read)" text)
 
                         return value
 
@@ -382,9 +383,9 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
 
                 if import_
                     then do
-                        context <- generateContext location
+                        bindings <- generateContext location
 
-                        (_, value) <- Interpret.interpretWith keyToMethods context (Just schema) (Code (Text.unpack url) responseBody)
+                        (_, value) <- Interpret.interpretWith keyToMethods status bindings (Just schema) (Code (Text.unpack url) responseBody)
 
                         return value
 
@@ -631,21 +632,23 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
 apply
     :: (Text -> Methods)
     -- ^ OpenAI methods
+    -> Status
+    -- ^ Type-checking status
     -> Value
     -- ^ Function
     -> Value
     -- ^ Argument
     -> IO Value
-apply keyToMethods function₀ argument₀ = runConcurrently (loop function₀ argument₀)
+apply keyToMethods status function₀ argument₀ = runConcurrently (loop function₀ argument₀)
   where
     loop (Value.Lambda capturedEnv (Value.Name name Nothing) body) argument =
-        Concurrently (evaluate keyToMethods ((name, argument) : capturedEnv) body)
+        Concurrently (evaluate keyToMethods status ((name, argument) : capturedEnv) body)
     loop (Value.Lambda capturedEnv (Value.Name name (Just assignment)) body) (Value.Scalar Null) =
-        Concurrently (evaluate keyToMethods ((name, assignment) : capturedEnv) body)
+        Concurrently (evaluate keyToMethods status ((name, assignment) : capturedEnv) body)
     loop (Value.Lambda capturedEnv (Value.Name name (Just _)) body) (Value.Application (Value.Builtin Some) argument) =
-        Concurrently (evaluate keyToMethods ((name, argument) : capturedEnv) body)
+        Concurrently (evaluate keyToMethods status ((name, argument) : capturedEnv) body)
     loop (Value.Lambda capturedEnv (Value.FieldNames fieldNames) body) (Value.Record keyValues) =
-        Concurrently (evaluate keyToMethods (extraEnv <> capturedEnv) body)
+        Concurrently (evaluate keyToMethods status (extraEnv <> capturedEnv) body)
       where
         extraEnv = do
             (fieldName, assignment) <- fieldNames

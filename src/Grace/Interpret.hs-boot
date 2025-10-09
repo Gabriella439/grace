@@ -11,10 +11,14 @@ import Grace.Location (Location(..))
 import Grace.Type (Type)
 import Grace.Value (Value)
 
+import {-# SOURCE #-} Grace.Infer (Status)
+
 interpretWith
     :: (MonadCatch m, MonadIO m)
     => (Text -> Methods)
     -- ^ OpenAI methods
+    -> Status
+    -- ^ Type-checking context
     -> [(Text, Type Location, Value)]
     -- ^ @(name, type, value)@ for each custom binding
     -> Maybe (Type Location)

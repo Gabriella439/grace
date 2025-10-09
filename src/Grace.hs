@@ -11,6 +11,7 @@ import Control.Exception.Safe (Exception(..), SomeException)
 import Data.Foldable (traverse_)
 import Data.Functor (void)
 import Data.Void (Void)
+import Grace.Infer (Status(..))
 import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
 import Grace.Syntax (Builtin(..), Syntax(..))
@@ -220,7 +221,9 @@ main = Exception.handle handler do
 
             let expected = Type.Scalar{ scalar = Monotype.Text, location }
 
-            (_, value) <- Interpret.interpretWith keyToMethods [] (Just expected) input
+            let initialStatus = Status{ count = 0, input, context = [] }
+
+            (_, value) <- Interpret.interpretWith keyToMethods initialStatus [] (Just expected) input
 
             case value of
                 Value.Text text -> Text.IO.putStr text

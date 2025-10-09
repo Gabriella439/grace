@@ -17,9 +17,11 @@ module Grace.Infer
     ( -- * Type inference
       typeOf
     , typeWith
+    , infer
 
       -- * Types
     , HTTP(..)
+    , Status(..)
 
       -- * Errors related to type inference
     , TypeInferenceError(..)

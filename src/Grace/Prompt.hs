@@ -39,10 +39,10 @@ import OpenAI.V1.Chat.Completions
     , _CreateChatCompletion
     )
 
+import {-# SOURCE #-} Grace.Infer (Status(..))
 import {-# SOURCE #-} qualified Grace.Interpret as Interpret
 
 import qualified Control.Exception.Safe as Exception
-import qualified Control.Lens as Lens
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.Foldable as Foldable
@@ -211,6 +211,22 @@ toJSONSchema original = loop original
         return (Aeson.object [ ("type", "string") ])
     loop _ = Left UnsupportedModelOutput{ original }
 
+toResponseFormat
+    :: Maybe (Type a) -> Either (UnsupportedModelOutput a) ResponseFormat
+toResponseFormat Nothing = do
+    return JSON_Object
+toResponseFormat (Just type_) = do
+    value <- toJSONSchema type_
+
+    return JSON_Schema
+        { json_schema = JSONSchema
+            { description = Nothing
+            , name = "result"
+            , schema = Just value
+            , strict = Just True
+            }
+        }
+
 -- | Arguments to the @prompt@ keyword
 data Prompt = Prompt
     { key :: Grace.Decode.Key
@@ -223,13 +239,13 @@ data Prompt = Prompt
 
 -- | Implementation of the @prompt@ keyword
 prompt
-    :: IO [(Text, Type Location, Value)]
-    -> Location
+    :: Status
+    -> IO [(Text, Type Location, Value)]
     -> Bool
     -> Prompt
-    -> Type Location
+    -> Maybe (Type Location)
     -> IO Value
-prompt generateContext location import_ Prompt{ key = Grace.Decode.Key{ text = key }, text, model, search, effort } schema = do
+prompt status generateContext import_ Prompt{ key = Grace.Decode.Key{ text = key }, text, model, search, effort } schema = do
     keyToMethods <- HTTP.getMethods
 
     let methods = keyToMethods (Text.strip key)
@@ -256,20 +272,6 @@ prompt generateContext location import_ Prompt{ key = Grace.Decode.Key{ text = k
                     Just ReasoningEffort_High
             _ ->
                 fmap fromEffort effort
-
-    let defaultedSchema =
-            Lens.transform
-                (Type.defaultTo Type.Scalar{ scalar = Monotype.Text, location })
-                schema
-
-    let toResponseFormat s = JSON_Schema
-            { json_schema = JSONSchema
-                { description = Nothing
-                , name = "result"
-                , schema = Just s
-                , strict = Just True
-                }
-            }
 
     let toOutput ChatCompletionObject{ choices = [ Choice{ message = Assistant{ assistant_content = Just output } } ] } = do
             return output
@@ -333,16 +335,21 @@ prompt generateContext location import_ Prompt{ key = Grace.Decode.Key{ text = k
                         let input =
                                 staticAssets <> "\n\
                                 \\n\
-                                \" <> environment <> "\
-                                \Generate a standalone Grace expression matching the following type:\n\
-                                \\n\
-                                \" <> Pretty.toSmart schema <> "\n\
-                                \\n\
-                                \" <> instructions <> "\
+                                \" <> environment <> expect <> instructions <> "\
                                 \Output a naked Grace expression without any code fence or explanation.\n\
                                 \Your response in its entirety should be a valid input to the Grace interpreter.\n\
                                 \\n\
                                 \" <> Text.concat failedAttempts
+                              where
+                                expect = case schema of
+                                    Just s ->
+                                        "Generate a standalone Grace expression matching the following type:\n\
+                                        \\n\
+                                        \" <> Pretty.toSmart s <> "\n\
+                                        \\n"
+                                    Nothing ->
+                                        ""
+
 
                         chatCompletionObject <- do
                             HTTP.createChatCompletion methods _CreateChatCompletion
@@ -354,7 +361,7 @@ prompt generateContext location import_ Prompt{ key = Grace.Decode.Key{ text = k
 
                         output <- toOutput chatCompletionObject
 
-                        Interpret.interpretWith keyToMethods context (Just schema) (Code "(prompt)" output)
+                        Interpret.interpretWith keyToMethods status context schema (Code "(prompt)" output)
                             `Exception.catch` \interpretError -> do
                                 retry ((output, interpretError) : errors)
 
@@ -372,16 +379,23 @@ prompt generateContext location import_ Prompt{ key = Grace.Decode.Key{ text = k
                         Right v -> return v
 
             let requestJSON =
-                    instructions <> "Generate JSON output matching the following type:\n\
-                    \\n\
-                    \" <> Pretty.toSmart defaultedSchema
+                    instructions <> jsonSchema
                   where
                     instructions = case text of
                         Nothing ->
                             ""
                         Just p ->
                             p <> "\n\
+
                             \\n"
+                    jsonSchema = case schema of
+                        Nothing ->
+                            "Generate JSON output"
+                        Just s  ->
+                            "Generate JSON output matching the following type:\n\
+                            \\n\
+                            \" <> Pretty.toSmart s
+
 
             let extractText = do
                     let extract text_ = do
@@ -393,42 +407,52 @@ prompt generateContext location import_ Prompt{ key = Grace.Decode.Key{ text = k
 
                     return
                         ( instructions
-                        , Nothing
+                        , ResponseFormat_Text
                         , extract
                         )
 
             let extractRecord = do
-                    jsonSchema <- case toJSONSchema defaultedSchema of
+                    responseFormat <- case toResponseFormat schema of
                         Left exception -> Exception.throwIO exception
                         Right result -> return result
 
                     let extract text_ = do
                             v <- decode_ text_
 
-                            case Value.checkJSON defaultedSchema v of
-                                Left invalidJSON -> Exception.throwIO invalidJSON
-                                Right e -> return e
+                            case schema of
+                                Nothing -> do
+                                    return (Value.inferJSON v)
+                                Just s -> do
+                                    case Value.checkJSON s v of
+                                        Left invalidJSON -> Exception.throwIO invalidJSON
+                                        Right e -> return e
 
                     return
                         ( requestJSON
-                        , Just (toResponseFormat jsonSchema)
+                        , responseFormat
                         , extract
                         )
 
             let extractNonRecord = do
-                    let adjustedSchema =
-                            Type.Record (Type.location defaultedSchema) (Type.Fields [("response", defaultedSchema)] Monotype.EmptyFields)
+                    let adjustedSchema = do
+                            s <- schema
 
-                    jsonSchema <- case toJSONSchema adjustedSchema of
+                            return (Type.Record (Type.location s) (Type.Fields [("response", s)] Monotype.EmptyFields))
+
+                    responseFormat <- case toResponseFormat adjustedSchema of
                         Left exception -> Exception.throwIO exception
                         Right result -> return result
 
                     let extract text_ = do
                             v <- decode_ text_
 
-                            expression <- case Value.checkJSON adjustedSchema v of
-                                Left invalidJSON -> Exception.throwIO invalidJSON
-                                Right expression -> return expression
+                            expression <- case adjustedSchema of
+                                Nothing -> do
+                                    return (Value.inferJSON v)
+                                Just s -> do
+                                    case Value.checkJSON s v of
+                                        Left invalidJSON -> Exception.throwIO invalidJSON
+                                        Right expression -> return expression
 
                             case expression of
                                 Value.Record [("response", response)] -> do
@@ -438,20 +462,20 @@ prompt generateContext location import_ Prompt{ key = Grace.Decode.Key{ text = k
 
                     return
                         ( requestJSON
-                        , Just (toResponseFormat jsonSchema)
+                        , responseFormat
                         , extract
                         )
 
-            (text_, response_format, extract) <- case defaultedSchema of
-                    Type.Scalar{ scalar = Monotype.Text } -> extractText
-                    Type.Record{ } -> extractRecord
-                    _ -> extractNonRecord
+            (text_, response_format, extract) <- case schema of
+                Just Type.Scalar{ scalar = Monotype.Text } -> extractText
+                Just Type.Record{ } -> extractRecord
+                _ -> extractNonRecord
 
             chatCompletionObject <- do
                 HTTP.createChatCompletion methods _CreateChatCompletion
                     { messages = [ User{ content = [ Completions.Text{ text = text_ } ], name = Nothing  } ]
                     , model = Model defaultedModel
-                    , response_format
+                    , response_format = Just response_format
                     , reasoning_effort
                     }
 

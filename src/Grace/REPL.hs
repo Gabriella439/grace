@@ -15,6 +15,7 @@ import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text)
 import Grace.HTTP (Methods)
+import Grace.Infer (Status(..))
 import Grace.Interpret (Input(..))
 import Grace.Parser (reserved)
 import System.Console.Haskeline (Interrupt(..))
@@ -41,9 +42,11 @@ repl keyToMethods = do
             liftIO (Text.IO.hPutStrLn IO.stderr (Text.pack (displayException e)))
 
     let interpret input = do
-            context <- get
+            bindings <- get
 
-            Exception.try @_ @SomeException (Interpret.interpretWith keyToMethods context Nothing input)
+            let initialStatus = Status{ count = 0, input, context = [] }
+
+            Exception.try @_ @SomeException (Interpret.interpretWith keyToMethods initialStatus bindings Nothing input)
 
     let command string = do
             let input = Code "(input)" (Text.pack string)
