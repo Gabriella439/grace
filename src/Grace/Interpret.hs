@@ -11,6 +11,7 @@ module Grace.Interpret
 
 import Control.Exception.Safe (MonadCatch)
 import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.State (MonadState)
 import Data.Text (Text)
 import Grace.Decode (FromGrace(..))
 import Grace.HTTP (Methods)
@@ -40,24 +41,25 @@ interpret
     :: (MonadCatch m, MonadIO m)
     => (Text -> Methods) -> Input -> m (Type Location, Value)
 interpret keyToMethods input = do
-    interpretWith keyToMethods initialStatus [] Nothing input
-  where
-    initialStatus = Status{ count = 0, input, context = [] }
+    let initialStatus = Status{ count = 0, input, context = [] }
+
+    ((inferred, value), Status{ context }) <- do
+        State.runStateT (interpretWith keyToMethods [] Nothing input) initialStatus
+
+    return (Context.complete context inferred, Lens.over Value.types (Context.complete context) value)
 
 -- | Like `interpret`, but accepts a custom list of bindings
 interpretWith
-    :: (MonadCatch m, MonadIO m)
+    :: (MonadCatch m, MonadState Status m, MonadIO m)
     => (Text -> Methods)
     -- ^ OpenAI methods
-    -> Status
-    -- ^ Type-checking status
     -> [(Text, Type Location, Value)]
     -- ^ @(name, type, value)@ for each custom binding
     -> Maybe (Type Location)
     -- ^ Optional expected type for the input
     -> Input
     -> m (Type Location, Value)
-interpretWith keyToMethods status₀ bindings maybeAnnotation input = do
+interpretWith keyToMethods bindings maybeAnnotation input = do
     expression <- liftIO (Import.resolve input)
 
     let annotatedExpression = case maybeAnnotation of
@@ -75,18 +77,18 @@ interpretWith keyToMethods status₀ bindings maybeAnnotation input = do
 
             return (Context.Annotation variable type_)
 
-    let status₁ = status₀{ context = typeContext <> context status₀ }
+    State.modify (\status -> status{ context = typeContext <> context status })
 
-    ((inferred, elaboratedExpression), status₂@Status{ context }) <- State.runStateT (Infer.infer annotatedExpression) status₁
+    (inferred, elaboratedExpression) <- Infer.infer annotatedExpression
 
     let evaluationContext = do
             (variable, _, value) <- bindings
 
             return (variable, value)
 
-    value <- liftIO (Normalize.evaluate keyToMethods status₂ evaluationContext elaboratedExpression)
+    value <- Normalize.evaluate keyToMethods evaluationContext elaboratedExpression
 
-    return (Context.complete context inferred, Lens.over Value.types (Context.complete context) value)
+    return (inferred, value)
 
 -- | Load a Grace expression
 load :: forall m a . (FromGrace a, MonadCatch m, MonadIO m) => Input -> m a
@@ -97,7 +99,7 @@ load input = do
 
     let initialStatus = Status{ count = 0, input, context = [] }
 
-    (_, value) <- interpretWith keyToMethods initialStatus [] (Just type_) input
+    (_, value) <- State.evalStateT (interpretWith keyToMethods [] (Just type_) input) initialStatus
 
     case decode value of
         Left exception -> Exception.throwM exception

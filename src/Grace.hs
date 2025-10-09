@@ -21,6 +21,7 @@ import Prettyprinter (Doc)
 import Prettyprinter.Render.Terminal (AnsiStyle)
 
 import qualified Control.Exception.Safe as Exception
+import qualified Control.Monad.State as State
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text.IO
 import qualified GHC.IO.Encoding
@@ -223,7 +224,7 @@ main = Exception.handle handler do
 
             let initialStatus = Status{ count = 0, input, context = [] }
 
-            (_, value) <- Interpret.interpretWith keyToMethods initialStatus [] (Just expected) input
+            (_, value) <- State.evalStateT (Interpret.interpretWith keyToMethods [] (Just expected) input) initialStatus
 
             case value of
                 Value.Text text -> Text.IO.putStr text

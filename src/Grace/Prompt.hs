@@ -12,7 +12,9 @@ module Grace.Prompt
     ) where
 
 import Control.Applicative (empty)
-import Control.Exception.Safe (Exception(..), SomeException(..))
+import Control.Exception.Safe (Exception(..), MonadCatch, SomeException(..))
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.State (MonadState)
 import Data.Foldable (toList)
 import Data.Text (Text)
 import Data.Typeable (Typeable)
@@ -39,7 +41,7 @@ import OpenAI.V1.Chat.Completions
     , _CreateChatCompletion
     )
 
-import {-# SOURCE #-} Grace.Infer (Status(..))
+import {-# SOURCE #-} Grace.Infer (Status)
 import {-# SOURCE #-} qualified Grace.Interpret as Interpret
 
 import qualified Control.Exception.Safe as Exception
@@ -239,14 +241,14 @@ data Prompt = Prompt
 
 -- | Implementation of the @prompt@ keyword
 prompt
-    :: Status
-    -> IO [(Text, Type Location, Value)]
+    :: (MonadCatch m, MonadState Status m, MonadIO m)
+    => IO [(Text, Type Location, Value)]
     -> Bool
     -> Prompt
     -> Maybe (Type Location)
-    -> IO Value
-prompt status generateContext import_ Prompt{ key = Grace.Decode.Key{ text = key }, text, model, search, effort } schema = do
-    keyToMethods <- HTTP.getMethods
+    -> m Value
+prompt generateContext import_ Prompt{ key = Grace.Decode.Key{ text = key }, text, model, search, effort } schema = do
+    keyToMethods <- liftIO (HTTP.getMethods)
 
     let methods = keyToMethods (Text.strip key)
 
@@ -280,11 +282,10 @@ prompt status generateContext import_ Prompt{ key = Grace.Decode.Key{ text = key
 
     if import_
         then do
-            let retry :: [(Text, SomeException)] -> IO (Type Location, Value)
-                retry errors
+            let retry errors
                     | (_, interpretError) : rest <- errors
                     , length rest == 3 = do
-                        Exception.throwIO interpretError
+                        liftIO (Exception.throwIO interpretError)
                     | otherwise = do
                         let failedAttempts = do
                                 (index, (program, interpretError)) <- zip [ 0 .. ] (reverse errors)
@@ -298,7 +299,7 @@ prompt status generateContext import_ Prompt{ key = Grace.Decode.Key{ text = key
                                       \\n"
                                     )
 
-                        context <- generateContext
+                        context <- liftIO generateContext
 
                         let renderAssignment (name, type_, _) =
                                 Pretty.toSmart (Pretty.group (Pretty.flatAlt long short)) <> "\n\n"
@@ -351,7 +352,7 @@ prompt status generateContext import_ Prompt{ key = Grace.Decode.Key{ text = key
                                         ""
 
 
-                        chatCompletionObject <- do
+                        chatCompletionObject <- liftIO do
                             HTTP.createChatCompletion methods _CreateChatCompletion
                                 { messages = [ User{ content = [ Completions.Text{ text = input } ], name = Nothing } ]
                                 , model = Model defaultedModel
@@ -359,10 +360,10 @@ prompt status generateContext import_ Prompt{ key = Grace.Decode.Key{ text = key
                                 , reasoning_effort
                                 }
 
-                        output <- toOutput chatCompletionObject
+                        output <- liftIO (toOutput chatCompletionObject)
 
-                        Interpret.interpretWith keyToMethods status context schema (Code "(prompt)" output)
-                            `Exception.catch` \interpretError -> do
+                        Interpret.interpretWith keyToMethods context schema (Code "(prompt)" output)
+                            `Exception.catch` \(interpretError :: SomeException) -> do
                                 retry ((output, interpretError) : errors)
 
             (_, e) <- retry []
@@ -471,7 +472,7 @@ prompt status generateContext import_ Prompt{ key = Grace.Decode.Key{ text = key
                 Just Type.Record{ } -> extractRecord
                 _ -> extractNonRecord
 
-            chatCompletionObject <- do
+            chatCompletionObject <- liftIO do
                 HTTP.createChatCompletion methods _CreateChatCompletion
                     { messages = [ User{ content = [ Completions.Text{ text = text_ } ], name = Nothing  } ]
                     , model = Model defaultedModel

@@ -22,14 +22,17 @@ import System.Console.Haskeline (Interrupt(..))
 import System.Console.Repline (CompleterStyle(..), MultiLine(..), ReplOpts(..))
 
 import qualified Control.Exception.Safe as Exception
+import qualified Control.Lens as Lens
 import qualified Control.Monad as Monad
 import qualified Control.Monad.State as State
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text.IO
+import qualified Grace.Context as Context
 import qualified Grace.Interpret as Interpret
 import qualified Grace.Normalize as Normalize
 import qualified Grace.Pretty as Pretty
 import qualified Grace.Type as Type
+import qualified Grace.Value as Value
 import qualified Grace.Width as Width
 import qualified System.Console.Haskeline.Completion as Completion
 import qualified System.Console.Repline as Repline
@@ -46,7 +49,7 @@ repl keyToMethods = do
 
             let initialStatus = Status{ count = 0, input, context = [] }
 
-            Exception.try @_ @SomeException (Interpret.interpretWith keyToMethods initialStatus bindings Nothing input)
+            Exception.try @_ @SomeException (State.runStateT (Interpret.interpretWith keyToMethods bindings Nothing input) initialStatus)
 
     let command string = do
             let input = Code "(input)" (Text.pack string)
@@ -57,8 +60,10 @@ repl keyToMethods = do
                 Left e -> do
                     err e
 
-                Right (_inferred, value) -> do
-                    let syntax = Normalize.strip (Normalize.quote value)
+                Right ((_inferred, value), Status{ context })  -> do
+                    let completed =
+                            Lens.over Value.types (Context.complete context) value
+                    let syntax = Normalize.strip (Normalize.quote completed)
 
                     width <- liftIO Width.getWidth
 
@@ -90,8 +95,11 @@ repl keyToMethods = do
                     Left e -> do
                         err e
 
-                    Right (type_, value) -> do
-                        State.modify ((variable, type_, value) :)
+                    Right ((type_, value), Status{ context }) -> do
+                        let completed =
+                                Lens.over Value.types (Context.complete context) value
+
+                        State.modify ((variable, type_, completed) :)
 
             | otherwise = do
                 liftIO (putStrLn "usage: let = {expression}")
@@ -105,10 +113,12 @@ repl keyToMethods = do
                 Left e -> do
                     err e
 
-                Right (type_, _) -> do
+                Right ((type_, _), Status{ context })  -> do
+                    let completed = Context.complete context type_
+
                     width <- liftIO Width.getWidth
 
-                    liftIO (Pretty.renderIO True width IO.stdout (Pretty.pretty type_ <> "\n"))
+                    liftIO (Pretty.renderIO True width IO.stdout (Pretty.pretty completed <> "\n"))
 
     let quit _ =
             liftIO (throwIO Interrupt)
