@@ -41,16 +41,19 @@ import OpenAI.V1.Chat.Completions
     , _CreateChatCompletion
     )
 
-import {-# SOURCE #-} Grace.Infer (Status)
+import {-# SOURCE #-} Grace.Infer (Status(..))
 import {-# SOURCE #-} qualified Grace.Interpret as Interpret
 
 import qualified Control.Exception.Safe as Exception
+import qualified Control.Lens as Lens
+import qualified Control.Monad.State as State
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.Foldable as Foldable
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
+import qualified Grace.Context as Context
 import qualified Grace.DataFile as DataFile
 import qualified Grace.HTTP as HTTP
 import qualified Grace.Monotype as Monotype
@@ -244,10 +247,11 @@ prompt
     :: (MonadCatch m, MonadState Status m, MonadIO m)
     => IO [(Text, Type Location, Value)]
     -> Bool
+    -> Location
     -> Prompt
     -> Maybe (Type Location)
     -> m Value
-prompt generateContext import_ Prompt{ key = Grace.Decode.Key{ text = key }, text, model, search, effort } schema = do
+prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = key }, text, model, search, effort } schema = do
     keyToMethods <- liftIO (HTTP.getMethods)
 
     let methods = keyToMethods (Text.strip key)
@@ -285,7 +289,7 @@ prompt generateContext import_ Prompt{ key = Grace.Decode.Key{ text = key }, tex
             let retry errors
                     | (_, interpretError) : rest <- errors
                     , length rest == 3 = do
-                        liftIO (Exception.throwIO interpretError)
+                        Exception.throwIO interpretError
                     | otherwise = do
                         let failedAttempts = do
                                 (index, (program, interpretError)) <- zip [ 0 .. ] (reverse errors)
@@ -370,6 +374,13 @@ prompt generateContext import_ Prompt{ key = Grace.Decode.Key{ text = key }, tex
 
             return e
         else do
+            Status{ context } <- State.get
+
+            let defaultedSchema = do
+                    s <- schema
+
+                    return (Lens.transform (Type.defaultTo Type.Scalar{ scalar = Monotype.Text, location }) (Context.complete context s))
+
             let decode_ text_ = do
                     let bytes = Encoding.encodeUtf8 text_
 
@@ -389,7 +400,7 @@ prompt generateContext import_ Prompt{ key = Grace.Decode.Key{ text = key }, tex
                             p <> "\n\
 
                             \\n"
-                    jsonSchema = case schema of
+                    jsonSchema = case defaultedSchema of
                         Nothing ->
                             "Generate JSON output"
                         Just s  ->
@@ -413,14 +424,14 @@ prompt generateContext import_ Prompt{ key = Grace.Decode.Key{ text = key }, tex
                         )
 
             let extractRecord = do
-                    responseFormat <- case toResponseFormat schema of
+                    responseFormat <- case toResponseFormat defaultedSchema of
                         Left exception -> Exception.throwIO exception
                         Right result -> return result
 
                     let extract text_ = do
                             v <- decode_ text_
 
-                            case schema of
+                            case defaultedSchema of
                                 Nothing -> do
                                     return (Value.inferJSON v)
                                 Just s -> do
@@ -436,7 +447,7 @@ prompt generateContext import_ Prompt{ key = Grace.Decode.Key{ text = key }, tex
 
             let extractNonRecord = do
                     let adjustedSchema = do
-                            s <- schema
+                            s <- defaultedSchema
 
                             return (Type.Record (Type.location s) (Type.Fields [("response", s)] Monotype.EmptyFields))
 
@@ -467,7 +478,7 @@ prompt generateContext import_ Prompt{ key = Grace.Decode.Key{ text = key }, tex
                         , extract
                         )
 
-            (text_, response_format, extract) <- case schema of
+            (text_, response_format, extract) <- case defaultedSchema of
                 Just Type.Scalar{ scalar = Monotype.Text } -> extractText
                 Just Type.Record{ } -> extractRecord
                 _ -> extractNonRecord

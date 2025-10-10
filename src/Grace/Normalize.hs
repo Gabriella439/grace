@@ -291,7 +291,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                     Left exception -> Exception.throwIO exception
                     Right prompt -> return prompt
 
-                Prompt.prompt (generateContext location) import_ prompt schema
+                Prompt.prompt (generateContext location) import_ location prompt schema
 
             Syntax.HTTP{ schema = Nothing } -> do
                 Exception.throwIO MissingSchema
