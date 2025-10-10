@@ -46,6 +46,7 @@ github import_ GitHub{ key, owner, repository, reference, path } = do
 
     let headers = Just
             (   [ Header{ header = "X-GitHub-Api-Version", value = "2022-11-28" }
+                , Header{ header = "User-Agent", value = "Grace" }
                 ]
             <>  authorization
             )
