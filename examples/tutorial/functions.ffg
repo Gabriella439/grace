@@ -7,7 +7,7 @@ let greeting = greet{ name: "world" }
 let greet{ name: Text } : Text = "Hello, ${name}!"
 # The type of the `greet` function is `{ name: Text } -> Text` which you can
 # read as "a function whose input is a record (with a `name` field) and whose
-# output is `Text`
+# output is `Text`"
 
 # Function definitions can define intermediate variables:
 let makeUser{ user } =
