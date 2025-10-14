@@ -133,7 +133,7 @@ fetch url = do
         Left exception -> Exception.throwIO (NotUTF8 exception)
         Right lazyText -> return (Text.Lazy.toStrict lazyText)
 
--- | Make a POST request
+-- | Make a HTTP request
 http :: Bool -> HTTP -> IO Text
 http import_ GET{ url, headers, parameters } = do
     manager <- newManager
