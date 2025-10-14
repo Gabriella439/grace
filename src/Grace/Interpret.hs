@@ -22,7 +22,6 @@ import Grace.Type (Type)
 import Grace.Value (Value)
 
 import qualified Control.Exception.Safe as Exception
-import qualified Control.Lens as Lens
 import qualified Control.Monad.State as State
 import qualified Grace.Context as Context
 import qualified Grace.HTTP as HTTP
@@ -46,7 +45,7 @@ interpret keyToMethods input = do
     ((inferred, value), Status{ context }) <- do
         State.runStateT (interpretWith keyToMethods [] Nothing input) initialStatus
 
-    return (Context.complete context inferred, Lens.over Value.types (Context.complete context) value)
+    return (Context.complete context inferred, Value.complete context value)
 
 -- | Like `interpret`, but accepts a custom list of bindings
 interpretWith

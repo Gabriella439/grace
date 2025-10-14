@@ -1,10 +1,11 @@
-{-# LANGUAGE BlockArguments      #-}
-{-# LANGUAGE DataKinds           #-}
-{-# LANGUAGE NamedFieldPuns      #-}
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE MultiWayIf          #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE BlockArguments        #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE MultiWayIf            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeApplications      #-}
 
 module Main where
 
@@ -20,6 +21,7 @@ import Data.JSString (JSString)
 import Data.Sequence (ViewR(..), (|>))
 import Data.Text (Text)
 import Data.Traversable (forM)
+import Grace.Infer (Status(..))
 import Grace.Type (Type(..))
 import GHCJS.Foreign.Callback (Callback)
 import GHCJS.Types (JSVal)
@@ -59,6 +61,7 @@ import qualified Data.Text.Lazy as Text.Lazy
 import qualified Data.Text.Lazy.Encoding as Text.Encoding
 import qualified GHCJS.Foreign.Callback as Callback
 import qualified GHCJS.Types
+import qualified Grace.Context as Context
 import qualified Grace.DataFile as DataFile
 import qualified Grace.Decode as Decode
 import qualified Grace.HTTP as HTTP
@@ -388,34 +391,35 @@ renderValue
     :: (Text -> Methods)
     -> IORef Natural
     -> JSVal
+    -> Status
     -> Type Location
     -> Value
     -> IO (IO ())
-renderValue keyToMethods ref parent Type.Forall{ name, nameLocation, domain = Type, type_ } value = do
+renderValue keyToMethods ref parent status Type.Forall{ name, nameLocation, domain = Type, type_ } value = do
     -- If an expression has a polymorphic type, specialize the type to Text
     let text = Type.Scalar{ location = nameLocation, scalar = Monotype.Text }
 
-    renderValue keyToMethods ref parent (Type.substituteType name 0 text type_) value
+    renderValue keyToMethods ref parent status (Type.substituteType name 0 text type_) value
 
-renderValue keyToMethods ref parent Type.Forall{ name, domain = Fields, type_ } value = do
+renderValue keyToMethods ref parent status Type.Forall{ name, domain = Fields, type_ } value = do
     let empty_ = Type.Fields [] EmptyFields
 
-    renderValue keyToMethods ref parent (Type.substituteFields name 0 empty_ type_) value
+    renderValue keyToMethods ref parent status (Type.substituteFields name 0 empty_ type_) value
 
-renderValue keyToMethods ref parent Type.Forall{ name, domain = Alternatives, type_ } value = do
+renderValue keyToMethods ref parent status Type.Forall{ name, domain = Alternatives, type_ } value = do
     let empty_ = Type.Alternatives [] EmptyAlternatives
 
-    renderValue keyToMethods ref parent (Type.substituteAlternatives name 0 empty_ type_) value
+    renderValue keyToMethods ref parent status (Type.substituteAlternatives name 0 empty_ type_) value
 
-renderValue keyToMethods ref parent Type.Optional{ type_ } value =
-    renderValue keyToMethods ref parent type_ value
+renderValue keyToMethods ref parent status Type.Optional{ type_ } value =
+    renderValue keyToMethods ref parent status type_ value
 
-renderValue _ _ parent _ (Value.Text text) = do
+renderValue _ _ parent _ _ (Value.Text text) = do
     setInnerHTML parent (markdownToHTML text)
 
     mempty
 
-renderValue _ _ parent _ (Value.Scalar (Bool bool)) = do
+renderValue _ _ parent _ _ (Value.Scalar (Bool bool)) = do
     input <- createElement "input"
 
     setAttribute input "type"     "checkbox"
@@ -428,7 +432,7 @@ renderValue _ _ parent _ (Value.Scalar (Bool bool)) = do
 
     mempty
 
-renderValue _ _ parent _ (Value.Scalar Null) = do
+renderValue _ _ parent _ _ (Value.Scalar Null) = do
     span <- createElement "span"
 
     setAttribute span "class" "fira"
@@ -439,7 +443,7 @@ renderValue _ _ parent _ (Value.Scalar Null) = do
 
     mempty
 
-renderValue _ _ parent _ value@Value.Scalar{} = do
+renderValue _ _ parent _ _ value@Value.Scalar{} = do
     span <- createElement "span"
 
     setTextContent span (valueToText value)
@@ -451,7 +455,7 @@ renderValue _ _ parent _ value@Value.Scalar{} = do
 
     mempty
 
-renderValue keyToMethods ref parent outer (Value.List values) = do
+renderValue keyToMethods ref parent status outer (Value.List values) = do
     inner <- case outer of
             Type.List{ type_ } -> do
                 return type_
@@ -465,7 +469,7 @@ renderValue keyToMethods ref parent outer (Value.List values) = do
     results <- forM values \value -> do
         li <- createElement "li"
 
-        refreshOutput <- renderValue keyToMethods ref li inner value
+        refreshOutput <- renderValue keyToMethods ref li status inner value
 
         return (li, refreshOutput)
 
@@ -479,7 +483,7 @@ renderValue keyToMethods ref parent outer (Value.List values) = do
 
     return (sequence_ refreshOutputs)
 
-renderValue keyToMethods ref parent outer (Value.Record keyValues) = do
+renderValue keyToMethods ref parent status outer (Value.Record keyValues) = do
     let lookupKey = case outer of
             Type.Record{ fields = Type.Fields keyTypes _ } ->
                 \key -> lookup key keyTypes
@@ -511,7 +515,7 @@ renderValue keyToMethods ref parent outer (Value.Record keyValues) = do
 
             setAttribute dd "class" "col"
 
-            refreshOutput <- renderValue keyToMethods ref dd type_ value
+            refreshOutput <- renderValue keyToMethods ref dd status type_ value
 
             dl <- createElement "dl"
 
@@ -529,10 +533,10 @@ renderValue keyToMethods ref parent outer (Value.Record keyValues) = do
 
     return (sequence_ refreshOutputs)
 
-renderValue keyToMethods ref parent outer (Application (Value.Builtin Syntax.Some) value) = do
-    renderValue keyToMethods ref parent outer value
+renderValue keyToMethods ref parent status outer (Application (Value.Builtin Syntax.Some) value) = do
+    renderValue keyToMethods ref parent status outer value
 
-renderValue keyToMethods ref parent outer (Value.Alternative alternative value) = do
+renderValue keyToMethods ref parent status outer (Value.Alternative alternative value) = do
     inner <- case outer of
             Type.Union{ alternatives = Type.Alternatives keyTypes _ } ->
                 case lookup alternative keyTypes of
@@ -550,9 +554,9 @@ renderValue keyToMethods ref parent outer (Value.Alternative alternative value) 
 
     let recordValue = Value.Record (HashMap.singleton alternative value)
 
-    renderValue keyToMethods ref parent recordType recordValue
+    renderValue keyToMethods ref parent status recordType recordValue
 
-renderValue keyToMethods counter parent Type.Function{ input, output } function = do
+renderValue keyToMethods counter parent status Type.Function{ input, output } function = do
     outputVal <- createElement "div"
 
     (setBusy, setSuccess, setError) <- createForm False outputVal
@@ -560,13 +564,19 @@ renderValue keyToMethods counter parent Type.Function{ input, output } function 
     let render value = do
             setBusy
 
-            eitherResult <- (liftIO . Exception.try) do
-                newValue <- Normalize.apply keyToMethods function value
+            let interpretOutput = do
+                    newValue <- Normalize.apply keyToMethods function value
 
-                refreshOutput <- setSuccess output newValue \htmlWrapper -> do
-                    renderValue keyToMethods counter htmlWrapper output newValue
+                    status_@Status{ context } <- State.get
 
-                refreshOutput
+                    let completedValue = Value.complete context newValue
+
+                    refreshOutput <- liftIO $ setSuccess output completedValue \htmlWrapper -> do
+                        renderValue keyToMethods counter htmlWrapper status_ output newValue
+
+                    liftIO refreshOutput
+
+            eitherResult <- liftIO (Exception.try (State.evalStateT interpretOutput status))
 
             case eitherResult of
                 Left exception -> do
@@ -577,26 +587,29 @@ renderValue keyToMethods counter parent Type.Function{ input, output } function 
 
     debouncedRender <- debounce render
 
-    if Lens.has Value.effects function
-        then do
-            (_, reader) <- renderInput [] input
+    (_, reader) <- renderInput [] input
 
-            let renderOutput Submit = debouncedRender
-                renderOutput Change = mempty
+    let hasEffects = Lens.has Value.effects function
 
-            result <- Maybe.runMaybeT (Reader.runReaderT reader RenderInput
-                { keyToMethods
-                , renderOutput
-                , counter
-                })
+    let renderOutput Change | hasEffects = mempty
+        renderOutput _                   = debouncedRender
 
-            case result of
-                Nothing -> do
-                    replaceChildren parent (Array.fromList [ ])
+    result <- Maybe.runMaybeT (Reader.runReaderT reader RenderInput
+        { keyToMethods
+        , renderOutput
+        , counter
+        , status
+        })
 
-                    mempty
+    case result of
+        Nothing -> do
+            replaceChildren parent (Array.fromList [ ])
 
-                Just (inputVal, invoke, refreshOutput) -> do
+            mempty
+
+        Just (inputVal, invoke, refreshOutput) -> do
+            if hasEffects
+                then do
                     button <- createElement "button"
 
                     setAttribute button "type"  "button"
@@ -612,38 +625,19 @@ renderValue keyToMethods counter parent Type.Function{ input, output } function 
 
                     replaceChildren parent (Array.fromList [ inputVal, button, hr, outputVal ])
 
-                    return refreshOutput
-
-        else do
-            (_, reader) <- renderInput [] input
-
-            let renderOutput _ = debouncedRender
-
-            result <- Maybe.runMaybeT (Reader.runReaderT reader RenderInput
-                { keyToMethods
-                , renderOutput
-                , counter
-                })
-
-            case result of
-                Nothing -> do
-                    replaceChildren parent (Array.fromList [ ])
-
-                    mempty
-
-                Just (inputVal, invoke, refreshOutput) -> do
+                else do
                     invoke Submit
 
                     hr <- createElement "hr"
 
                     replaceChildren parent (Array.fromList [ inputVal, hr, outputVal ])
-                    return refreshOutput
+            return refreshOutput
 
 -- At the time of this writing this case should (in theory) never be hit,
 -- because all of the `Value` constructors are either explicitly handled (e.g.
 -- `Text` / `Scalar`) or handled by the case for `Type.Function` (e.g. `Builtin`
 -- / `Alternative`)
-renderValue _ _ parent _ value = do
+renderValue _ _ parent _ _ value = do
     renderDefault parent value
 
 renderDefault :: JSVal -> Value -> IO (IO ())
@@ -666,6 +660,7 @@ data RenderInput = RenderInput
     { keyToMethods :: Text -> Methods
     , renderOutput :: Mode -> Value -> IO ()
     , counter :: IORef Natural
+    , status :: Status
     }
 
 register
@@ -1365,7 +1360,7 @@ renderInputDefault path type_ = do
             Nothing -> ""
 
     return $ (,) (Value.Scalar Null) do
-        RenderInput{ keyToMethods, renderOutput } <- Reader.ask
+        RenderInput{ keyToMethods, renderOutput, status } <- Reader.ask
 
         textarea <- createElement "textarea"
 
@@ -1390,10 +1385,12 @@ renderInputDefault path type_ = do
 
                 let input_ = Code "(input)" text
 
-                result <- (liftIO . Exception.try) do
-                    (_, value) <- Interpret.interpretWith keyToMethods [] (Just type_) input_
+                let interpretInput = do
+                        (_, value) <- Interpret.interpretWith keyToMethods [] (Just type_) input_
 
-                    return value
+                        return value
+
+                result <- liftIO (Exception.try (State.evalStateT interpretInput status))
 
                 case result of
                     Left exception -> do
@@ -1661,17 +1658,32 @@ main = do
 
                     let input_ = Code "(input)" text
 
-                    result <- Exception.try do
-                        expression <- Import.resolve input_
+                    let initialStatus = Status
+                            { count = 0
+                            , input = input_
+                            , context = []
+                            }
 
-                        (inferred, elaboratedExpression) <- Infer.typeWith input_ [] expression
+                    let interpretOutput = do
+                            expression <- liftIO (Import.resolve input_)
 
-                        value <- Normalize.evaluate keyToMethods [] elaboratedExpression
+                            (inferred, elaboratedExpression) <- Infer.infer expression
 
-                        refreshOutput <- setSuccess inferred value \htmlWrapper -> do
-                            renderValue keyToMethods counter htmlWrapper inferred value
+                            value <- Normalize.evaluate keyToMethods [] elaboratedExpression
 
-                        refreshOutput
+                            status@Status{ context } <- State.get
+
+                            let completedType =
+                                    Context.complete context inferred
+
+                            let completedValue = Value.complete context value
+
+                            refreshOutput <- liftIO $ setSuccess completedType completedValue \htmlWrapper -> do
+                                renderValue keyToMethods counter htmlWrapper status completedType value
+
+                            liftIO refreshOutput
+
+                    result <- Exception.try (State.evalStateT interpretOutput initialStatus)
 
 
                     case result of

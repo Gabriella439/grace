@@ -22,7 +22,6 @@ import System.Console.Haskeline (Interrupt(..))
 import System.Console.Repline (CompleterStyle(..), MultiLine(..), ReplOpts(..))
 
 import qualified Control.Exception.Safe as Exception
-import qualified Control.Lens as Lens
 import qualified Control.Monad as Monad
 import qualified Control.Monad.State as State
 import qualified Data.Text as Text
@@ -61,8 +60,8 @@ repl keyToMethods = do
                     err e
 
                 Right ((_inferred, value), Status{ context })  -> do
-                    let completed =
-                            Lens.over Value.types (Context.complete context) value
+                    let completed = Value.complete context value
+
                     let syntax = Normalize.strip (Normalize.quote completed)
 
                     width <- liftIO Width.getWidth
@@ -96,8 +95,7 @@ repl keyToMethods = do
                         err e
 
                     Right ((type_, value), Status{ context }) -> do
-                        let completed =
-                                Lens.over Value.types (Context.complete context) value
+                        let completed = Value.complete context value
 
                         State.modify ((variable, type_, completed) :)
 
