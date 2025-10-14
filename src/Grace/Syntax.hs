@@ -10,10 +10,11 @@ module Grace.Syntax
       Syntax(..)
     , usedIn
     , effects
+    , types
+    , complete
     , Chunks(..)
     , Field(..)
     , Smaller(..)
-    , types
     , Scalar(..)
     , Operator(..)
     , Builtin(..)
@@ -34,6 +35,7 @@ import Data.String (IsString(..))
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Grace.Compat ()  -- For an orphan instance for Lift (Seq a)
+import Grace.Context (Context)
 import Grace.Pretty (Pretty(..), keyword, punctuation)
 import Grace.Type (Type)
 import Language.Haskell.TH.Syntax (Lift)
@@ -59,6 +61,7 @@ import qualified Control.Lens as Lens
 import qualified Control.Monad as Monad
 import qualified Data.Aeson as Aeson
 import qualified Data.Text as Text
+import qualified Grace.Context as Context
 import qualified Grace.Pretty as Pretty
 import qualified Grace.Type as Type
 import qualified Prettyprinter as Pretty
@@ -627,14 +630,14 @@ usedIn _ Builtin{ } =
 usedIn _ Embed{ } =
     False
 
--- | Matches all effects within a `Syntax` tree
+-- | `Getting` that matches all effects within a `Syntax` tree
 effects :: Getting Any (Syntax s a) ()
-effects =
-      Lens.cosmos
-    . (   (_As @"Prompt" . Lens.to (\_ -> ()))
-      <>  (_As @"HTTP"   . Lens.to (\_ -> ()))
-      <>  (_As @"GitHub" . Lens.to (\_ -> ()))
-      )
+effects = Lens.cosmos . effect
+  where
+    effect =
+            (_As @"Prompt" . Lens.to (\_ -> ()))
+        <>  (_As @"HTTP"   . Lens.to (\_ -> ()))
+        <>  (_As @"GitHub" . Lens.to (\_ -> ()))
 
 -- | A text literal with interpolated expressions
 data Chunks s a = Chunks Text [(Syntax s a, Text)]
@@ -712,7 +715,7 @@ data Smaller s
 instance IsString (Smaller ()) where
     fromString string = Single{ single = fromString string }
 
--- | @Traversal'@ from a `Syntax` to its immediate `Type` annotations
+-- | @Traversal'@ from a `Syntax` to its immediate `Type`
 types :: Traversal' (Syntax s a) (Type s)
 types onType
     Lambda{ location, nameBinding = NameBinding{ nameLocation, name, annotation, assignment }, body } = do
@@ -794,8 +797,12 @@ types onType Let{ location, bindings, body } = do
                 , annotation = newAnnotation
                 , assignment
                 }
-
 types _ e = pure e
+
+-- | Complete all `Type` annotations in a `Syntax` tree using the provided
+-- `Context`
+complete :: Context s -> Syntax s a -> Syntax s a
+complete context = Lens.transform (Lens.over types (Context.complete context))
 
 -- | A scalar value
 data Scalar

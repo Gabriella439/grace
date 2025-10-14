@@ -17,9 +17,11 @@ module Grace.Infer
     ( -- * Type inference
       typeOf
     , typeWith
+    , infer
 
       -- * Types
     , HTTP(..)
+    , Status(..)
 
       -- * Errors related to type inference
     , TypeInferenceError(..)
@@ -99,6 +101,15 @@ fresh = do
 -- | Push a new `Context` `Entry` onto the stack
 push :: MonadState Status m => Entry Location -> m ()
 push entry = State.modify (\s -> s { context = entry : context s })
+
+-- | Push an unsolved variable to the very beginning of the `Context`.  This
+-- ensures that the unsolved variable is never lost.
+--
+-- This comes in handy for existential variables created as part of `import`
+-- keywords, where we want to make sure that these type variables are preserved
+-- in the final `Context` so that they can be reused by evaluation.
+preserve :: MonadState Status m => Entry Location -> m ()
+preserve entry = State.modify (\s -> s { context = context s <> [ entry ] })
 
 -- | Retrieve the current `Context`
 get :: MonadState Status m => m (Context Location)
@@ -1318,25 +1329,21 @@ infer e₀ = do
                 Syntax.NameBinding{ nameLocation, name, annotation = Just input₀, assignment = Just assignment } -> do
                     newAssignment <- check assignment input₀
 
-                    context <- get
-
-                    let input₁ = Context.solveType context input₀
-
-                    let input₂ = Type.Optional
+                    let input₁ = Type.Optional
                             { location = Syntax.location assignment
-                            , type_ = input₁
+                            , type_ = input₀
                             }
 
-                    let entries = [Context.Annotation name input₁]
+                    let entries = [Context.Annotation name input₀]
 
                     let newNameBinding = Syntax.NameBinding
                             { nameLocation
                             , name
-                            , annotation = Just input₁
+                            , annotation = Just input₀
                             , assignment = Just newAssignment
                             }
 
-                    return (input₂, entries, newNameBinding)
+                    return (input₁, entries, newNameBinding)
 
                 Syntax.FieldNamesBinding{ fieldNamesLocation, fieldNames } -> do
                     let process Syntax.FieldName{ fieldNameLocation, name, annotation = Nothing, assignment = Nothing } = do
@@ -1422,20 +1429,7 @@ infer e₀ = do
 
                     tuples <- traverse process fieldNames
 
-                    let fieldTypes = do
-                            (fieldType, _, _) <- tuples
-
-                            return fieldType
-
-                    let entries = do
-                            (_, entry, _) <- tuples
-
-                            return entry
-
-                    let newFieldNames = do
-                            (_, _, newFieldName) <- tuples
-
-                            return newFieldName
+                    let (fieldTypes, entries, newFieldNames) = unzip3 tuples
 
                     existential <- fresh
 
@@ -1478,7 +1472,7 @@ infer e₀ = do
                             }
 
                     -- TODO: Only `solveSyntax` `newNameBinding`
-                    return (inferred, solveSyntax context newLambda)
+                    return (Context.solveType context inferred, solveSyntax context newLambda)
 
             foldr scoped done entries
 
@@ -1560,7 +1554,7 @@ infer e₀ = do
 
                     context <- get
 
-                    return (output, solveSyntax context Syntax.Let{ location, bindings = NonEmpty.fromList (reverse newBindings), body = newBody })
+                    return (Context.solveType context output, solveSyntax context Syntax.Let{ location, bindings = NonEmpty.fromList (reverse newBindings), body = newBody })
 
             foldr cons nil bindings []
 
@@ -2003,7 +1997,7 @@ infer e₀ = do
                 Nothing -> do
                     existential <- fresh
 
-                    push (Context.UnsolvedType existential)
+                    preserve (Context.UnsolvedType existential)
 
                     return Type.UnsolvedType{..}
 
@@ -2023,7 +2017,7 @@ infer e₀ = do
                         | import_ -> do
                             existential <- fresh
 
-                            push (Context.UnsolvedType existential)
+                            preserve (Context.UnsolvedType existential)
 
                             return Type.UnsolvedType{..}
                         | otherwise -> do
@@ -2045,7 +2039,7 @@ infer e₀ = do
                         | import_ -> do
                             existential <- fresh
 
-                            push (Context.UnsolvedType existential)
+                            preserve (Context.UnsolvedType existential)
 
                             return Type.UnsolvedType{..}
                         | otherwise -> do
@@ -2067,7 +2061,7 @@ infer e₀ = do
                         | import_ -> do
                             existential <- fresh
 
-                            push (Context.UnsolvedType existential)
+                            preserve(Context.UnsolvedType existential)
 
                             return Type.UnsolvedType{..}
                         | otherwise -> do
@@ -3552,7 +3546,7 @@ typeWith input context syntax = do
 
     ((_A, elaborated), Status{ context = _Δ }) <- State.runStateT (infer syntax) initialStatus
 
-    return (Context.complete _Δ _A, Lens.transform (Lens.over Syntax.types (Context.complete _Δ)) elaborated)
+    return (Context.complete _Δ _A, solveSyntax _Δ elaborated)
 
 solveSyntax :: Context s -> Syntax s a -> Syntax s a
 solveSyntax _Γ = Lens.transform (Lens.over Syntax.types (Context.solveType _Γ))

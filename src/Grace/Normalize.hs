@@ -15,9 +15,9 @@ module Grace.Normalize
     , MissingSchema(..)
     ) where
 
-import Control.Concurrent.Async (Concurrently(..))
-import Control.Exception.Safe (Exception(..))
-import Control.Monad.IO.Class (liftIO)
+import Control.Exception.Safe (Exception(..), MonadCatch)
+import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.State (MonadState(..))
 import Data.Bifunctor (first)
 import Data.HashMap.Strict.InsOrd (InsOrdHashMap)
 import Data.List.NonEmpty (NonEmpty(..))
@@ -27,6 +27,7 @@ import Data.Void (Void)
 import Grace.Aeson (JSONDecodingFailed(..))
 import Grace.Decode (FromGrace(..))
 import Grace.HTTP (Methods)
+import Grace.Infer (Status)
 import Grace.Input (Input(..))
 import Grace.Location (Location(..))
 import Grace.Syntax (Builtin(..), Scalar(..), Syntax)
@@ -90,15 +91,17 @@ sorted = List.sortBy (Ord.comparing fst) . HashMap.toList
     sub-expression multiple times.
 -}
 evaluate
-    :: (Text -> Methods)
+    :: (MonadCatch m, MonadState Status m, MonadIO m)
+    => (Text -> Methods)
     -- ^ OpenAI methods
     -> [(Text, Value)]
     -- ^ Evaluation environment (starting at @[]@ for a top-level expression)
     -> Syntax Location Void
     -- ^ Surface syntax
-    -> IO Value
+    -> m Value
     -- ^ Result, free of reducible sub-expressions
-evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
+evaluate keyToMethods env₀ syntax₀ = do
+    loop env₀ syntax₀
   where
     generateContext location = do
         let infer (name, assignment) = do
@@ -114,21 +117,17 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
         traverse infer env₀
 
     loop
-        :: [(Text, Value)]
-        -> Syntax Location Void
-        -> Concurrently Value
+        :: (MonadIO m, MonadState Status m, MonadCatch m)
+        => [(Text, Value)] -> Syntax Location Void -> m Value
     loop env syntax =
         case syntax of
             Syntax.Variable{ name } -> do
                 pure (lookupVariable name env)
 
-            Syntax.Application{ function, argument } -> Concurrently do
-                io <- runConcurrently do
-                    function' <- loop env function
-                    argument' <- loop env argument
-                    return (apply keyToMethods function' argument')
-
-                io
+            Syntax.Application{ function, argument } -> do
+                function' <- loop env function
+                argument' <- loop env argument
+                apply keyToMethods function' argument'
 
             Syntax.Lambda{ nameBinding = Syntax.NameBinding{ name, assignment }, body } -> do
                 newAssignment <- traverse (loop env) assignment
@@ -162,12 +161,12 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
 
                     promote newAnnotated annotation
 
-            Syntax.Let{ bindings, body = body₀ } -> Concurrently do
+            Syntax.Let{ bindings, body = body₀ } -> do
                 newEnv <- Monad.foldM snoc env bindings
 
-                runConcurrently (loop newEnv body₀)
+                loop newEnv body₀
               where
-                snoc environment Syntax.Binding{ nameLocation, name, nameBindings, assignment } = runConcurrently do
+                snoc environment Syntax.Binding{ nameLocation, name, nameBindings, assignment } = do
                     let cons nameBinding body =
                             Syntax.Lambda{ location = nameLocation, nameBinding, body }
 
@@ -200,9 +199,9 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                             _ ->
                                 error "Grace.Normalize.evaluate: interpolations must be text values"
 
-                suffix <- foldMap onChunk rest
+                suffixes <- traverse onChunk rest
 
-                return (Value.Text (text <> suffix))
+                return (Value.Text (text <> Text.concat suffixes))
 
             Syntax.Project{ larger, smaller } -> do
                 let lookup field fieldValues = case HashMap.lookup field fieldValues of
@@ -285,21 +284,19 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                     Value.Scalar (Bool False) -> ifFalse'
                     _ -> error "Grace.Normalize.evaluate: if predicate must be a boolean value"
 
-            Syntax.Prompt{ schema = Nothing } -> do
-                Concurrently (Exception.throwIO MissingSchema)
-            Syntax.Prompt{ location, import_, arguments, schema = Just schema } -> Concurrently do
-                newArguments <- runConcurrently (loop env arguments)
+            Syntax.Prompt{ location, import_, arguments, schema } -> do
+                newArguments <- loop env arguments
 
                 prompt <- case decode newArguments of
                     Left exception -> Exception.throwIO exception
                     Right prompt -> return prompt
 
-                liftIO (Prompt.prompt (generateContext location) location import_ prompt schema)
+                Prompt.prompt (generateContext location) import_ location prompt schema
 
             Syntax.HTTP{ schema = Nothing } -> do
-                Concurrently (Exception.throwIO MissingSchema)
-            Syntax.HTTP{ location, import_, arguments, schema = Just schema } -> Concurrently do
-                newArguments <- runConcurrently (loop env arguments)
+                Exception.throwIO MissingSchema
+            Syntax.HTTP{ location, import_, arguments, schema = Just schema } -> do
+                newArguments <- loop env arguments
 
                 http <- case decode newArguments of
                     Left exception -> Exception.throwIO exception
@@ -309,14 +306,14 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
 
                 if import_
                     then do
-                        context <- generateContext location
+                        bindings <- liftIO (generateContext location)
 
-                        (_, value) <- Interpret.interpretWith keyToMethods context (Just schema) (Code (Text.unpack (HTTP.url http)) responseBody)
+                        (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema) (Code (Text.unpack (HTTP.url http)) responseBody)
 
                         return value
 
                     else do
-                        responseValue <- Grace.Aeson.decode responseBody
+                        responseValue <- liftIO (Grace.Aeson.decode responseBody)
 
                         let defaultedSchema =
                                 Lens.transform (Type.defaultTo Type.Scalar{ location, scalar = Monotype.JSON }) schema
@@ -326,9 +323,9 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                             Right value    -> return value
 
             Syntax.Read{ schema = Nothing } -> do
-                Concurrently (Exception.throwIO MissingSchema)
-            Syntax.Read{ location, import_, arguments, schema = Just schema } -> Concurrently do
-                newArguments <- runConcurrently (loop env arguments)
+                Exception.throwIO MissingSchema
+            Syntax.Read{ location, import_, arguments, schema = Just schema } -> do
+                newArguments <- loop env arguments
 
                 text <- case decode newArguments of
                     Left exception -> Exception.throwIO exception
@@ -336,14 +333,14 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
 
                 if import_
                     then do
-                        context <- generateContext location
+                        bindings <- generateContext location
 
-                        (_, value) <- Interpret.interpretWith keyToMethods context (Just schema) (Code "(read)" text)
+                        (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema) (Code "(read)" text)
 
                         return value
 
                     else do
-                        aesonValue <- Grace.Aeson.decode text
+                        aesonValue <- liftIO (Grace.Aeson.decode text)
 
                         case Value.checkJSON schema aesonValue of
                             Left exception -> do
@@ -370,9 +367,9 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
                                 return value
 
             Syntax.GitHub{ schema = Nothing } -> do
-                Concurrently (Exception.throwIO MissingSchema)
-            Syntax.GitHub{ location, import_, arguments, schema = Just schema } -> Concurrently do
-                newArguments <- runConcurrently (loop env arguments)
+                Exception.throwIO MissingSchema
+            Syntax.GitHub{ location, import_, arguments, schema = Just schema } -> do
+                newArguments <- loop env arguments
 
                 github <- case decode newArguments of
                     Left exception -> Exception.throwIO exception
@@ -382,14 +379,14 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
 
                 if import_
                     then do
-                        context <- generateContext location
+                        bindings <- generateContext location
 
-                        (_, value) <- Interpret.interpretWith keyToMethods context (Just schema) (Code (Text.unpack url) responseBody)
+                        (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema) (Code (Text.unpack url) responseBody)
 
                         return value
 
                     else do
-                        aesonValue <- Grace.Aeson.decode responseBody
+                        aesonValue <- liftIO (Grace.Aeson.decode responseBody)
 
                         let defaultedSchema =
                                 Lens.transform (Type.defaultTo Type.Scalar{ location, scalar = Monotype.JSON }) schema
@@ -629,23 +626,24 @@ evaluate keyToMethods env₀ syntax₀ = runConcurrently (loop env₀ syntax₀)
     evaluating anonymous functions and evaluating all built-in functions.
 -}
 apply
-    :: (Text -> Methods)
+    :: (MonadCatch m, MonadState Status m, MonadIO m)
+    => (Text -> Methods)
     -- ^ OpenAI methods
     -> Value
     -- ^ Function
     -> Value
     -- ^ Argument
-    -> IO Value
-apply keyToMethods function₀ argument₀ = runConcurrently (loop function₀ argument₀)
+    -> m Value
+apply keyToMethods function₀ argument₀ = loop function₀ argument₀
   where
     loop (Value.Lambda capturedEnv (Value.Name name Nothing) body) argument =
-        Concurrently (evaluate keyToMethods ((name, argument) : capturedEnv) body)
+        evaluate keyToMethods ((name, argument) : capturedEnv) body
     loop (Value.Lambda capturedEnv (Value.Name name (Just assignment)) body) (Value.Scalar Null) =
-        Concurrently (evaluate keyToMethods ((name, assignment) : capturedEnv) body)
+        evaluate keyToMethods ((name, assignment) : capturedEnv) body
     loop (Value.Lambda capturedEnv (Value.Name name (Just _)) body) (Value.Application (Value.Builtin Some) argument) =
-        Concurrently (evaluate keyToMethods ((name, argument) : capturedEnv) body)
+        evaluate keyToMethods ((name, argument) : capturedEnv) body
     loop (Value.Lambda capturedEnv (Value.FieldNames fieldNames) body) (Value.Record keyValues) =
-        Concurrently (evaluate keyToMethods (extraEnv <> capturedEnv) body)
+        evaluate keyToMethods (extraEnv <> capturedEnv) body
       where
         extraEnv = do
             (fieldName, assignment) <- fieldNames
@@ -672,12 +670,12 @@ apply keyToMethods function₀ argument₀ = runConcurrently (loop function₀ a
             pure (if b then trueHandler else falseHandler)
     loop
         (Value.Fold (Value.Record (sorted -> [("succ", succ), ("zero", zero)])))
-        (Value.Scalar (Natural n)) = Concurrently (go n zero)
+        (Value.Scalar (Natural n)) = go n zero
       where
         go 0 !result = do
             return result
         go m !result = do
-            x <- runConcurrently (loop succ result)
+            x <- loop succ result
             go (m - 1) x
     loop
         (Value.Fold (Value.Record (sorted -> [("null", _), ("some", some)])))
@@ -689,7 +687,7 @@ apply keyToMethods function₀ argument₀ = runConcurrently (loop function₀ a
             pure null
     loop
         (Value.Fold (Value.Record (sorted -> [("cons", cons), ("nil", nil)])))
-        (Value.List elements) = Concurrently do
+        (Value.List elements) = do
             inner (Seq.reverse elements) nil
       where
         inner xs !result =
@@ -697,8 +695,8 @@ apply keyToMethods function₀ argument₀ = runConcurrently (loop function₀ a
                 EmptyL -> do
                     return result
                 y :< ys -> do
-                    a <- runConcurrently (loop cons y)
-                    b <- runConcurrently (loop a result)
+                    a <- loop cons y
+                    b <- loop a result
                     inner ys b
     loop
         (Value.Fold
@@ -730,12 +728,12 @@ apply keyToMethods function₀ argument₀ = runConcurrently (loop function₀ a
             loop string (Value.Text t)
         inner (Value.Scalar Null) =
             pure null
-        inner (Value.List elements) = Concurrently do
-            newElements <- runConcurrently (traverse inner elements)
-            runConcurrently (loop array (Value.List newElements))
-        inner (Value.Record keyValues) = Concurrently do
-            elements <- runConcurrently (traverse adapt (HashMap.toList keyValues))
-            runConcurrently (loop object (Value.List (Seq.fromList elements)))
+        inner (Value.List elements) = do
+            newElements <- traverse inner elements
+            loop array (Value.List newElements)
+        inner (Value.Record keyValues) = do
+            elements <- traverse adapt (HashMap.toList keyValues)
+            loop object (Value.List (Seq.fromList elements))
           where
             adapt (key, value) = do
                 newValue <- inner value
