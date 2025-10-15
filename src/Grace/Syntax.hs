@@ -1314,7 +1314,7 @@ prettyApplicationExpression expression
         prefix = if import_ then keyword "import" <> " " else mempty
     prettyLong GitHub{ import_, arguments } =
             prefix
-        <>  keyword "read"
+        <>  keyword "github"
         <>  Pretty.hardline
         <>  "  "
         <>  Pretty.nest 2 (prettyProjectExpression arguments)
