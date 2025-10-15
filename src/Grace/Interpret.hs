@@ -11,25 +11,21 @@ module Grace.Interpret
 
 import Control.Exception.Safe (MonadCatch)
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.State (MonadState)
 import Data.Text (Text)
 import Grace.Decode (FromGrace(..))
 import Grace.HTTP (Methods)
-import Grace.Infer (Status(..))
 import Grace.Input (Input(..))
 import Grace.Location (Location(..))
 import Grace.Type (Type)
 import Grace.Value (Value)
 
 import qualified Control.Exception.Safe as Exception
-import qualified Control.Monad.State as State
 import qualified Grace.Context as Context
 import qualified Grace.HTTP as HTTP
 import qualified Grace.Import as Import
 import qualified Grace.Infer as Infer
 import qualified Grace.Normalize as Normalize
 import qualified Grace.Syntax as Syntax
-import qualified Grace.Value as Value
 
 {-| Interpret Grace source code, return the inferred type and the evaluated
     result
@@ -40,16 +36,11 @@ interpret
     :: (MonadCatch m, MonadIO m)
     => (Text -> Methods) -> Input -> m (Type Location, Value)
 interpret keyToMethods input = do
-    let initialStatus = Status{ count = 0, input, context = [] }
-
-    ((inferred, value), Status{ context }) <- do
-        State.runStateT (interpretWith keyToMethods [] Nothing input) initialStatus
-
-    return (Context.complete context inferred, Value.complete context value)
+    interpretWith keyToMethods [] Nothing input
 
 -- | Like `interpret`, but accepts a custom list of bindings
 interpretWith
-    :: (MonadCatch m, MonadState Status m, MonadIO m)
+    :: (MonadCatch m, MonadIO m)
     => (Text -> Methods)
     -- ^ OpenAI methods
     -> [(Text, Type Location, Value)]
@@ -76,16 +67,14 @@ interpretWith keyToMethods bindings maybeAnnotation input = do
 
             return (Context.Annotation variable type_)
 
-    State.modify (\status -> status{ context = typeContext <> context status })
-
-    (inferred, elaboratedExpression) <- Infer.infer annotatedExpression
+    (inferred, elaboratedExpression) <- Infer.typeWith input typeContext annotatedExpression
 
     let evaluationContext = do
             (variable, _, value) <- bindings
 
             return (variable, value)
 
-    value <- Normalize.evaluate keyToMethods evaluationContext elaboratedExpression
+    value <- liftIO (Normalize.evaluate keyToMethods evaluationContext elaboratedExpression)
 
     return (inferred, value)
 
@@ -96,9 +85,7 @@ load input = do
 
     let type_ = fmap (\_ -> Unknown) (expected @a)
 
-    let initialStatus = Status{ count = 0, input, context = [] }
-
-    (_, value) <- State.evalStateT (interpretWith keyToMethods [] (Just type_) input) initialStatus
+    (_, value) <- interpretWith keyToMethods [] (Just type_) input
 
     case decode value of
         Left exception -> Exception.throwM exception
