@@ -12,6 +12,8 @@ module Grace.Value
     , toJSON
     , inferJSON
     , checkJSON
+    , syntax
+    , complete
     , effects
 
       -- * Exceptions
@@ -20,7 +22,7 @@ module Grace.Value
 
 import Control.Applicative (empty)
 import Control.Exception.Safe (Exception(..))
-import Control.Lens (Getting, Plated(..))
+import Control.Lens (Getting, Plated(..), Traversal')
 import Data.Aeson (FromJSON(..))
 import Data.Foldable (toList)
 import Data.Generics.Sum (_As)
@@ -32,6 +34,7 @@ import Data.Text (Text)
 import Data.Typeable (Typeable)
 import Data.Void (Void)
 import GHC.Generics (Generic)
+import Grace.Context (Context)
 import Grace.Location (Location)
 import Grace.Syntax (Builtin, Scalar, Syntax)
 import Grace.Type (Type)
@@ -288,6 +291,15 @@ instance (Show a, Typeable a) => Exception (InvalidJSON a) where
             Left  _    -> show bytes
             Right text -> Text.unpack text
 
+-- | @Traversal'@ from a `Value` to a 
+syntax :: Traversal' Value (Syntax Location Void)
+syntax = _As @"Lambda" . the @3
+
+-- | `Complete` all `Type` annotations in a `Value` using the provided
+-- `Context`
+complete :: Context Location -> Value -> Value
+complete context = Lens.transform (Lens.over syntax (Syntax.complete context))
+
 -- | Determines whether the `Value` has an effect
 effects :: Getting Any Value ()
-effects = Lens.cosmos . _As @"Lambda" . the @3 . Syntax.effects
+effects = Lens.cosmos . syntax . Syntax.effects
