@@ -1,3 +1,5 @@
-\{ key } ->
+\{ "OpenAI API key" } ->
 
-import prompt{ key, text: "Uppercase the input" } "abc" : Text
+let key = .'OpenAI API key'
+
+in  import prompt{ key, text: "Uppercase the input" } "abc" : Text

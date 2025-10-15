@@ -3,7 +3,7 @@
 # and then click "Submit".
 \arguments ->
 
-let key = arguments."OpenAI key" in
+let key = arguments."OpenAI API key" in
 
 { # You can prompt a model with `Text`, which will (by default) return `Text`:
   names: prompt{ key, text: "Give me a list of names" }

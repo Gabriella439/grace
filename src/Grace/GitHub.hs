@@ -9,6 +9,7 @@ import Data.Aeson (FromJSON)
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Grace.Decode (FromGrace(..), Key(..))
+import Grace.Encode (ToGrace)
 import Grace.HTTP.Type (Header(..), HTTP(..), Parameter(..))
 
 import qualified Data.Text as Text
@@ -23,7 +24,7 @@ data GitHub = GitHub
     , repository :: Text
     , path :: Text
     } deriving stock (Generic)
-      deriving anyclass (FromGrace)
+      deriving anyclass (FromGrace, ToGrace)
 
 -- | Response from GitHub @\/repos/${owner}\/${repo}\/contents\/${path}@ API
 data Contents = Contents{ download_url :: Text }

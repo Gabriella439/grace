@@ -1,4 +1,6 @@
-\{ key } ->
+\{ "OpenAI API key" } ->
+
+let key = .'OpenAI API key'
 
 let concatSep = https://raw.githubusercontent.com/Gabriella439/grace/refs/heads/main/prelude/text/concatSep.ffg
 

@@ -21,6 +21,7 @@ import Data.JSString (JSString)
 import Data.Sequence (ViewR(..), (|>))
 import Data.Text (Text)
 import Data.Traversable (forM)
+import Data.Void (Void)
 import Grace.Infer (Status(..))
 import Grace.Type (Type(..))
 import GHCJS.Foreign.Callback (Callback)
@@ -31,7 +32,7 @@ import Grace.HTTP (Methods)
 import Grace.Input (Input(..))
 import Grace.Location (Location)
 import Grace.Monotype (RemainingFields(..))
-import Grace.Syntax (Scalar(..))
+import Grace.Syntax (FieldName(..), NameBinding(..), Scalar(..), Syntax)
 import Grace.Value (Value(..))
 import JavaScript.Array (JSArray)
 import Numeric.Natural (Natural)
@@ -1571,6 +1572,8 @@ main = do
 
     params <- getSearchParams
 
+    hasGitHub <- hasParam params "github"
+
     hasTutorial <- hasParam params "tutorial"
 
     hasExpression <- hasParam params "expression"
@@ -1587,7 +1590,7 @@ main = do
                 then do
                     return True
                 else do
-                    if hasExpression
+                    if hasExpression || hasGitHub
                         then do
                             return False
                         else do
@@ -1616,7 +1619,7 @@ main = do
     let interpret () = do
             text <- getValue codeInput
 
-            if text == ""
+            if text == "" || hasGitHub
                 then deleteParam params "expression"
                 else setParam params "expression" (URI.Encode.encodeText text)
 
@@ -1804,6 +1807,140 @@ main = do
     addEventListener startTutorial "click" startTutorialCallback
 
     Monad.when hasTutorial enableTutorial
+
+    Monad.when hasGitHub do
+        githubText <- getParam params "github"
+
+        hasPrivate <- hasParam params "private"
+
+        hasReference <- hasParam params "reference"
+
+        reference <- case hasReference of
+            False -> do
+                return Syntax.Scalar
+                    { location = ()
+                    , scalar = Syntax.Null
+                    }
+
+            True -> do
+                ref <- getParam params "reference"
+
+                return Syntax.Application
+                    { location = ()
+                    , function = Syntax.Builtin
+                        { location = ()
+                        , builtin = Syntax.Some
+                        }
+                    , argument = Syntax.Text
+                        { location = ()
+                        , chunks = Syntax.Chunks ref []
+                        }
+                    }
+
+
+        case Text.splitOn "/" githubText of
+            owner : repository : path -> do
+                if hasPrivate
+                    then do
+                        let expression = Syntax.Lambda
+                                { location = ()
+                                , nameBinding = FieldNamesBinding
+                                    { fieldNamesLocation = ()
+                                    , fieldNames =
+                                        [ FieldName
+                                            { fieldNameLocation = ()
+                                            , name = "GitHub personal access token"
+                                            , annotation = Just Type.Scalar
+                                                { location = ()
+                                                , scalar = Monotype.Key
+                                                }
+                                            , assignment = Nothing
+                                            }
+                                        ]
+                                    }
+                                , body = Syntax.GitHub
+                                    { location = ()
+                                    , import_ = True
+                                    , arguments = Syntax.Record
+                                        { location = ()
+                                        , fieldValues =
+                                            [ ( "key"
+                                              , Syntax.Application
+                                                  { location = ()
+                                                  , function = Syntax.Builtin
+                                                      { location = ()
+                                                      , builtin = Syntax.Some
+                                                      }
+                                                  , argument = "GitHub personal access token"
+                                                  }
+                                              )
+                                            , ( "owner"
+                                              , Syntax.Text
+                                                  { location = ()
+                                                  , chunks = Syntax.Chunks owner []
+                                                  }
+                                              )
+                                            , ( "repository"
+                                              , Syntax.Text
+                                                  { location = ()
+                                                  , chunks = Syntax.Chunks repository []
+                                                  }
+                                              )
+                                            , ("reference", reference)
+                                            , ( "path"
+                                              , Syntax.Text
+                                                  { location = ()
+                                                  , chunks = Syntax.Chunks (Text.intercalate "/" path) []
+                                                  }
+                                              )
+                                            ]
+                                        }
+                                    , schema = Nothing
+                                    }
+                                }
+
+                        setCodeValue codeInput (Pretty.toSmart (expression :: Syntax () Void))
+
+                    else do
+                        let expression = Syntax.GitHub
+                                { location = ()
+                                , import_ = True
+                                , arguments = Syntax.Record
+                                    { location = ()
+                                    , fieldValues =
+                                        [ ( "key"
+                                          , Syntax.Scalar
+                                              { location = ()
+                                              , scalar = Syntax.Null
+                                              }
+                                          )
+                                        , ( "owner"
+                                          , Syntax.Text
+                                              { location = ()
+                                              , chunks = Syntax.Chunks owner []
+                                              }
+                                          )
+                                        , ( "repository"
+                                          , Syntax.Text
+                                              { location = ()
+                                              , chunks = Syntax.Chunks repository []
+                                              }
+                                          )
+                                        , ("reference", reference)
+                                        , ( "path"
+                                          , Syntax.Text
+                                              { location = ()
+                                              , chunks = Syntax.Chunks (Text.intercalate "/" path) []
+                                              }
+                                          )
+                                        ]
+                                    }
+                                , schema = Nothing
+                                }
+
+                        setCodeValue codeInput (Pretty.toSmart (expression :: Syntax () Void))
+            _ -> do
+                return ()
 
     Monad.when hasExpression do
         expression <- getParam params "expression"

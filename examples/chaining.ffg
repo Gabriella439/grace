@@ -1,4 +1,6 @@
-\{ key } ->
+\{ "OpenAI API key" } ->
+
+let key = .'OpenAI API key'
 
 let question = prompt
         { key
