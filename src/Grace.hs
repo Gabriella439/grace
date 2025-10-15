@@ -11,7 +11,6 @@ import Control.Exception.Safe (Exception(..), SomeException)
 import Data.Foldable (traverse_)
 import Data.Functor (void)
 import Data.Void (Void)
-import Grace.Infer (Status(..))
 import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
 import Grace.Syntax (Builtin(..), Syntax(..))
@@ -21,7 +20,6 @@ import Prettyprinter (Doc)
 import Prettyprinter.Render.Terminal (AnsiStyle)
 
 import qualified Control.Exception.Safe as Exception
-import qualified Control.Monad.State as State
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text.IO
 import qualified GHC.IO.Encoding
@@ -222,9 +220,7 @@ main = Exception.handle handler do
 
             let expected = Type.Scalar{ scalar = Monotype.Text, location }
 
-            let initialStatus = Status{ count = 0, input, context = [] }
-
-            (_, value) <- State.evalStateT (Interpret.interpretWith keyToMethods [] (Just expected) input) initialStatus
+            (_, value) <- Interpret.interpretWith keyToMethods [] (Just expected) input
 
             case value of
                 Value.Text text -> Text.IO.putStr text

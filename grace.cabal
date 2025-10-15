@@ -85,7 +85,6 @@ library
                      , DeriveTraversable
                      , DerivingStrategies
                      , DuplicateRecordFields
-                     , FlexibleContexts
                      , GeneralizedNewtypeDeriving
                      , MultiWayIf
                      , NamedFieldPuns
