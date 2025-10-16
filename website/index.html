@@ -43,6 +43,50 @@ function autoResize(element) {
     element.style.height = element.scrollHeight + 'px';
   });
 }
+function print(element) {
+  const printWindow = window.open('', '_blank');
+
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>Preview</title>
+        <style>
+          @media print {
+            @page {
+              size: Letter portrait;
+
+              margin: 0em;
+            }
+          }
+
+          .printable {
+            margin: 0.5in !important;
+          }
+
+          ${
+          Array.from(document.styleSheets).map(styleSheet =>
+            Array.from(styleSheet.cssRules).map(cssRule =>
+              cssRule.cssText
+            ).join('\n')
+          ).join('\n')
+          }
+        </style>
+      </head>
+      <body>
+        <div class="printable">
+          ${element.outerHTML}
+        </div>
+        <script>
+          window.onload = function() {
+            window.onafterprint = function() { window.close(); };
+
+            window.print();
+          }
+        <\/script>
+      <\/body>
+    <\/html>
+  `);
+}
 </script>
 <script defer language="javascript" src="js/all.js"></script>
 </html>

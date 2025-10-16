@@ -375,6 +375,18 @@ getLocalStorage a = liftIO do
         then return Nothing
         else return (Just (JSString.Text.textFromJSVal jsVal))
 
+foreign import javascript unsafe "print($1)"
+    printElement_ :: JSVal -> IO ()
+
+printElement :: MonadIO io => JSVal -> io ()
+printElement a = liftIO (printElement_ a)
+
+foreign import javascript unsafe "navigator.clipboard.writeText($1)"
+    writeClipboard_ :: JSString -> IO ()
+
+writeClipboard :: MonadIO io => Text -> io ()
+writeClipboard a = liftIO (writeClipboard_ (fromText a))
+
 toText :: JSString -> Text
 toText = Text.pack . JSString.unpack
 
@@ -399,7 +411,29 @@ renderValue keyToMethods ref parent status Type.Optional{ type_ } value =
     renderValue keyToMethods ref parent status type_ value
 
 renderValue _ _ parent _ _ (Value.Text text) = do
-    setInnerHTML parent (markdownToHTML text)
+    setAttribute parent "style" "position: relative;"
+
+    markdown <- createElement "div"
+    setAttribute markdown "class" "printable"
+    setInnerHTML markdown (markdownToHTML text)
+
+    printButton <- createElement "button"
+    setAttribute printButton "class" "print-button btn btn-outline-light"
+    setAttribute printButton "type" "button"
+    setInnerText printButton "Print"
+
+    printCallback <- Callback.asyncCallback (printElement markdown)
+    addEventListener printButton "click" printCallback
+
+    copyButton <- createElement "button"
+    setAttribute copyButton "class" "copy-button btn btn-outline-light"
+    setAttribute copyButton "type" "button"
+    setInnerText copyButton "Copy"
+
+    copyCallback <- Callback.asyncCallback (writeClipboard text)
+    addEventListener copyButton "click" copyCallback
+
+    replaceChildren parent (Array.fromList [ printButton, copyButton, markdown ])
 
     mempty
 

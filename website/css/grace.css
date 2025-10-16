@@ -63,3 +63,21 @@ textarea {
 #start-tutorial, #stop-tutorial, #api-key {
   margin-bottom: 1em;
 }
+
+.printable {
+  margin-right: 10em;
+}
+
+.print-button {
+  position: absolute;
+  top: 0.5em;
+  right: 0.5em;
+  cursor: pointer;
+}
+
+.copy-button {
+  position: absolute;
+  top: 0.5em;
+  right: 5em;
+  cursor: pointer;
+}
