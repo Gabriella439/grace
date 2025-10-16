@@ -358,7 +358,7 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
 
                         State.put Status{ input = child, .. }
 
-                        expression <- Interpret.interpretWith keyToMethods bindings schema 
+                        expression <- Interpret.interpretWith keyToMethods bindings schema
                             `Exception.catch` \(interpretError :: SomeException) -> do
                                 retry ((output, interpretError) : errors)
 
@@ -487,7 +487,7 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
                     , reasoning_effort
                     }
 
-            output <- toOutput chatCompletionObject
+            output <- liftIO (toOutput chatCompletionObject)
 
             extract output
 
