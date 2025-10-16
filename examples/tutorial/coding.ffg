@@ -7,7 +7,7 @@ import prompt{ key }
     : { "Job Description": Text } -> { "Is Finance?": Bool, "Rationale": Text }
 # You can read the above type as "a function whose input is a record (with a
 # "Job Description" field) and whose output is a record (with "Is Finance?" and
-# "Rationale" fields)
+# "Rationale" fields)"
 
 # The `import` keyword instructs the model to generate Grace code matching the
 # expected type.  The generated Grace might use the `prompt` keyword, too!

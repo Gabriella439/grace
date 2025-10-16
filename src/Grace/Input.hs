@@ -1,4 +1,4 @@
--- | This module contains the functions and types that power to URI-base imports
+-- | This module contains the functions and types that power the URI-based imports
 module Grace.Input
     ( -- * Input
       Input(..)
@@ -68,9 +68,9 @@ data Mode
     = AsCode
     -- ^ Interpret the string as Grace code (the default)
     | AsText
-    -- ^ Interpret the string as raw text
+    -- ^ Interpret the string as raw Text
     | AsKey
-    -- ^ Interpret the string as raw text
+    -- ^ Interpret the string as a Key
     deriving stock (Eq, Show)
 
 instance Pretty Mode where

@@ -80,12 +80,11 @@ consist of:
 Then, edit the [`Normalize`][normalize] module to change the `apply` function to
 add a case for handling the newly-added builtin.
 
-Finally, add support for parsing the built-in by:
+Finally, add support for parsing the built-in to the [`Parser`][parser] module by:
 
-* Adding a new `Token` for the `Builtin` in the [`Lexer`][lexer] module
-* Adding the built-in name to the `reserved` words in the [`Lexer`][lexer]
-  module
-* Adding a new parsing rule in the [`Parser`][parser] module.
+* Adding a new `Token` for the `Builtin`
+* Adding the built-in name to the `reserved` words
+* Adding a new parsing rule.
 
 ## Adding a new operator
 
@@ -110,8 +109,8 @@ the type errors, which will consist of:
 
   … by returning the matching scalar type you just created
 
-Finally, edit the [`Lexer`][lexer] and [`Parser`][parser] modules to lex and
-parse the new scalar literal and scalar type you just created.  
+Finally, edit the [`Parser`][parser] module to lex and
+parse the new scalar literal and scalar type you just created.
 
 ## Adding a new keyword
 
@@ -142,7 +141,7 @@ This is probably the hardest part of making any changes, especially changes that
 add new keywords or complex types, since they cannot be handled uniformly.
 
 If you're new to logical notation in general, then I recommend first reading
-[A tutorial implementation of a dependently typed lambda calculus](http://www.cs.ru.nl/~wouters/Publications/Tutorial.pdf),
+[A tutorial implementation of a dependently typed lambda calculus](https://www.andres-loeh.de/LambdaPi/LambdaPi.pdf),
 which explains the correspondence between logical notation and Haskell code.
 
 Then read the
@@ -153,7 +152,6 @@ the paper, so follow up by reading the [`Infer`][infer] module, which is heavily
 commented with things I had to figure out in the course of attempting to
 implement the paper.
 
-[lexer]: ./src/Grace/Lexer.hs
 [infer]: ./src/Grace/Infer.hs
 [monotype]: ./src/Grace/Monotype.hs
 [normalize]: ./src/Grace/Normalize.hs

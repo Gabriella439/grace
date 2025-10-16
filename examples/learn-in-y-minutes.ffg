@@ -75,7 +75,7 @@ let dna = [ Thymine { }, Guanine { }, Guanine{ } ]
 # You can read that as saying: "`dna` is a `List` of unions, each of which can
 # be one of at least two alternatives (`Thymine` and `Guanine`) wrapping an
 # empty record.  There may be `other` alternatives (meaning that this anonymous
-# union is still "open")
+# union is still "open")"
 
 # This is an example of a nested `let` binding
 let compactDNA =
@@ -96,7 +96,7 @@ let renderDNA = fold
         }
 
 # Our first built-in function: `map` (which transforms each element of a
-# list
+# list)
 let nucleotideElements : List Text = map renderDNA compactDNA
 
 # You can import a naked Grace expression by URL

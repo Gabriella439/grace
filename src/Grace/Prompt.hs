@@ -227,7 +227,7 @@ toResponseFormat (Just type_) = do
 
 -- | Implementation of the @prompt@ keyword
 prompt
-    :: forall m. (MonadCatch m, MonadState Status m, MonadIO m)
+    :: (MonadCatch m, MonadState Status m, MonadIO m)
     => IO [(Text, Type Location, Value)]
     -> Bool
     -> Location
@@ -265,8 +265,7 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
                 | otherwise ->
                     Nothing
 
-    let toOutput :: ChatCompletionObject -> m Text
-        toOutput ChatCompletionObject{ choices = [ Choice{ message = Assistant{ assistant_content = Just output } } ] } = do
+    let toOutput ChatCompletionObject{ choices = [ Choice{ message = Assistant{ assistant_content = Just output } } ] } = do
             return output
         toOutput ChatCompletionObject{ choices } = do
             Exception.throwIO UnexpectedModelResponse{ choices }

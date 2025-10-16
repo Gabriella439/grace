@@ -829,6 +829,9 @@ data Scalar
     --   >>> pretty Null
     --   null
     | Key Text
+    -- ^
+    --   >>> pretty (Key "secret")
+    --   🔒
     deriving stock (Eq, Generic, Lift, Show)
 
 instance ToJSON Scalar where
