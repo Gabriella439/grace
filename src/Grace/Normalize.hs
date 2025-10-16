@@ -313,15 +313,15 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                         uri <- URI.mkURI (HTTP.url http)
 
-                        Status{ input = parent, .. } <- State.get
+                        Status{ input = parent } <- State.get
 
                         let child = parent <> URI uri AsCode
 
-                        State.put Status{ input = child, .. }
+                        State.modify (\s -> s{ input = child })
 
                         (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema)
 
-                        State.put Status{ input = parent, .. }
+                        State.modify (\s -> s{ input = parent })
 
                         return value
 
@@ -348,15 +348,15 @@ evaluate keyToMethods env₀ syntax₀ = do
                     then do
                         bindings <- generateContext location
 
-                        Status{ input = parent, .. } <- State.get
+                        Status{ input = parent } <- State.get
 
                         let child = parent <> Code "(read)" text
 
-                        State.put Status{ input = child, .. }
+                        State.modify (\s -> s{ input = child })
 
                         (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema)
 
-                        State.put Status{ input = parent, .. }
+                        State.modify (\s -> s{ input = parent })
 
                         return value
 
@@ -404,15 +404,15 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                         uri <- URI.mkURI url
 
-                        Status{ input = parent, .. } <- State.get
+                        Status{ input = parent } <- State.get
 
                         let child = parent <> URI uri AsCode
 
-                        State.put Status{ input = child, .. }
+                        State.modify (\s -> s{ input = child })
 
                         (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema)
 
-                        State.put Status{ input = parent, .. }
+                        State.modify (\s -> s{ input = parent })
 
                         return value
 
