@@ -1,0 +1,6 @@
+import github
+    { owner: "Gabriella439"
+    , repository: "grace"
+    , reference: "2aa58c1b5aeffab08acf2dd4c0d2de430a380b9b"
+    , path: "prelude/bool/not.ffg"
+    }

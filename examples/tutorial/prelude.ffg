@@ -2,10 +2,18 @@
 # functions that you can also use.
 
 # You can import functions individually, like this:
-let not = https://raw.githubusercontent.com/Gabriella439/grace/main/prelude/bool/not.ffg
+let not = import github
+        { owner: "Gabriella439"
+        , repository: "grace"
+        , path: "prelude/bool/not.ffg"
+        }
 
 # You can also import the Prelude as a whole, which is a nested record:
-let prelude = https://raw.githubusercontent.com/Gabriella439/grace/main/prelude/package.ffg
+let prelude = import github
+        { owner: "Gabriella439"
+        , repository: "grace"
+        , path: "prelude/package.ffg"
+        }
 
 # Then you can access functions as record fields:
 let clamp = prelude.integer.clamp
