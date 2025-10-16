@@ -43,7 +43,7 @@ interpret keyToMethods input = do
     let initialStatus = Status{ count = 0, input, context = [] }
 
     ((inferred, value), Status{ context }) <- do
-        State.runStateT (interpretWith keyToMethods [] Nothing input) initialStatus
+        State.runStateT (interpretWith keyToMethods [] Nothing) initialStatus
 
     return (Context.complete context inferred, Value.complete context value)
 
@@ -56,9 +56,10 @@ interpretWith
     -- ^ @(name, type, value)@ for each custom binding
     -> Maybe (Type Location)
     -- ^ Optional expected type for the input
-    -> Input
     -> m (Type Location, Value)
-interpretWith keyToMethods bindings maybeAnnotation input = do
+interpretWith keyToMethods bindings maybeAnnotation = do
+    Status{ input } <- State.get
+
     expression <- liftIO (Import.resolve input)
 
     let annotatedExpression = case maybeAnnotation of
@@ -98,7 +99,7 @@ load input = do
 
     let initialStatus = Status{ count = 0, input, context = [] }
 
-    (_, value) <- State.evalStateT (interpretWith keyToMethods [] (Just type_) input) initialStatus
+    (_, value) <- State.evalStateT (interpretWith keyToMethods [] (Just type_) ) initialStatus
 
     case decode value of
         Left exception -> Exception.throwM exception

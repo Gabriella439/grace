@@ -1367,14 +1367,14 @@ renderInputDefault path type_ = do
 
                 setSessionStorage (renderPath path type_) text
 
-                let input_ = Code "(input)" text
+                let newStatus = status{ Infer.input = Infer.input status <> Code "(input)" text }
 
                 let interpretInput = do
-                        (_, value) <- Interpret.interpretWith keyToMethods [] (Just type_) input_
+                        (_, value) <- Interpret.interpretWith keyToMethods [] (Just type_)
 
                         return value
 
-                result <- liftIO (Exception.try (State.evalStateT interpretInput status))
+                result <- liftIO (Exception.try (State.evalStateT interpretInput newStatus))
 
                 case result of
                     Left exception -> do
