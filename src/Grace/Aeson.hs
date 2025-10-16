@@ -1,4 +1,4 @@
--- | Utilities for working with the `aeson` package
+-- | Utilities for working with the @aeson@ package
 module Grace.Aeson where
 
 import Control.Exception.Safe (Exception(..))

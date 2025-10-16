@@ -4,7 +4,9 @@
 
 -- | This module implements the @prompt@ keyword
 module Grace.Prompt
-    ( Prompt(..)
+    ( -- * Prompting
+      Prompt(..)
+    , Effort(..)
     , prompt
 
       -- * Exceptions
@@ -19,11 +21,11 @@ import Data.Foldable (toList)
 import Data.Text (Text)
 import Data.Typeable (Typeable)
 import Data.Vector (Vector)
-import GHC.Generics (Generic)
 import Grace.Decode (FromGrace(..), Key(..))
 import Grace.Input (Input(..))
 import Grace.Location (Location(..))
 import Grace.Pretty (Pretty(..))
+import Grace.Prompt.Types (Effort(..), Prompt(..))
 import Grace.Type (Type(..))
 import Grace.Value (Value)
 import Numeric.Natural (Natural)
@@ -41,7 +43,7 @@ import OpenAI.V1.Chat.Completions
     , _CreateChatCompletion
     )
 
-import {-# SOURCE #-} Grace.Infer (Status(..))
+import Grace.Infer (Status(..))
 import {-# SOURCE #-} qualified Grace.Interpret as Interpret
 
 import qualified Control.Exception.Safe as Exception
@@ -65,16 +67,6 @@ import qualified Prettyprinter as Pretty
 import qualified System.IO.Unsafe as Unsafe
 
 deriving anyclass instance FromGrace ReasoningEffort
-
--- | The amount of effort a reasoning model puts into reasoning
-data Effort = Low | Medium | High
-    deriving stock (Generic)
-    deriving anyclass (FromGrace)
-
-fromEffort :: Effort -> ReasoningEffort
-fromEffort Low = ReasoningEffort_Low
-fromEffort Medium = ReasoningEffort_Medium
-fromEffort High = ReasoningEffort_High
 
 -- | Context used to teach the LLM to code in Grace
 staticAssets :: Text
@@ -232,16 +224,6 @@ toResponseFormat (Just type_) = do
             }
         }
 
--- | Arguments to the @prompt@ keyword
-data Prompt = Prompt
-    { key :: Grace.Decode.Key
-    , text :: Maybe Text
-    , model :: Maybe Text
-    , search :: Maybe Bool
-    , effort :: Maybe Effort
-    } deriving stock (Generic)
-      deriving anyclass (FromGrace)
-
 -- | Implementation of the @prompt@ keyword
 prompt
     :: (MonadCatch m, MonadState Status m, MonadIO m)
@@ -273,11 +255,14 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
               | otherwise -> "o4-mini"
 
     let reasoning_effort = case effort of
+            Just Low    -> Just ReasoningEffort_Low
+            Just Medium -> Just ReasoningEffort_Medium
+            Just High   -> Just ReasoningEffort_High
             Nothing
                 | Text.isPrefixOf "o" defaultedModel ->
                     Just ReasoningEffort_High
-            _ ->
-                fmap fromEffort effort
+                | otherwise ->
+                    Nothing
 
     let toOutput ChatCompletionObject{ choices = [ Choice{ message = Assistant{ assistant_content = Just output } } ] } = do
             return output
