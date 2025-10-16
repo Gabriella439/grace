@@ -62,6 +62,7 @@ library
                      , Grace.Parser
                      , Grace.Pretty
                      , Grace.Prompt
+                     , Grace.Prompt.Types
                      , Grace.Syntax
                      , Grace.Type
                      , Grace.Value

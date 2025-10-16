@@ -295,7 +295,7 @@ instance (Show a, Typeable a) => Exception (InvalidJSON a) where
 syntax :: Traversal' Value (Syntax Location Void)
 syntax = _As @"Lambda" . the @3
 
--- | `Complete` all `Type` annotations in a `Value` using the provided
+-- | Complete all `Type` annotations in a `Value` using the provided
 -- `Context`
 complete :: Context Location -> Value -> Value
 complete context = Lens.transform (Lens.over syntax (Syntax.complete context))

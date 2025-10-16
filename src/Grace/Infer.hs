@@ -45,7 +45,7 @@ import Grace.Input (Input)
 import Grace.Location (Location(..))
 import Grace.Monotype (Monotype)
 import Grace.Pretty (Pretty(..))
-import Grace.Prompt (Prompt(..))
+import Grace.Prompt.Types (Prompt(..))
 import Grace.Syntax (Syntax)
 import Grace.Type (Type(..))
 
