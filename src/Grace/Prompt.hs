@@ -227,7 +227,7 @@ toResponseFormat (Just type_) = do
 
 -- | Implementation of the @prompt@ keyword
 prompt
-    :: (MonadCatch m, MonadState Status m, MonadIO m)
+    :: forall m. (MonadCatch m, MonadState Status m, MonadIO m)
     => IO [(Text, Type Location, Value)]
     -> Bool
     -> Location
@@ -235,7 +235,7 @@ prompt
     -> Maybe (Type Location)
     -> m Value
 prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = key }, text, model, search, effort } schema = do
-    keyToMethods <- liftIO (HTTP.getMethods)
+    keyToMethods <- liftIO HTTP.getMethods
 
     let methods = keyToMethods (Text.strip key)
 
@@ -265,7 +265,8 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
                 | otherwise ->
                     Nothing
 
-    let toOutput ChatCompletionObject{ choices = [ Choice{ message = Assistant{ assistant_content = Just output } } ] } = do
+    let toOutput :: ChatCompletionObject -> m Text
+        toOutput ChatCompletionObject{ choices = [ Choice{ message = Assistant{ assistant_content = Just output } } ] } = do
             return output
         toOutput ChatCompletionObject{ choices } = do
             Exception.throwIO UnexpectedModelResponse{ choices }
@@ -350,7 +351,7 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
                                 , reasoning_effort
                                 }
 
-                        output <- liftIO (toOutput chatCompletionObject)
+                        output <- toOutput chatCompletionObject
 
                         Status{ input = parent, .. } <- State.get
 
@@ -358,7 +359,7 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
 
                         State.put Status{ input = child, .. }
 
-                        expression <- Interpret.interpretWith keyToMethods bindings schema 
+                        expression <- Interpret.interpretWith keyToMethods bindings schema
                             `Exception.catch` \(interpretError :: SomeException) -> do
                                 retry ((output, interpretError) : errors)
 
