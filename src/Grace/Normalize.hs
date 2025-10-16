@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE RecordWildCards #-}
 
 -- | This module contains the logic for efficiently evaluating an expression
 module Grace.Normalize
@@ -27,8 +28,8 @@ import Data.Void (Void)
 import Grace.Aeson (JSONDecodingFailed(..))
 import Grace.Decode (FromGrace(..))
 import Grace.HTTP (Methods)
-import Grace.Infer (Status)
-import Grace.Input (Input(..))
+import Grace.Infer (Status(..))
+import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
 import Grace.Syntax (Builtin(..), Scalar(..), Syntax)
 import Grace.Value (Value)
@@ -39,6 +40,7 @@ import {-# SOURCE #-} qualified Grace.Interpret as Interpret
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
 import qualified Control.Monad as Monad
+import qualified Control.Monad.State as State
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Yaml as YAML
 import qualified Data.ByteString.Lazy as ByteString.Lazy
@@ -60,6 +62,7 @@ import qualified Grace.Prompt as Prompt
 import qualified Grace.Syntax as Syntax
 import qualified Grace.Type as Type
 import qualified Grace.Value as Value
+import qualified Text.URI as URI
 import qualified Prelude
 
 {- $setup
@@ -308,7 +311,17 @@ evaluate keyToMethods env₀ syntax₀ = do
                     then do
                         bindings <- liftIO (generateContext location)
 
-                        (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema) (Code (Text.unpack (HTTP.url http)) responseBody)
+                        uri <- URI.mkURI (HTTP.url http)
+
+                        Status{ input = parent, .. } <- State.get
+
+                        let child = parent <> URI uri AsCode
+
+                        State.put Status{ input = child, .. }
+
+                        (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema)
+
+                        State.put Status{ input = parent, .. }
 
                         return value
 
@@ -335,7 +348,15 @@ evaluate keyToMethods env₀ syntax₀ = do
                     then do
                         bindings <- generateContext location
 
-                        (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema) (Code "(read)" text)
+                        Status{ input = parent, .. } <- State.get
+
+                        let child = parent <> Code "(read)" text
+
+                        State.put Status{ input = child, .. }
+
+                        (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema)
+
+                        State.put Status{ input = parent, .. }
 
                         return value
 
@@ -381,7 +402,17 @@ evaluate keyToMethods env₀ syntax₀ = do
                     then do
                         bindings <- generateContext location
 
-                        (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema) (Code (Text.unpack url) responseBody)
+                        uri <- URI.mkURI url
+
+                        Status{ input = parent, .. } <- State.get
+
+                        let child = parent <> URI uri AsCode
+
+                        State.put Status{ input = child, .. }
+
+                        (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema)
+
+                        State.put Status{ input = parent, .. }
 
                         return value
 

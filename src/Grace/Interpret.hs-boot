@@ -7,7 +7,6 @@ import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.State (MonadState)
 import Data.Text (Text)
 import Grace.HTTP (Methods)
-import Grace.Input (Input(..))
 import Grace.Location (Location(..))
 import Grace.Type (Type)
 import Grace.Value (Value)
@@ -23,6 +22,5 @@ interpretWith
     -- ^ @(name, type, value)@ for each custom binding
     -> Maybe (Type Location)
     -- ^ Optional expected type for the input
-    -> Input
     -> m (Type Location, Value)
 

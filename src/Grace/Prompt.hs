@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE RecordWildCards #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -288,7 +289,7 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
                                       \\n"
                                     )
 
-                        context <- liftIO generateContext
+                        bindings <- liftIO generateContext
 
                         let renderAssignment (name, type_, _) =
                                 Pretty.toSmart (Pretty.group (Pretty.flatAlt long short)) <> "\n\n"
@@ -307,11 +308,11 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
                                     <>  pretty type_
 
                         let environment
-                                | Foldable.null context = ""
+                                | Foldable.null bindings = ""
                                 | otherwise =
                                     "Given the following variables:\n\
                                     \\n\
-                                    \" <> foldMap renderAssignment context
+                                    \" <> foldMap renderAssignment bindings
 
                         let instructions = case text of
                                 Nothing ->
@@ -351,9 +352,19 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
 
                         output <- liftIO (toOutput chatCompletionObject)
 
-                        Interpret.interpretWith keyToMethods context schema (Code "(prompt)" output)
+                        Status{ input = parent, .. } <- State.get
+
+                        let child = parent <> Code "(prompt)" output
+
+                        State.put Status{ input = child, .. }
+
+                        expression <- Interpret.interpretWith keyToMethods bindings schema 
                             `Exception.catch` \(interpretError :: SomeException) -> do
                                 retry ((output, interpretError) : errors)
+
+                        State.put Status{ input = parent, .. }
+
+                        return expression
 
             (_, e) <- retry []
 

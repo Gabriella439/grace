@@ -17,9 +17,9 @@ import qualified Text.URI as URI
 
 {-| Input to the interpreter.
 
-    You should prefer to use `Path` if possible (for better error messages and
-    correctly handling transitive imports).  The `Code` constructor is intended
-    for cases like interpreting code read from standard input.
+    You should prefer to use `Path` and `URI` if possible (for better error
+    messages and correctly handling transitive imports).  The `Code` constructor
+    is intended for cases like interpreting code read from standard input.
 -}
 data Input
     = Path FilePath Mode

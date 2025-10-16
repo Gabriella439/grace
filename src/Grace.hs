@@ -224,7 +224,7 @@ main = Exception.handle handler do
 
             let initialStatus = Status{ count = 0, input, context = [] }
 
-            (_, value) <- State.evalStateT (Interpret.interpretWith keyToMethods [] (Just expected) input) initialStatus
+            (_, value) <- State.evalStateT (Interpret.interpretWith keyToMethods [] (Just expected)) initialStatus
 
             case value of
                 Value.Text text -> Text.IO.putStr text

@@ -48,7 +48,7 @@ repl keyToMethods = do
 
             let initialStatus = Status{ count = 0, input, context = [] }
 
-            Exception.try @_ @SomeException (State.runStateT (Interpret.interpretWith keyToMethods bindings Nothing input) initialStatus)
+            Exception.try @_ @SomeException (State.runStateT (Interpret.interpretWith keyToMethods bindings Nothing) initialStatus)
 
     let command string = do
             let input = Code "(input)" (Text.pack string)
