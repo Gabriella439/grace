@@ -31,14 +31,14 @@ data Contents = Contents{ download_url :: Text }
     deriving stock (Generic)
     deriving anyclass (FromJSON)
 
-{-| Make an HTTP request to GitHub
+{-| Get the download URL of a file on GitHub
 
     This is an ergonomic convenience for the user for the exceedingly common use
     case of fetching code in version control from GitHub (and also powers
     trygrace.dev's `/github/${owner}/${repository}/${path}` short-links.
 -}
-github :: Bool -> GitHub -> IO (Text, Text)
-github import_ GitHub{ key, owner, repository, reference, path } = do
+github :: GitHub -> IO Text
+github GitHub{ key, owner, repository, reference, path } = do
     let authorization = case key of
             Nothing ->
                 [ ]
@@ -65,10 +65,4 @@ github import_ GitHub{ key, owner, repository, reference, path } = do
 
     Contents{ download_url } <- Grace.Aeson.decode contentsResponse
 
-    contents <- HTTP.http import_ GET
-        { url = download_url
-        , headers = Nothing
-        , parameters = Nothing
-        }
-
-    return (contents, download_url)
+    return download_url
