@@ -253,17 +253,15 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
     let defaultedModel = case model of
             Just m -> m
             _ | defaultedSearch -> "gpt-4o-search-preview"
-              | otherwise -> "o4-mini"
+              | otherwise -> "gpt-5-mini"
 
-    let reasoning_effort = case effort of
-            Just Low    -> Just ReasoningEffort_Low
-            Just Medium -> Just ReasoningEffort_Medium
-            Just High   -> Just ReasoningEffort_High
-            Nothing
-                | Text.isPrefixOf "o" defaultedModel ->
-                    Just ReasoningEffort_High
-                | otherwise ->
-                    Nothing
+    let reasoning_effort = do
+            e <- effort
+
+            return case e of
+                Low    -> ReasoningEffort_Low
+                Medium -> ReasoningEffort_Medium
+                High   -> ReasoningEffort_High
 
     let toOutput ChatCompletionObject{ choices = [ Choice{ message = Assistant{ assistant_content = Just output } } ] } = do
             return output
