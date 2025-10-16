@@ -152,9 +152,9 @@
                   self.lib.fold self.lib.composeExtensions oldOverrides
                     (   [ sourceOverrides
                           directoryOverrides
-                          manualOverrides
                         ]
                     ++  self.lib.optional (compiler == "ghcjs") ghcjsOverrides
+                    ++  [ manualOverrides ]
                     );
             });
           };
