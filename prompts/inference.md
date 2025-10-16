@@ -89,8 +89,11 @@ I'll cut to the case by showing the above prompt chain written as a program in t
 ```haskell
 \{ key } ->
 
-let concatSep =
-      https://raw.githubusercontent.com/Gabriella439/grace/refs/heads/main/prelude/text/concatSep.ffg
+let concatSep = import github
+      { owner: "Gabriella439"
+      , repository: "grace"
+      , path: "prelude/text/concatSep.ffg"
+      }
 
 let generatePoem idea =
         let structure = prompt
@@ -336,7 +339,11 @@ For example, consider this Grace program:
 ```haskell
 \{ key } ->
 
-let concatSep = https://raw.githubusercontent.com/Gabriella439/grace/refs/heads/main/prelude/text/concatSep.ffg
+let concatSep = import github
+      { owner: "Gabriella439"
+      , repository: "grace"
+      , path: "prelude/text/concatSep.ffg"
+      }
 
 let call = fold
       { HttpRequest: \x -> "curl " + x.url

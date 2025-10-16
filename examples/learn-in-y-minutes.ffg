@@ -103,6 +103,13 @@ let nucleotideElements : List Text = map renderDNA compactDNA
 let concat =
         https://raw.githubusercontent.com/Gabriella439/grace/refs/heads/main/prelude/text/concat.ffg
 
+# Or using the `import github` keywords
+let alsoConcat = import github
+        { owner: "Gabriella439"
+        , repository: "grace"
+        , path: "prelude/text/concat.ffg"
+        }
+
 let nucleotideString : Text = concat nucleotideElements
 
 let points =
@@ -206,6 +213,7 @@ in  { greeting
     , renderDNA
     , nucleotideElements
     , concat
+    , alsoConcat
     , nucleotideString
     , points
     , exampleFunction

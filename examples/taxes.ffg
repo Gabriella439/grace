@@ -1,0 +1,58 @@
+\{ "Filing status", "Taxable income" } ->
+
+let toBracket brackets (_ : { }) income = fold
+        { cons: \bracket result ->
+            if income > bracket."Lower bound"
+            then
+                  bracket."Minimum tax"
+                + bracket."Tax rate" * (income - bracket."Lower bound")
+            else result
+        , nil: 0 : Real
+        }
+        brackets
+
+let tax = fold
+        # Based on 2022 federal income tax brackets from:
+        #
+        # https://www.nerdwallet.com/article/taxes/federal-income-tax-brackets
+        { "Single filers": toBracket
+            [ { "Tax rate": 0.37, "Lower bound": 539900.00, "Minimum tax": 162718.00 }
+            , { "Tax rate": 0.35, "Lower bound": 215950.00, "Minimum tax":  49335.50 }
+            , { "Tax rate": 0.32, "Lower bound": 170050.00, "Minimum tax":  34647.50 }
+            , { "Tax rate": 0.24, "Lower bound":  89075.00, "Minimum tax":  15213.50 }
+            , { "Tax rate": 0.22, "Lower bound":  41775.00, "Minimum tax":   4807.50 }
+            , { "Tax rate": 0.12, "Lower bound":  10275.00, "Minimum tax":   1027.50 }
+            , { "Tax rate": 0.10, "Lower bound":      0.00, "Minimum tax":      0.00 }
+            ]
+        , "Married, filing jointly": toBracket
+            [ { "Tax rate": 0.37, "Lower bound": 647850.00, "Minimum tax": 174253.50 }
+            , { "Tax rate": 0.35, "Lower bound": 431900.00, "Minimum tax":  98671.00 }
+            , { "Tax rate": 0.32, "Lower bound": 340100.00, "Minimum tax":  69295.00 }
+            , { "Tax rate": 0.24, "Lower bound": 178150.00, "Minimum tax":  30427.00 }
+            , { "Tax rate": 0.22, "Lower bound":  93550.00, "Minimum tax":   9615.00 }
+            , { "Tax rate": 0.12, "Lower bound":  20550.00, "Minimum tax":   2055.00 }
+            , { "Tax rate": 0.10, "Lower bound":      0.00, "Minimum tax":      0.00 }
+            ]
+        , "Married, filing separately": toBracket
+            [ { "Tax rate": 0.37, "Lower bound": 539900.00, "Minimum tax": 162718.00 }
+            , { "Tax rate": 0.35, "Lower bound": 215950.00, "Minimum tax":  49335.50 }
+            , { "Tax rate": 0.32, "Lower bound": 170050.00, "Minimum tax":  34647.50 }
+            , { "Tax rate": 0.24, "Lower bound":  89075.00, "Minimum tax":  15213.50 }
+            , { "Tax rate": 0.22, "Lower bound":  41775.00, "Minimum tax":   4807.50 }
+            , { "Tax rate": 0.12, "Lower bound":  10275.00, "Minimum tax":   1027.50 }
+            , { "Tax rate": 0.10, "Lower bound":      0.00, "Minimum tax":      0.00 }
+              ]
+        , "Head of household": toBracket
+            [ { "Tax rate": 0.37, "Lower bound": 539900.00, "Minimum tax": 161218.50 }
+            , { "Tax rate": 0.35, "Lower bound": 215950.00, "Minimum tax":  47836.00 }
+            , { "Tax rate": 0.32, "Lower bound": 170050.00, "Minimum tax":  33148.00 }
+            , { "Tax rate": 0.24, "Lower bound":  89050.00, "Minimum tax":  13708.00 }
+            , { "Tax rate": 0.22, "Lower bound":  55900.00, "Minimum tax":   6415.00 }
+            , { "Tax rate": 0.12, "Lower bound":  14650.00, "Minimum tax":   1465.00 }
+            , { "Tax rate": 0.10, "Lower bound":      0.00, "Minimum tax":      0.00 }
+            ]
+        }
+        .'Filing status'
+        .'Taxable income'
+
+in  { "Tax": tax }
