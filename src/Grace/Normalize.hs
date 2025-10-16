@@ -27,7 +27,7 @@ import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Aeson (JSONDecodingFailed(..))
 import Grace.Decode (FromGrace(..))
-import Grace.HTTP (Methods)
+import Grace.HTTP (HTTP(..), Methods)
 import Grace.Infer (Status(..))
 import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
@@ -396,7 +396,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                     Left exception -> Exception.throwIO exception
                     Right http -> return http
 
-                (responseBody, url) <- liftIO (GitHub.github import_ github)
+                url <- liftIO (GitHub.github github)
 
                 if import_
                     then do
@@ -417,6 +417,12 @@ evaluate keyToMethods env₀ syntax₀ = do
                         return value
 
                     else do
+                        responseBody <- liftIO $ HTTP.http import_ GET
+                            { url = url
+                            , headers = Nothing
+                            , parameters = Nothing
+                            }
+
                         aesonValue <- liftIO (Grace.Aeson.decode responseBody)
 
                         let defaultedSchema =
