@@ -252,7 +252,7 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
 
     let defaultedModel = case model of
             Just m -> m
-            _ | defaultedSearch -> "gpt-4o-search-preview"
+            _ | defaultedSearch -> "gpt-5-search-api"
               | otherwise -> "gpt-5-mini"
 
     let reasoning_effort = do
