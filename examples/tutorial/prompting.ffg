@@ -20,10 +20,10 @@ let key = arguments."OpenAI API key" in
 , # In fact, that type is descriptive enough that we can just omit the prompt:
   tacitFullNames: prompt{ key } : List { firstName: Text, lastName: Text }
 
-, # By default the `prompt` keyword selects the `o4-mini` model, but you can
+, # By default the `prompt` keyword selects the `gpt-5-mini` model, but you can
   # specify other models using the `model` argument:
   differentModel:
-    prompt{ key, model: "gpt-4o" } : List { firstName: Text, lastName: Text }
+    prompt{ key, model: "gpt-5-nano" } : List { firstName: Text, lastName: Text }
 }
 
 # Try switching to the "Code" tab below to view the code for the result, then
