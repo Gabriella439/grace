@@ -603,9 +603,11 @@ renderValue parent Type.Function{ input, output } function = do
 
                     status_@Status{ context } <- State.get
 
+                    let completedType = Context.complete context output
+
                     let solvedType = Context.solveType context output
 
-                    refreshOutput <- liftIO $ setSuccess solvedType newValue \htmlWrapper -> do
+                    refreshOutput <- liftIO $ setSuccess completedType newValue \htmlWrapper -> do
                         Reader.runReaderT (renderValue htmlWrapper solvedType newValue) (r :: RenderValue){ status = status_ }
 
                     liftIO refreshOutput
@@ -1710,9 +1712,12 @@ main = do
 
                             status@Status{ context } <- State.get
 
+                            let completedType =
+                                    Context.complete context inferred
+
                             let solvedType = Context.solveType context inferred
 
-                            refreshOutput <- liftIO $ setSuccess solvedType value \htmlWrapper -> do
+                            refreshOutput <- liftIO $ setSuccess completedType value \htmlWrapper -> do
                                 Reader.runReaderT (renderValue htmlWrapper solvedType value) RenderValue{ keyToMethods, counter, status, edit }
 
                             liftIO refreshOutput
