@@ -411,6 +411,7 @@ data RenderValue = RenderValue
     { keyToMethods :: Text -> Methods
     , counter :: IORef Natural
     , status :: Status
+    , edit :: Bool
     }
 
 renderValue
@@ -586,11 +587,13 @@ renderValue parent outer (Value.Alternative alternative value) = do
     renderValue parent recordType recordValue
 
 renderValue parent Type.Function{ input, output } function = do
-    r@RenderValue{ counter, keyToMethods, status } <- Reader.ask
+    r@RenderValue{ counter, keyToMethods, status, edit } <- Reader.ask
 
     outputVal <- createElement "div"
 
-    (setBusy, setSuccess, setError) <- createForm False outputVal
+    let hasEffects = Lens.has Value.effects function
+
+    (setBusy, setSuccess, setError) <- createForm (edit && hasEffects) outputVal
 
     let render value = do
             setBusy
@@ -620,8 +623,6 @@ renderValue parent Type.Function{ input, output } function = do
 
     (_, reader) <- liftIO (renderInput [] input)
 
-    let hasEffects = Lens.has Value.effects function
-
     let renderOutput Change | hasEffects = mempty
         renderOutput _                   = debouncedRender
 
@@ -630,6 +631,7 @@ renderValue parent Type.Function{ input, output } function = do
         , renderOutput
         , counter
         , status
+        , edit
         })
 
     case result of
@@ -692,6 +694,7 @@ data RenderInput = RenderInput
     , renderOutput :: Mode -> Value -> IO ()
     , counter :: IORef Natural
     , status :: Status
+    , edit :: Bool
     }
 
 register
@@ -1710,7 +1713,7 @@ main = do
                             let solvedType = Context.solveType context inferred
 
                             refreshOutput <- liftIO $ setSuccess solvedType value \htmlWrapper -> do
-                                Reader.runReaderT (renderValue htmlWrapper solvedType value) RenderValue{ keyToMethods, counter, status }
+                                Reader.runReaderT (renderValue htmlWrapper solvedType value) RenderValue{ keyToMethods, counter, status, edit }
 
                             liftIO refreshOutput
 
