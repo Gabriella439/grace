@@ -100,7 +100,7 @@ repl keyToMethods = do
                         State.modify ((variable, type_, completed) :)
 
             | otherwise = do
-                liftIO (putStrLn "usage: let = {expression}")
+                liftIO (putStrLn "usage: let {identifier} = {expression}")
 
     let infer expr = do
             let input = Code "(input)" (Text.pack expr)
@@ -202,14 +202,16 @@ repl keyToMethods = do
     let banner MultiLine  = return "... "
         banner SingleLine = return ">>> "
 
+    let initialiser = liftIO (putStrLn "Type :help for more information.")
+
     let action = Repline.evalReplOpts ReplOpts
-            { banner 
+            { banner
             , command
             , options
             , prefix = Just ':'
             , multilineCommand = Just "paste"
             , tabComplete
-            , initialiser = return ()
+            , initialiser
             , finaliser = return Repline.Exit
             }
 
