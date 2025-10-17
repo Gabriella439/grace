@@ -7,9 +7,11 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeApplications      #-}
 
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 module Main where
 
-import Control.Applicative (empty)
+import Control.Applicative (empty, liftA2)
 import Control.Concurrent.Async (Async)
 import Control.Exception.Safe (catch, Exception(..), SomeException)
 import Control.Monad.IO.Class (MonadIO(..))
@@ -76,6 +78,12 @@ import qualified Grace.Type as Type
 import qualified Grace.Value as Value
 import qualified JavaScript.Array as Array
 import qualified Network.URI.Encode as URI.Encode
+
+instance (Applicative m, Semigroup a) => Semigroup (ReaderT r m a) where
+    (<>) = liftA2 (<>)
+
+instance (Applicative m, Monoid a) => Monoid (ReaderT r m a) where
+    mempty = pure mempty
 
 foreign import javascript unsafe "document.getElementById($1)"
     getElementById_ :: JSString -> IO JSVal
@@ -399,18 +407,21 @@ typeToText = Pretty.renderStrict False 80
 valueToText :: Value -> Text
 valueToText = Pretty.renderStrict False 80 . Normalize.strip . Normalize.quote
 
+data RenderValue = RenderValue
+    { keyToMethods :: Text -> Methods
+    , counter :: IORef Natural
+    , status :: Status
+    }
+
 renderValue
-    :: (Text -> Methods)
-    -> IORef Natural
-    -> JSVal
-    -> Status
+    :: JSVal
     -> Type Location
     -> Value
-    -> IO (IO ())
-renderValue keyToMethods ref parent status Type.Optional{ type_ } value =
-    renderValue keyToMethods ref parent status type_ value
+    -> ReaderT RenderValue IO (IO ())
+renderValue parent Type.Optional{ type_ } value =
+    renderValue parent type_ value
 
-renderValue _ _ parent _ _ (Value.Text text) = do
+renderValue parent _ (Value.Text text) = do
     setAttribute parent "style" "position: relative;"
 
     markdown <- createElement "div"
@@ -422,7 +433,7 @@ renderValue _ _ parent _ _ (Value.Text text) = do
     setAttribute printButton "type" "button"
     setInnerText printButton "Print"
 
-    printCallback <- Callback.asyncCallback (printElement markdown)
+    printCallback <- liftIO (Callback.asyncCallback (printElement markdown))
     addEventListener printButton "click" printCallback
 
     copyButton <- createElement "button"
@@ -430,14 +441,14 @@ renderValue _ _ parent _ _ (Value.Text text) = do
     setAttribute copyButton "type" "button"
     setInnerText copyButton "Copy"
 
-    copyCallback <- Callback.asyncCallback (writeClipboard text)
+    copyCallback <- liftIO (Callback.asyncCallback (writeClipboard text))
     addEventListener copyButton "click" copyCallback
 
     replaceChildren parent (Array.fromList [ printButton, copyButton, markdown ])
 
     mempty
 
-renderValue _ _ parent _ _ (Value.Scalar (Bool bool)) = do
+renderValue parent _ (Value.Scalar (Bool bool)) = do
     input <- createElement "input"
 
     setAttribute input "type"     "checkbox"
@@ -450,7 +461,7 @@ renderValue _ _ parent _ _ (Value.Scalar (Bool bool)) = do
 
     mempty
 
-renderValue _ _ parent _ _ (Value.Scalar Null) = do
+renderValue parent _ (Value.Scalar Null) = do
     span <- createElement "span"
 
     setAttribute span "class" "fira"
@@ -461,7 +472,7 @@ renderValue _ _ parent _ _ (Value.Scalar Null) = do
 
     mempty
 
-renderValue _ _ parent _ _ value@Value.Scalar{} = do
+renderValue parent _ value@Value.Scalar{} = do
     span <- createElement "span"
 
     setTextContent span (valueToText value)
@@ -473,7 +484,7 @@ renderValue _ _ parent _ _ value@Value.Scalar{} = do
 
     mempty
 
-renderValue keyToMethods ref parent status outer (Value.List values) = do
+renderValue parent outer (Value.List values) = do
     inner <- case outer of
             Type.List{ type_ } -> do
                 return type_
@@ -487,7 +498,7 @@ renderValue keyToMethods ref parent status outer (Value.List values) = do
     results <- forM values \value -> do
         li <- createElement "li"
 
-        refreshOutput <- renderValue keyToMethods ref li status inner value
+        refreshOutput <- renderValue li inner value
 
         return (li, refreshOutput)
 
@@ -501,7 +512,7 @@ renderValue keyToMethods ref parent status outer (Value.List values) = do
 
     return (sequence_ refreshOutputs)
 
-renderValue keyToMethods ref parent status outer (Value.Record keyValues) = do
+renderValue parent outer (Value.Record keyValues) = do
     let lookupKey = case outer of
             Type.Record{ fields = Type.Fields keyTypes _ } ->
                 \key -> lookup key keyTypes
@@ -533,7 +544,7 @@ renderValue keyToMethods ref parent status outer (Value.Record keyValues) = do
 
             setAttribute dd "class" "col"
 
-            refreshOutput <- renderValue keyToMethods ref dd status type_ value
+            refreshOutput <- renderValue dd type_ value
 
             dl <- createElement "dl"
 
@@ -551,10 +562,10 @@ renderValue keyToMethods ref parent status outer (Value.Record keyValues) = do
 
     return (sequence_ refreshOutputs)
 
-renderValue keyToMethods ref parent status outer (Application (Value.Builtin Syntax.Some) value) = do
-    renderValue keyToMethods ref parent status outer value
+renderValue parent outer (Application (Value.Builtin Syntax.Some) value) = do
+    renderValue parent outer value
 
-renderValue keyToMethods ref parent status outer (Value.Alternative alternative value) = do
+renderValue parent outer (Value.Alternative alternative value) = do
     inner <- case outer of
             Type.Union{ alternatives = Type.Alternatives keyTypes _ } ->
                 case lookup alternative keyTypes of
@@ -572,9 +583,11 @@ renderValue keyToMethods ref parent status outer (Value.Alternative alternative 
 
     let recordValue = Value.Record (HashMap.singleton alternative value)
 
-    renderValue keyToMethods ref parent status recordType recordValue
+    renderValue parent recordType recordValue
 
-renderValue keyToMethods counter parent status Type.Function{ input, output } function = do
+renderValue parent Type.Function{ input, output } function = do
+    r@RenderValue{ counter, keyToMethods, status } <- Reader.ask
+
     outputVal <- createElement "div"
 
     (setBusy, setSuccess, setError) <- createForm False outputVal
@@ -590,7 +603,7 @@ renderValue keyToMethods counter parent status Type.Function{ input, output } fu
                     let solvedType = Context.solveType context output
 
                     refreshOutput <- liftIO $ setSuccess solvedType newValue \htmlWrapper -> do
-                        renderValue keyToMethods counter htmlWrapper status_ solvedType newValue
+                        Reader.runReaderT (renderValue htmlWrapper solvedType newValue) (r :: RenderValue){ status = status_ }
 
                     liftIO refreshOutput
 
@@ -600,19 +613,19 @@ renderValue keyToMethods counter parent status Type.Function{ input, output } fu
                 Left exception -> do
                     setError (Text.pack (displayException (exception :: SomeException)))
 
-                Right r -> do
-                    return r
+                Right x -> do
+                    return x
 
     debouncedRender <- debounce render
 
-    (_, reader) <- renderInput [] input
+    (_, reader) <- liftIO (renderInput [] input)
 
     let hasEffects = Lens.has Value.effects function
 
     let renderOutput Change | hasEffects = mempty
         renderOutput _                   = debouncedRender
 
-    result <- Maybe.runMaybeT (Reader.runReaderT reader RenderInput
+    result <- liftIO $ Maybe.runMaybeT (Reader.runReaderT reader RenderInput
         { keyToMethods
         , renderOutput
         , counter
@@ -637,14 +650,14 @@ renderValue keyToMethods counter parent status Type.Function{ input, output } fu
 
                     hr <- createElement "hr"
 
-                    callback <- Callback.asyncCallback (invoke Submit)
+                    callback <- liftIO (Callback.asyncCallback (invoke Submit))
 
                     addEventListener button "click" callback
 
                     replaceChildren parent (Array.fromList [ inputVal, button, hr, outputVal ])
 
                 else do
-                    invoke Submit
+                    liftIO (invoke Submit)
 
                     hr <- createElement "hr"
 
@@ -655,11 +668,11 @@ renderValue keyToMethods counter parent status Type.Function{ input, output } fu
 -- because all of the `Value` constructors are either explicitly handled (e.g.
 -- `Text` / `Scalar`) or handled by the case for `Type.Function` (e.g. `Builtin`
 -- / `Alternative`)
-renderValue _ _ parent _ _ value = do
+renderValue parent _ value = do
     renderDefault parent value
 
-renderDefault :: JSVal -> Value -> IO (IO ())
-renderDefault parent value = do
+renderDefault :: MonadIO io => JSVal -> Value -> io (IO ())
+renderDefault parent value = liftIO do
     code <- createElement "code"
 
     setTextContent code (valueToText value)
@@ -1443,8 +1456,8 @@ renderInputDefault path type_ = do
 
 data DebounceStatus = Ready | Lock | Running (Async ())
 
-debounce :: (a -> IO ()) -> IO (a -> IO ())
-debounce f = do
+debounce :: MonadIO io => (a -> IO ()) -> io (a -> IO ())
+debounce f = liftIO do
     tvar <- TVar.newTVarIO Ready
 
     return \args -> do
@@ -1471,15 +1484,16 @@ debounce f = do
         STM.atomically (TVar.writeTVar tvar Ready)
 
 createForm
-    :: Bool
+    :: MonadIO io
+    => Bool
     -- ^ Show tabs?
     -> JSVal
-    -> IO
+    -> io
         ( IO ()
         , Type Location -> Value -> (JSVal -> IO (IO ())) -> IO (IO ())
         , Text -> IO ()
         )
-createForm showTabs output = do
+createForm showTabs output = liftIO do
     let toTab name = do
             link <- createElement "a"
             setAttribute link "class" "nav-link"
@@ -1696,7 +1710,7 @@ main = do
                             let solvedType = Context.solveType context inferred
 
                             refreshOutput <- liftIO $ setSuccess solvedType value \htmlWrapper -> do
-                                renderValue keyToMethods counter htmlWrapper status solvedType value
+                                Reader.runReaderT (renderValue htmlWrapper solvedType value) RenderValue{ keyToMethods, counter, status }
 
                             liftIO refreshOutput
 
