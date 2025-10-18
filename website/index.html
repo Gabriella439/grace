@@ -77,11 +77,9 @@ function print(element) {
           ${element.outerHTML}
         </div>
         <script>
-          window.onload = function() {
-            window.onafterprint = function() { window.close(); };
+          window.onafterprint = function() { window.close(); };
 
-            window.print();
-          }
+          window.print();
         <\/script>
       <\/body>
     <\/html>

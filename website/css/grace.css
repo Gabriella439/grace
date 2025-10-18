@@ -70,14 +70,14 @@ textarea {
 
 .print-button {
   position: absolute;
-  top: 0.5em;
-  right: 0.5em;
+  top: 0em;
+  right: 0em;
   cursor: pointer;
 }
 
 .copy-button {
   position: absolute;
-  top: 0.5em;
+  top: 0em;
   right: 5em;
   cursor: pointer;
 }

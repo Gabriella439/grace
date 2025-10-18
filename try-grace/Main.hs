@@ -430,20 +430,33 @@ renderValue parent _ (Value.Text text) = do
     setInnerHTML markdown (markdownToHTML text)
 
     printButton <- createElement "button"
-    setAttribute printButton "class" "print-button btn btn-outline-light"
+    setAttribute printButton "class" "print-button btn btn-light"
     setAttribute printButton "type" "button"
     setInnerText printButton "Print"
+    setDisplay printButton "none"
 
     printCallback <- liftIO (Callback.asyncCallback (printElement markdown))
     addEventListener printButton "click" printCallback
 
     copyButton <- createElement "button"
-    setAttribute copyButton "class" "copy-button btn btn-outline-light"
+    setAttribute copyButton "class" "copy-button btn btn-light"
     setAttribute copyButton "type" "button"
     setInnerText copyButton "Copy"
+    setDisplay copyButton "none"
 
     copyCallback <- liftIO (Callback.asyncCallback (writeClipboard text))
     addEventListener copyButton "click" copyCallback
+
+    showCallback <- (liftIO . Callback.asyncCallback) do
+        setDisplay printButton "block"
+        setDisplay copyButton  "block"
+
+    hideCallback <- (liftIO . Callback.asyncCallback) do
+        setDisplay printButton "none"
+        setDisplay copyButton  "none"
+
+    addEventListener parent "mouseenter" showCallback
+    addEventListener parent "mouseleave" hideCallback
 
     replaceChildren parent (Array.fromList [ printButton, copyButton, markdown ])
 
