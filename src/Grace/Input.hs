@@ -10,6 +10,7 @@ import Data.Text (Text)
 import Grace.Pretty (Pretty(..))
 import System.FilePath ((</>))
 
+import qualified Data.List as List
 import qualified Data.Text as Text
 import qualified Grace.Pretty as Pretty
 import qualified System.FilePath as FilePath
@@ -44,8 +45,12 @@ instance Semigroup Input where
         | otherwise =
             Path child mode
       where
+        stripped = case List.stripPrefix "./" child of
+            Nothing     -> child
+            Just suffix -> suffix
+
         uriPath = do
-            c : cs <- traverse (URI.mkPathPiece . Text.pack) (FilePath.splitPath child)
+            c : cs <- traverse (URI.mkPathPiece . Text.pack) (FilePath.splitPath stripped)
 
             return (FilePath.hasTrailingPathSeparator child, c :| cs)
 
