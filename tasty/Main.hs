@@ -164,7 +164,7 @@ interpretCodeWithImport = Tasty.HUnit.testCase "interpret code with import from 
     let expectedValue =
             (Type.Scalar{ location, scalar = Monotype.Natural }, Value.Scalar (Syntax.Natural 5))
           where
-            location = Location{ name = "tasty/data/unit/plus-input.ffg", code = "2 + 3\n", offset = 2 }
+            location = Location{ name = "./tasty/data/unit/plus-input.ffg", code = "2 + 3\n", offset = 2 }
 
     Tasty.HUnit.assertEqual "" expectedValue actualValue
 
