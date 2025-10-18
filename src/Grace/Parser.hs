@@ -246,7 +246,7 @@ lexDotNumber = try do
 
 lexFile :: Lexer Token
 lexFile = (lexeme . try) do
-    prefix <- ("../" <|> ("" <$ "./") <|> "/") Megaparsec.<?> "path character"
+    prefix <- ("../" <|> "./" <|> "/") Megaparsec.<?> "path character"
 
     let isPath c =
                  '\x21' == c
