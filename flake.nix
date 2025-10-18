@@ -36,8 +36,6 @@
                     grace =
                       hlib.justStaticExecutables
                         (hlib.overrideCabal hsuper.grace (old: {
-                          doCheck = false;
-
                           src =
                             self.lib.cleanSourceWith
                               { inherit (old) src;
@@ -73,6 +71,7 @@
                         "conduit"
                         "cryptonite"
                         "foldl"
+                        "grace"
                         "ghcjs-fetch"
                         "hedgehog"
                         "http-date"

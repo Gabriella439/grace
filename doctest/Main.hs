@@ -17,6 +17,7 @@ main = Test.DocTest.doctest
     , "-XDeriveTraversable"
     , "-XDerivingStrategies"
     , "-XDuplicateRecordFields"
+    , "-XFlexibleContexts"
     , "-XGeneralizedNewtypeDeriving"
     , "-XMultiWayIf"
     , "-XNamedFieldPuns"
