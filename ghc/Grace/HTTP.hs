@@ -77,7 +77,7 @@ retry io =
         ]
         (\_ -> io)
   where
-    retryPolicy = Retry.fullJitterBackoff 1000000
+    retryPolicy = Retry.fullJitterBackoff 1000000 <> Retry.limitRetries 3
 
     handler (FailureResponse _ Response{ responseStatusCode }) =
         return (Status.statusIsServerError responseStatusCode)
