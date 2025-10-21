@@ -1506,12 +1506,12 @@ infer e₀ = do
                 _ -> do
                     return (annotation, Syntax.Annotation{ annotated = annotated₁, annotation, location })
 
-        Syntax.Let{ location, bindings, body } -> do
+        Syntax.Let{ location, assignments, body } -> do
             b <- fresh
 
             push (Context.UnsolvedType b)
 
-            let cons Syntax.Binding{ nameLocation = nameLocation₀, name, nameBindings = nameBindings₀, annotation, assignment } action newBindings = do
+            let cons Syntax.Assignment{ nameLocation = nameLocation₀, name, nameBindings = nameBindings₀, annotation, assignment } action newAssignments = do
                     let annotatedAssignment = case annotation of
                             Nothing ->
                                 assignment
@@ -1531,20 +1531,20 @@ infer e₀ = do
                         toLambda [] =
                             annotatedAssignment
 
-                    (assignmentType, newAssignment) <- infer (toLambda nameBindings₀)
+                    (assignmentType, newValue) <- infer (toLambda nameBindings₀)
 
-                    let newBinding = Syntax.Binding
+                    let newAssignment = Syntax.Assignment
                             { name
                             , nameLocation = nameLocation₀
                             , nameBindings = []
                             , annotation = Nothing
-                            , assignment = newAssignment
+                            , assignment = newValue
                             }
 
                     scoped (Context.Annotation name assignmentType) do
-                        action (newBinding : newBindings)
+                        action (newAssignment : newAssignments)
 
-            let nil newBindings = do
+            let nil newAssignments = do
                     let output = Type.UnsolvedType
                             { location = Syntax.location body
                             , existential = b
@@ -1554,9 +1554,9 @@ infer e₀ = do
 
                     context <- get
 
-                    return (Context.solveType context output, solveSyntax context Syntax.Let{ location, bindings = NonEmpty.fromList (reverse newBindings), body = newBody })
+                    return (Context.solveType context output, solveSyntax context Syntax.Let{ location, assignments = NonEmpty.fromList (reverse newAssignments), body = newBody })
 
-            foldr cons nil bindings []
+            foldr cons nil assignments []
 
         Syntax.List{ location, elements = elements₀ } -> do
             case Seq.viewl elements₀ of

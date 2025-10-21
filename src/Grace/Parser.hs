@@ -53,7 +53,7 @@ import Text.Earley (Grammar, Prod, Report(..), rule, (<?>))
 import Text.Megaparsec (ParseErrorBundle(..), State(..), try)
 
 import Grace.Syntax
-    ( Binding(..)
+    ( Assignment(..)
     , Chunks(..)
     , Field(..)
     , FieldName(..)
@@ -925,7 +925,7 @@ grammar endsWithBrace = mdo
 
                         pure annotation
 
-                let parseAssignment = do
+                let parseDefault = do
                         parseToken Grace.Parser.Equals
 
                         assignment <- expression
@@ -937,7 +937,7 @@ grammar endsWithBrace = mdo
 
                         annotation <- optional parseAnnotation
 
-                        assignment <- optional parseAssignment
+                        assignment <- optional parseDefault
 
                         return FieldName{ fieldNameLocation, name, annotation, assignment }
 
@@ -967,16 +967,16 @@ grammar endsWithBrace = mdo
                             }
                     foldr cons body0 nameBindings
 
-        <|> do  bindings <- some1 binding
+        <|> do  assignments <- some1 parseAssignment
 
                 parseToken Grace.Parser.In
 
                 body <- expression
 
                 return do
-                    let Syntax.Binding{ nameLocation = location } =
-                            NonEmpty.head bindings
-                    Syntax.Let{ location, bindings, body }
+                    let Syntax.Assignment{ nameLocation = location } =
+                            NonEmpty.head assignments
+                    Syntax.Let{ location, assignments, body }
 
         <|> do  location <- locatedToken Grace.Parser.If
 
@@ -1339,7 +1339,7 @@ grammar endsWithBrace = mdo
                 return e
         )
 
-    binding <- rule
+    parseAssignment <- rule
         (   do  nameLocation <- locatedToken Grace.Parser.Let
 
                 name <- label
@@ -1350,7 +1350,7 @@ grammar endsWithBrace = mdo
 
                 assignment <- expression
 
-                return Syntax.Binding
+                return Syntax.Assignment
                     { nameLocation
                     , name
                     , nameBindings
@@ -1372,7 +1372,7 @@ grammar endsWithBrace = mdo
 
                 assignment <- expression
 
-                return Syntax.Binding
+                return Syntax.Assignment
                     { nameLocation
                     , name
                     , nameBindings

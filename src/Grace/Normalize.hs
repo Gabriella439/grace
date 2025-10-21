@@ -164,12 +164,12 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                     promote newAnnotated annotation
 
-            Syntax.Let{ bindings, body = body₀ } -> do
-                newEnv <- Monad.foldM snoc env bindings
+            Syntax.Let{ assignments, body = body₀ } -> do
+                newEnv <- Monad.foldM snoc env assignments
 
                 loop newEnv body₀
               where
-                snoc environment Syntax.Binding{ nameLocation, name, nameBindings, assignment } = do
+                snoc environment Syntax.Assignment{ nameLocation, name, nameBindings, assignment } = do
                     let cons nameBinding body =
                             Syntax.Lambda{ location = nameLocation, nameBinding, body }
 
@@ -866,7 +866,7 @@ quote value = case value of
             , body = first (\_ -> location) body₀
             }
 
-        toBinding n v = Syntax.Binding
+        toBinding n v = Syntax.Assignment
             { name = n
             , nameLocation = location
             , nameBindings = []
@@ -874,17 +874,17 @@ quote value = case value of
             , assignment = quote v
             }
 
-        snoc e@Syntax.Let{ bindings = b :| bs, body = body₁ } (n, v)
+        snoc e@Syntax.Let{ assignments = a :| as, body = body₁ } (n, v)
             | Syntax.usedIn n e = Syntax.Let
                 { location
-                , bindings = toBinding n v :| (b : bs)
+                , assignments = toBinding n v :| (a : as)
                 , body = body₁
                 }
             | otherwise = e
         snoc e (n, v)
             | Syntax.usedIn n e = Syntax.Let
                 { location
-                , bindings = toBinding n v :| []
+                , assignments = toBinding n v :| []
                 , body = e
                 }
             | otherwise = e
