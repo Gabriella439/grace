@@ -1346,13 +1346,13 @@ infer e₀ = do
                     return (input₁, entries, newBinding)
 
                 Syntax.RecordBinding{ fieldNamesLocation, fieldNames } -> do
-                    let process Syntax.FieldName{ fieldNameLocation, name, annotation = Nothing, assignment = Nothing } = do
+                    let process Syntax.NameBinding{ nameLocation, name, annotation = Nothing, assignment = Nothing } = do
                             existential <- fresh
 
                             push (Context.UnsolvedType existential)
 
                             let annotation = Type.UnsolvedType
-                                    { location = fieldNameLocation
+                                    { location = nameLocation
                                     , existential
                                     }
 
@@ -1360,8 +1360,8 @@ infer e₀ = do
 
                             let entry = Context.Annotation name annotation
 
-                            let newFieldName = Syntax.FieldName
-                                    { fieldNameLocation
+                            let newFieldName = Syntax.NameBinding
+                                    { nameLocation
                                     , name
                                     , annotation = Nothing
                                     , assignment = Nothing
@@ -1369,13 +1369,13 @@ infer e₀ = do
 
                             return (fieldType, entry, newFieldName)
 
-                        process Syntax.FieldName{ fieldNameLocation, name, annotation = Just annotation, assignment = Nothing } = do
+                        process Syntax.NameBinding{ nameLocation, name, annotation = Just annotation, assignment = Nothing } = do
                             let fieldType = (name, annotation)
 
                             let entry = Context.Annotation name annotation
 
-                            let newFieldName = Syntax.FieldName
-                                    { fieldNameLocation
+                            let newFieldName = Syntax.NameBinding
+                                    { nameLocation
                                     , name
                                     , annotation = Just annotation
                                     , assignment = Nothing
@@ -1383,7 +1383,7 @@ infer e₀ = do
 
                             return (fieldType, entry, newFieldName)
 
-                        process Syntax.FieldName{ fieldNameLocation, name, annotation = Nothing, assignment = Just assignment } = do
+                        process Syntax.NameBinding{ nameLocation, name, annotation = Nothing, assignment = Just assignment } = do
                             (annotation₀, newAssignment) <- infer assignment
 
                             let annotation₁ = Type.Optional
@@ -1395,8 +1395,8 @@ infer e₀ = do
 
                             let entry = Context.Annotation name annotation₀
 
-                            let newFieldName = Syntax.FieldName
-                                    { fieldNameLocation
+                            let newFieldName = Syntax.NameBinding
+                                    { nameLocation
                                     , name
                                     , annotation = Nothing
                                     , assignment = Just newAssignment
@@ -1404,7 +1404,7 @@ infer e₀ = do
 
                             return (fieldType, entry, newFieldName)
 
-                        process Syntax.FieldName{ fieldNameLocation, name, annotation = Just annotation₀, assignment = Just assignment } = do
+                        process Syntax.NameBinding{ nameLocation, name, annotation = Just annotation₀, assignment = Just assignment } = do
                             let annotation₁ = Type.Optional
                                     { location = Syntax.location assignment
                                     , type_ = annotation₀
@@ -1418,8 +1418,8 @@ infer e₀ = do
 
                             newAssignment <- check assignment (Context.solveType context annotation₀)
 
-                            let newFieldName = Syntax.FieldName
-                                    { fieldNameLocation
+                            let newFieldName = Syntax.NameBinding
+                                    { nameLocation
                                     , name
                                     , annotation = Just annotation₀
                                     , assignment = Just newAssignment

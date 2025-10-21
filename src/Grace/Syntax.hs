@@ -18,7 +18,7 @@ module Grace.Syntax
     , Scalar(..)
     , Operator(..)
     , Builtin(..)
-    , FieldName(..)
+    , NameBinding(..)
     , Binding(..)
     , Assignment(..)
     ) where
@@ -180,9 +180,9 @@ instance Monad (Syntax ()) where
                 }
 
         onFieldName
-            FieldName{ fieldNameLocation, name, annotation, assignment } =
-                FieldName
-                    { fieldNameLocation
+            NameBinding{ nameLocation, name, annotation, assignment } =
+                NameBinding
+                    { nameLocation
                     , name
                     , annotation
                     , assignment = fmap (>>= f) assignment
@@ -227,9 +227,9 @@ instance Monad (Syntax ()) where
                 }
 
         onFieldName
-            FieldName{ fieldNameLocation, name, annotation, assignment } =
-                FieldName
-                    { fieldNameLocation
+            NameBinding{ nameLocation, name, annotation, assignment } =
+                NameBinding
+                    { nameLocation
                     , name
                     , annotation
                     , assignment = fmap (>>= f) assignment
@@ -324,11 +324,11 @@ instance Plated (Syntax s a) where
 
             Let{ location, assignments, body } -> do
                 let onFieldName
-                        FieldName{ fieldNameLocation, name, annotation, assignment } = do
+                        NameBinding{ nameLocation, name, annotation, assignment } = do
                             newAssignment <- traverse onSyntax assignment
 
-                            return FieldName
-                                { fieldNameLocation
+                            return NameBinding
+                                { nameLocation
                                 , name
                                 , annotation
                                 , assignment = newAssignment
@@ -593,7 +593,7 @@ usedIn name₀ Lambda{ binding = PlainBinding{ name = name₁ }, body } =
 usedIn name₀ Lambda{ binding = RecordBinding{ fieldNames }, body } =
     (name₀ `notElem` fmap toName fieldNames) && usedIn name₀ body
   where
-    toName FieldName{ name = name₁ } = name₁
+    toName NameBinding{ name = name₁ } = name₁
 usedIn name₀ Application{ function, argument } =
     usedIn name₀ function || usedIn name₀ argument
 usedIn name₀ Annotation{ annotated } =
@@ -791,11 +791,11 @@ types onType Let{ location, assignments, body } = do
             }
 
     onFieldName
-        FieldName{ fieldNameLocation, name, annotation, assignment } = do
+        NameBinding{ nameLocation, name, annotation, assignment } = do
             newAnnotation <- traverse onType annotation
 
-            return FieldName
-                { fieldNameLocation
+            return NameBinding
+                { nameLocation
                 , name
                 , annotation = newAnnotation
                 , assignment
@@ -1497,26 +1497,26 @@ prettyPrimitiveExpression other = Pretty.group (Pretty.flatAlt long short)
 
 {-| A bound field name
 
-    >>> pretty @(FieldName () Void) (FieldName () "x" Nothing Nothing)
+    >>> pretty @(NameBinding () Void) (NameBinding () "x" Nothing Nothing)
     x
-    >>> pretty @(FieldName () Void) (FieldName () "x" (Just "A") Nothing)
+    >>> pretty @(NameBinding () Void) (NameBinding () "x" (Just "A") Nothing)
     x : A
-    >>> pretty @(FieldName () Void) (FieldName () "x" Nothing (Just "a"))
+    >>> pretty @(NameBinding () Void) (NameBinding () "x" Nothing (Just "a"))
     x = a
-    >>> pretty @(FieldName () Void) (FieldName () "x" (Just "A") (Just "a"))
+    >>> pretty @(NameBinding () Void) (NameBinding () "x" (Just "A") (Just "a"))
     x : A = a
 -}
-data FieldName s a = FieldName
-    { fieldNameLocation :: s
+data NameBinding s a = NameBinding
+    { nameLocation :: s
     , name :: Text
     , annotation :: Maybe (Type s)
     , assignment :: Maybe (Syntax s a)
     } deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
 
-instance Bifunctor FieldName where
-    first f FieldName{ fieldNameLocation, name, annotation, assignment } =
-        FieldName
-            { fieldNameLocation = f fieldNameLocation
+instance Bifunctor NameBinding where
+    first f NameBinding{ nameLocation, name, annotation, assignment } =
+        NameBinding
+            { nameLocation = f nameLocation
             , name
             , annotation = fmap (fmap f) annotation
             , assignment = fmap (first f) assignment
@@ -1524,16 +1524,16 @@ instance Bifunctor FieldName where
 
     second = fmap
 
-instance IsString (FieldName () a) where
-    fromString string = FieldName
-        { fieldNameLocation = ()
+instance IsString (NameBinding () a) where
+    fromString string = NameBinding
+        { nameLocation = ()
         , name = fromString string
         , annotation = Nothing
         , assignment = Nothing
         }
 
-instance Pretty a => Pretty (FieldName s a) where
-    pretty FieldName{ name, annotation, assignment } =
+instance Pretty a => Pretty (NameBinding s a) where
+    pretty NameBinding{ name, annotation, assignment } =
             Type.prettyRecordLabel False name
         <>  foldMap renderAnnotation annotation
         <>  foldMap renderAssignment assignment
@@ -1568,7 +1568,7 @@ data Binding s a
         }
     | RecordBinding
         { fieldNamesLocation :: s
-        , fieldNames :: [FieldName s a]
+        , fieldNames :: [NameBinding s a]
         }
     deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
 

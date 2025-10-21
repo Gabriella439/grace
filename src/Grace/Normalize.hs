@@ -138,7 +138,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                 pure (Value.Lambda env (Value.Name name newAssignment) body)
 
             Syntax.Lambda{ binding = Syntax.RecordBinding{ fieldNames }, body } -> do
-                let process Syntax.FieldName{ name, assignment } = do
+                let process Syntax.NameBinding{ name, assignment } = do
                         newAssignment <- traverse (loop env) assignment
 
                         return (name, newAssignment)
@@ -851,10 +851,10 @@ quote value = case value of
                 Syntax.RecordBinding
                     { fieldNamesLocation = location
                     , fieldNames = do
-                        (fieldName, assignment) <- fieldNames
-                        return Syntax.FieldName
-                            { name = fieldName
-                            , fieldNameLocation = location
+                        (name, assignment) <- fieldNames
+                        return Syntax.NameBinding
+                            { nameLocation = location
+                            , name
                             , annotation = Nothing
                             , assignment = fmap quote assignment
                             }

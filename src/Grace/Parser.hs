@@ -57,7 +57,7 @@ import Grace.Syntax
     , Binding(..)
     , Chunks(..)
     , Field(..)
-    , FieldName(..)
+    , NameBinding(..)
     , Smaller(..)
     , Syntax(..)
     )
@@ -933,13 +933,13 @@ grammar endsWithBrace = mdo
                         pure assignment
 
                 let parseFieldName = do
-                        ~(fieldNameLocation, name) <- locatedRecordLabel
+                        ~(nameLocation, name) <- locatedRecordLabel
 
                         annotation <- optional parseAnnotation
 
                         assignment <- optional parseDefault
 
-                        return FieldName{ fieldNameLocation, name, annotation, assignment }
+                        return NameBinding{ nameLocation, name, annotation, assignment }
 
                 fieldNamesLocation <- locatedToken Grace.Parser.OpenBrace
 

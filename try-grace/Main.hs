@@ -34,7 +34,7 @@ import Grace.HTTP (Methods)
 import Grace.Input (Input(..))
 import Grace.Location (Location)
 import Grace.Monotype (RemainingFields(..))
-import Grace.Syntax (FieldName(..), Binding(..), Scalar(..), Syntax)
+import Grace.Syntax (Binding(..), NameBinding(..), Scalar(..), Syntax)
 import Grace.Value (Value(..))
 import JavaScript.Array (JSArray)
 import Numeric.Natural (Natural)
@@ -1916,8 +1916,8 @@ main = do
                                 , nameBinding = RecordBinding
                                     { fieldNamesLocation = ()
                                     , fieldNames =
-                                        [ FieldName
-                                            { fieldNameLocation = ()
+                                        [ NameBinding
+                                            { nameLocation = ()
                                             , name = "GitHub personal access token"
                                             , annotation = Just Type.Scalar
                                                 { location = ()
