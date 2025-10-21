@@ -1913,7 +1913,7 @@ main = do
                     then do
                         let expression = Syntax.Lambda
                                 { location = ()
-                                , nameBinding = RecordBinding
+                                , binding = RecordBinding
                                     { fieldNamesLocation = ()
                                     , fieldNames =
                                         [ NameBinding
