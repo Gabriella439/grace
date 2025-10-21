@@ -905,16 +905,25 @@ grammar endsWithBrace = mdo
 
                 parseToken Grace.Parser.CloseParenthesis
 
-                pure PlainBinding{ nameLocation, name, annotation, assignment }
+                pure PlainBinding
+                    { plain = NameBinding
+                        { nameLocation
+                        , name
+                        , annotation
+                        , assignment
+                        }
+                    }
 
         let unannotated = do
                 ~(nameLocation, name) <- locatedLabel
 
                 pure PlainBinding
-                    { nameLocation
-                    , name
-                    , annotation = Nothing
-                    , assignment = Nothing
+                    { plain = NameBinding
+                        { nameLocation
+                        , name
+                        , annotation = Nothing
+                        , assignment = Nothing
+                        }
                     }
 
         let fields = do

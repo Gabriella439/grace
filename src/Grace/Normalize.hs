@@ -132,7 +132,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                 argument' <- loop env argument
                 apply keyToMethods function' argument'
 
-            Syntax.Lambda{ binding = Syntax.PlainBinding{ name, assignment }, body } -> do
+            Syntax.Lambda{ binding = Syntax.PlainBinding{ plain = Syntax.NameBinding{ name, assignment } }, body } -> do
                 newAssignment <- traverse (loop env) assignment
 
                 pure (Value.Lambda env (Value.Name name newAssignment) body)
@@ -841,10 +841,12 @@ quote value = case value of
         binding = case names_ of
             Value.Name name assignment ->
                 Syntax.PlainBinding
-                    { nameLocation = location
-                    , name
-                    , annotation = Nothing
-                    , assignment = fmap quote assignment
+                    { plain = Syntax.NameBinding
+                        { nameLocation = location
+                        , name
+                        , annotation = Nothing
+                        , assignment = fmap quote assignment
+                        }
                     }
 
             Value.FieldNames fieldNames ->

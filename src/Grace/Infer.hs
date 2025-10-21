@@ -1274,7 +1274,7 @@ infer e₀ = do
         -- →I⇒
         Syntax.Lambda{ location, binding, body } -> do
             (input, entries, newBinding) <- case binding of
-                Syntax.PlainBinding{ nameLocation, name, annotation = Nothing, assignment = Nothing } -> do
+                Syntax.PlainBinding{ plain = Syntax.NameBinding{ nameLocation, name, annotation = Nothing, assignment = Nothing } } -> do
                     existential <- fresh
 
                     push (Context.UnsolvedType existential)
@@ -1287,27 +1287,31 @@ infer e₀ = do
                     let entries = [Context.Annotation name input]
 
                     let newBinding = Syntax.PlainBinding
-                            { nameLocation
-                            , name
-                            , annotation = Nothing
-                            , assignment = Nothing
+                            { plain = Syntax.NameBinding
+                                { nameLocation
+                                , name
+                                , annotation = Nothing
+                                , assignment = Nothing
+                                }
                             }
 
                     return (input, entries, newBinding)
 
-                Syntax.PlainBinding{ nameLocation, name, annotation = Just input, assignment = Nothing } -> do
+                Syntax.PlainBinding{ plain = Syntax.NameBinding{ nameLocation, name, annotation = Just input, assignment = Nothing } } -> do
                     let entries = [Context.Annotation name input]
 
                     let newBinding = Syntax.PlainBinding
-                            { nameLocation
-                            , name
-                            , annotation = Just input
-                            , assignment = Nothing
+                            { plain = Syntax.NameBinding
+                                { nameLocation
+                                , name
+                                , annotation = Just input
+                                , assignment = Nothing
+                                }
                             }
 
                     return (input, entries, newBinding)
 
-                Syntax.PlainBinding{ nameLocation, name, annotation = Nothing, assignment = Just assignment } -> do
+                Syntax.PlainBinding{ plain = Syntax.NameBinding{ nameLocation, name, annotation = Nothing, assignment = Just assignment } } -> do
                     (input₀, newAssignment) <- infer assignment
 
                     let input₁ = Type.Optional
@@ -1318,15 +1322,17 @@ infer e₀ = do
                     let entries = [Context.Annotation name input₀]
 
                     let newBinding = Syntax.PlainBinding
-                            { nameLocation
-                            , name
-                            , annotation = Nothing
-                            , assignment = Just newAssignment
+                            { plain = Syntax.NameBinding
+                                { nameLocation
+                                , name
+                                , annotation = Nothing
+                                , assignment = Just newAssignment
+                                }
                             }
 
                     return (input₁, entries, newBinding)
 
-                Syntax.PlainBinding{ nameLocation, name, annotation = Just input₀, assignment = Just assignment } -> do
+                Syntax.PlainBinding{ plain = Syntax.NameBinding{ nameLocation, name, annotation = Just input₀, assignment = Just assignment } } -> do
                     newAssignment <- check assignment input₀
 
                     let input₁ = Type.Optional
@@ -1337,10 +1343,12 @@ infer e₀ = do
                     let entries = [Context.Annotation name input₀]
 
                     let newBinding = Syntax.PlainBinding
-                            { nameLocation
-                            , name
-                            , annotation = Just input₀
-                            , assignment = Just newAssignment
+                            { plain = Syntax.NameBinding
+                                { nameLocation
+                                , name
+                                , annotation = Just input₀
+                                , assignment = Just newAssignment
+                                }
                             }
 
                     return (input₁, entries, newBinding)
@@ -2924,20 +2932,22 @@ check
 -- type annotations to fix any type errors that they might encounter, which is
 -- a desirable property!
 
-check Syntax.Lambda{ binding = Syntax.PlainBinding{ name, nameLocation, annotation = Nothing, assignment = Nothing }, ..} Type.Function{ location = _, .. } = do
+check Syntax.Lambda{ binding = Syntax.PlainBinding{ plain = Syntax.NameBinding{ name, nameLocation, annotation = Nothing, assignment = Nothing } }, ..} Type.Function{ location = _, .. } = do
     scoped (Context.Annotation name input) do
         newBody <- check body output
 
         let newBinding = Syntax.PlainBinding
-                { nameLocation
-                , name
-                , annotation = Nothing
-                , assignment = Nothing
+                { plain = Syntax.NameBinding
+                    { nameLocation
+                    , name
+                    , annotation = Nothing
+                    , assignment = Nothing
+                    }
                 }
 
         return Syntax.Lambda{ body = newBody, binding = newBinding, .. }
 
-check Syntax.Lambda{ binding = Syntax.PlainBinding{ name, nameLocation, annotation = Just annotation, assignment = Nothing }, .. } Type.Function{ location = _, ..} = do
+check Syntax.Lambda{ binding = Syntax.PlainBinding{ plain = Syntax.NameBinding{ name, nameLocation, annotation = Just annotation, assignment = Nothing } }, .. } Type.Function{ location = _, ..} = do
     subtype annotation input
 
     scoped (Context.Annotation name input) do
@@ -2946,15 +2956,17 @@ check Syntax.Lambda{ binding = Syntax.PlainBinding{ name, nameLocation, annotati
         context <- get
 
         let newBinding = Syntax.PlainBinding
-                { nameLocation
-                , name
-                , annotation = Just (Context.solveType context annotation)
-                , assignment = Nothing
+                { plain = Syntax.NameBinding
+                    { nameLocation
+                    , name
+                    , annotation = Just (Context.solveType context annotation)
+                    , assignment = Nothing
+                    }
                 }
 
         return Syntax.Lambda{ body = newBody, binding = newBinding, .. }
 
-check Syntax.Lambda{ binding = Syntax.PlainBinding{ nameLocation, name, annotation = Nothing, assignment = Just assignment }, .. } Type.Function{ location = _, input = input₀, output } = do
+check Syntax.Lambda{ binding = Syntax.PlainBinding{ plain = Syntax.NameBinding{ nameLocation, name, annotation = Nothing, assignment = Just assignment } }, .. } Type.Function{ location = _, input = input₀, output } = do
     existential <- fresh
 
     push (Context.UnsolvedType existential)
@@ -2977,15 +2989,17 @@ check Syntax.Lambda{ binding = Syntax.PlainBinding{ nameLocation, name, annotati
         newBody <- check body output
 
         let newBinding = Syntax.PlainBinding
-                { nameLocation
-                , name
-                , annotation = Nothing
-                , assignment = Just newAssignment
+                { plain = Syntax.NameBinding
+                    { nameLocation
+                    , name
+                    , annotation = Nothing
+                    , assignment = Just newAssignment
+                    }
                 }
 
         return Syntax.Lambda{ body = newBody, binding = newBinding, .. }
 
-check Syntax.Lambda{ binding = Syntax.PlainBinding{ name, nameLocation, annotation = Just annotation, assignment = Just assignment }, .. } Type.Function{ location = _, ..} = do
+check Syntax.Lambda{ binding = Syntax.PlainBinding{ plain = Syntax.NameBinding{ name, nameLocation, annotation = Just annotation, assignment = Just assignment } }, .. } Type.Function{ location = _, ..} = do
     newAssignment <- check assignment annotation
 
     context₀ <- get
@@ -3000,10 +3014,12 @@ check Syntax.Lambda{ binding = Syntax.PlainBinding{ name, nameLocation, annotati
         context₂ <- get
 
         let newBinding = Syntax.PlainBinding
-                { nameLocation
-                , name
-                , annotation = Just (Context.solveType context₂ annotation)
-                , assignment = Just newAssignment
+                { plain = Syntax.NameBinding
+                    { nameLocation
+                    , name
+                    , annotation = Just (Context.solveType context₂ annotation)
+                    , assignment = Just newAssignment
+                    }
                 }
 
         return Syntax.Lambda{ body = newBody, binding = newBinding, .. }
