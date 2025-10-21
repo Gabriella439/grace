@@ -21,10 +21,10 @@ let generatePoem idea =
                 }
 
         let renderedStructure = "
-                - Form: ${structure.form}
-                - Stanzas: ${show (structure.stanzaCount : Text)}
-                - Lines per stanza: ${show (structure.linesPerStanza : Text)}
-                - Rhyme scheme: ${structure.rhymeScheme}
+                - Form: ${structure."Form"}
+                - Stanzas: ${show (structure."Stanza Count" : Natural)}
+                - Lines per stanza: ${show (structure."Lines per Stanza" : Natural)}
+                - Rhyme scheme: ${structure."Rhyme Scheme"}
                 "
 
         let style = prompt
@@ -39,9 +39,9 @@ let generatePoem idea =
                 }
 
         let renderedStyle = "
-                - Tone: ${style.tone}
-                - Voice: ${style.voice}
-                - Literary Devices: ${concatSep ", " style.literaryDevices}
+                - Tone: ${style."Tone"}
+                - Voice: ${style."Voice"}
+                - Literary Devices: ${concatSep ", " style."Literary Devices"}
                 "
 
         let poem = prompt

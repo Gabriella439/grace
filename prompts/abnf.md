@@ -19,10 +19,13 @@ identifier
   ; Examples: `.'Rationale'`, `.'Section Header'`, `.'Website - Backend'`
   / "." single-quoted
 
-lambda = "\" 1*name-binding "->" expression
+lambda = "\" 1*binding "->" expression
+
+; A bound variable with an optional type annotation and optional default value
+name-binding = identifier [ ":" type ] [ "=" expression ]
 
 ; One or more names bound as arguments for a lambda or named functions
-name-binding
+binding
   ; Plain bound variable:
   ;
   ;     \x -> …
@@ -64,17 +67,17 @@ name-binding
   ;
   ;     let greet (.'Name') = "Hi, ${.'Name'}!" in greet "Alice"
   ;
-  / "(" identifier [ ":" type ] [ "=" expression ] ")"
+  / "(" name-binding ")"
 
   ; Destructure a record function argument:
   ;
   ;     \{ a, b } -> …
   ;
-  ;     let f { a, b } = … in …
+  ;     let f{ a, b } = … in …
   ;
-  ;     let greet { "Name" } = "Hi, ${.'Name'}!" in greet { "Name": "Alice" }
+  ;     let greet{ "Name" } = "Hi, ${.'Name'}!" in greet{ "Name": "Alice" }
   ;
-  ;     let greet { .'Name' } = "Hi, ${.'Name'}!" in greet { "Name": "Alice" }
+  ;     let greet{ .'Name' } = "Hi, ${.'Name'}!" in greet{ "Name": "Alice" }
   ;
   ; Record fields destructured in this way can have optional type annotations
   ; and optional default values:
@@ -83,12 +86,10 @@ name-binding
   ;
   ;     let f { a, b : T0, c = v0, d : T1 = v1 } = … in …
   ;
-  ;     let greet { "Name" : Text = "Alice" } = "Hi, ${.'Name'}!" in greet { }
+  ;     let greet{ "Name" : Text = "Alice" } = "Hi, ${.'Name'}!" in greet{ }
   ;
-  ;     let greet { .'Name' : Text = "Alice" } = "Hi, ${.'Name'}!" in greet { }
-  / "{" [ field-binding *( "," field-binding ) ] "}"
-
-field-binding = identifier [ ":" type ] [ "=" expression ]
+  ;     let greet{ .'Name' : Text = "Alice" } = "Hi, ${.'Name'}!" in greet{ }
+  / "{" [ name-binding *( "," name-binding ) ] "}"
 
 ; Note: Every sequence of `let`s (even top-level `let`s) must have a matching
 ; `in`.  Dangling `let`s are a parse error in any context.
@@ -103,9 +104,9 @@ field-binding = identifier [ ":" type ] [ "=" expression ]
 ;     let x = 2
 ;     let y = 3
 ;     in  { x, y }  # To "export" let bindings, package them in a record
-let = 1*binding "in" expression
+let = 1*assignment "in" expression
 
-; Every binding must begin with a `let` because Grace is not
+; Every assignment must begin with a `let` because Grace is not
 ; whitespace-sensitive.
 ;
 ; BAD:
@@ -119,7 +120,25 @@ let = 1*binding "in" expression
 ;     let x = 2
 ;     let y = 3
 ;     in  x + y
-binding = "let" identifier *name-binding [ ":" type ] "=" expression
+assignment =
+    ; Define a simple value:
+    ;
+    ;     let x = 2 in x + 1
+    ;
+    ; … or a function of one or more arguments:
+    ;
+    ;     let increment x = x + 1 in increment 2
+    ;
+    ; Function definitions can destructure their arguments and this is the most
+    ; idiomatic way to define functions in Grace:
+    ;
+    ;     let greet{ name } = "Hi, ${name}!" in greet{ name: "Alice" }
+    = ("let" identifier *binding [ ":" type ] "=" expression)
+
+    ; Destructure the right-hand side:
+    ;
+    ;     let { x, y } = { x: 1, y: 2 } in x + y
+    / ("let" binding "=" expression)
 
 if = "if" expression "then" expression "else" expression
 
