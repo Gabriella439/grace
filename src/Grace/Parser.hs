@@ -54,10 +54,10 @@ import Text.Megaparsec (ParseErrorBundle(..), State(..), try)
 
 import Grace.Syntax
     ( Assignment(..)
+    , Binding(..)
     , Chunks(..)
     , Field(..)
     , FieldName(..)
-    , NameBinding(..)
     , Smaller(..)
     , Syntax(..)
     )
@@ -883,7 +883,7 @@ render t = case t of
 
 grammar :: Bool -> Grammar r (Parser r (Syntax Offset Input))
 grammar endsWithBrace = mdo
-    nameBinding <- rule do
+    binding <- rule do
         let annotated = do
                 parseToken Grace.Parser.OpenParenthesis
 
@@ -905,12 +905,12 @@ grammar endsWithBrace = mdo
 
                 parseToken Grace.Parser.CloseParenthesis
 
-                pure NameBinding{ nameLocation, name, annotation, assignment }
+                pure PlainBinding{ nameLocation, name, annotation, assignment }
 
         let unannotated = do
                 ~(nameLocation, name) <- locatedLabel
 
-                pure NameBinding
+                pure PlainBinding
                     { nameLocation
                     , name
                     , annotation = Nothing
@@ -946,26 +946,27 @@ grammar endsWithBrace = mdo
                 fieldNames <- parseFieldName `sepBy` parseToken Grace.Parser.Comma
                 parseToken Grace.Parser.CloseBrace
 
-                pure FieldNamesBinding{ fieldNamesLocation, fieldNames }
+                pure RecordBinding{ fieldNamesLocation, fieldNames }
 
         annotated <|> unannotated <|> fields
 
     expression <- rule
         (   do  location <- locatedToken Grace.Parser.Lambda
 
-                nameBindings <- some1 nameBinding
+                bindings <- some1 binding
 
                 parseToken Grace.Parser.Arrow
 
                 body0 <- expression
 
                 return do
-                    let cons nameBinding_ body = Syntax.Lambda
+                    let cons binding_ body = Syntax.Lambda
                             { location
-                            , nameBinding = nameBinding_
+                            , binding = binding_
                             , body
                             }
-                    foldr cons body0 nameBindings
+
+                    foldr cons body0 bindings
 
         <|> do  assignments <- some1 parseAssignment
 
@@ -1344,7 +1345,7 @@ grammar endsWithBrace = mdo
 
                 name <- label
 
-                nameBindings <- many nameBinding
+                bindings <- many binding
 
                 parseToken Grace.Parser.Equals
 
@@ -1353,7 +1354,7 @@ grammar endsWithBrace = mdo
                 return Syntax.Assignment
                     { nameLocation
                     , name
-                    , nameBindings
+                    , bindings
                     , annotation = Nothing
                     , assignment
                     }
@@ -1362,7 +1363,7 @@ grammar endsWithBrace = mdo
 
                 name <- label
 
-                nameBindings <- many nameBinding
+                bindings <- many binding
 
                 parseToken Grace.Parser.Colon
 
@@ -1375,7 +1376,7 @@ grammar endsWithBrace = mdo
                 return Syntax.Assignment
                     { nameLocation
                     , name
-                    , nameBindings
+                    , bindings
                     , annotation
                     , assignment
                     }

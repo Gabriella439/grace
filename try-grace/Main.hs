@@ -34,7 +34,7 @@ import Grace.HTTP (Methods)
 import Grace.Input (Input(..))
 import Grace.Location (Location)
 import Grace.Monotype (RemainingFields(..))
-import Grace.Syntax (FieldName(..), NameBinding(..), Scalar(..), Syntax)
+import Grace.Syntax (FieldName(..), Binding(..), Scalar(..), Syntax)
 import Grace.Value (Value(..))
 import JavaScript.Array (JSArray)
 import Numeric.Natural (Natural)
@@ -1913,7 +1913,7 @@ main = do
                     then do
                         let expression = Syntax.Lambda
                                 { location = ()
-                                , nameBinding = FieldNamesBinding
+                                , nameBinding = RecordBinding
                                     { fieldNamesLocation = ()
                                     , fieldNames =
                                         [ FieldName

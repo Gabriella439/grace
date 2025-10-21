@@ -132,12 +132,12 @@ evaluate keyToMethods env₀ syntax₀ = do
                 argument' <- loop env argument
                 apply keyToMethods function' argument'
 
-            Syntax.Lambda{ nameBinding = Syntax.NameBinding{ name, assignment }, body } -> do
+            Syntax.Lambda{ binding = Syntax.PlainBinding{ name, assignment }, body } -> do
                 newAssignment <- traverse (loop env) assignment
 
                 pure (Value.Lambda env (Value.Name name newAssignment) body)
 
-            Syntax.Lambda{ nameBinding = Syntax.FieldNamesBinding{ fieldNames }, body } -> do
+            Syntax.Lambda{ binding = Syntax.RecordBinding{ fieldNames }, body } -> do
                 let process Syntax.FieldName{ name, assignment } = do
                         newAssignment <- traverse (loop env) assignment
 
@@ -169,11 +169,11 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                 loop newEnv body₀
               where
-                snoc environment Syntax.Assignment{ nameLocation, name, nameBindings, assignment } = do
-                    let cons nameBinding body =
-                            Syntax.Lambda{ location = nameLocation, nameBinding, body }
+                snoc environment Syntax.Assignment{ nameLocation, name, bindings, assignment } = do
+                    let cons binding body =
+                            Syntax.Lambda{ location = nameLocation, binding, body }
 
-                    let newAssignment = foldr cons assignment nameBindings
+                    let newAssignment = foldr cons assignment bindings
 
                     value <- loop environment newAssignment
 
@@ -838,9 +838,9 @@ quote value = case value of
     Value.Lambda env names_ body₀ ->
         foldl snoc newLambda env
       where
-        nameBinding = case names_ of
+        binding = case names_ of
             Value.Name name assignment ->
-                Syntax.NameBinding
+                Syntax.PlainBinding
                     { nameLocation = location
                     , name
                     , annotation = Nothing
@@ -848,7 +848,7 @@ quote value = case value of
                     }
 
             Value.FieldNames fieldNames ->
-                Syntax.FieldNamesBinding
+                Syntax.RecordBinding
                     { fieldNamesLocation = location
                     , fieldNames = do
                         (fieldName, assignment) <- fieldNames
@@ -862,14 +862,14 @@ quote value = case value of
 
         newLambda = Syntax.Lambda
             { location
-            , nameBinding
+            , binding
             , body = first (\_ -> location) body₀
             }
 
         toBinding n v = Syntax.Assignment
             { name = n
             , nameLocation = location
-            , nameBindings = []
+            , bindings = []
             , annotation = Nothing
             , assignment = quote v
             }

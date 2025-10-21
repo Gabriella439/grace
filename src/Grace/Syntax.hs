@@ -19,7 +19,7 @@ module Grace.Syntax
     , Operator(..)
     , Builtin(..)
     , FieldName(..)
-    , NameBinding(..)
+    , Binding(..)
     , Assignment(..)
     ) where
 
@@ -80,15 +80,15 @@ data Syntax s a
     -- ^
     --   >>> pretty @(Syntax () Void) (Variable () "x")
     --   x
-    | Lambda { location :: s, nameBinding :: NameBinding s a, body :: Syntax s a }
+    | Lambda { location :: s, binding :: Binding s a, body :: Syntax s a }
     -- ^
     --   >>> pretty @(Syntax () Void) (Lambda () "x" "x")
     --   \x -> x
-    --   >>> pretty @(Syntax () Void) (Lambda () (NameBinding () "x" (Just "A") Nothing) "x")
+    --   >>> pretty @(Syntax () Void) (Lambda () (PlainBinding () "x" (Just "A") Nothing) "x")
     --   \(x : A) -> x
-    --   >>> pretty @(Syntax () Void) (Lambda () (NameBinding () "x" Nothing (Just "a")) "x")
+    --   >>> pretty @(Syntax () Void) (Lambda () (PlainBinding () "x" Nothing (Just "a")) "x")
     --   \(x = a) -> x
-    --   >>> pretty @(Syntax () Void) (Lambda () (NameBinding () "x" (Just "A") (Just "a")) "x")
+    --   >>> pretty @(Syntax () Void) (Lambda () (PlainBinding () "x" (Just "A") (Just "a")) "x")
     --   \(x : A = a) -> x
     | Application { location :: s, function :: Syntax s a, argument :: Syntax s a }
     -- ^
@@ -102,7 +102,7 @@ data Syntax s a
     -- ^
     --   >>> pretty @(Syntax () Void) (Let () (Assignment () "x" [] Nothing "y" :| []) "z")
     --   let x = y in z
-    --   >>> pretty @(Syntax () Void) (Let () (Assignment () "x" [NameBinding () "a" (Just "A") Nothing, NameBinding () "b" Nothing (Just "e")] (Just "X") "y" :| []) "z")
+    --   >>> pretty @(Syntax () Void) (Let () (Assignment () "x" [PlainBinding () "a" (Just "A") Nothing, PlainBinding () "b" Nothing (Just "e")] (Just "X") "y" :| []) "z")
     --   let x (a : A) (b = e) : X = y in z
     --   >>> pretty @(Syntax () Void) (Let () (Assignment () "a" [] Nothing "b" :| [ Assignment () "c" [] Nothing "d" ]) "e")
     --   let a = b let c = d in e
@@ -160,21 +160,21 @@ instance Monad (Syntax ()) where
     Variable{ location, name } >>= _ =
         Variable{ location, name }
 
-    Lambda{ location, nameBinding, body } >>= f = Lambda
+    Lambda{ location, binding, body } >>= f = Lambda
         { location
-        , nameBinding = onNameBinding nameBinding
+        , binding = onBinding binding
         , body = body >>= f
         }
       where
-        onNameBinding NameBinding{ nameLocation, name, annotation, assignment} =
-            NameBinding
+        onBinding PlainBinding{ nameLocation, name, annotation, assignment} =
+            PlainBinding
                 { nameLocation
                 , name
                 , annotation
                 , assignment = fmap (>>= f) assignment
                 }
-        onNameBinding FieldNamesBinding{ fieldNamesLocation, fieldNames } =
-            FieldNamesBinding
+        onBinding RecordBinding{ fieldNamesLocation, fieldNames } =
+            RecordBinding
                 { fieldNamesLocation
                 , fieldNames = fmap onFieldName fieldNames
                 }
@@ -203,25 +203,25 @@ instance Monad (Syntax ()) where
         }
       where
         onAssignment
-            Assignment{ nameLocation, name, nameBindings, annotation, assignment } =
+            Assignment{ nameLocation, name, bindings, annotation, assignment } =
                 Assignment
                     { name
                     , nameLocation
-                    , nameBindings = fmap onNameBinding nameBindings
+                    , bindings = fmap onBinding bindings
                     , annotation
                     , assignment = assignment >>= f
                     }
 
-        onNameBinding
-            NameBinding{ nameLocation, name, annotation, assignment } =
-                NameBinding
+        onBinding
+            PlainBinding{ nameLocation, name, annotation, assignment } =
+                PlainBinding
                     { nameLocation
                     , name
                     , annotation
                     , assignment = fmap (>>= f) assignment
                     }
-        onNameBinding FieldNamesBinding{ fieldNamesLocation, fieldNames } =
-            FieldNamesBinding
+        onBinding RecordBinding{ fieldNamesLocation, fieldNames } =
+            RecordBinding
                 { fieldNamesLocation
                 , fieldNames = fmap onFieldName fieldNames
                 }
@@ -298,10 +298,10 @@ instance Plated (Syntax s a) where
             Variable{ location, name } -> do
                 pure Variable{ location, name }
 
-            Lambda{ location, nameBinding, body } -> do
+            Lambda{ location, binding, body } -> do
                 newBody <- onSyntax body
 
-                return Lambda{ location, nameBinding, body = newBody }
+                return Lambda{ location, binding, body = newBody }
 
             Application{ location, function, argument } -> do
                 newFunction <- onSyntax function
@@ -334,36 +334,36 @@ instance Plated (Syntax s a) where
                                 , assignment = newAssignment
                                 }
 
-                let onNameBinding
-                        NameBinding{ nameLocation, name, annotation, assignment } = do
+                let onBinding
+                        PlainBinding{ nameLocation, name, annotation, assignment } = do
                             newAssignment <- traverse onSyntax assignment
 
-                            return NameBinding
+                            return PlainBinding
                                 { nameLocation
                                 , name
                                 , annotation
                                 , assignment = newAssignment
                                 }
 
-                    onNameBinding
-                        FieldNamesBinding{ fieldNamesLocation, fieldNames } = do
+                    onBinding
+                        RecordBinding{ fieldNamesLocation, fieldNames } = do
                             newFieldNames <- traverse onFieldName fieldNames
 
-                            return FieldNamesBinding
+                            return RecordBinding
                                 { fieldNamesLocation
                                 , fieldNames = newFieldNames
                                 }
 
                 let onAssignment
-                        Assignment{ nameLocation, name, nameBindings, annotation, assignment } = do
+                        Assignment{ nameLocation, name, bindings, annotation, assignment } = do
                             newAssignment <- onSyntax assignment
 
-                            newNameBindings <- traverse onNameBinding nameBindings
+                            newBindings <- traverse onBinding bindings
 
                             return Assignment
                                 { nameLocation
                                 , name
-                                , nameBindings = newNameBindings
+                                , bindings = newBindings
                                 , annotation
                                 , assignment = newAssignment
                                 }
@@ -475,9 +475,9 @@ instance Bifunctor Syntax where
     first f Variable{ location, name } =
         Variable{ name, location = f location }
 
-    first f Lambda{ location, nameBinding, body } = Lambda
+    first f Lambda{ location, binding, body } = Lambda
         { location = f location
-        , nameBinding = first f nameBinding
+        , binding = first f binding
         , body = first f body
         }
 
@@ -588,9 +588,9 @@ instance Pretty a => Pretty (Syntax s a) where
 usedIn :: Text -> Syntax s a -> Bool
 usedIn name₀ Variable{ name = name₁ } =
      name₀ == name₁
-usedIn name₀ Lambda{ nameBinding = NameBinding{ name = name₁ }, body } =
+usedIn name₀ Lambda{ binding = PlainBinding{ name = name₁ }, body } =
     (name₀ /= name₁) && usedIn name₀ body
-usedIn name₀ Lambda{ nameBinding = FieldNamesBinding{ fieldNames }, body } =
+usedIn name₀ Lambda{ binding = RecordBinding{ fieldNames }, body } =
     (name₀ `notElem` fmap toName fieldNames) && usedIn name₀ body
   where
     toName FieldName{ name = name₁ } = name₁
@@ -721,12 +721,12 @@ instance IsString (Smaller ()) where
 -- | @Traversal'@ from a `Syntax` to its immediate `Type`
 types :: Traversal' (Syntax s a) (Type s)
 types onType
-    Lambda{ location, nameBinding = NameBinding{ nameLocation, name, annotation, assignment }, body } = do
+    Lambda{ location, binding = PlainBinding{ nameLocation, name, annotation, assignment }, body } = do
         newAnnotation <- traverse onType annotation
 
         return Lambda
             { location
-            , nameBinding = NameBinding
+            , binding = PlainBinding
                 { nameLocation
                 , name
                 , annotation = newAnnotation
@@ -760,32 +760,32 @@ types onType Let{ location, assignments, body } = do
     return Let{ location, assignments = newAssignments, body }
   where
     onAssignment
-        Assignment{ nameLocation, name, nameBindings, annotation, assignment } = do
-            newNameBindings <- traverse onNameBinding nameBindings
+        Assignment{ nameLocation, name, bindings, annotation, assignment } = do
+            newBindings <- traverse onBinding bindings
 
             newAnnotation <- traverse onType annotation
 
             return Assignment
                 { nameLocation
                 , name
-                , nameBindings = newNameBindings
+                , bindings = newBindings
                 , annotation = newAnnotation
                 , assignment
                 }
 
-    onNameBinding NameBinding{ nameLocation, name, annotation, assignment } = do
+    onBinding PlainBinding{ nameLocation, name, annotation, assignment } = do
         newAnnotation <- traverse onType annotation
 
-        return NameBinding
+        return PlainBinding
             { nameLocation
             , name
             , annotation = newAnnotation
             , assignment
             }
-    onNameBinding FieldNamesBinding{ fieldNamesLocation, fieldNames } = do
+    onBinding RecordBinding{ fieldNamesLocation, fieldNames } = do
         newFieldNames <- traverse onFieldName fieldNames
 
-        return FieldNamesBinding
+        return RecordBinding
             { fieldNamesLocation
             , fieldNames = newFieldNames
             }
@@ -984,8 +984,8 @@ prettyExpression expression@Lambda{} =
 
     long = prettyLong expression
 
-    prettyShort Lambda{ nameBinding, body } =
-            pretty nameBinding
+    prettyShort Lambda{ binding, body } =
+            pretty binding
         <>  " "
         <>  prettyShort body
     prettyShort body =
@@ -993,9 +993,9 @@ prettyExpression expression@Lambda{} =
         <>  " "
         <>  prettyExpression body
 
-    prettyLong Lambda{ nameBinding, body } =
+    prettyLong Lambda{ binding, body } =
             punctuation "\\"
-        <>  pretty nameBinding
+        <>  pretty binding
         <>  " "
         <>  punctuation "->"
         <>  Pretty.hardline
@@ -1546,53 +1546,53 @@ instance Pretty a => Pretty (FieldName s a) where
 
 {-| A bound variable, possibly with a type annotation
 
-    >>> pretty @(NameBinding () Void) (NameBinding () "x" Nothing Nothing)
+    >>> pretty @(Binding () Void) (PlainBinding () "x" Nothing Nothing)
     x
-    >>> pretty @(NameBinding () Void) (NameBinding () "x" (Just "A") Nothing)
+    >>> pretty @(Binding () Void) (PlainBinding () "x" (Just "A") Nothing)
     (x : A)
-    >>> pretty @(NameBinding () Void) (NameBinding () "x" Nothing (Just "a"))
+    >>> pretty @(Binding () Void) (PlainBinding () "x" Nothing (Just "a"))
     (x = a)
-    >>> pretty @(NameBinding () Void) (NameBinding () "x" (Just "A") (Just "a"))
+    >>> pretty @(Binding () Void) (PlainBinding () "x" (Just "A") (Just "a"))
     (x : A = a)
-    >>> pretty @(NameBinding () Void) (FieldNamesBinding () [])
+    >>> pretty @(Binding () Void) (RecordBinding () [])
     { }
-    >>> pretty @(NameBinding () Void) (FieldNamesBinding () [ "x", "y" ])
+    >>> pretty @(Binding () Void) (RecordBinding () [ "x", "y" ])
     { x, y }
 -}
-data NameBinding s a
-    = NameBinding
+data Binding s a
+    = PlainBinding
         { nameLocation :: s
         , name :: Text
         , annotation :: Maybe (Type s)
         , assignment :: Maybe (Syntax s a)
         }
-    | FieldNamesBinding
+    | RecordBinding
         { fieldNamesLocation :: s
         , fieldNames :: [FieldName s a]
         }
     deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
 
-instance Bifunctor NameBinding where
-    first f NameBinding{ nameLocation, name, annotation, assignment } =
-        NameBinding{ nameLocation = f nameLocation, name, annotation = fmap (fmap f) annotation, assignment = fmap (first f) assignment }
-    first f FieldNamesBinding{ fieldNamesLocation, fieldNames } =
-        FieldNamesBinding{ fieldNamesLocation = f fieldNamesLocation, fieldNames = fmap (first f) fieldNames }
+instance Bifunctor Binding where
+    first f PlainBinding{ nameLocation, name, annotation, assignment } =
+        PlainBinding{ nameLocation = f nameLocation, name, annotation = fmap (fmap f) annotation, assignment = fmap (first f) assignment }
+    first f RecordBinding{ fieldNamesLocation, fieldNames } =
+        RecordBinding{ fieldNamesLocation = f fieldNamesLocation, fieldNames = fmap (first f) fieldNames }
 
     second = fmap
 
-instance IsString (NameBinding () a) where
+instance IsString (Binding () a) where
     fromString string =
-        NameBinding
+        PlainBinding
             { nameLocation = ()
             , name = fromString string
             , annotation = Nothing
             , assignment = Nothing
             }
 
-instance Pretty a => Pretty (NameBinding s a) where
-    pretty NameBinding{ name, annotation = Nothing, assignment = Nothing } =
+instance Pretty a => Pretty (Binding s a) where
+    pretty PlainBinding{ name, annotation = Nothing, assignment = Nothing } =
         Type.prettyLabel name
-    pretty NameBinding{ name, annotation, assignment } =
+    pretty PlainBinding{ name, annotation, assignment } =
             punctuation "("
         <>  Type.prettyLabel name
         <>  foldMap renderAnnotation annotation
@@ -1605,12 +1605,12 @@ instance Pretty a => Pretty (NameBinding s a) where
         renderAssignment a =
             " " <> Pretty.operator "=" <> " " <> pretty a
 
-    pretty FieldNamesBinding{ fieldNames = [ ] } =
+    pretty RecordBinding{ fieldNames = [ ] } =
             punctuation "{"
         <>  " "
         <>  punctuation "}"
 
-    pretty FieldNamesBinding{ fieldNames = fieldName : fieldNames } =
+    pretty RecordBinding{ fieldNames = fieldName : fieldNames } =
             punctuation "{"
         <>  " "
         <>  pretty fieldName
@@ -1624,24 +1624,24 @@ instance Pretty a => Pretty (NameBinding s a) where
     let x = y
     >>> pretty @(Assignment () Void) (Assignment () "x" [] (Just "X") "y")
     let x : X = y
-    >>> pretty @(Assignment () Void) (Assignment () "x" [NameBinding () "a" (Just "A") Nothing] (Just "X") "y")
+    >>> pretty @(Assignment () Void) (Assignment () "x" [PlainBinding () "a" (Just "A") Nothing] (Just "X") "y")
     let x (a : A) : X = y
 -}
 data Assignment s a = Assignment
     { nameLocation :: s
     , name :: Text
-    , nameBindings :: [NameBinding s a]
+    , bindings :: [Binding s a]
     , annotation :: Maybe (Type s)
     , assignment :: Syntax s a
     } deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
 
 instance Bifunctor Assignment where
     first f
-        Assignment{ nameLocation, name, nameBindings, annotation, assignment } =
+        Assignment{ nameLocation, name, bindings, annotation, assignment } =
             Assignment
                 { nameLocation = f nameLocation
                 , name
-                , nameBindings = fmap (first f) nameBindings
+                , bindings = fmap (first f) bindings
                 , annotation = fmap (fmap f) annotation
                 , assignment = first f assignment
                 }
@@ -1649,14 +1649,14 @@ instance Bifunctor Assignment where
     second = fmap
 
 instance Pretty a => Pretty (Assignment s a) where
-    pretty Assignment{ name, nameBindings, annotation = Nothing, assignment } =
+    pretty Assignment{ name, bindings, annotation = Nothing, assignment } =
         Pretty.group (Pretty.flatAlt long short)
       where
         long =  keyword "let"
             <>  " "
             <>  Type.prettyLabel name
             <>  Pretty.hardline
-            <>  foldMap (\nameBinding -> "      " <> Pretty.nest 6 (pretty nameBinding) <> Pretty.hardline) nameBindings
+            <>  foldMap (\binding -> "      " <> Pretty.nest 6 (pretty binding) <> Pretty.hardline) bindings
             <>  "      "
             <>  punctuation "="
             <>  " "
@@ -1666,18 +1666,18 @@ instance Pretty a => Pretty (Assignment s a) where
             <>  " "
             <>  Type.prettyLabel name
             <>  " "
-            <>  foldMap (\nameBinding -> pretty nameBinding <> " ") nameBindings
+            <>  foldMap (\binding -> pretty binding <> " ") bindings
             <>  punctuation "="
             <>  " "
             <>  pretty assignment
-    pretty Assignment{ name, nameBindings, annotation = Just type_, assignment } =
+    pretty Assignment{ name, bindings, annotation = Just type_, assignment } =
         Pretty.group (Pretty.flatAlt long short)
       where
         long =  keyword "let"
             <>  " "
             <>  Type.prettyLabel name
             <>  Pretty.hardline
-            <>  foldMap (\nameBinding -> "      " <> Pretty.nest 6 (pretty nameBinding) <> Pretty.hardline) nameBindings
+            <>  foldMap (\binding -> "      " <> Pretty.nest 6 (pretty binding) <> Pretty.hardline) bindings
             <>  "      "
             <>  Pretty.operator ":"
             <>  " "
@@ -1692,7 +1692,7 @@ instance Pretty a => Pretty (Assignment s a) where
             <>  " "
             <>  Type.prettyLabel name
             <>  " "
-            <>  foldMap (\nameBinding -> pretty nameBinding <> " ") nameBindings
+            <>  foldMap (\binding -> pretty binding <> " ") bindings
             <>  Pretty.operator ":"
             <>  " "
             <>  pretty type_
