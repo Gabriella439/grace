@@ -985,7 +985,7 @@ grammar endsWithBrace = mdo
 
                 return do
                     let location = case NonEmpty.head assignments of
-                            Syntax.Definition{ nameLocation } -> nameLocation
+                            Syntax.Define{ definition = Syntax.Definition{ nameLocation } } -> nameLocation
                             Syntax.Bind{ binding = Syntax.PlainBinding{ plain = Syntax.NameBinding{ nameLocation } } } -> nameLocation
                             Syntax.Bind{ binding = Syntax.RecordBinding{ fieldNamesLocation } } -> fieldNamesLocation
                     Syntax.Let{ location, assignments, body }
@@ -1370,12 +1370,14 @@ grammar endsWithBrace = mdo
 
                 assignment <- expression
 
-                return Syntax.Definition
-                    { nameLocation
-                    , name
-                    , bindings
-                    , annotation
-                    , assignment
+                return Syntax.Define
+                    { definition = Syntax.Definition
+                        { nameLocation
+                        , name
+                        , bindings
+                        , annotation
+                        , assignment
+                        }
                     }
 
         let parseBind = do

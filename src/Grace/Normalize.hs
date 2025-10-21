@@ -169,7 +169,7 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                 loop newEnv body₀
               where
-                snoc environment Syntax.Definition{ nameLocation, name, bindings, assignment } = do
+                snoc environment Syntax.Define{ definition = Syntax.Definition{ nameLocation, name, bindings, assignment } } = do
                     let cons binding body =
                             Syntax.Lambda{ location = nameLocation, binding, body }
 
@@ -906,12 +906,14 @@ quote value = case value of
             , body = first (\_ -> location) body₀
             }
 
-        toBinding n v = Syntax.Definition
-            { name = n
-            , nameLocation = location
-            , bindings = []
-            , annotation = Nothing
-            , assignment = quote v
+        toBinding n v = Syntax.Define
+            { definition = Syntax.Definition
+                { name = n
+                , nameLocation = location
+                , bindings = []
+                , annotation = Nothing
+                , assignment = quote v
+                }
             }
 
         snoc e@Syntax.Let{ assignments = a :| as, body = body₁ } (n, v)

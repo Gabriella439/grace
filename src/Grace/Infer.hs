@@ -1519,7 +1519,7 @@ infer e₀ = do
 
             push (Context.UnsolvedType b)
 
-            let cons Syntax.Definition{ nameLocation = nameLocation₀, name, bindings = bindings₀, annotation, assignment = value } action newAssignments = do
+            let cons Syntax.Define{ definition = Syntax.Definition{ nameLocation = nameLocation₀, name, bindings = bindings₀, annotation, assignment = value } } action newAssignments = do
                     let annotatedValue = case annotation of
                             Nothing ->
                                 value
@@ -1541,12 +1541,14 @@ infer e₀ = do
 
                     (valueType, newValue) <- infer (toLambda bindings₀)
 
-                    let newAssignment = Syntax.Definition
-                            { name
-                            , nameLocation = nameLocation₀
-                            , bindings = []
-                            , annotation = Nothing
-                            , assignment = newValue
+                    let newAssignment = Syntax.Define
+                            { definition = Syntax.Definition
+                                { name
+                                , nameLocation = nameLocation₀
+                                , bindings = []
+                                , annotation = Nothing
+                                , assignment = newValue
+                                }
                             }
 
                     scoped (Context.Annotation name valueType) do
@@ -1555,7 +1557,7 @@ infer e₀ = do
                 -- TODO: Properly implement.  This is currently discarding the
                 -- `assignment` field of `Syntax.NameBinding`.
                 cons Syntax.Bind{ binding = Syntax.PlainBinding{ plain = Syntax.NameBinding{ nameLocation, name, annotation } }, assignment } action newAssignments = do
-                    cons Syntax.Definition{ nameLocation, name, bindings = [], annotation, assignment } action newAssignments
+                    cons Syntax.Define{ definition = Syntax.Definition{ nameLocation, name, bindings = [], annotation, assignment } } action newAssignments
                 cons Syntax.Bind{ binding = Syntax.RecordBinding{ fieldNamesLocation, fieldNames }, assignment = value₀ } action newAssignments = do
                     let process Syntax.NameBinding{ nameLocation, name, annotation = Nothing, assignment = Nothing } = do
                             existential <- fresh
