@@ -132,13 +132,13 @@ evaluate keyToMethods env₀ syntax₀ = do
                 argument' <- loop env argument
                 apply keyToMethods function' argument'
 
-            Syntax.Lambda{ nameBinding = Syntax.NameBinding{ name, assignment }, body } -> do
+            Syntax.Lambda{ binding = Syntax.PlainBinding{ plain = Syntax.NameBinding{ name, assignment } }, body } -> do
                 newAssignment <- traverse (loop env) assignment
 
                 pure (Value.Lambda env (Value.Name name newAssignment) body)
 
-            Syntax.Lambda{ nameBinding = Syntax.FieldNamesBinding{ fieldNames }, body } -> do
-                let process Syntax.FieldName{ name, assignment } = do
+            Syntax.Lambda{ binding = Syntax.RecordBinding{ fieldNames }, body } -> do
+                let process Syntax.NameBinding{ name, assignment } = do
                         newAssignment <- traverse (loop env) assignment
 
                         return (name, newAssignment)
@@ -164,20 +164,58 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                     promote newAnnotated annotation
 
-            Syntax.Let{ bindings, body = body₀ } -> do
-                newEnv <- Monad.foldM snoc env bindings
+            Syntax.Let{ assignments, body = body₀ } -> do
+                newEnv <- Monad.foldM snoc env assignments
 
                 loop newEnv body₀
               where
-                snoc environment Syntax.Binding{ nameLocation, name, nameBindings, assignment } = do
-                    let cons nameBinding body =
-                            Syntax.Lambda{ location = nameLocation, nameBinding, body }
+                snoc environment Syntax.Definition{ nameLocation, name, bindings, assignment } = do
+                    let cons binding body =
+                            Syntax.Lambda{ location = nameLocation, binding, body }
 
-                    let newAssignment = foldr cons assignment nameBindings
+                    let newAssignment = foldr cons assignment bindings
 
                     value <- loop environment newAssignment
 
                     return ((name, value) : environment)
+                snoc environment Syntax.Bind{ binding, assignment = assignment₀ } = do
+                    value₀ <- loop environment assignment₀
+
+                    case binding of
+                        -- TODO: This is ignoring the `assignment` field of
+                        -- `NameBinding`
+                        Syntax.PlainBinding{ plain = Syntax.NameBinding{ name } } -> do
+                            return ((name, value₀) : environment)
+
+                        Syntax.RecordBinding{ fieldNames } -> do
+                            case value₀ of
+                                Value.Record hashMap -> do
+                                    let process Syntax.NameBinding{ name, assignment = assignment₁} = do
+                                            value <- case HashMap.lookup name hashMap of
+                                                Nothing -> case assignment₁ of
+                                                    Nothing -> do
+                                                        return (Value.Scalar Syntax.Null)
+
+                                                    Just a -> do
+                                                        loop environment a
+
+                                                Just (Value.Scalar Syntax.Null) -> case assignment₁ of
+                                                    Nothing -> do
+                                                        return (Value.Scalar Syntax.Null)
+
+                                                    Just a -> do
+                                                        loop environment a
+
+                                                Just value -> do
+                                                    return value
+
+                                            return (name, value)
+
+                                    entries <- traverse process fieldNames
+
+                                    return (entries <> environment)
+                                _ -> do
+                                    error "Grace.Normalize.evaluate: non-records can't be destructured as records"
 
             Syntax.List{ elements } -> do
                 values <- traverse (loop env) elements
@@ -838,23 +876,25 @@ quote value = case value of
     Value.Lambda env names_ body₀ ->
         foldl snoc newLambda env
       where
-        nameBinding = case names_ of
+        binding = case names_ of
             Value.Name name assignment ->
-                Syntax.NameBinding
-                    { nameLocation = location
-                    , name
-                    , annotation = Nothing
-                    , assignment = fmap quote assignment
+                Syntax.PlainBinding
+                    { plain = Syntax.NameBinding
+                        { nameLocation = location
+                        , name
+                        , annotation = Nothing
+                        , assignment = fmap quote assignment
+                        }
                     }
 
             Value.FieldNames fieldNames ->
-                Syntax.FieldNamesBinding
+                Syntax.RecordBinding
                     { fieldNamesLocation = location
                     , fieldNames = do
-                        (fieldName, assignment) <- fieldNames
-                        return Syntax.FieldName
-                            { name = fieldName
-                            , fieldNameLocation = location
+                        (name, assignment) <- fieldNames
+                        return Syntax.NameBinding
+                            { nameLocation = location
+                            , name
                             , annotation = Nothing
                             , assignment = fmap quote assignment
                             }
@@ -862,29 +902,29 @@ quote value = case value of
 
         newLambda = Syntax.Lambda
             { location
-            , nameBinding
+            , binding
             , body = first (\_ -> location) body₀
             }
 
-        toBinding n v = Syntax.Binding
+        toBinding n v = Syntax.Definition
             { name = n
             , nameLocation = location
-            , nameBindings = []
+            , bindings = []
             , annotation = Nothing
             , assignment = quote v
             }
 
-        snoc e@Syntax.Let{ bindings = b :| bs, body = body₁ } (n, v)
+        snoc e@Syntax.Let{ assignments = a :| as, body = body₁ } (n, v)
             | Syntax.usedIn n e = Syntax.Let
                 { location
-                , bindings = toBinding n v :| (b : bs)
+                , assignments = toBinding n v :| (a : as)
                 , body = body₁
                 }
             | otherwise = e
         snoc e (n, v)
             | Syntax.usedIn n e = Syntax.Let
                 { location
-                , bindings = toBinding n v :| []
+                , assignments = toBinding n v :| []
                 , body = e
                 }
             | otherwise = e

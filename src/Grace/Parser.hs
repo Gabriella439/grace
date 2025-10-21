@@ -53,10 +53,10 @@ import Text.Earley (Grammar, Prod, Report(..), rule, (<?>))
 import Text.Megaparsec (ParseErrorBundle(..), State(..), try)
 
 import Grace.Syntax
-    ( Binding(..)
+    ( Assignment(..)
+    , Binding(..)
     , Chunks(..)
     , Field(..)
-    , FieldName(..)
     , NameBinding(..)
     , Smaller(..)
     , Syntax(..)
@@ -883,7 +883,7 @@ render t = case t of
 
 grammar :: Bool -> Grammar r (Parser r (Syntax Offset Input))
 grammar endsWithBrace = mdo
-    nameBinding <- rule do
+    parseBinding <- rule do
         let annotated = do
                 parseToken Grace.Parser.OpenParenthesis
 
@@ -905,16 +905,25 @@ grammar endsWithBrace = mdo
 
                 parseToken Grace.Parser.CloseParenthesis
 
-                pure NameBinding{ nameLocation, name, annotation, assignment }
+                pure PlainBinding
+                    { plain = NameBinding
+                        { nameLocation
+                        , name
+                        , annotation
+                        , assignment
+                        }
+                    }
 
         let unannotated = do
                 ~(nameLocation, name) <- locatedLabel
 
-                pure NameBinding
-                    { nameLocation
-                    , name
-                    , annotation = Nothing
-                    , assignment = Nothing
+                pure PlainBinding
+                    { plain = NameBinding
+                        { nameLocation
+                        , name
+                        , annotation = Nothing
+                        , assignment = Nothing
+                        }
                     }
 
         let fields = do
@@ -925,7 +934,7 @@ grammar endsWithBrace = mdo
 
                         pure annotation
 
-                let parseAssignment = do
+                let parseDefault = do
                         parseToken Grace.Parser.Equals
 
                         assignment <- expression
@@ -933,50 +942,53 @@ grammar endsWithBrace = mdo
                         pure assignment
 
                 let parseFieldName = do
-                        ~(fieldNameLocation, name) <- locatedRecordLabel
+                        ~(nameLocation, name) <- locatedRecordLabel
 
                         annotation <- optional parseAnnotation
 
-                        assignment <- optional parseAssignment
+                        assignment <- optional parseDefault
 
-                        return FieldName{ fieldNameLocation, name, annotation, assignment }
+                        return NameBinding{ nameLocation, name, annotation, assignment }
 
                 fieldNamesLocation <- locatedToken Grace.Parser.OpenBrace
 
                 fieldNames <- parseFieldName `sepBy` parseToken Grace.Parser.Comma
                 parseToken Grace.Parser.CloseBrace
 
-                pure FieldNamesBinding{ fieldNamesLocation, fieldNames }
+                pure RecordBinding{ fieldNamesLocation, fieldNames }
 
         annotated <|> unannotated <|> fields
 
     expression <- rule
         (   do  location <- locatedToken Grace.Parser.Lambda
 
-                nameBindings <- some1 nameBinding
+                bindings <- some1 parseBinding
 
                 parseToken Grace.Parser.Arrow
 
                 body0 <- expression
 
                 return do
-                    let cons nameBinding_ body = Syntax.Lambda
+                    let cons binding body = Syntax.Lambda
                             { location
-                            , nameBinding = nameBinding_
+                            , binding
                             , body
                             }
-                    foldr cons body0 nameBindings
 
-        <|> do  bindings <- some1 binding
+                    foldr cons body0 bindings
+
+        <|> do  assignments <- some1 parseAssignment
 
                 parseToken Grace.Parser.In
 
                 body <- expression
 
                 return do
-                    let Syntax.Binding{ nameLocation = location } =
-                            NonEmpty.head bindings
-                    Syntax.Let{ location, bindings, body }
+                    let location = case NonEmpty.head assignments of
+                            Syntax.Definition{ nameLocation } -> nameLocation
+                            Syntax.Bind{ binding = Syntax.PlainBinding{ plain = Syntax.NameBinding{ nameLocation } } } -> nameLocation
+                            Syntax.Bind{ binding = Syntax.RecordBinding{ fieldNamesLocation } } -> fieldNamesLocation
+                    Syntax.Let{ location, assignments, body }
 
         <|> do  location <- locatedToken Grace.Parser.If
 
@@ -1339,47 +1351,48 @@ grammar endsWithBrace = mdo
                 return e
         )
 
-    binding <- rule
-        (   do  nameLocation <- locatedToken Grace.Parser.Let
+    parseAssignment <- rule do
+        _ <- parseToken Grace.Parser.Let
 
-                name <- label
+        let parseDefinition = do
+                ~(nameLocation, name) <- locatedLabel
 
-                nameBindings <- many nameBinding
+                bindings <- many parseBinding
 
-                parseToken Grace.Parser.Equals
+                annotation <- optional do
+                    parseToken Grace.Parser.Colon
 
-                assignment <- expression
+                    t <- quantifiedType
 
-                return Syntax.Binding
-                    { nameLocation
-                    , name
-                    , nameBindings
-                    , annotation = Nothing
-                    , assignment
-                    }
-
-        <|> do  nameLocation <- locatedToken Grace.Parser.Let
-
-                name <- label
-
-                nameBindings <- many nameBinding
-
-                parseToken Grace.Parser.Colon
-
-                annotation <- fmap Just quantifiedType
+                    return t
 
                 parseToken Grace.Parser.Equals
 
                 assignment <- expression
 
-                return Syntax.Binding
+                return Syntax.Definition
                     { nameLocation
                     , name
-                    , nameBindings
+                    , bindings
                     , annotation
                     , assignment
                     }
-        )
+
+        let parseBind = do
+                binding <- parseBinding
+
+                parseToken Grace.Parser.Equals
+
+                assignment <- expression
+
+                return Syntax.Bind
+                    { binding
+                    , assignment
+                    }
+
+        assignment <- parseDefinition <|> parseBind
+
+        return assignment
 
     recordLabel <- rule (reservedLabel <|> label <|> alternative <|> text)
 

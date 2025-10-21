@@ -2,6 +2,6 @@
 
 let key = .'OpenAI API key'
 
-let numbers = prompt{ key, text: "Give me two numbers" }
+let { x, y } = prompt{ key, text: "Give me two numbers" }
 
-in  { x: numbers.x, y: numbers.y, sum: numbers.x + numbers.y : Integer }
+in  { x, y, sum: x + y : Integer }

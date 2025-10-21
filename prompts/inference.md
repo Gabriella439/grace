@@ -222,12 +222,9 @@ I'll illustrate this with a contrived Grace example:
 ```haskell
 \{ key } ->
 
-let numbers = prompt{ key, text: "Give me two numbers" }
+let { x, y } = prompt{ key, text: "Give me two numbers" }
 
-in  { x: numbers.x
-    , y: numbers.y
-    , sum: numbers.x + numbers.y : Integer
-    }
+in  { x, y, sum: x + y : Integer }
 ```
 
 … which might produce an output like this:
@@ -242,19 +239,15 @@ $ grace interpret ./numbers.ffg
 When Grace analyzes this program the type checker works backwards from this expression:
 
 ```haskell
-numbers.x + numbers.y : Integer
+x + y : Integer
 ```
 
 … and reasons about it like this:
 
-- the addition produces an `Integer`, therefore `numbers.x` and `numbers.y` must also be `Integer`s
+- the addition produces an `Integer`, therefore `x` and `y` must also be `Integer`s
 
-- therefore `numbers` is a record with two fields, `x` and `y`, both of which are `Integer`s
+- therefore the output of the `prompt` function must be a record with two `Integer` fields: `x` and `y`
   
-  … or using Grace syntax, the inferred type of `numbers` is: `{ x: Integer, y: Integer }`[^1]
-
-- therefore the output of the `prompt` command must have the same type
-
 … and then Grace generates a JSON schema for the prompt which looks like this:
 
 ```json
@@ -439,5 +432,3 @@ Grace is a superset of JSON and since JSON supports arbitrary field names so doe
 Hopefully this gives you some idea of why I've begun to think of prompt chaining as a programming languages problem.  Type inference is just the beginning and I think it is possible to use a domain-specific programming language not just to simplify the code but to ultimately unlock greater reasoning power.
 
 I'm going to continue to use Grace as a research vehicle for prompt chaining but my LLM-enabled [branch of Grace](https://github.com/Gabriella439/grace/tree/gabriella/llm) (like Grace itself) is not really intended to be used in production and I created it mainly as a proof-of-concept for where I'd like prompt chaining frameworks to go.  If I do end up eventually productionizing this research I will create a proper fork with its own name and the whole works.
-
-- [ ] [^1]: To be completely pedantic the inferred Grace type for  `numbers` is `forall (other : Fields) . { x: Integer, y: Integer, other }` which essentially means "a record with at least two fields, `x` and `y`, but it might have other fields which we don't care about".
