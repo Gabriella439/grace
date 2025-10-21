@@ -883,7 +883,7 @@ render t = case t of
 
 grammar :: Bool -> Grammar r (Parser r (Syntax Offset Input))
 grammar endsWithBrace = mdo
-    binding <- rule do
+    parseBinding <- rule do
         let annotated = do
                 parseToken Grace.Parser.OpenParenthesis
 
@@ -962,16 +962,16 @@ grammar endsWithBrace = mdo
     expression <- rule
         (   do  location <- locatedToken Grace.Parser.Lambda
 
-                bindings <- some1 binding
+                bindings <- some1 parseBinding
 
                 parseToken Grace.Parser.Arrow
 
                 body0 <- expression
 
                 return do
-                    let cons binding_ body = Syntax.Lambda
+                    let cons binding body = Syntax.Lambda
                             { location
-                            , binding = binding_
+                            , binding
                             , body
                             }
 
@@ -984,8 +984,10 @@ grammar endsWithBrace = mdo
                 body <- expression
 
                 return do
-                    let Syntax.Assignment{ nameLocation = location } =
-                            NonEmpty.head assignments
+                    let location = case NonEmpty.head assignments of
+                            Syntax.Definition{ nameLocation } -> nameLocation
+                            Syntax.Bind{ binding = Syntax.PlainBinding{ plain = Syntax.NameBinding{ nameLocation } } } -> nameLocation
+                            Syntax.Bind{ binding = Syntax.RecordBinding{ fieldNamesLocation } } -> fieldNamesLocation
                     Syntax.Let{ location, assignments, body }
 
         <|> do  location <- locatedToken Grace.Parser.If
@@ -1349,47 +1351,48 @@ grammar endsWithBrace = mdo
                 return e
         )
 
-    parseAssignment <- rule
-        (   do  nameLocation <- locatedToken Grace.Parser.Let
+    parseAssignment <- rule do
+        _ <- parseToken Grace.Parser.Let
 
-                name <- label
+        let parseDefinition = do
+                ~(nameLocation, name) <- locatedLabel
 
-                bindings <- many binding
-
-                parseToken Grace.Parser.Equals
-
-                assignment <- expression
-
-                return Syntax.Assignment
-                    { nameLocation
-                    , name
-                    , bindings
-                    , annotation = Nothing
-                    , assignment
-                    }
-
-        <|> do  nameLocation <- locatedToken Grace.Parser.Let
-
-                name <- label
-
-                bindings <- many binding
-
-                parseToken Grace.Parser.Colon
-
-                annotation <- fmap Just quantifiedType
+                bindings <- many parseBinding
 
                 parseToken Grace.Parser.Equals
 
+                annotation <- optional do
+                    parseToken Grace.Parser.Colon
+
+                    t <- quantifiedType
+
+                    return t
+
                 assignment <- expression
 
-                return Syntax.Assignment
+                return Syntax.Definition
                     { nameLocation
                     , name
                     , bindings
                     , annotation
                     , assignment
                     }
-        )
+
+        let parseBind = do
+                binding <- parseBinding
+
+                parseToken Grace.Parser.Equals
+
+                assignment <- expression
+
+                return Syntax.Bind
+                    { binding
+                    , assignment
+                    }
+
+        assignment <- parseDefinition <|> parseBind
+
+        return assignment
 
     recordLabel <- rule (reservedLabel <|> label <|> alternative <|> text)
 

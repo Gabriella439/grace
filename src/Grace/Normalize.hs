@@ -169,7 +169,7 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                 loop newEnv body₀
               where
-                snoc environment Syntax.Assignment{ nameLocation, name, bindings, assignment } = do
+                snoc environment Syntax.Definition{ nameLocation, name, bindings, assignment } = do
                     let cons binding body =
                             Syntax.Lambda{ location = nameLocation, binding, body }
 
@@ -178,6 +178,44 @@ evaluate keyToMethods env₀ syntax₀ = do
                     value <- loop environment newAssignment
 
                     return ((name, value) : environment)
+                snoc environment Syntax.Bind{ binding, assignment = assignment₀ } = do
+                    value₀ <- loop environment assignment₀
+
+                    case binding of
+                        -- TODO: This is ignoring the `assignment` field of
+                        -- `NameBinding`
+                        Syntax.PlainBinding{ plain = Syntax.NameBinding{ name } } -> do
+                            return ((name, value₀) : environment)
+
+                        Syntax.RecordBinding{ fieldNames } -> do
+                            case value₀ of
+                                Value.Record hashMap -> do
+                                    let process Syntax.NameBinding{ name, assignment = assignment₁} = do
+                                            value <- case HashMap.lookup name hashMap of
+                                                Nothing -> case assignment₁ of
+                                                    Nothing -> do
+                                                        return (Value.Scalar Syntax.Null)
+
+                                                    Just a -> do
+                                                        loop environment a
+
+                                                Just (Value.Scalar Syntax.Null) -> case assignment₁ of
+                                                    Nothing -> do
+                                                        return (Value.Scalar Syntax.Null)
+
+                                                    Just a -> do
+                                                        loop environment a
+
+                                                Just value -> do
+                                                    return value
+
+                                            return (name, value)
+
+                                    entries <- traverse process fieldNames
+
+                                    return (entries <> environment)
+                                _ -> do
+                                    error "Grace.Normalize.evaluate: non-records can't be destructured as records"
 
             Syntax.List{ elements } -> do
                 values <- traverse (loop env) elements
@@ -868,7 +906,7 @@ quote value = case value of
             , body = first (\_ -> location) body₀
             }
 
-        toBinding n v = Syntax.Assignment
+        toBinding n v = Syntax.Definition
             { name = n
             , nameLocation = location
             , bindings = []

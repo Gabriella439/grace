@@ -205,12 +205,17 @@ instance Monad (Syntax ()) where
         }
       where
         onAssignment
-            Assignment{ nameLocation, name, bindings, annotation, assignment } =
-                Assignment
+            Definition{ nameLocation, name, bindings, annotation, assignment } =
+                Definition
                     { name
                     , nameLocation
                     , bindings = fmap onBinding bindings
                     , annotation
+                    , assignment = assignment >>= f
+                    }
+        onAssignment
+            Bind{ binding, assignment } =
+                Bind{ binding = onBinding binding
                     , assignment = assignment >>= f
                     }
 
@@ -361,16 +366,26 @@ instance Plated (Syntax s a) where
                                 }
 
                 let onAssignment
-                        Assignment{ nameLocation, name, bindings, annotation, assignment } = do
+                        Definition{ nameLocation, name, bindings, annotation, assignment } = do
                             newAssignment <- onSyntax assignment
 
                             newBindings <- traverse onBinding bindings
 
-                            return Assignment
+                            return Definition
                                 { nameLocation
                                 , name
                                 , bindings = newBindings
                                 , annotation
+                                , assignment = newAssignment
+                                }
+                    onAssignment
+                        Bind{ binding, assignment } = do
+                            newBinding <- onBinding binding
+
+                            newAssignment <- onSyntax assignment
+
+                            return Bind
+                                { binding = newBinding
                                 , assignment = newAssignment
                                 }
 
@@ -604,10 +619,24 @@ usedIn name₀ Application{ function, argument } =
     usedIn name₀ function || usedIn name₀ argument
 usedIn name₀ Annotation{ annotated } =
     usedIn name₀ annotated
-usedIn name₀ Let{ assignments = Assignment{ name = name₁, assignment } :| [], body } =
+usedIn name₀ Let{ assignments = Definition{ name = name₁, assignment } :| [], body } =
     usedIn name₀ assignment || (name₀ /= name₁ && usedIn name₀ body)
-usedIn name₀ Let{ location, assignments = Assignment{ name = name₁, assignment } :| (a : as), body } =
+usedIn name₀ Let{ assignments = Bind{ binding, assignment } :| [], body } =
+    usedIn name₀ assignment || (name₀ `notElem` toNames binding && usedIn name₀ body)
+  where
+    toName NameBinding{ name = name₁ } = name₁
+
+    toNames PlainBinding{ plain } = [ toName plain ]
+    toNames RecordBinding{ fieldNames } = map toName fieldNames
+usedIn name₀ Let{ location, assignments = Definition{ name = name₁, assignment } :| (a : as), body } =
     usedIn name₀ assignment || (name₀ /= name₁ && usedIn name₀ Let{ location, assignments = a :| as, body })
+usedIn name₀ Let{ location, assignments = Bind{ binding, assignment } :| (a : as), body } =
+    usedIn name₀ assignment || (name₀ `notElem` toNames binding && usedIn name₀ Let{ location, assignments = a :| as, body })
+  where
+    toName NameBinding{ name = name₁ } = name₁
+
+    toNames PlainBinding{ plain } = [ toName plain ]
+    toNames RecordBinding{ fieldNames } = map toName fieldNames
 usedIn name₀ List{ elements } =
     any (usedIn name₀) elements
 usedIn name₀ Record{ fieldValues } =
@@ -768,16 +797,24 @@ types onType Let{ location, assignments, body } = do
     return Let{ location, assignments = newAssignments, body }
   where
     onAssignment
-        Assignment{ nameLocation, name, bindings, annotation, assignment } = do
+        Definition{ nameLocation, name, bindings, annotation, assignment } = do
             newBindings <- traverse onBinding bindings
 
             newAnnotation <- traverse onType annotation
 
-            return Assignment
+            return Definition
                 { nameLocation
                 , name
                 , bindings = newBindings
                 , annotation = newAnnotation
+                , assignment
+                }
+    onAssignment
+        Bind{ binding, assignment } = do
+            newBinding <- onBinding binding
+
+            return Bind
+                { binding = newBinding
                 , assignment
                 }
 
@@ -1633,29 +1670,37 @@ instance Pretty a => Pretty (Binding s a) where
     >>> pretty @(Assignment () Void) (Assignment () "x" [PlainBinding (NameBinding () "a" (Just "A") Nothing)] (Just "X") "y")
     let x (a : A) : X = y
 -}
-data Assignment s a = Assignment
-    { nameLocation :: s
-    , name :: Text
-    , bindings :: [Binding s a]
-    , annotation :: Maybe (Type s)
-    , assignment :: Syntax s a
-    } deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
+data Assignment s a
+    = Definition
+        { nameLocation :: s
+        , name :: Text
+        , bindings :: [Binding s a]
+        , annotation :: Maybe (Type s)
+        , assignment :: Syntax s a
+        }
+    | Bind{ binding :: Binding s a, assignment :: Syntax s a }
+    deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
 
 instance Bifunctor Assignment where
     first f
-        Assignment{ nameLocation, name, bindings, annotation, assignment } =
-            Assignment
+        Definition{ nameLocation, name, bindings, annotation, assignment } =
+            Definition
                 { nameLocation = f nameLocation
                 , name
                 , bindings = fmap (first f) bindings
                 , annotation = fmap (fmap f) annotation
                 , assignment = first f assignment
                 }
+    first f
+        Bind{ binding, assignment } =
+            Bind{ binding = first f binding
+                , assignment = first f assignment
+                }
 
     second = fmap
 
 instance Pretty a => Pretty (Assignment s a) where
-    pretty Assignment{ name, bindings, annotation = Nothing, assignment } =
+    pretty Definition{ name, bindings, annotation = Nothing, assignment } =
         Pretty.group (Pretty.flatAlt long short)
       where
         long =  keyword "let"
@@ -1676,7 +1721,7 @@ instance Pretty a => Pretty (Assignment s a) where
             <>  punctuation "="
             <>  " "
             <>  pretty assignment
-    pretty Assignment{ name, bindings, annotation = Just type_, assignment } =
+    pretty Definition{ name, bindings, annotation = Just type_, assignment } =
         Pretty.group (Pretty.flatAlt long short)
       where
         long =  keyword "let"
@@ -1702,6 +1747,25 @@ instance Pretty a => Pretty (Assignment s a) where
             <>  Pretty.operator ":"
             <>  " "
             <>  pretty type_
+            <>  " "
+            <>  punctuation "="
+            <>  " "
+            <>  pretty assignment
+    pretty Bind{ binding, assignment } =
+        Pretty.group (Pretty.flatAlt long short)
+      where
+        long =  keyword "let"
+            <>  " "
+            <>  pretty binding
+            <>  Pretty.hardline
+            <>  "      "
+            <>  punctuation "="
+            <>  " "
+            <>  Pretty.nest 8 (pretty assignment)
+
+        short = keyword "let"
+            <>  " "
+            <>  pretty binding
             <>  " "
             <>  punctuation "="
             <>  " "
