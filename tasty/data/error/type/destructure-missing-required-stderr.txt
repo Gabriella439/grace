@@ -1,0 +1,23 @@
+Record type mismatch
+
+The following record type:
+
+  { }
+
+tasty/data/error/type/destructure-missing-required-input.ffg:1:22: 
+  │
+1 │ let { x: Natural } = { } in x
+  │                      ↑
+
+… is not a subtype of the following record type:
+
+  { x: Natural, b? }
+
+tasty/data/error/type/destructure-missing-required-input.ffg:1:5: 
+  │
+1 │ let { x: Natural } = { } in x
+  │     ↑
+
+The latter record has the following extra fields:
+
+• x

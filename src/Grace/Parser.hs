@@ -1359,14 +1359,14 @@ grammar endsWithBrace = mdo
 
                 bindings <- many parseBinding
 
-                parseToken Grace.Parser.Equals
-
                 annotation <- optional do
                     parseToken Grace.Parser.Colon
 
                     t <- quantifiedType
 
                     return t
+
+                parseToken Grace.Parser.Equals
 
                 assignment <- expression
 

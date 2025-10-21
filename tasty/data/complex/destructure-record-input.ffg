@@ -1,0 +1,4 @@
+let { a, b = 1, c: Natural, d: Natural = 1, e, f = 1, g: Natural = 1 }
+      = { a: 2, b: 2, c: 2, d: 2 }
+
+in  { a, b, c, d, e, f, g }
