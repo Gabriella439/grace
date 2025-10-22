@@ -111,7 +111,7 @@ data Syntax s a
     -- ^
     --   >>> pretty @(Syntax () Void) (List () [ "x", "y", "z" ])
     --   [ x, y, z ]
-    | Record { location :: s, fieldValues :: [(Text, Syntax s a)] }
+    | Record { location :: s, fieldValues :: [Definition s a] }
     -- ^
     --   >>> pretty @(Syntax () Void) (Record () [ ("x", "a"), ("y", "b") ])
     --   { "x": a, "y": b }
@@ -250,7 +250,41 @@ instance Monad (Syntax ()) where
         List{ location, elements = fmap (>>= f) elements }
 
     Record{ location, fieldValues } >>= f =
-        Record{ location, fieldValues = fmap (fmap (>>= f)) fieldValues }
+        Record{ location, fieldValues = fmap onDefinition fieldValues }
+      where
+        onDefinition Definition{ nameLocation, name, bindings, annotation, assignment } =
+            Definition
+                { nameLocation
+                , name
+                , bindings = fmap onBinding bindings
+                , annotation
+                , assignment = assignment >>= f
+                }
+
+        onBinding
+            PlainBinding{ plain = NameBinding{ nameLocation, name, annotation, assignment } } =
+                PlainBinding
+                    { plain = NameBinding
+                        { nameLocation
+                        , name
+                        , annotation
+                        , assignment = fmap (>>= f) assignment
+                        }
+                    }
+        onBinding RecordBinding{ fieldNamesLocation, fieldNames } =
+            RecordBinding
+                { fieldNamesLocation
+                , fieldNames = fmap onFieldName fieldNames
+                }
+
+        onFieldName
+            NameBinding{ nameLocation, name, annotation, assignment } =
+                NameBinding
+                    { nameLocation
+                    , name
+                    , annotation
+                    , assignment = fmap (>>= f) assignment
+                    }
 
     Project{ location, larger, smaller } >>= f =
         Project{ location, larger = larger >>= f, smaller }
@@ -409,12 +443,45 @@ instance Plated (Syntax s a) where
                 return List{ location, elements = newElements }
 
             Record{ location, fieldValues } -> do
-                let onPair (field, value) = do
-                        newValue <- onSyntax value
+                let onNameBinding
+                        NameBinding{ nameLocation, name, annotation, assignment } = do
+                            newAssignment <- traverse onSyntax assignment
 
-                        return (field, newValue)
+                            return NameBinding
+                                { nameLocation
+                                , name
+                                , annotation
+                                , assignment = newAssignment
+                                }
 
-                newFieldValues <- traverse onPair fieldValues
+                let onBinding
+                        PlainBinding{ plain } = do
+                            newPlain <- onNameBinding plain
+
+                            return PlainBinding{ plain = newPlain }
+                    onBinding
+                        RecordBinding{ fieldNamesLocation, fieldNames } = do
+                            newFieldNames <- traverse onNameBinding fieldNames
+
+                            return RecordBinding
+                                { fieldNamesLocation
+                                , fieldNames = newFieldNames
+                                }
+
+                let onDefinition Definition{ name, nameLocation, bindings, annotation, assignment } = do
+                        newBindings <- traverse onBinding bindings
+
+                        newAssignment <- onSyntax assignment
+
+                        return Definition
+                            { name
+                            , nameLocation
+                            , bindings = newBindings
+                            , annotation
+                            , assignment = newAssignment
+                            }
+
+                newFieldValues <- traverse onDefinition fieldValues
 
                 return Record{ location, fieldValues = newFieldValues }
 
@@ -528,9 +595,7 @@ instance Bifunctor Syntax where
         List{ location = f location, elements = fmap (first f) elements }
 
     first f Record{ location, fieldValues } =
-        Record{ location = f location, fieldValues = fmap adapt fieldValues }
-      where
-        adapt (field, value) = (field, first f value)
+        Record{ location = f location, fieldValues = fmap (first f) fieldValues }
 
     first f Project{ location, larger, smaller } = Project
         { location = f location
@@ -643,8 +708,15 @@ usedIn name₀ Let{ location, assignments = Bind{ binding, assignment } :| (a : 
     toNames RecordBinding{ fieldNames } = map toName fieldNames
 usedIn name₀ List{ elements } =
     any (usedIn name₀) elements
-usedIn name₀ Record{ fieldValues } =
-    any (usedIn name₀ . snd) fieldValues
+usedIn name₀ Record{ fieldValues } = any onDefinition fieldValues
+  where
+    onDefinition Definition{ bindings, assignment } =
+        name₀ `notElem` concatMap toNames bindings || usedIn name₀ assignment
+
+    toName NameBinding{ name = name₁ } = name₁
+
+    toNames PlainBinding{ plain } = [ toName plain ]
+    toNames RecordBinding{ fieldNames } = map toName fieldNames
 usedIn name₀ Project{ larger } =
     usedIn name₀ larger
 usedIn name₀ Alternative{ argument } =
@@ -1507,30 +1579,17 @@ prettyPrimitiveExpression Record { fieldValues = fieldValue : fieldValues } =
   where
     short = punctuation "{"
         <>  " "
-        <>  prettyShortFieldValue fieldValue
-        <>  foldMap (\fv -> punctuation "," <> " " <> prettyShortFieldValue fv) fieldValues
+        <>  pretty fieldValue
+        <>  foldMap (\fv -> punctuation "," <> " " <> pretty fv) fieldValues
         <>  " "
         <>  punctuation "}"
 
     long =  punctuation "{"
         <>  " "
-        <>  prettyLongFieldValue fieldValue
-        <>  foldMap (\fv -> punctuation "," <> " " <> prettyLongFieldValue fv) fieldValues
+        <>  pretty fieldValue
+        <>  foldMap (\fv -> punctuation "," <> " " <> pretty fv) fieldValues
         <>  punctuation "}"
 
-    prettyShortFieldValue (field, value) =
-            Type.prettyRecordLabel True field
-        <>  Pretty.operator ":"
-        <>  " "
-        <>  prettyExpression value
-
-    prettyLongFieldValue (field, value) =
-            Type.prettyRecordLabel True field
-        <>  Pretty.operator ":"
-        <>  Pretty.hardline
-        <>  "    "
-        <>  Pretty.nest 4 (prettyExpression value)
-        <>  Pretty.hardline
 prettyPrimitiveExpression Builtin{ builtin } =
     pretty builtin
 prettyPrimitiveExpression Scalar{ scalar } =
@@ -1674,6 +1733,65 @@ data Definition s a = Definition
     , annotation :: Maybe (Type s)
     , assignment :: Syntax s a
     } deriving stock (Eq, Foldable, Functor, Generic, Lift, Show, Traversable)
+
+instance Bifunctor Definition where
+    first f Definition{ nameLocation, name, bindings, annotation, assignment } =
+        Definition
+            { nameLocation = f nameLocation
+            , name
+            , bindings = fmap (first f) bindings
+            , annotation = fmap (fmap f) annotation
+            , assignment = first f assignment
+            }
+
+    second = fmap
+
+instance Pretty a => Pretty (Definition s a) where
+    pretty Definition{ name, bindings, annotation, assignment } =
+        Pretty.group (Pretty.flatAlt long short)
+      where
+        short = Type.prettyRecordLabel True name
+            <>  foldMap renderBinding bindings
+            <>  foldMap renderAnnotation annotation
+            <>  " "
+            <>  Pretty.operator ":"
+            <>  " "
+            <>  prettyExpression assignment
+          where
+            renderBinding binding = " " <> pretty binding
+
+            renderAnnotation type_ =
+                    " "
+                <>  punctuation ":"
+                <>  " "
+                <>  Pretty.punctuation "("
+                <>  pretty type_
+                <>  Pretty.punctuation ")"
+
+        long =  Type.prettyRecordLabel True name
+            <>  foldMap renderBinding bindings
+            <>  foldMap renderAnnotation annotation
+            <>  Pretty.operator ":"
+            <>  Pretty.hardline
+            <>  "    "
+            <>  Pretty.nest 4 (prettyExpression assignment)
+            <>  Pretty.hardline
+          where
+            renderBinding binding =
+                    Pretty.hardline
+                <>  "    "
+                <>  Pretty.nest 4
+                        (   Pretty.punctuation "("
+                        <>  " "
+                        <>  Pretty.nest 2 (pretty binding)
+                        <>  Pretty.hardline
+                        <>  Pretty.punctuation ")"
+                        )
+
+            renderAnnotation type_ =
+                    Pretty.hardline
+                <>  "    "
+                <>  Pretty.nest 4 (pretty type_)
 
 {-| The assignment part of a @let@ binding
 

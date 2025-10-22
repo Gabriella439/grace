@@ -1407,18 +1407,42 @@ grammar endsWithBrace = mdo
 
     fieldValue <- rule do
         let setting = do
-                name <- recordLabel
+                ~(nameLocation, name) <- locatedRecordLabel
+
+                bindings <- many parseBinding
+
+                annotation <- optional do
+                    parseToken Grace.Parser.Colon
+
+                    t <- quantifiedType
+
+                    return t
 
                 parseToken Grace.Parser.Colon
 
-                value <- expression
+                assignment <- expression
 
-                return (name, value)
+                return Syntax.Definition
+                    { nameLocation
+                    , name
+                    , bindings
+                    , annotation
+                    , assignment
+                    }
 
         let pun = do
-                ~(location, name) <- locatedRecordLabel
+                ~(nameLocation, name) <- locatedRecordLabel
 
-                pure (name, Syntax.Variable{ location, name })
+                return Syntax.Definition
+                    { nameLocation
+                    , name
+                    , bindings = [] -- TODO
+                    , annotation = Nothing
+                    , assignment = Syntax.Variable
+                        { location = nameLocation
+                        , name
+                        }
+                    }
 
         setting <|> pun
 

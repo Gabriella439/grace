@@ -95,9 +95,11 @@ repl keyToMethods = do
                         err e
 
                     Right ((type_, value), Status{ context }) -> do
-                        let completed = Value.complete context value
+                        let completedType = Context.complete context type_
 
-                        State.modify ((variable, type_, completed) :)
+                        let completedValue = Value.complete context value
+
+                        State.modify ((variable, completedType, completedValue) :)
 
             | otherwise = do
                 liftIO (putStrLn "usage: let {identifier} = {expression}")
