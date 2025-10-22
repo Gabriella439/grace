@@ -113,7 +113,7 @@ data Syntax s a
     --   [ x, y, z ]
     | Record { location :: s, fieldValues :: [Definition s a] }
     -- ^
-    --   >>> pretty @(Syntax () Void) (Record () [ ("x", "a"), ("y", "b") ])
+    --   >>> pretty @(Syntax () Void) (Record () [ Definition () "x" [] Nothing "a", Definition () "y" [] Nothing "b" ])
     --   { "x": a, "y": b }
     | Project { location :: s, larger :: Syntax s a, smaller :: Smaller s }
     -- ^
@@ -1579,17 +1579,45 @@ prettyPrimitiveExpression Record { fieldValues = fieldValue : fieldValues } =
   where
     short = punctuation "{"
         <>  " "
-        <>  pretty fieldValue
-        <>  foldMap (\fv -> punctuation "," <> " " <> pretty fv) fieldValues
+        <>  prettyShortFieldValue fieldValue
+        <>  foldMap (\fv -> punctuation "," <> " " <> prettyShortFieldValue fv) fieldValues
         <>  " "
         <>  punctuation "}"
 
     long =  punctuation "{"
         <>  " "
-        <>  pretty fieldValue
-        <>  foldMap (\fv -> punctuation "," <> " " <> pretty fv) fieldValues
+        <>  prettyLongFieldValue fieldValue
+        <>  foldMap (\fv -> punctuation "," <> " " <> prettyLongFieldValue fv) fieldValues
         <>  punctuation "}"
 
+    prettyShortFieldValue Definition{ name, bindings, assignment } =
+            Type.prettyRecordLabel True name
+        <>  foldMap renderBinding bindings
+        <>  Pretty.operator ":"
+        <>  " "
+        <>  prettyExpression assignment
+      where
+        renderBinding binding = " " <> pretty binding
+
+    prettyLongFieldValue Definition{ name, bindings, assignment } =
+            Type.prettyRecordLabel True name
+        <>  foldMap renderBinding bindings
+        <>  Pretty.operator ":"
+        <>  Pretty.hardline
+        <>  "    "
+        <>  Pretty.nest 4 (prettyExpression assignment)
+        <>  Pretty.hardline
+      where
+        renderBinding binding =
+                Pretty.hardline
+            <>  "    "
+            <>  Pretty.nest 4
+                    (   Pretty.punctuation "("
+                    <>  " "
+                    <>  Pretty.nest 2 (pretty binding)
+                    <>  Pretty.hardline
+                    <>  Pretty.punctuation ")"
+                    )
 prettyPrimitiveExpression Builtin{ builtin } =
     pretty builtin
 prettyPrimitiveExpression Scalar{ scalar } =
@@ -1745,53 +1773,6 @@ instance Bifunctor Definition where
             }
 
     second = fmap
-
-instance Pretty a => Pretty (Definition s a) where
-    pretty Definition{ name, bindings, annotation, assignment } =
-        Pretty.group (Pretty.flatAlt long short)
-      where
-        short = Type.prettyRecordLabel True name
-            <>  foldMap renderBinding bindings
-            <>  foldMap renderAnnotation annotation
-            <>  " "
-            <>  Pretty.operator ":"
-            <>  " "
-            <>  prettyExpression assignment
-          where
-            renderBinding binding = " " <> pretty binding
-
-            renderAnnotation type_ =
-                    " "
-                <>  punctuation ":"
-                <>  " "
-                <>  Pretty.punctuation "("
-                <>  pretty type_
-                <>  Pretty.punctuation ")"
-
-        long =  Type.prettyRecordLabel True name
-            <>  foldMap renderBinding bindings
-            <>  foldMap renderAnnotation annotation
-            <>  Pretty.operator ":"
-            <>  Pretty.hardline
-            <>  "    "
-            <>  Pretty.nest 4 (prettyExpression assignment)
-            <>  Pretty.hardline
-          where
-            renderBinding binding =
-                    Pretty.hardline
-                <>  "    "
-                <>  Pretty.nest 4
-                        (   Pretty.punctuation "("
-                        <>  " "
-                        <>  Pretty.nest 2 (pretty binding)
-                        <>  Pretty.hardline
-                        <>  Pretty.punctuation ")"
-                        )
-
-            renderAnnotation type_ =
-                    Pretty.hardline
-                <>  "    "
-                <>  Pretty.nest 4 (pretty type_)
 
 {-| The assignment part of a @let@ binding
 

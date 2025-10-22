@@ -46,7 +46,7 @@ import Grace.Location (Location(..))
 import Grace.Monotype (Monotype)
 import Grace.Pretty (Pretty(..))
 import Grace.Prompt.Types (Prompt(..))
-import Grace.Syntax (Binding, Definition, NameBinding, Syntax)
+import Grace.Syntax (Binding, Definition(..), NameBinding, Syntax)
 import Grace.Type (Type(..))
 
 import qualified Control.Exception.Safe as Exception
@@ -1367,16 +1367,22 @@ onDefinition Syntax.Definition{ nameLocation, name, bindings, annotation = annot
 
     let (inputs, entriess, newBindings) = unzip3 results
 
-    let assignment₁ = case annotation₀ of
-            Nothing -> assignment₀
-            Just annotation₁ -> Syntax.Annotation
-                { location = Syntax.location assignment₀
-                , annotated = assignment₀
-                , annotation = annotation₁
-                }
-
     let nil = do
-            (type₀, assignment₂) <- infer assignment₁
+            (annotation₁, assignment₂) <- case (bindings, annotation₀) of
+                ([], Just annotation₁) -> do
+                    assignment₂ <- check assignment₀ annotation₁
+
+                    return (annotation₁, assignment₂)
+                (_, Just annotation₁) -> do
+                    let assignment₁ = Syntax.Annotation
+                            { location = Syntax.location assignment₀
+                            , annotated = assignment₀
+                            , annotation = annotation₁
+                            }
+
+                    infer assignment₁
+                (_, Nothing) -> do
+                    infer assignment₀
 
             let newDefinition = Syntax.Definition
                     { nameLocation
@@ -1392,9 +1398,9 @@ onDefinition Syntax.Definition{ nameLocation, name, bindings, annotation = annot
                     , output
                     }
 
-            let type₁ = foldr cons type₀ inputs
+            let annotation₂ = foldr cons annotation₁ inputs
 
-            let fieldType = (name, type₁)
+            let fieldType = (name, annotation₂)
 
             return (fieldType, newDefinition)
 
@@ -3282,12 +3288,25 @@ check Syntax.List{..} annotation@Type.Scalar{ scalar = Monotype.JSON } = do
     return Syntax.Annotation
         { annotated, annotation, location = Syntax.location annotated }
 
-check Syntax.Record{ location, fieldValues } annotation@Type.Scalar{ scalar = Monotype.JSON } = do
-    result <- traverse onDefinition fieldValues
+check Syntax.Record{ location, fieldValues } annotation₀@Type.Scalar{ scalar = Monotype.JSON } = do
+    let process definition₀@Syntax.Definition{ bindings, annotation = annotation₁ } = do
+            definition₁ <- case bindings of
+                    [] -> do
+                        case annotation₁ of
+                            Just annotation₂ -> do
+                                subtype annotation₂ annotation₀
+                            Nothing -> do
+                                return ()
 
-    let (fieldTypes, newFieldValues) = unzip result
+                        return (definition₀ :: Definition Location Input){ annotation = Just annotation₀ }
+                    _ -> do
+                        return definition₀
 
-    traverse_ (`subtype` annotation) (map snd fieldTypes)
+            onDefinition definition₁
+
+    result <- traverse process fieldValues
+
+    let (_, newFieldValues) = unzip result
 
     return Syntax.Record{ location, fieldValues = newFieldValues }
 
