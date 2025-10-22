@@ -1933,35 +1933,57 @@ main = do
                                     , arguments = Syntax.Record
                                         { location = ()
                                         , fieldValues =
-                                            [ ( "key"
-                                              , Syntax.Application
-                                                  { location = ()
-                                                  , function = Syntax.Builtin
-                                                      { location = ()
-                                                      , builtin = Syntax.Some
-                                                      }
-                                                  , argument = "GitHub personal access token"
-                                                  }
-                                              )
-                                            , ( "owner"
-                                              , Syntax.Text
-                                                  { location = ()
-                                                  , chunks = Syntax.Chunks owner []
-                                                  }
-                                              )
-                                            , ( "repository"
-                                              , Syntax.Text
-                                                  { location = ()
-                                                  , chunks = Syntax.Chunks repository []
-                                                  }
-                                              )
-                                            , ("reference", reference)
-                                            , ( "path"
-                                              , Syntax.Text
-                                                  { location = ()
-                                                  , chunks = Syntax.Chunks (Text.intercalate "/" path) []
-                                                  }
-                                              )
+                                            [ Syntax.Definition
+                                                { nameLocation = ()
+                                                , name = "key"
+                                                , bindings = []
+                                                , annotation = Nothing
+                                                , assignment = Syntax.Application
+                                                    { location = ()
+                                                    , function = Syntax.Builtin
+                                                        { location = ()
+                                                        , builtin = Syntax.Some
+                                                        }
+                                                    , argument = "GitHub personal access token"
+                                                    }
+                                                }
+                                            , Syntax.Definition
+                                                { nameLocation = ()
+                                                , name = "owner"
+                                                , bindings = []
+                                                , annotation = Nothing
+                                                , assignment = Syntax.Text
+                                                    { location = ()
+                                                    , chunks = Syntax.Chunks owner []
+                                                    }
+                                                }
+                                            , Syntax.Definition
+                                                { nameLocation = ()
+                                                , name = "repository"
+                                                , bindings = []
+                                                , annotation = Nothing
+                                                , assignment = Syntax.Text
+                                                    { location = ()
+                                                    , chunks = Syntax.Chunks repository []
+                                                    }
+                                                }
+                                            , Syntax.Definition
+                                                { nameLocation = ()
+                                                , name = "reference"
+                                                , bindings = []
+                                                , annotation = Nothing
+                                                , assignment = reference
+                                                }
+                                            , Syntax.Definition
+                                                { nameLocation = ()
+                                                , name = "path"
+                                                , bindings = []
+                                                , annotation = Nothing
+                                                , assignment = Syntax.Text
+                                                    { location = ()
+                                                    , chunks = Syntax.Chunks (Text.intercalate "/" path) []
+                                                    }
+                                                }
                                             ]
                                         }
                                     , schema = Nothing
@@ -1977,31 +1999,53 @@ main = do
                                 , arguments = Syntax.Record
                                     { location = ()
                                     , fieldValues =
-                                        [ ( "key"
-                                          , Syntax.Scalar
-                                              { location = ()
-                                              , scalar = Syntax.Null
-                                              }
-                                          )
-                                        , ( "owner"
-                                          , Syntax.Text
-                                              { location = ()
-                                              , chunks = Syntax.Chunks owner []
-                                              }
-                                          )
-                                        , ( "repository"
-                                          , Syntax.Text
-                                              { location = ()
-                                              , chunks = Syntax.Chunks repository []
-                                              }
-                                          )
-                                        , ("reference", reference)
-                                        , ( "path"
-                                          , Syntax.Text
-                                              { location = ()
-                                              , chunks = Syntax.Chunks (Text.intercalate "/" path) []
-                                              }
-                                          )
+                                        [ Syntax.Definition
+                                            { nameLocation = ()
+                                            , name = "key"
+                                            , bindings = []
+                                            , annotation = Nothing
+                                            , assignment = Syntax.Scalar
+                                                { location = ()
+                                                , scalar = Syntax.Null
+                                                }
+                                            }
+                                        , Syntax.Definition
+                                            { nameLocation = ()
+                                            , name = "owner"
+                                            , bindings = []
+                                            , annotation = Nothing
+                                            , assignment = Syntax.Text
+                                                { location = ()
+                                                , chunks = Syntax.Chunks owner []
+                                                }
+                                            }
+                                        , Syntax.Definition
+                                            { nameLocation = ()
+                                            , name = "repository"
+                                            , bindings = []
+                                            , annotation = Nothing
+                                            , assignment = Syntax.Text
+                                                { location = ()
+                                                , chunks = Syntax.Chunks repository []
+                                                }
+                                            }
+                                        , Syntax.Definition
+                                            { nameLocation = ()
+                                            , name = "reference"
+                                            , bindings = []
+                                            , annotation = Nothing
+                                            , assignment = reference
+                                            }
+                                        , Syntax.Definition
+                                            { nameLocation = ()
+                                            , name = "path"
+                                            , bindings = []
+                                            , annotation = Nothing
+                                            , assignment = Syntax.Text
+                                                { location = ()
+                                                , chunks = Syntax.Chunks (Text.intercalate "/" path) []
+                                                }
+                                            }
                                         ]
                                     }
                                 , schema = Nothing
