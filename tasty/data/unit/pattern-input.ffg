@@ -1,0 +1,1 @@
+fold { some x: x, null: 0 } 1

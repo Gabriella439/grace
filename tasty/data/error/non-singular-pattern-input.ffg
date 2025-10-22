@@ -1,0 +1,1 @@
+fold { A x y: x && y } (A true false)
