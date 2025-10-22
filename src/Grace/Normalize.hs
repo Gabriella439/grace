@@ -169,7 +169,7 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                 loop newEnv body₀
               where
-                snoc environment Syntax.Definition{ nameLocation, name, bindings, assignment } = do
+                snoc environment Syntax.Define{ definition = Syntax.Definition{ nameLocation, name, bindings, assignment } } = do
                     let cons binding body =
                             Syntax.Lambda{ location = nameLocation, binding, body }
 
@@ -222,9 +222,18 @@ evaluate keyToMethods env₀ syntax₀ = do
                 return (Value.List values)
 
             Syntax.Record{ fieldValues } -> do
-                let process (key, field) = do
-                        newField <- loop env field
-                        return (key, newField)
+                let process Syntax.Definition{ nameLocation, name, bindings, assignment = assignment₀ } = do
+                        let cons binding body = Syntax.Lambda
+                                { location = nameLocation
+                                , binding
+                                , body
+                                }
+
+                        let assignment₁ = foldr cons assignment₀ bindings
+
+                        assignment₂ <- loop env assignment₁
+
+                        return (name, assignment₂)
 
                 newFieldValues <- traverse process fieldValues
 
@@ -906,12 +915,14 @@ quote value = case value of
             , body = first (\_ -> location) body₀
             }
 
-        toBinding n v = Syntax.Definition
-            { name = n
-            , nameLocation = location
-            , bindings = []
-            , annotation = Nothing
-            , assignment = quote v
+        toBinding n v = Syntax.Define
+            { definition = Syntax.Definition
+                { name = n
+                , nameLocation = location
+                , bindings = []
+                , annotation = Nothing
+                , assignment = quote v
+                }
             }
 
         snoc e@Syntax.Let{ assignments = a :| as, body = body₁ } (n, v)
@@ -945,7 +956,13 @@ quote value = case value of
             , fieldValues = map adapt (HashMap.toList fieldValues)
             }
       where
-        adapt (field, value_) = (field, quote value_)
+        adapt (field, value_) = Syntax.Definition
+            { nameLocation = location
+            , name = field
+            , bindings = []
+            , annotation = Nothing
+            , assignment = quote value_
+            }
 
     Value.Alternative name argument ->
         Syntax.Alternative{ location, name, argument  = quote argument }

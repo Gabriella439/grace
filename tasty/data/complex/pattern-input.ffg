@@ -1,0 +1,9 @@
+let match = fold
+        { C0 x: x
+        , C1 bool: Text: if bool then "true" else "false"
+        , C2 (text: Text): text
+        , C3 (number: Natural): Text: show number
+        , C4 { x, y : Natural }: Text: show (x + y)
+        }
+
+in  map match [ C0 "a", C1 false, C2 "b", C3 2, C4 { x: 3, y: 5 } ]

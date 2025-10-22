@@ -1,0 +1,19 @@
+Not a subtype
+
+The following type:
+
+  Natural
+
+tasty/data/error/pattern-input.ffg:1:10: 
+  │
+1 │ { f (x : Natural): Text: x }
+  │          ↑
+
+… cannot be a subtype of:
+
+  Text
+
+tasty/data/error/pattern-input.ffg:1:20: 
+  │
+1 │ { f (x : Natural): Text: x }
+  │                    ↑

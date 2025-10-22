@@ -1,0 +1,13 @@
+Not a function type
+
+An expression of the following type:
+
+  < A: Bool | f? >
+
+tasty/data/error/non-singular-pattern-input.ffg:1:25: 
+  │
+1 │ fold { A x y: x && y } (A true false)
+  │                         ↑
+
+… was invoked as if it were a function, but the above type is not a function
+type.

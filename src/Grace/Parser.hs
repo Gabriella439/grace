@@ -985,7 +985,7 @@ grammar endsWithBrace = mdo
 
                 return do
                     let location = case NonEmpty.head assignments of
-                            Syntax.Definition{ nameLocation } -> nameLocation
+                            Syntax.Define{ definition = Syntax.Definition{ nameLocation } } -> nameLocation
                             Syntax.Bind{ binding = Syntax.PlainBinding{ plain = Syntax.NameBinding{ nameLocation } } } -> nameLocation
                             Syntax.Bind{ binding = Syntax.RecordBinding{ fieldNamesLocation } } -> fieldNamesLocation
                     Syntax.Let{ location, assignments, body }
@@ -1370,12 +1370,14 @@ grammar endsWithBrace = mdo
 
                 assignment <- expression
 
-                return Syntax.Definition
-                    { nameLocation
-                    , name
-                    , bindings
-                    , annotation
-                    , assignment
+                return Syntax.Define
+                    { definition = Syntax.Definition
+                        { nameLocation
+                        , name
+                        , bindings
+                        , annotation
+                        , assignment
+                        }
                     }
 
         let parseBind = do
@@ -1405,18 +1407,42 @@ grammar endsWithBrace = mdo
 
     fieldValue <- rule do
         let setting = do
-                name <- recordLabel
+                ~(nameLocation, name) <- locatedRecordLabel
+
+                bindings <- many parseBinding
+
+                annotation <- optional do
+                    parseToken Grace.Parser.Colon
+
+                    t <- quantifiedType
+
+                    return t
 
                 parseToken Grace.Parser.Colon
 
-                value <- expression
+                assignment <- expression
 
-                return (name, value)
+                return Syntax.Definition
+                    { nameLocation
+                    , name
+                    , bindings
+                    , annotation
+                    , assignment
+                    }
 
         let pun = do
-                ~(location, name) <- locatedRecordLabel
+                ~(nameLocation, name) <- locatedRecordLabel
 
-                pure (name, Syntax.Variable{ location, name })
+                return Syntax.Definition
+                    { nameLocation
+                    , name
+                    , bindings = [] -- TODO
+                    , annotation = Nothing
+                    , assignment = Syntax.Variable
+                        { location = nameLocation
+                        , name
+                        }
+                    }
 
         setting <|> pun
 
