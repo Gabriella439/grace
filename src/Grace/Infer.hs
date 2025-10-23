@@ -2506,19 +2506,19 @@ infer e₀ = do
 
                     return (list, newOperator)
 
-            listArguments `Exception.catch` \(_ :: TypeInferenceError) -> do
+            naturalArguments `Exception.catch` \(_ :: TypeInferenceError) -> do
                 set context₁
 
-                textArguments `Exception.catch` \(_ :: TypeInferenceError) -> do
+                integerArguments `Exception.catch` \(_ :: TypeInferenceError) -> do
                     set context₁
 
-                    naturalArguments `Exception.catch` \(_ :: TypeInferenceError) -> do
+                    realArguments `Exception.catch` \(_ :: TypeInferenceError) -> do
                         set context₁
 
-                        integerArguments `Exception.catch` \(_ :: TypeInferenceError) -> do
+                        textArguments `Exception.catch` \(_ :: TypeInferenceError) -> do
                             set context₁
 
-                            realArguments `Exception.catch` \(_ :: TypeInferenceError) -> do
+                            listArguments `Exception.catch` \(_ :: TypeInferenceError) -> do
                                 Exception.throwIO (InvalidOperands "add" (Syntax.location left) (Syntax.location right))
 
         Syntax.Operator{ operator = Syntax.Minus, .. } -> do
