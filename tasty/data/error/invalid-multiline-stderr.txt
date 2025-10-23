@@ -1,4 +1,0 @@
-tasty/data/error/invalid-multiline-input.ffg:1:5: Invalid input - Lexing failed
-  │
-1 │ "abc
-  │     ↑

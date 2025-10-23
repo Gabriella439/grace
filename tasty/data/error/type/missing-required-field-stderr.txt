@@ -4,7 +4,7 @@ The following record type:
 
   { x: Natural }
 
-tasty/data/error/missing-required-field-input.ffg:1:1: 
+tasty/data/error/type/missing-required-field-input.ffg:1:1: 
   │
 1 │ { x: 1 }.y : Bool
   │ ↑
@@ -13,7 +13,7 @@ tasty/data/error/missing-required-field-input.ffg:1:1:
 
   { y: Bool, a? }
 
-tasty/data/error/missing-required-field-input.ffg:1:10: 
+tasty/data/error/type/missing-required-field-input.ffg:1:10: 
   │
 1 │ { x: 1 }.y : Bool
   │          ↑
