@@ -1,0 +1,13 @@
+let a = some 1
+
+for x of a
+
+let b = some x
+
+for y of b
+
+let c = null
+
+for z of c
+
+in  { x, y, z }
