@@ -1,1 +1,1 @@
-forall (a : Fields) . { x: Natural, y: Natural, a } -> Natural
+forall (a : Type) (b : Fields) . { x: a, b } -> a

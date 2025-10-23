@@ -1,0 +1,2 @@
+# Verify that we can infer the types of higher-order functions
+\f x -> f x
