@@ -1,0 +1,11 @@
+Failed to decode output as JSON
+
+The following text:
+
+{
+
+… to decode as JSON.
+
+Decoding error message:
+
+Error in $: not enough input

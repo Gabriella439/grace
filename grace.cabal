@@ -171,16 +171,20 @@ test-suite tasty
   main-is:             Main.hs
 
   build-depends:       base
+                     , aeson
+                     , containers
                      , directory
                      , filepath
                      , grace
                      , mtl
                      , prettyprinter
                      , safe-exceptions
+                     , scientific
                      , tasty
                      , tasty-hunit
                      , tasty-silver
                      , text
+                     , vector
 
   hs-source-dirs:      tasty
 
