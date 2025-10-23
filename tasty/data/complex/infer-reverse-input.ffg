@@ -1,0 +1,3 @@
+# This is a basic test that type inference can work backwards from output types
+# to infer input types
+\x -> x : Bool

@@ -1,1 +1,1 @@
-forall (a : Type) (b : Type) . (b -> a) -> b -> a
+Text

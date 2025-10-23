@@ -1,3 +1,1 @@
-{ example0: "a${"b" + "c"}d"
-, example1: "a${ "b" }c"
-}
+"a${"b"}c"
