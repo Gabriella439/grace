@@ -74,7 +74,7 @@ data DecodingError
     -- ^ The input Grace expression has the wrong type
     | RangeError
     -- ^ The input Grace expression is out of bounds for the target Haskell type
-    deriving stock (Show)
+    deriving stock (Eq, Show)
 
 instance Exception DecodingError where
     displayException TypeError =
@@ -112,8 +112,10 @@ instance FromGrace Bool where
     expected = Type.Scalar{ location = (), scalar = Monotype.Bool }
 
 instance FromGrace Natural where
-    decode (Value.Scalar (Syntax.Natural natural)) = return natural
-    decode _ = Left TypeError
+    decode (Value.Scalar (Syntax.Natural natural)) =
+        return natural
+    decode _ =
+        Left TypeError
 
     expected = Type.Scalar{ location = (), scalar = Monotype.Natural }
 
@@ -155,8 +157,12 @@ instance FromGrace Word64 where
     expected = expected @Natural
 
 instance FromGrace Integer where
-    decode (Value.Scalar (Syntax.Integer integer)) = return integer
-    decode _ = Left TypeError
+    decode (Value.Scalar (Syntax.Natural natural)) =
+        return (fromIntegral natural)
+    decode (Value.Scalar (Syntax.Integer integer)) =
+        return integer
+    decode _ =
+        Left TypeError
 
     expected = Type.Scalar{ location = (), scalar = Monotype.Integer }
 
@@ -186,8 +192,14 @@ instance FromGrace Int64 where
     expected = expected @Integer
 
 instance FromGrace Scientific where
-    decode (Value.Scalar (Syntax.Real scientific)) = return scientific
-    decode _ = Left TypeError
+    decode (Value.Scalar (Syntax.Natural natural)) =
+        return (fromIntegral natural)
+    decode (Value.Scalar (Syntax.Integer integer)) =
+        return (fromInteger integer)
+    decode (Value.Scalar (Syntax.Real scientific)) =
+        return scientific
+    decode _ =
+        Left TypeError
 
     expected = Type.Scalar{ location = (), scalar = Monotype.Real }
 
@@ -548,7 +560,7 @@ instance (GenericFromGrace (f₀ :+: f₁), GenericFromGrace (f₂ :+: f₃)) =>
             Left TypeError <|> Left TypeError = Left TypeError
             _ <|> _ = Left RangeError
 
-        let decode_ value = decode₀ value <|> decode₁ value
+        let decode_ value = fmap L1 (decode₀ value) <|> fmap R1 (decode₁ value)
 
         return decode_
 

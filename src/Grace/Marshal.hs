@@ -15,7 +15,7 @@ import qualified GHC.Generics as Generics
 
 -- | A protected `Text` value
 newtype Key = Key{ text :: Text }
-    deriving newtype (IsString, Show)
+    deriving newtype (Eq, IsString, Show)
 
 selector :: Selector s => M1 S s f r -> State Int Text
 selector m1 = do
