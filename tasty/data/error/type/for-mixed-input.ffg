@@ -1,0 +1,5 @@
+for x of [ 1, 2, 3 ]
+
+for y of some 4
+
+in  x + y

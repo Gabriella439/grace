@@ -1,0 +1,1 @@
+forall (a : Type) . Optional { x: Natural, y: Natural, z: a }

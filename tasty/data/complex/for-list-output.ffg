@@ -1,0 +1,7 @@
+[ { "bool": false, "number": 4 }
+, { "bool": false, "number": 5 }
+, { "bool": false, "number": 6 }
+, { "bool": true, "number": 1 }
+, { "bool": true, "number": 2 }
+, { "bool": true, "number": 3 }
+]

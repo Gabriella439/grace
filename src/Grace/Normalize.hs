@@ -20,6 +20,7 @@ import Control.Exception.Safe (Exception(..), MonadCatch)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.State (MonadState(..))
 import Data.Bifunctor (first)
+import Data.Foldable (toList)
 import Data.HashMap.Strict.InsOrd (InsOrdHashMap)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Sequence (ViewL(..))
@@ -31,7 +32,7 @@ import Grace.HTTP (HTTP(..), Methods)
 import Grace.Infer (Status(..))
 import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
-import Grace.Syntax (Builtin(..), Scalar(..), Syntax)
+import Grace.Syntax (BindMonad(..), Builtin(..), Scalar(..), Syntax)
 import Grace.Value (Value)
 import Prelude hiding (lookup, null, succ)
 
@@ -39,13 +40,13 @@ import {-# SOURCE #-} qualified Grace.Interpret as Interpret
 
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
-import qualified Control.Monad as Monad
 import qualified Control.Monad.State as State
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Yaml as YAML
 import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.HashMap.Strict.InsOrd as HashMap
 import qualified Data.List as List
+import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Ord as Ord
 import qualified Data.Scientific as Scientific
 import qualified Data.Sequence as Seq
@@ -165,57 +166,106 @@ evaluate keyToMethods env₀ syntax₀ = do
                     promote newAnnotated annotation
 
             Syntax.Let{ assignments, body = body₀ } -> do
-                newEnv <- Monad.foldM snoc env assignments
+                let cons Syntax.Define{ definition = Syntax.Definition{ nameLocation, name, bindings, assignment } } action environment = do
+                        let lambda binding body = Syntax.Lambda
+                                { location = nameLocation
+                                , binding
+                                , body
+                                }
 
-                loop newEnv body₀
-              where
-                snoc environment Syntax.Define{ definition = Syntax.Definition{ nameLocation, name, bindings, assignment } } = do
-                    let cons binding body =
-                            Syntax.Lambda{ location = nameLocation, binding, body }
+                        let newAssignment = foldr lambda assignment bindings
 
-                    let newAssignment = foldr cons assignment bindings
+                        value <- loop environment newAssignment
 
-                    value <- loop environment newAssignment
+                        action ((name, value) : environment)
 
-                    return ((name, value) : environment)
-                snoc environment Syntax.Bind{ binding, assignment = assignment₀ } = do
-                    value₀ <- loop environment assignment₀
+                    cons Syntax.Bind{ monad, binding, assignment = assignment₀ } action environment = do
+                        value₀ <- loop environment assignment₀
 
-                    case binding of
-                        -- TODO: This is ignoring the `assignment` field of
-                        -- `NameBinding`
-                        Syntax.PlainBinding{ plain = Syntax.NameBinding{ name } } -> do
-                            return ((name, value₀) : environment)
+                        let once v = case binding of
+                                -- TODO: This is ignoring the `assignment` field of
+                                -- `NameBinding`
+                                Syntax.PlainBinding{ plain = Syntax.NameBinding{ name } } -> do
+                                    action ((name, v) : environment)
 
-                        Syntax.RecordBinding{ fieldNames } -> do
-                            case value₀ of
-                                Value.Record hashMap -> do
-                                    let process Syntax.NameBinding{ name, assignment = assignment₁} = do
-                                            value <- case HashMap.lookup name hashMap of
-                                                Nothing -> case assignment₁ of
-                                                    Nothing -> do
-                                                        return (Value.Scalar Syntax.Null)
+                                Syntax.RecordBinding{ fieldNames } -> do
+                                    case v of
+                                        Value.Record hashMap -> do
+                                            let process Syntax.NameBinding{ name, assignment = assignment₁} = do
+                                                    value <- case HashMap.lookup name hashMap of
+                                                        Nothing -> case assignment₁ of
+                                                            Nothing -> do
+                                                                return (Value.Scalar Syntax.Null)
 
-                                                    Just a -> do
-                                                        loop environment a
+                                                            Just a -> do
+                                                                loop environment a
 
-                                                Just (Value.Scalar Syntax.Null) -> case assignment₁ of
-                                                    Nothing -> do
-                                                        return (Value.Scalar Syntax.Null)
+                                                        Just (Value.Scalar Syntax.Null) -> case assignment₁ of
+                                                            Nothing -> do
+                                                                return (Value.Scalar Syntax.Null)
 
-                                                    Just a -> do
-                                                        loop environment a
+                                                            Just a -> do
+                                                                loop environment a
 
-                                                Just value -> do
-                                                    return value
+                                                        Just value -> do
+                                                            return value
 
-                                            return (name, value)
+                                                    return (name, value)
 
-                                    entries <- traverse process fieldNames
+                                            entries <- traverse process fieldNames
 
-                                    return (entries <> environment)
-                                _ -> do
-                                    error "Grace.Normalize.evaluate: non-records can't be destructured as records"
+                                            action (entries <> environment)
+                                        _ -> do
+                                            error "Grace.Normalize.evaluate: non-records can't be destructured as records"
+
+                        case monad of
+                            UnknownMonad ->
+                                error "Grace.Normalize.evaluate: unknown monad"
+
+                            NoMonad ->
+                                once value₀
+
+                            OptionalMonad ->
+                                case value₀ of
+                                    Value.Scalar Null -> do
+                                        return (Value.Scalar Null)
+                                    Value.Application (Value.Builtin Some) value₁ -> do
+                                        once value₁
+                                    value₁ ->
+                                        once value₁
+
+                            ListMonad ->
+                                case value₀ of
+                                    Value.List elements -> do
+                                        values <- traverse once elements
+
+                                        let newElements = mconcat do
+                                                Value.List xs <- toList values
+
+                                                return (toList xs)
+
+                                        return (Value.List (Seq.fromList newElements))
+
+                                    _ ->
+                                        error "Grace.Normalize.evaluate: cannot bind a non-Listin the List monad"
+
+                let monad =
+                        NonEmpty.last
+                            (NoMonad :| [ m | Syntax.Bind{ monad = m } <- toList assignments ])
+
+                let nil environment = do
+                        value <- loop environment body₀
+
+                        return case monad of
+                            UnknownMonad ->
+                                error "Grace.Normalize.evaluate: unknown monad"
+                            NoMonad ->
+                                value
+                            ListMonad ->
+                                Value.List [ value ]
+                            OptionalMonad ->
+                                Value.Application (Value.Builtin Some) value
+                foldr cons nil assignments env
 
             Syntax.List{ elements } -> do
                 values <- traverse (loop env) elements
@@ -916,7 +966,8 @@ quote value = case value of
             }
 
         toBinding n v = Syntax.Define
-            { definition = Syntax.Definition
+            { assignmentLocation = location
+            , definition = Syntax.Definition
                 { name = n
                 , nameLocation = location
                 , bindings = []

@@ -55,6 +55,7 @@ import Text.Megaparsec (ParseErrorBundle(..), State(..), try)
 import Grace.Syntax
     ( Assignment(..)
     , Binding(..)
+    , BindMonad(..)
     , Chunks(..)
     , Field(..)
     , NameBinding(..)
@@ -137,6 +138,7 @@ lexToken =
             [ Grace.Parser.Else         <$ symbol "else"
             , Grace.Parser.Forall       <$ symbol "forall"
             , Grace.Parser.Fold         <$ symbol "fold"
+            , Grace.Parser.For          <$ symbol "for"
             , Grace.Parser.GitHub       <$ symbol "github"
             , Grace.Parser.HTTP         <$ symbol "http"
             , Grace.Parser.Read         <$ symbol "read"
@@ -144,6 +146,7 @@ lexToken =
             , Grace.Parser.Import       <$ symbol "import"
             , Grace.Parser.In           <$ symbol "in"
             , Grace.Parser.Let          <$ symbol "let"
+            , Grace.Parser.Of           <$ symbol "of"
             , Grace.Parser.Prompt       <$ symbol "prompt"
             , Grace.Parser.Then         <$ symbol "then"
             , Grace.Parser.Alternatives <$ symbol "Alternatives"
@@ -496,6 +499,7 @@ reserved =
         , "else"
         , "false"
         , "fold"
+        , "for"
         , "forall"
         , "github"
         , "http"
@@ -507,6 +511,7 @@ reserved =
         , "let"
         , "map"
         , "null"
+        , "of"
         , "prompt"
         , "read"
         , "reveal"
@@ -621,6 +626,7 @@ data Token
     | Fields
     | File FilePath
     | Fold
+    | For
     | Forall
     | ForwardSlash
     | GitHub
@@ -644,6 +650,7 @@ data Token
     | Natural
     | NotEqual
     | Null
+    | Of
     | OpenAngle
     | OpenBrace
     | OpenBracket
@@ -834,6 +841,7 @@ render t = case t of
     Grace.Parser.Fields             -> "Fields"
     Grace.Parser.File _             -> "a file"
     Grace.Parser.Fold               -> "fold"
+    Grace.Parser.For                -> "for"
     Grace.Parser.Forall             -> "forall"
     Grace.Parser.ForwardSlash       -> "/"
     Grace.Parser.GitHub             -> "github"
@@ -857,6 +865,7 @@ render t = case t of
     Grace.Parser.Natural            -> "Natural"
     Grace.Parser.NotEqual           -> "!="
     Grace.Parser.Null               -> "null"
+    Grace.Parser.Of                 -> "of"
     Grace.Parser.OpenAngle          -> "<"
     Grace.Parser.OpenBrace          -> "{"
     Grace.Parser.OpenBracket        -> "<"
@@ -1352,49 +1361,71 @@ grammar endsWithBrace = mdo
         )
 
     parseAssignment <- rule do
-        _ <- parseToken Grace.Parser.Let
+        let parseLetAssignment = do
+                let parseDefinition = do
+                        ~(nameLocation, name) <- locatedLabel
 
-        let parseDefinition = do
-                ~(nameLocation, name) <- locatedLabel
+                        bindings <- many parseBinding
 
-                bindings <- many parseBinding
+                        annotation <- optional do
+                            parseToken Grace.Parser.Colon
 
-                annotation <- optional do
-                    parseToken Grace.Parser.Colon
+                            t <- quantifiedType
 
-                    t <- quantifiedType
+                            return t
 
-                    return t
+                        parseToken Grace.Parser.Equals
 
-                parseToken Grace.Parser.Equals
+                        assignment <- expression
 
-                assignment <- expression
+                        return \assignmentLocation -> Syntax.Define
+                            { assignmentLocation
+                            , definition = Syntax.Definition
+                                { nameLocation
+                                , name
+                                , bindings
+                                , annotation
+                                , assignment
+                                }
+                            }
 
-                return Syntax.Define
-                    { definition = Syntax.Definition
-                        { nameLocation
-                        , name
-                        , bindings
-                        , annotation
-                        , assignment
-                        }
-                    }
+                let parseBind = do
+                        binding <- parseBinding
 
-        let parseBind = do
+                        parseToken Grace.Parser.Equals
+
+                        assignment <- expression
+
+                        return \assignmentLocation -> Syntax.Bind
+                            { assignmentLocation
+                            , monad = NoMonad
+                            , binding
+                            , assignment
+                            }
+
+                assignmentLocation <- locatedToken Grace.Parser.Let
+
+                f <- parseDefinition <|> parseBind
+
+                return (f assignmentLocation)
+
+        let parseForAssignment = do
+                assignmentLocation <- locatedToken Grace.Parser.For
+
                 binding <- parseBinding
 
-                parseToken Grace.Parser.Equals
+                parseToken Grace.Parser.Of
 
                 assignment <- expression
 
                 return Syntax.Bind
-                    { binding
+                    { assignmentLocation
+                    , monad = UnknownMonad
+                    , binding
                     , assignment
                     }
 
-        assignment <- parseDefinition <|> parseBind
-
-        return assignment
+        parseLetAssignment <|> parseForAssignment
 
     recordLabel <- rule (reservedLabel <|> label <|> alternative <|> text)
 
