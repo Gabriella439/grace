@@ -9,8 +9,9 @@ let concatSep = import github
       }
 
 let call = fold
-      { HttpRequest: \x -> "curl ${x.url}"
-      , ShellCommand: \x -> concatSep " " ([ x.executable ] + x.arguments)
+      { HttpRequest { url }: "curl ${url}"
+      , ShellCommand { executable, arguments}:
+          concatSep " " ([ executable ] + arguments)
       }
 
 in  map call (prompt{ key, text: "Call some tools" })

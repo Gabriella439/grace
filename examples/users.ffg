@@ -1,5 +1,5 @@
 # Grace version of an example from https://dhall-lang.org/
-let makeUser user =
+let makeUser{ user }=
       let home = "/home/${user}"
 
       let privateKey = "${home}/.ssh/id_ed25519"
@@ -8,6 +8,6 @@ let makeUser user =
 
       in  { home, privateKey, publicKey }
 
-in  [ makeUser "bill"
-    , makeUser "jane"
+in  [ makeUser{ user: "bill" }
+    , makeUser{ user: "jane" }
     ]
