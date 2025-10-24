@@ -1,7 +1,7 @@
 # Grace
 
 Grace (short for [Fall-from-Grace](#name)) is a domain-specific programming
-language for prompting LLMs.  In particular, Grace is well-suited for building
+language for prompting models.  In particular, Grace is well-suited for building
 and auto-generating elaborate prompt chains
 
 You can use Grace in your browser without installing anything by visiting
@@ -11,45 +11,91 @@ Grace.
 
 ## Features
 
-- Integrated language support for LLMs
+- Integrated language support for models
 
   You don't need to install any dependencies or import anything to get started.
   Everything you need is built directly into the language.
 
-  For example, the following self-contained Grace program asks a model to
-  generate a list of names and then greets each one:
+  The language provides a built-in `prompt` function for prompting a model:
 
   ```haskell
-  let key = ./openai-key.txt
+  >>> :let key = ./openai.key : Key
 
-  let names = prompt{ key }
+  >>> prompt{ key, text: "Generate a list of names" }
+  "
+  Here are 40 varied first names (mixed genders and cultures):
 
-  let greet{ name } = "Hello, ${name}!"
+  - Aiden
+  - Sofia
+  - Mateo
+  …
+  - Mabel
+  - Imani
+  - Zane
 
-  in  map greet names
+  Want names filtered by gender, culture, style (modern/vintage), or as full names/surnames?"
   ```
 
-  … which might output something like:
+  … and you can structure the output by giving a type annotation:
 
-  ```json
-  [ "Hello, Alice!", "Hello, Bob!", "Hello, Charlie!" ]
+  ```haskell
+  >>> prompt{ key, text: "Generate a list of names" } : List Text
+  [ "Ava Thompson"
+  , "Liam Patel"
+  , "Sophia Martinez"
+  …
+  , "Jackson Rivera"
+  , "Zoe Wilson"
+  , "Aiden Park"
+  ]
+  ```
+
+  If the type is sufficiently self-explanatory, you can even omit the prompt:
+
+  ```haskell
+  >>> prompt{ key } : List { name: Text }
+  [ { "name": "Alice" }
+  , { "name": "Bob" }
+  , { "name": "Charlie" }
+  , { "name": "Diana" }
+  , { "name": "Evan" }
+  ]
+  ```
+
+  In fact, you can omit the type, too, if the type can be inferred from use:
+
+  ```haskell
+  >>> for { name } of prompt{ key } in "Hello, ${name}!"
+  [ "Hello, Alice!"
+  , "Hello, Bob!"
+  , "Hello, Carol!"
+  , "Hello, Dave!"
+  , "Hello, Eve!"
+  ]
   ```
 
 - JSON schemas inferred from use
 
-  Notice how the above example doesn't include any prompt for the model.  This
-  is because Grace infers the correct JSON schema by working backwards from how
-  the model's output is used.
+  That last example works even without a prompt, schema, or type because Grace's
+  type checker reasons backwards from how the output is used to infer the
+  correct JSON schem, like this:
 
-  In particular, the type checker can deduce (without any type annotations)
-  that the `names` value is has a Grace type of:
+  - type checker infers that the `name` variable must be `Text`
 
-  ```haskell
-  List { name: Text }
-  ```
+    … because the `name` variable is interpolated into "Hello, ${name}!"
+
+  - the type checker infers that the `prompt` function must generate a `List`
+
+    … because the program loops over the output using a `for … of` loop.
+
+  - the type checker infers each element of the `List` has type `{ name: Text }`
+
+    … because the `for … of` loop destructures each element using `{ name }`
+
+  - therefore the `prompt` function outputs a value of type `List{ name: Text }`
 
   … which you can read as "a `List` of records, each of which has a `name` field
-  containing `Text`).
+  containing `Text`".
 
   The interpreter then converts that Grace type into the following matching JSON
   schema to constrain the model's output:
@@ -70,68 +116,68 @@ Grace.
   }
   ```
 
-  Finally, the LLM infers from that JSON schema alone that it should generate a
-  JSON-encoded list of names.
+  Finally, the model infers from that JSON schema alone (without any additional
+  prompt) that it should generate a JSON-encoded list of names.
 
 - Code generation
 
-  You can ask the LLM to generate a Grace expression of any desired type; even
-  functions (using the `import` keyword)!
-
-  For example, if we ask the model to generate the following function
+  You can prefix the `prompt` keyword with `import` to ask the model to generate
+  a Grace expression of any type.  For example:
 
   ```haskell
-  >>> :let key = ./openai-key.txt
-
-  >>> import prompt{ key, text: "Greet every name" } : List { name : Text } -> List Text
+  >>> import prompt{ key, text: "increment" }
+  \n -> n + 1
   ```
 
-  … then the model generates code equivalent to what we wrote:
-
-  ```
-  \xs -> map (\{ name } -> "Hello, ${name}!") xs
-  ```
-
-  … which means that we could have written our original example as:
+  You can use an explicit type annotation to guide the generated code:
 
   ```haskell
-  let key = ./openai-key.txt
-
-  let names = prompt{ key }
-
-  let process{ names: List{ name: Text } } : List Text =
-          import prompt{ key, text: "Greet every name" } names
-
-  in  process{ names }
+  >>> import prompt{ key, text: "increment" } : { input: Natural } -> { output: Natural }
+  \{ input } -> { "output": input + 1 }
   ```
 
-  … which will generate something similar to this intermediate program after
-  prompting:
+  … and if the type is informative enough then you can omit the prompt:
 
   ```haskell
-  let names = [ { name: "Alice" }, { name: "Bob" }, { name: "Charlie" } ]
+  >>> import prompt{ key } : { "Job Description": Text } -> { "Is Finance?": Bool }
+  let key = 🔒
 
-  let process{ names: List{ name: Text } } : List Text =
-          (\xs -> map (\{ name } -> "Hello, ${name}!") xs) names
-
-  in  process{ names }
+  in  \{ "Job Description" } ->
+        prompt
+          { "key":
+              key
+          , "text":
+              "
+              Determine whether the following job description is for a finance role.
+              Return a JSON object with a single boolean field \"Is Finance?\": true if it is a finance role, otherwise false.
+              Answer only valid JSON, nothing else.
+  
+              Job description:
+              ${.'Job Description'}
+              "
+          , "model":
+              null
+          , "search":
+              null
+          , "effort":
+              null
+          }
+          : { "Is Finance?": Bool }
   ```
 
-  … and that simplifies to:
+  Notice in that last example how the model can generate code which itself
+  `prompt`s an model.  Neat!
 
-  ```json
-  [ "Hello, Alice!", "Hello, Bob!", "Hello, Charlie!" ]
+  Inferred types also guide the code generation process, too!
+
+  ```haskell
+  >>> let upper = import prompt{ key, text: "uppercase" } in "Hello, ${upper "gabby"}!"
+  "Hello, GABBY!"
   ```
 
-- Type inference
-
-  Grace is a typed programming language, meaning that many programming errors
-  are caught ahead of time before the program is run.  However, Grace programs
-  often require no type annotations because the intermediate types can be
-  inferred from use.
-
-  Moreover, Grace's LLM support is *type-aware*, meaning that the inferred
-  types *inform* and *constrain* the model's outputs.
+  There the model infers that the type of the `upper` function needs to be
+  `Text -> Text` (a function whose input is `Text` and whose output is `Text`)
+  and generates an function matching that type which uppercases `Text`.
 
 ### Command line
 
@@ -159,17 +205,13 @@ You can use the `interpret` subcommand for interpreting a single file:
 ```haskell
 # ./greet.ffg
 
-let key = ./openai-key.txt
+for { name } of prompt{ key: ./openai-key.txt }
 
-let names = prompt{ key }
-
-let greet{ name } = "Hello, ${name}!"
-
-in  map greet names
+in  "Hello, ${name}!"
 ```
 
 ```bash
-$ grace interpret --openAIKey "$(< openai-key.txt)" ./greet.ffg
+$ grace interpret ./greet.ffg
 ```
 ```json
 [ "Hello, Alice!", "Hello, Bob!", "Hello, Charlie!" ]

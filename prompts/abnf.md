@@ -140,6 +140,20 @@ assignment =
     ;     let { x, y } = { x: 1, y: 2 } in x + y
     / ("let" binding "=" expression)
 
+    ; For comprehension (like a list comprehension, but works on both `List`s
+    ; and `Optional`s)
+    ;
+    ;     for x of [ 1, 2 ]
+    ;     for y of [ false, true ]
+    ;     in  { x, y }
+    ;
+    ;     = [ {x: 1, y: false }
+    ;       , {x: 1, y: true  }
+    ;       , {x: 2, y: false }
+    ;       , {x: 2, y: true  }
+    ;       ]
+    / ("for" binding "of" expression)
+
 if = "if" expression "then" expression "else" expression
 
 ; Optional type annotation:
