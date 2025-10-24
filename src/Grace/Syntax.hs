@@ -1238,7 +1238,8 @@ prettyExpression Read{ arguments, import_, schema = Just schema } =
         <>  " "
         <>  pretty schema
 
-    long =  keyword "read"
+    long =  prefix
+        <>  keyword "read"
         <>  Pretty.hardline
         <>  "  "
         <>  Pretty.nest 2 (prettyProjectExpression arguments)
@@ -1261,7 +1262,8 @@ prettyExpression GitHub{ arguments, import_, schema = Just schema } =
         <>  " "
         <>  pretty schema
 
-    long =  keyword "github"
+    long =  prefix
+        <>  keyword "github"
         <>  Pretty.hardline
         <>  "  "
         <>  Pretty.nest 2 (prettyProjectExpression arguments)
