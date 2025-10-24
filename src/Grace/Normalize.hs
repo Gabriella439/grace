@@ -183,10 +183,19 @@ evaluate keyToMethods env₀ syntax₀ = do
                         value₀ <- loop environment assignment₀
 
                         let once v = case binding of
-                                -- TODO: This is ignoring the `assignment` field of
-                                -- `NameBinding`
-                                Syntax.PlainBinding{ plain = Syntax.NameBinding{ name } } -> do
-                                    action ((name, v) : environment)
+                                Syntax.PlainBinding{ plain = Syntax.NameBinding{ name, assignment = assignment₁ } } -> do
+                                    v₁ <- case assignment₁ of
+                                        Nothing -> do
+                                            return v
+                                        Just assignment₂ ->
+                                            case v of
+                                                Value.Scalar Null -> do
+                                                    loop environment assignment₂
+                                                Value.Application (Value.Builtin Some) v₁ -> do
+                                                    return v₁
+                                                v₁ -> do
+                                                    return v₁
+                                    action ((name, v₁) : environment)
 
                                 Syntax.RecordBinding{ fieldNames } -> do
                                     case v of
