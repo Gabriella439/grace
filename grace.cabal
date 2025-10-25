@@ -5,9 +5,16 @@ license-file:        LICENSE
 author:              Gabriella Gonzalez
 maintainer:          Gabriel439@gmail.com
 build-type:          Simple
-extra-source-files:  examples/**.ffg
-                   , prompts/**.md
-                   , prelude/**.ffg
+extra-source-files:  examples/*.ffg
+                     examples/tutorial/*.ffg
+                     prompts/*.md
+                     prelude/bool/*.ffg
+                     prelude/integer/*.ffg
+                     prelude/list/*.ffg
+                     prelude/natural/*.ffg
+                     prelude/package.ffg
+                     prelude/real/*.ffg
+                     prelude/text/*.ffg
 
 library
   hs-source-dirs:      src
