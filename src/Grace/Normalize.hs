@@ -201,23 +201,34 @@ evaluate keyToMethods env₀ syntax₀ = do
                                     case v of
                                         Value.Record hashMap -> do
                                             let process Syntax.NameBinding{ name, assignment = assignment₁} = do
+                                                    let missing = case assignment₁ of
+                                                            Nothing -> do
+                                                                return (Value.Scalar Syntax.Null)
+
+                                                            Just a -> do
+                                                                loop environment a
+
                                                     value <- case HashMap.lookup name hashMap of
-                                                        Nothing -> case assignment₁ of
-                                                            Nothing -> do
-                                                                return (Value.Scalar Syntax.Null)
+                                                        -- This case shouldn't happen in theory, all missing
+                                                        -- fields should be elaborated to present fields set
+                                                        -- to `null` but we handle it as a precaution by
+                                                        -- just treating it as if elaboration had happened.
+                                                        Nothing ->
+                                                            missing
 
-                                                            Just a -> do
-                                                                loop environment a
+                                                        Just (Value.Scalar Syntax.Null) ->
+                                                            missing
 
-                                                        Just (Value.Scalar Syntax.Null) -> case assignment₁ of
-                                                            Nothing -> do
-                                                                return (Value.Scalar Syntax.Null)
+                                                        -- If the field had a default assignment then that
+                                                        -- means that the right-hand side would be elaborated
+                                                        -- to be wrapped in a `some`, which we need to undo
+                                                        -- here
+                                                        Just (Value.Application (Value.Builtin Some) a)
+                                                            | Just _ <- assignment₁ ->
+                                                                return a
 
-                                                            Just a -> do
-                                                                loop environment a
-
-                                                        Just value -> do
-                                                            return value
+                                                        Just a -> do
+                                                            return a
 
                                                     return (name, value)
 

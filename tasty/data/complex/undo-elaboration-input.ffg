@@ -1,0 +1,4 @@
+# This is a regression test for:
+#
+# https://github.com/Gabriella439/grace/pull/175#issuecomment-3449878560
+let { x = 0, y } = { x: 1, y: 2 } in x + y
