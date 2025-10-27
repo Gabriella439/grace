@@ -21,6 +21,8 @@
 module Grace.Parser
     ( -- * Parsing
       parse
+    , parseREPLCommand
+    , REPLCommand(..)
       -- * Errors related to parsing
     , ParseError(..)
       -- * Utilities
@@ -398,7 +400,7 @@ lexText = lexeme do
                   where
                     (afterSpace, _) = Megaparsec.runParser' space originalState
 
-            (syntax, index) <- case Earley.allParses (Earley.parser (grammar True)) locatedTokens of
+            (syntax, index) <- case Earley.allParses (Earley.parser (grammar (Interpolation id))) locatedTokens of
                 ([], Report{ position }) -> do
                     case drop position locatedTokens of
                         [] ->
@@ -487,13 +489,10 @@ reserved =
         , "Fields"
         , "Integer"
         , "List"
-        , "List/equal"
         , "Natural"
         , "Optional"
         , "Real"
-        , "Real/equal"
         , "Text"
-        , "Text/equal"
         , "Type"
         , "abs"
         , "else"
@@ -890,8 +889,20 @@ render t = case t of
     Grace.Parser.URI _              -> "a URI"
     Grace.Parser.YAML               -> "yaml"
 
-grammar :: Bool -> Grammar r (Parser r (Syntax Offset Input))
-grammar endsWithBrace = mdo
+{-| This is how we decide at the top-level what we want to parse, to work around
+    the fact that the @Earley@ package only lets you return one `Parser`
+-}
+data GrammaticalForm a
+    = Expression (Syntax Offset Input -> a)
+    | Interpolation (Syntax Offset Input -> a)
+    | REPLCommand (REPLCommand -> a)
+
+-- | 
+data REPLCommand
+    = Evaluate (Syntax Offset Input) | Assign (Assignment Offset Input)
+
+grammar :: GrammaticalForm a -> Grammar r (Parser r a)
+grammar form = mdo
     parseBinding <- rule do
         let annotated = do
                 parseToken Grace.Parser.OpenParenthesis
@@ -1360,55 +1371,55 @@ grammar endsWithBrace = mdo
                 return e
         )
 
+    parseREPLCommand <- rule do
+        let parseDefinition = do
+                ~(nameLocation, name) <- locatedLabel
+
+                bindings <- many parseBinding
+
+                annotation <- optional do
+                    parseToken Grace.Parser.Colon
+
+                    t <- quantifiedType
+
+                    return t
+
+                parseToken Grace.Parser.Equals
+
+                assignment <- expression
+
+                return \assignmentLocation -> Syntax.Define
+                    { assignmentLocation
+                    , definition = Syntax.Definition
+                        { nameLocation
+                        , name
+                        , bindings
+                        , annotation
+                        , assignment
+                        }
+                    }
+
+        let parseBind = do
+                binding <- parseBinding
+
+                parseToken Grace.Parser.Equals
+
+                assignment <- expression
+
+                return \assignmentLocation -> Syntax.Bind
+                    { assignmentLocation
+                    , monad = NoMonad
+                    , binding
+                    , assignment
+                    }
+
+        assignmentLocation <- locatedToken Grace.Parser.Let
+
+        f <- parseDefinition <|> parseBind
+
+        return (f assignmentLocation)
+
     parseAssignment <- rule do
-        let parseLetAssignment = do
-                let parseDefinition = do
-                        ~(nameLocation, name) <- locatedLabel
-
-                        bindings <- many parseBinding
-
-                        annotation <- optional do
-                            parseToken Grace.Parser.Colon
-
-                            t <- quantifiedType
-
-                            return t
-
-                        parseToken Grace.Parser.Equals
-
-                        assignment <- expression
-
-                        return \assignmentLocation -> Syntax.Define
-                            { assignmentLocation
-                            , definition = Syntax.Definition
-                                { nameLocation
-                                , name
-                                , bindings
-                                , annotation
-                                , assignment
-                                }
-                            }
-
-                let parseBind = do
-                        binding <- parseBinding
-
-                        parseToken Grace.Parser.Equals
-
-                        assignment <- expression
-
-                        return \assignmentLocation -> Syntax.Bind
-                            { assignmentLocation
-                            , monad = NoMonad
-                            , binding
-                            , assignment
-                            }
-
-                assignmentLocation <- locatedToken Grace.Parser.Let
-
-                f <- parseDefinition <|> parseBind
-
-                return (f assignmentLocation)
-
         let parseForAssignment = do
                 assignmentLocation <- locatedToken Grace.Parser.For
 
@@ -1425,7 +1436,7 @@ grammar endsWithBrace = mdo
                     , assignment
                     }
 
-        parseLetAssignment <|> parseForAssignment
+        parseREPLCommand <|> parseForAssignment
 
     recordLabel <- rule (reservedLabel <|> label <|> alternative <|> text)
 
@@ -1467,7 +1478,7 @@ grammar endsWithBrace = mdo
                 return Syntax.Definition
                     { nameLocation
                     , name
-                    , bindings = [] -- TODO
+                    , bindings = []
                     , annotation = Nothing
                     , assignment = Syntax.Variable
                         { location = nameLocation
@@ -1668,7 +1679,16 @@ grammar endsWithBrace = mdo
 
         return a
 
-    return (if endsWithBrace then expressionEndingWithBrace else expression)
+    replCommand <- rule
+        (fmap Evaluate expression <|> fmap Assign parseREPLCommand)
+
+    return case form of
+        Expression continuation ->
+            fmap continuation expression
+        Interpolation continuation ->
+            fmap continuation expressionEndingWithBrace
+        REPLCommand continuation ->
+            fmap continuation replCommand
 
 -- | Parse a complete expression
 parse
@@ -1677,10 +1697,21 @@ parse
     -> Text
     -- ^ Source code
     -> Either ParseError (Syntax Offset Input)
-parse name code = do
+parse = parseGrammaticalForm (Expression id)
+
+-- | Parse a grammatical form
+parseGrammaticalForm
+    :: GrammaticalForm r
+    -- ^ Grammatical form to parse
+    -> String
+    -- ^ Name of the input (used for error messages)
+    -> Text
+    -- ^ Source code
+    -> Either ParseError r
+parseGrammaticalForm form name code = do
     tokens <- lex name code
 
-    case Earley.fullParses (Earley.parser (grammar False)) tokens of
+    case Earley.fullParses (Earley.parser (grammar form)) tokens of
         ([], Report{ unconsumed }) -> do
             let offset =
                     case unconsumed of
@@ -1693,3 +1724,12 @@ parse name code = do
 
         (result : _, _) -> do
             return result
+
+-- | Parse a @let@ assignment
+parseREPLCommand
+    :: String
+    -- ^ Name of the input (used for error messages)
+    -> Text
+    -- ^ Source code
+    -> Either ParseError REPLCommand
+parseREPLCommand = parseGrammaticalForm (REPLCommand id)

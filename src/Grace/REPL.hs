@@ -8,18 +8,22 @@ module Grace.REPL
     ) where
 
 import Control.Applicative (empty)
-import Control.Exception.Safe (SomeException, displayException, throwIO)
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.State (MonadState(..))
+import Data.Bifunctor (first)
 import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text)
 import Grace.HTTP (Methods)
 import Grace.Infer (Status(..))
 import Grace.Interpret (Input(..))
-import Grace.Parser (reserved)
+import Grace.Location (Location(..))
+import Grace.Parser (REPLCommand(..), reserved)
 import System.Console.Haskeline (Interrupt(..))
 import System.Console.Repline (CompleterStyle(..), MultiLine(..), ReplOpts(..))
+
+import Control.Exception.Safe
+    (Exception, SomeException, displayException, throwIO)
 
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Monad as Monad
@@ -27,9 +31,11 @@ import qualified Control.Monad.State as State
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text.IO
 import qualified Grace.Context as Context
-import qualified Grace.Interpret as Interpret
+import qualified Grace.Infer as Infer
 import qualified Grace.Normalize as Normalize
+import qualified Grace.Parser as Parser
 import qualified Grace.Pretty as Pretty
+import qualified Grace.Syntax as Syntax
 import qualified Grace.Type as Type
 import qualified Grace.Value as Value
 import qualified Grace.Width as Width
@@ -40,33 +46,94 @@ import qualified System.IO as IO
 -- | Entrypoint for the @grace repl@ subcommand
 repl :: (Text -> Methods) -> IO ()
 repl keyToMethods = do
-    let err e =
+    let err :: (Exception e, MonadIO io) => e -> io ()
+        err e =
             liftIO (Text.IO.hPutStrLn IO.stderr (Text.pack (displayException e)))
 
-    let interpret input = do
-            bindings <- get
+    let command infer string = do
+            let text = Text.pack string
 
-            let initialStatus = Status{ count = 0, input, context = [] }
+            let locate offset = Location
+                    { name = "(input)"
+                    , code = text
+                    , offset
+                    }
 
-            Exception.try @_ @SomeException (State.runStateT (Interpret.interpretWith keyToMethods bindings Nothing) initialStatus)
+            let interpret syntax₀ = do
+                    assignments₀ <- State.get
 
-    let command string = do
-            let input = Code "(input)" (Text.pack string)
+                    let syntax₁ = case reverse assignments₀ of
+                            [] -> first locate syntax₀
 
-            eitherResult <- interpret input
+                            assignment₁ : assignments₁ -> Syntax.Let
+                              { location = Unknown
+                              , assignments = assignment₁ :| assignments₁
+                              , body = first locate syntax₀
+                              }
 
-            case eitherResult of
-                Left e -> do
-                    err e
+                    let status = Status
+                            { count = 0
+                            , input = Code "(input)" text
+                            , context = []
+                            }
 
-                Right ((_inferred, value), Status{ context })  -> do
-                    let completed = Value.complete context value
+                    let action = do
+                            (inferred, elaborated) <- Infer.infer syntax₁
 
-                    let syntax = Normalize.strip (Normalize.quote completed)
+                            value <- Normalize.evaluate keyToMethods [] elaborated
 
-                    width <- liftIO Width.getWidth
+                            return (inferred, value)
 
-                    liftIO (Pretty.renderIO True width IO.stdout (Pretty.pretty syntax <> "\n"))
+                    result <- liftIO (Exception.try (State.runStateT action status))
+
+                    case result of
+                        Left (e :: SomeException) -> do
+                            return (Left e)
+
+                        Right ((inferred, value), Status{ context }) -> do
+                            let annotation = Context.complete context inferred
+
+                            let annotated =
+                                    Normalize.strip (Normalize.quote (Value.complete context value))
+
+                            return (Right (annotation, annotated))
+
+            case Parser.parseREPLCommand "(input)" text of
+                Left parseError -> do
+                    err parseError
+
+                Right (Evaluate syntax₀) -> do
+                    result <- interpret syntax₀
+
+                    case result of
+                        Left (e :: SomeException) -> do
+                            err e
+
+                        Right (annotation, annotated) -> do
+                            width <- liftIO Width.getWidth
+
+                            let document =
+                                    if infer
+                                    then Pretty.pretty annotation
+                                    else Pretty.pretty annotated
+
+                            liftIO (Pretty.renderIO True width IO.stdout (document <> "\n"))
+
+                Right (Assign assignment) -> do
+                    assignments <- State.get
+
+                    State.put (first locate assignment : assignments)
+
+                    result <- interpret Syntax.Record{ location = 0, fieldValues = []  }
+
+                    case result of
+                        Left e -> do
+                            State.put assignments
+
+                            err e
+
+                        Right _ -> do
+                            return ()
 
     let help _string = do
             liftIO (putStrLn
@@ -75,62 +142,21 @@ repl keyToMethods = do
                 \    Print help text and describe options\n\
                 \:paste\n\
                 \    Start a multi-line input. Submit with <Ctrl-D>\n\
-                \:type EXPRESSION\n\
-                \    Infer the type of an expression\n\
-                \:let IDENTIFIER = EXPRESSION\n\
+                \let IDENTIFIER = EXPRESSION\n\
                 \    Assign an expression to a variable\n\
                 \:quit\n\
                 \    Exit the REPL")
-
-    let assignment string
-            | (var, '=' : expr) <- break (== '=') string = do
-                let input = Code "(input)" (Text.pack expr)
-
-                let variable = Text.strip (Text.pack var)
-
-                eitherResult <- interpret input
-
-                case eitherResult of
-                    Left e -> do
-                        err e
-
-                    Right ((type_, value), Status{ context }) -> do
-                        let completedType = Context.complete context type_
-
-                        let completedValue = Value.complete context value
-
-                        State.modify ((variable, completedType, completedValue) :)
-
-            | otherwise = do
-                liftIO (putStrLn "usage: let {identifier} = {expression}")
-
-    let infer expr = do
-            let input = Code "(input)" (Text.pack expr)
-
-            eitherResult <- interpret input
-
-            case eitherResult of
-                Left e -> do
-                    err e
-
-                Right ((type_, _), Status{ context })  -> do
-                    let completed = Context.complete context type_
-
-                    width <- liftIO Width.getWidth
-
-                    liftIO (Pretty.renderIO True width IO.stdout (Pretty.pretty completed <> "\n"))
 
     let quit _ =
             liftIO (throwIO Interrupt)
 
     let options =
             [ ("help", Repline.dontCrash . help)
-            , ("let", Repline.dontCrash . assignment)
             -- `paste` is included here for auto-completion purposes only.
             -- `repline`'s `multilineCommand` logic overrides this no-op.
             , ("paste", Repline.dontCrash . \_ -> return ())
             , ("quit", quit)
-            , ("type", Repline.dontCrash . infer)
+            , ("type", Repline.dontCrash . command True)
             ]
 
     let tabComplete = Prefix complete [ (":", completeCommands) ]
@@ -151,10 +177,12 @@ repl keyToMethods = do
                 Repline.listCompleter (fmap Text.unpack (toList reserved))
 
             completeIdentifiers args = do
-                context <- get
+                assignments <- get
 
-                let completions =
-                        fmap (\(name, _, _) -> name) context
+                let completions = do
+                        Syntax.Define{ definition = Syntax.Definition{ name } } <- assignments
+
+                        return name
 
                 Repline.listCompleter (fmap Text.unpack completions) args
 
@@ -165,13 +193,15 @@ repl keyToMethods = do
 
                     let loop (c0 :| c1 : cs) context = do
                             let newContext = do
-                                    (name, type_) <- context
+                                    (name, annotation) <- context
 
                                     Monad.guard (c0 == name)
 
-                                    case type_ of
-                                        Type.Record{ fields = Type.Fields keyTypes _ } -> do
-                                            keyTypes
+                                    case annotation of
+                                        Just Type.Record{ fields = Type.Fields keyTypes _ } -> do
+                                            (key, type_) <- keyTypes
+
+                                            return (key, Just type_)
                                         _ -> do
                                             empty
 
@@ -180,6 +210,7 @@ repl keyToMethods = do
                             let prepend result = c0 <> "." <> result
 
                             return (fmap prepend results)
+
                         loop (c0 :| []) context = return do
                             (name, _) <- context
 
@@ -190,12 +221,12 @@ repl keyToMethods = do
                     let startingComponents =
                             toNonEmpty (Text.splitOn "." (Text.pack prefix))
 
-                    context <- get
+                    assignments <- get
 
                     let startingContext = do
-                            (name, type_, _) <- context
+                            Syntax.Define{ definition = Syntax.Definition{ name, annotation } } <- assignments
 
-                            return (name, type_)
+                            return (name, annotation)
 
                     results <- loop startingComponents startingContext
 
@@ -208,7 +239,7 @@ repl keyToMethods = do
 
     let action = Repline.evalReplOpts ReplOpts
             { banner
-            , command
+            , command = command False
             , options
             , prefix = Just ':'
             , multilineCommand = Just "paste"
