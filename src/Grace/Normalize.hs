@@ -239,13 +239,13 @@ evaluate keyToMethods env₀ syntax₀ = do
                                             error "Grace.Normalize.evaluate: non-records can't be destructured as records"
 
                         case monad of
-                            UnknownMonad ->
-                                error "Grace.Normalize.evaluate: unknown monad"
-
-                            NoMonad ->
+                            Nothing ->
                                 once value₀
 
-                            OptionalMonad ->
+                            Just UnknownMonad ->
+                                error "Grace.Normalize.evaluate: unknown monad"
+
+                            Just OptionalMonad ->
                                 case value₀ of
                                     Value.Scalar Null -> do
                                         return (Value.Scalar Null)
@@ -254,7 +254,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                                     value₁ ->
                                         once value₁
 
-                            ListMonad ->
+                            Just ListMonad ->
                                 case value₀ of
                                     Value.List elements -> do
                                         values <- traverse once elements
@@ -271,19 +271,19 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                 let monad =
                         NonEmpty.last
-                            (NoMonad :| [ m | Syntax.Bind{ monad = m } <- toList assignments ])
+                            (Nothing :| [ m | Syntax.Bind{ monad = m } <- toList assignments ])
 
                 let nil environment = do
                         value <- loop environment body₀
 
                         return case monad of
-                            UnknownMonad ->
-                                error "Grace.Normalize.evaluate: unknown monad"
-                            NoMonad ->
+                            Nothing ->
                                 value
-                            ListMonad ->
+                            Just UnknownMonad ->
+                                error "Grace.Normalize.evaluate: unknown monad"
+                            Just ListMonad ->
                                 Value.List [ value ]
-                            OptionalMonad ->
+                            Just OptionalMonad ->
                                 Value.Application (Value.Builtin Some) value
                 foldr cons nil assignments env
 
