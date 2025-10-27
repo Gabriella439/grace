@@ -1787,11 +1787,10 @@ instance Bifunctor Definition where
     second = fmap
 
 -- | The monad that a `Bind` takes place in
-data BindMonad = NoMonad | UnknownMonad | OptionalMonad | ListMonad
+data BindMonad = UnknownMonad | OptionalMonad | ListMonad
     deriving stock (Eq, Generic, Lift, Show)
 
 instance Pretty BindMonad where
-    pretty NoMonad       = "simple"
     pretty UnknownMonad  = "unknown"
     pretty OptionalMonad = Pretty.builtin "Optional"
     pretty ListMonad     = Pretty.builtin "List"
@@ -1812,7 +1811,7 @@ data Assignment s a
         }
     | Bind
         { assignmentLocation :: s
-        , monad :: BindMonad
+        , monad :: Maybe BindMonad
         , binding :: Binding s a
         , assignment :: Syntax s a
         }
@@ -1892,7 +1891,7 @@ instance Pretty a => Pretty (Assignment s a) where
             <>  punctuation "="
             <>  " "
             <>  pretty assignment
-    pretty Bind{ monad = NoMonad, binding, assignment } =
+    pretty Bind{ monad = Nothing, binding, assignment } =
         Pretty.group (Pretty.flatAlt long short)
       where
         long =  keyword "let"
@@ -1911,7 +1910,7 @@ instance Pretty a => Pretty (Assignment s a) where
             <>  punctuation "="
             <>  " "
             <>  pretty assignment
-    pretty Bind{ binding, assignment } =
+    pretty Bind{ monad = Just _, binding, assignment } =
         Pretty.group (Pretty.flatAlt long short)
       where
         long =  keyword "for"

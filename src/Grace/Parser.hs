@@ -1408,7 +1408,7 @@ grammar form = mdo
 
                 return \assignmentLocation -> Syntax.Bind
                     { assignmentLocation
-                    , monad = NoMonad
+                    , monad = Nothing
                     , binding
                     , assignment
                     }
@@ -1431,7 +1431,7 @@ grammar form = mdo
 
                 return Syntax.Bind
                     { assignmentLocation
-                    , monad = UnknownMonad
+                    , monad = Just UnknownMonad
                     , binding
                     , assignment
                     }
