@@ -19,7 +19,7 @@ Grace.
   The language provides a built-in `prompt` function for prompting a model:
 
   ```haskell
-  >>> :let key = ./openai.key : Key
+  >>> let key = ./openai.key : Key
 
   >>> prompt{ key, text: "Generate a list of names" }
   "
@@ -233,7 +233,7 @@ You can also use the `repl` subcommand for interactive usage:
 $ grace repl
 ```
 ```haskell
->>> :let key = ./openai-key.txt
+>>> let key = ./openai-key.txt
 >>> prompt{ key } : List { "First Name": Text, "Last Name": Text }
 [ { "First Name": "John", "Last Name": "Doe" }
 , { "First Name": "Jane", "Last Name": "Smith" }

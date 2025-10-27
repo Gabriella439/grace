@@ -107,7 +107,7 @@ evaluate
 evaluate keyToMethods env₀ syntax₀ = do
     loop env₀ syntax₀
   where
-    generateContext location = do
+    generateContext env location = do
         let infer (name, assignment) = do
                 let expression :: Syntax Location Input
                     expression = first (\_ -> location) (fmap Void.absurd (quote assignment))
@@ -118,7 +118,7 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                 return (name, type_, assignment)
 
-        traverse infer env₀
+        traverse infer env
 
     loop
         :: (MonadIO m, MonadState Status m, MonadCatch m)
@@ -400,7 +400,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                     Left exception -> Exception.throwIO exception
                     Right prompt -> return prompt
 
-                Prompt.prompt (generateContext location) import_ location prompt schema
+                Prompt.prompt (generateContext env location) import_ location prompt schema
 
             Syntax.HTTP{ schema = Nothing } -> do
                 Exception.throwIO MissingSchema
@@ -415,7 +415,7 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                 if import_
                     then do
-                        bindings <- liftIO (generateContext location)
+                        bindings <- liftIO (generateContext env location)
 
                         uri <- URI.mkURI (HTTP.url http)
 
@@ -452,7 +452,7 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                 if import_
                     then do
-                        bindings <- generateContext location
+                        bindings <- generateContext env location
 
                         Status{ input = parent } <- State.get
 
@@ -506,7 +506,7 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                 if import_
                     then do
-                        bindings <- generateContext location
+                        bindings <- generateContext env location
 
                         uri <- URI.mkURI url
 
