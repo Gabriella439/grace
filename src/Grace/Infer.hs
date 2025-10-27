@@ -1364,49 +1364,55 @@ onDefinition
     :: (MonadCatch m, MonadState Status m, MonadIO m)
     => Definition Location Input
     -> m ((Text, Type Location), Definition Location Void)
-onDefinition Syntax.Definition{ nameLocation, name, bindings, annotation = annotation₀, assignment = assignment₀ } = do
-    results <- traverse onBinding bindings
+onDefinition Syntax.Definition
+    { nameLocation
+    , name
+    , bindings
+    , annotation = annotation₀
+    , assignment = assignment₀
+    } = do
+        results <- traverse onBinding bindings
 
-    let (inputs, entriess, newBindings) = unzip3 results
+        let (inputs, entriess, newBindings) = unzip3 results
 
-    let nil = do
-            (annotation₁, assignment₂) <- case (bindings, annotation₀) of
-                ([], Just annotation₁) -> do
-                    assignment₂ <- check assignment₀ annotation₁
+        let nil = do
+                (annotation₁, assignment₂) <- case (bindings, annotation₀) of
+                    ([], Just annotation₁) -> do
+                        assignment₂ <- check assignment₀ annotation₁
 
-                    return (annotation₁, assignment₂)
-                (_, Just annotation₁) -> do
-                    let assignment₁ = Syntax.Annotation
-                            { location = Syntax.location assignment₀
-                            , annotated = assignment₀
-                            , annotation = annotation₁
-                            }
+                        return (annotation₁, assignment₂)
+                    (_, Just annotation₁) -> do
+                        let assignment₁ = Syntax.Annotation
+                                { location = Syntax.location assignment₀
+                                , annotated = assignment₀
+                                , annotation = annotation₁
+                                }
 
-                    infer assignment₁
-                (_, Nothing) -> do
-                    infer assignment₀
+                        infer assignment₁
+                    (_, Nothing) -> do
+                        infer assignment₀
 
-            let newDefinition = Syntax.Definition
-                    { nameLocation
-                    , name
-                    , bindings = newBindings
-                    , annotation = annotation₀
-                    , assignment = assignment₂
-                    }
+                let newDefinition = Syntax.Definition
+                        { nameLocation
+                        , name
+                        , bindings = newBindings
+                        , annotation = annotation₀
+                        , assignment = assignment₂
+                        }
 
-            let cons input output = Type.Function
-                    { location = nameLocation
-                    , input
-                    , output
-                    }
+                let cons input output = Type.Function
+                        { location = nameLocation
+                        , input
+                        , output
+                        }
 
-            let annotation₂ = foldr cons annotation₁ inputs
+                let annotation₂ = foldr cons annotation₁ inputs
 
-            let fieldType = (name, annotation₂)
+                let fieldType = (name, annotation₂)
 
-            return (fieldType, newDefinition)
+                return (fieldType, newDefinition)
 
-    foldr scoped nil (concat entriess)
+        foldr scoped nil (concat entriess)
 
 {-| This corresponds to the judgment:
 
