@@ -1,7 +1,6 @@
-Invalid handler
+Not a subtype
 
-The fold keyword expects a record of handlers where all handlers are functions,
-but you provided a handler of the following type:
+The following type:
 
   Natural
 
@@ -10,4 +9,11 @@ tasty/data/error/type/invalid-handler-input.ffg:1:11:
 1 │ fold { x: 1 }
   │           ↑
 
-… which is not a function type.
+… cannot be a subtype of:
+
+  d? -> c?
+
+tasty/data/error/type/invalid-handler-input.ffg:1:1: 
+  │
+1 │ fold { x: 1 }
+  │ ↑
