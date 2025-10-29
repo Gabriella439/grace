@@ -49,7 +49,7 @@ import Grace.Prompt.Types (Prompt(..))
 import Grace.Type (Type(..))
 
 import Grace.Syntax
-    (Assignment, Binding, BindMonad(..), Definition(..), NameBinding, Syntax)
+    (Binding, BindMonad(..), Definition(..), NameBinding, Syntax)
 
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
@@ -1502,151 +1502,110 @@ infer e₀ = do
                     return (annotation, Syntax.Annotation{ annotated = annotated₁, annotation, location })
 
         Syntax.Let{ location, assignments, body } -> do
-            let cons
-                    :: (MonadCatch m, MonadState Status m, MonadIO m)
-                    => Assignment Location Input
-                    -> m ([(BindMonad, Location)], [Assignment Location Void], Syntax Location Void)
-                    -> m ([(BindMonad, Location)], [Assignment Location Void], Syntax Location Void)
-                cons Syntax.Define{ assignmentLocation, definition } action = do
-                    ((name, annotation), newDefinition) <- onDefinition definition
+            let assign monad₀ = do
+                    let cons Syntax.Define{ assignmentLocation, definition } action = do
+                            ((name, annotation), newDefinition) <- onDefinition definition
 
-                    let entry = Context.Annotation name annotation
+                            let entry = Context.Annotation name annotation
 
-                    let newAssignment = Syntax.Define
-                            { assignmentLocation
-                            , definition = newDefinition
+                            let newAssignment = Syntax.Define
+                                    { assignmentLocation
+                                    , definition = newDefinition
+                                    }
+
+                            scoped entry do
+                                (newAssignments, newBody) <- action
+
+                                return (newAssignment : newAssignments, newBody)
+
+                        cons Syntax.Bind{ assignmentLocation, monad = monad₁, binding, assignment = value } action = do
+                            case (monad₀, monad₁) of
+                                (Nothing, Just _) -> do
+                                    Exception.throwIO (MonadMismatch assignmentLocation)
+
+                                _ -> do
+                                    (annotation₀, newEntries, newBinding) <- onBinding binding
+
+                                    (newAssignments, newBody) <- foldr scoped action newEntries
+
+                                    context <- get
+
+                                    let annotation₁ = Context.solveType context annotation₀
+
+                                    let annotation₂ = case monad₀ of
+                                            Just ListMonad -> Type.List
+                                                { location = assignmentLocation
+                                                , type_ = annotation₁
+                                                }
+
+                                            Just OptionalMonad -> Type.Optional
+                                                { location = assignmentLocation
+                                                , type_ = annotation₁
+                                                }
+
+                                            Just UnknownMonad -> annotation₁
+
+                                            Nothing -> annotation₁
+
+                                    newValue <- check value annotation₂
+
+                                    let newAssignment = Syntax.Bind
+                                            { assignmentLocation
+                                            , monad = monad₀
+                                            , binding = newBinding
+                                            , assignment = newValue
+                                            }
+
+                                    return (newAssignment : newAssignments, newBody)
+
+                    b <- fresh
+
+                    push (Context.UnsolvedType b)
+
+                    let unsolved = Type.UnsolvedType
+                            { location = Syntax.location body
+                            , existential = b
                             }
 
-                    scoped entry do
-                        (monads, newAssignments, newBody) <- action
+                    let nil = do
+                            newBody <- check body unsolved
 
-                        return (monads, newAssignment : newAssignments, newBody)
+                            return ([], newBody)
 
-                cons Syntax.Bind{ assignmentLocation, monad = Nothing, binding, assignment = value } action = do
-                    (annotation₀, newEntries, newBinding) <- onBinding binding
+                    (newAssignments, newBody) <- foldr cons nil assignments
 
-                    (monads, newAssignments, newBody) <- foldr scoped action newEntries
+                    let output = case monad₀ of
+                            Just OptionalMonad -> Type.Optional
+                                { location = location
+                                , type_ = unsolved
+                                }
+                            Just ListMonad -> Type.List
+                                { location = location
+                                , type_ = unsolved
+                                }
+                            Just UnknownMonad -> unsolved
+                            Nothing -> unsolved
 
                     context <- get
 
-                    let annotation₁ = Context.solveType context annotation₀
-
-                    newValue <- check value annotation₁
-
-                    let newAssignment = Syntax.Bind
-                            { assignmentLocation
-                            , monad = Nothing
-                            , binding = newBinding
-                            , assignment = newValue
+                    let newLet = Syntax.Let
+                            { location
+                            , assignments = NonEmpty.fromList newAssignments
+                            , body = newBody
                             }
 
-                    return (monads, newAssignment : newAssignments, newBody)
-
-                cons Syntax.Bind{ assignmentLocation, monad = Just monad₀, binding, assignment = value } action = do
-                    (annotation₀, newEntries, newBinding) <- onBinding binding
-
-                    (monads, newAssignments, newBody) <- foldr scoped action newEntries
-
-                    context <- get
-
-                    let annotation₁ = Context.solveType context annotation₀
-
-                    let listMonad = do
-                            let annotation₂ = Type.List
-                                    { location = assignmentLocation
-                                    , type_ = annotation₁
-                                    }
-
-                            newValue <- check value annotation₂
-
-                            let monad₁ = ListMonad
-
-                            let newAssignment = Syntax.Bind
-                                    { assignmentLocation
-                                    , monad = Just monad₁
-                                    , binding = newBinding
-                                    , assignment = newValue
-                                    }
-
-                            return (monad₁, newAssignment)
-
-                    let optionalMonad = do
-                            let annotation₂ = Type.Optional
-                                    { location = assignmentLocation
-                                    , type_ = annotation₁
-                                    }
-
-                            newValue <- check value annotation₂
-
-                            let monad₁ = OptionalMonad
-
-                            let newAssignment = Syntax.Bind
-                                    { assignmentLocation
-                                    , monad = Just monad₁
-                                    , binding = newBinding
-                                    , assignment = newValue
-                                    }
-
-                            return (monad₁, newAssignment)
-
-                    (monad₁, newAssignment) <- case monad₀ of
-                         ListMonad -> do
-                            listMonad
-                         OptionalMonad -> do
-                            optionalMonad
-                         UnknownMonad -> do
-                            listMonad `Exception.catch` \(_ :: TypeInferenceError) -> do
-                                set context
-
-                                optionalMonad
-
-                    return ((monad₁, assignmentLocation) : monads, newAssignment : newAssignments, newBody)
-
-
-            b <- fresh
-
-            push (Context.UnsolvedType b)
-
-            let unsolved = Type.UnsolvedType
-                    { location = Syntax.location body
-                    , existential = b
-                    }
-
-            let nil = do
-                    newBody <- check body unsolved
-
-                    return ([], [], newBody)
-
-            (monads₀, newAssignments, newBody) <- foldr cons nil assignments
-
-            output <- case monads₀ of
-                [] -> do
-                    return unsolved
-
-                (monad₀, location₀) : monads -> do
-                    let process (monad₁, location₁)
-                            | monad₀ == monad₁ = return ()
-                            | otherwise = Exception.throwIO (MonadMismatch location₀ monad₀ location₁ monad₁)
-
-                    traverse_ process monads
-
-                    return case monad₀ of
-                        OptionalMonad -> Type.Optional
-                            { location = location₀
-                            , type_ = unsolved
-                            }
-                        ListMonad -> Type.List
-                            { location = location₀
-                            , type_ = unsolved
-                            }
-                        UnknownMonad -> Type.Optional
-                            { location = location₀
-                            , type_ = unsolved
-                            }
+                    return (Context.solveType context output, solveSyntax context newLet)
 
             context <- get
 
-            return (Context.solveType context output, solveSyntax context Syntax.Let{ location, assignments = NonEmpty.fromList newAssignments, body = newBody })
+            assign Nothing `Exception.catch` \(_ :: MonadMismatch) -> do
+                set context
+
+                assign (Just ListMonad) `Exception.catch` \(e :: TypeInferenceError) -> do
+                    set context
+
+                    assign (Just OptionalMonad) `Exception.catch` \(_ :: TypeInferenceError) -> do
+                        Exception.throwIO e
 
         Syntax.List{ location, elements = elements₀ } -> do
             case Seq.viewl elements₀ of
@@ -3095,6 +3054,98 @@ check e Type.Forall{..} = do
     scoped (Context.Variable domain name) do
         check e type_
 
+check Syntax.Let{ location, assignments, body } annotation₀ = do
+    let assign element monad₀ = do
+            let cons Syntax.Define{ assignmentLocation, definition } action = do
+                    ((name, annotation₁), newDefinition) <- onDefinition definition
+
+                    let entry = Context.Annotation name annotation₁
+
+                    let newAssignment = Syntax.Define
+                            { assignmentLocation
+                            , definition = newDefinition
+                            }
+
+                    scoped entry do
+                        (newAssignments, newBody) <- action
+
+                        return (newAssignment : newAssignments, newBody)
+
+                cons Syntax.Bind{ assignmentLocation, monad = monad₁, binding, assignment = value } action =
+                    case (monad₀, monad₁) of
+                        (Nothing, Just _) -> do
+                            Exception.throwIO (MonadMismatch assignmentLocation)
+
+                        _ -> do
+                            (annotation₁, newEntries, newBinding) <- onBinding binding
+
+                            (newAssignments, newBody) <- foldr scoped action newEntries
+
+                            context <- get
+
+                            let annotation₂ = Context.solveType context annotation₁
+
+                            let annotation₃ = case monad₀ of
+                                    Just ListMonad -> Type.List
+                                        { location = assignmentLocation
+                                        , type_ = annotation₂
+                                        }
+
+                                    Just OptionalMonad -> Type.Optional
+                                        { location = assignmentLocation
+                                        , type_ = annotation₂
+                                        }
+
+                                    Just UnknownMonad -> annotation₂
+
+                                    Nothing -> annotation₂
+
+                            newValue <- check value annotation₃
+
+                            let newAssignment = Syntax.Bind
+                                    { assignmentLocation
+                                    , monad = monad₀
+                                    , binding = newBinding
+                                    , assignment = newValue
+                                    }
+
+                            return (newAssignment : newAssignments, newBody)
+
+            let nil = do
+                    newBody <- check body element
+
+                    return ([], newBody)
+
+            (newAssignments, newBody) <- foldr cons nil assignments
+
+            context <- get
+
+            let newLet = Syntax.Let
+                    { location
+                    , assignments = NonEmpty.fromList newAssignments
+                    , body = newBody
+                    }
+
+            return (solveSyntax context newLet)
+
+    context <- get
+
+    case annotation₀ of
+        Type.Optional{ type_ } ->
+            assign annotation₀ Nothing `Exception.catch` \(_ :: MonadMismatch) -> do
+                set context
+
+                assign type_ (Just OptionalMonad)
+
+        Type.List{ type_ } ->
+            assign annotation₀ Nothing `Exception.catch` \(_ :: MonadMismatch) -> do
+                set context
+
+                assign type_ (Just ListMonad)
+
+        _ -> do
+            assign annotation₀ Nothing
+
 check Syntax.Alternative{ location, name , argument } annotation@Type.Union{ alternatives = Type.Alternatives alternativeTypes remainingAlternatives } = do
     existential <- fresh
 
@@ -3712,7 +3763,7 @@ data TypeInferenceError
     --
     | RecordTypeMismatch (Type Location) (Type Location) [Text]
     | UnionTypeMismatch (Type Location) (Type Location) [Text]
-    | MonadMismatch Location BindMonad Location BindMonad
+    --
     deriving stock (Eq, Show)
 
 instance Exception TypeInferenceError where
@@ -4039,18 +4090,14 @@ instance Exception TypeInferenceError where
         \\n\
         \" <> listToText extraA
 
-    displayException (MonadMismatch monadLocation₀ monad₀ monadLocation₁ monad₁) =
-        "Type constructor mismatch\n\
+data MonadMismatch = MonadMismatch Location
+    deriving stock (Eq, Show)
+
+instance Exception MonadMismatch where
+    displayException (MonadMismatch location) =
+        "For comprehensions mismatch\n\
         \\n\
-        \You cannot bind " <> Text.unpack (Grace.Pretty.toText monad₀) <> " expressions:\n\
-        \\n\
-        \" <> Text.unpack (Location.renderError "" monadLocation₀) <> "\n\
-        \\n\
-        \ … and " <> Text.unpack (Grace.Pretty.toText monad₁) <> " expressions:\n\
-        \\n\
-        \" <> Text.unpack (Location.renderError "" monadLocation₁) <> "\n\
-        \\n\
-        \… within the same group of assignments."
+        \" <> Text.unpack (Location.renderError "" location)
 
 -- Helper functions for displaying errors
 

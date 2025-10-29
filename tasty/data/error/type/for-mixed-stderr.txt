@@ -1,17 +1,19 @@
-Type constructor mismatch
+Not a subtype
 
-You cannot bind List expressions:
+The following type:
 
-tasty/data/error/type/for-mixed-input.ffg:1:1: 
+  Optional Natural
+
+tasty/data/error/type/for-mixed-input.ffg:3:10: 
   │
-1 │ for x of [ 1, 2, 3 ]
-  │ ↑
+3 │ for y of some 4
+  │          ↑
 
- … and Optional expressions:
+… cannot be a subtype of:
+
+  List Natural
 
 tasty/data/error/type/for-mixed-input.ffg:3:1: 
   │
 3 │ for y of some 4
   │ ↑
-
-… within the same group of assignments.
