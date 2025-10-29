@@ -1,0 +1,1 @@
+\{ nil, cons } -> fold{ nil, cons }
