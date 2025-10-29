@@ -1,0 +1,1 @@
+forall (a : Type) (b : Fields) . { false: a, true: a, b } -> Bool -> a

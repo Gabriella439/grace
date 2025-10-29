@@ -1,0 +1,19 @@
+\{ array, bool, integer, natural, null, object, real, string } ->
+  fold
+    { "array":
+        array
+    , "bool":
+        bool
+    , "integer":
+        integer
+    , "natural":
+        natural
+    , "null":
+        .'null'
+    , "object":
+        object
+    , "real":
+        real
+    , "string":
+        string
+    }
