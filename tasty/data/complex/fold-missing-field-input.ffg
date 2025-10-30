@@ -1,0 +1,86 @@
+# This tests how `fold` behaves when missing various arguments, along with
+# commentary on why each case behaves the way it does:
+{ "Example 0":
+    # The inferred type will be:
+    #
+    #     Bool -> Optional Natural
+    #
+    # … because this will elaborate to:
+    #
+    #     fold{ false: some 0, true: null }
+    fold{ false: 0 }
+
+, "Example 1":
+    # This will also work because `fold`s for standard types (like `Bool`)
+    # tolerate extra fields.  Unfortunately this means that a typo (like `tru`
+    # instead of `true`) will be ignored and the intended field will default to
+    # `null`.  Fortunately, the type checker will catch that because a
+    # downstream step will fail if it does not expect an `Optional` value, such
+    # as:
+    #
+    #     fold{ false: 0, tru: 1 } + 2  # This will still fail to typecheck
+    fold{ false: 0, tru: 1 }
+
+, "Example 2":
+    # The inferred type will be:
+    #
+    #     forall (a : Type) . Natural -> Optional a`
+    #
+    # … because this will elaborate to:
+    #
+    #     fold{ succ x: x, zero: null }
+    #
+    # … and the inferred type correctly deduces that must always return `null`
+    # no matter what `Natural` number we provide.
+    fold{ succ x: x }
+
+, "Example 3":
+    # The inferred type will be:
+    #
+    #     < 'succ': Natural > -> Natural
+    #
+    # … because this cannot successfully type-check as a `fold` for `Natural`
+    # numbers.  This elaborates to:
+    #
+    #     fold{ succ x: x + 1, zero: null }
+    #
+    # … which doesn't work because if the accumulator is `Optional` then you
+    # can't add to it.  Since this doesn't work as a `Natural` number `fold` the
+    # type checker falls back to treating this as a union fold with `succ` as
+    # the alternative name.
+    fold{ succ x: x + 1 }
+
+, "Example 4":
+    # The inferred type will be:
+    #
+    #     forall (a : Type) . Optional (Optional a) -> Optional a
+    #
+    # … because this will elaborate to:
+    #
+    #     fold{ some x: x, null: null }
+    fold{ some x: x }
+
+, "Example 5":
+    # The inferred type will be:
+    #
+    #     Optional Natural -> Optional Natural
+    #
+    # … because this will elaborate to:
+    #
+    #     fold{ some x: some (x + 1), null: null }
+    #
+    # Note that (unlike the previous example) the typechecker has to insert a
+    # `some` around the `some` handler, which is why the inferred type has a
+    # different shape than the previous example.
+    fold{ some x: x + 1 }
+
+, "Example 6":
+    # The inferred type will be:
+    #
+    #     forall (a : Type) (b : Type) . List a -> Optional b
+    #
+    # … because this will elaborate to:
+    #
+    #     fold{ cons: \x y -> y, nil: null }
+    fold{ cons: \x y -> y }
+}
