@@ -1,0 +1,15 @@
+{ "Example 0":
+    fold { "false": 0, "true": null }
+, "Example 1":
+    fold { "false": 0, "true": null, "tru": 1 }
+, "Example 2":
+    fold { "succ": \x -> x, "zero": null }
+, "Example 3":
+    fold { "succ": \x -> x + 1 }
+, "Example 4":
+    fold { "some": \x -> x, "null": null }
+, "Example 5":
+    fold { "some": \x -> x + 1, "null": null }
+, "Example 6":
+    fold { "cons": \x y -> y, "nil": null }
+}
