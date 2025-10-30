@@ -1,0 +1,2 @@
+\{ array, bool, integer, natural, null, object, real, string } ->
+  fold{ array, bool, integer, natural, null, object, real, string }

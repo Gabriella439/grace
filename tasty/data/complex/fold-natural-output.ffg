@@ -1,0 +1,1 @@
+\{ zero, succ } -> fold { "zero": zero, "succ": succ }

@@ -1,0 +1,4 @@
+forall (a : Type) .
+forall (b : Type) .
+forall (c : Fields) .
+  { null: a, some: b -> a, c } -> Optional b -> a

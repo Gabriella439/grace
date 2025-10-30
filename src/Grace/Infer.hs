@@ -56,9 +56,7 @@ import qualified Control.Lens as Lens
 import qualified Control.Monad as Monad
 import qualified Control.Monad.State as State
 import qualified Data.HashMap.Strict.InsOrd as Map
-import qualified Data.List as List
 import qualified Data.List.NonEmpty as NonEmpty
-import qualified Data.Ord as Ord
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
 import qualified Grace.Context as Context
@@ -1678,18 +1676,23 @@ infer e₀ = do
             return (inferred, newAlternative)
 
         Syntax.Fold{ location, handlers } -> do
-            (recordType,newHandlers) <- infer handlers
+            let boolFold = do
+                    existential <- fresh
 
-            context <- get
+                    push (Context.UnsolvedType existential)
 
-            case Context.solveType context recordType  of
-                Type.Record{ fields = Type.Fields (List.sortBy (Ord.comparing fst) -> [("false", falseHandler), ("true", trueHandler)]) Monotype.EmptyFields } -> do
-                    let bool = falseHandler
+                    let bool = Type.UnsolvedType{ location, existential }
 
-                    subtype trueHandler bool
+                    newHandlers <- check handlers Type.Record
+                        { location
+                        , fields = Type.Fields
+                            [ ("false", bool)
+                            , ("true", bool)
+                            ]
+                            Monotype.EmptyFields
+                        }
 
-                    return
-                        ( Type.Function
+                    let type_ = Type.Function
                             { location
                             , input = Type.Scalar
                                 { location
@@ -1697,20 +1700,37 @@ infer e₀ = do
                                 }
                             , output = bool
                             }
-                        , Syntax.Fold{ handlers = solveSyntax context newHandlers, .. }
-                        )
 
-                Type.Record{ fields = Type.Fields (List.sortBy (Ord.comparing fst) -> [("succ", succHandler), ("zero", zeroHandler)]) Monotype.EmptyFields } -> do
-                    let natural = zeroHandler
+                    let newFold = Syntax.Fold
+                            { location
+                            , handlers = newHandlers
+                            }
 
-                    subtype succHandler Type.Function
+                    return (type_, newFold)
+
+            let naturalFold = do
+                    existential <- fresh
+
+                    push (Context.UnsolvedType existential)
+
+                    let natural = Type.UnsolvedType{ location, existential }
+
+                    newHandlers <- check handlers Type.Record
                         { location
-                        , input = natural
-                        , output = natural
+                        , fields = Type.Fields
+                            [ ( "zero", natural )
+                            , ( "succ"
+                              , Type.Function
+                                  { location
+                                  , input = natural
+                                  , output = natural
+                                  }
+                              )
+                            ]
+                            Monotype.EmptyFields
                         }
 
-                    return
-                        ( Type.Function
+                    let type_ = Type.Function
                             { location
                             , input = Type.Scalar
                                 { location
@@ -1718,63 +1738,103 @@ infer e₀ = do
                                 }
                             , output = natural
                             }
-                        , Syntax.Fold{ handlers = solveSyntax context newHandlers, .. }
-                        )
 
-                Type.Record{ fields = Type.Fields (List.sortBy (Ord.comparing fst) -> [("null", nullHandler), ("some", someHandler)]) Monotype.EmptyFields } -> do
-                    existential <- fresh
-
-                    push (Context.UnsolvedType existential)
-
-                    let element = Type.UnsolvedType
-                            { location = Type.location someHandler
-                            , existential
-                            }
-
-                    let optional = nullHandler
-
-                    subtype someHandler Type.Function
-                        { location
-                        , input = element
-                        , output = optional
-                        }
-
-                    return
-                        ( Type.Function
-                              { location
-                              , input = Type.Optional
-                                  { location
-                                  , type_ = element
-                                  }
-                              , output = optional
-                              }
-                        , Syntax.Fold{ handlers = solveSyntax context newHandlers, .. }
-                        )
-
-                Type.Record{ fields = Type.Fields (List.sortBy (Ord.comparing fst) -> [("cons", consHandler), ("nil", nilHandler)]) Monotype.EmptyFields } -> do
-                    existential <- fresh
-
-                    push (Context.UnsolvedType existential)
-
-                    let element = Type.UnsolvedType
-                            { location = Type.location consHandler
-                            , existential
-                            }
-
-                    let list = nilHandler
-
-                    subtype consHandler Type.Function
-                        { location
-                        , input = element
-                        , output = Type.Function
+                    let newFold = Syntax.Fold
                             { location
-                            , input = list
-                            , output = list
+                            , handlers = newHandlers
                             }
+
+                    return (type_, newFold)
+
+            let optionalFold = do
+                    existential₀ <- fresh
+
+                    push (Context.UnsolvedType existential₀)
+
+                    let element = Type.UnsolvedType
+                            { location
+                            , existential = existential₀
+                            }
+
+                    existential₁ <- fresh
+
+                    push (Context.UnsolvedType existential₁)
+
+                    let optional = Type.UnsolvedType
+                            { location
+                            , existential = existential₁
+                            }
+
+                    newHandlers <- check handlers Type.Record
+                        { location
+                        , fields = Type.Fields
+                            [ ( "null", optional )
+                            , ( "some"
+                              , Type.Function
+                                  { location
+                                  , input = element
+                                  , output = optional
+                                  }
+                              )
+                            ]
+                            Monotype.EmptyFields
                         }
 
-                    return
-                        ( Type.Function
+                    let type_ = Type.Function
+                            { location
+                            , input = Type.Optional
+                                { location
+                                , type_ = element
+                                }
+                            , output = optional
+                            }
+
+                    let newFold = Syntax.Fold
+                            { location
+                            , handlers = newHandlers
+                            }
+
+                    return (type_, newFold)
+
+            let listFold = do
+                    existential₀ <- fresh
+
+                    push (Context.UnsolvedType existential₀)
+
+                    let element = Type.UnsolvedType
+                            { location
+                            , existential = existential₀
+                            }
+
+                    existential₁ <- fresh
+
+                    push (Context.UnsolvedType existential₁)
+
+                    let list = Type.UnsolvedType
+                            { location
+                            , existential = existential₁
+                            }
+
+                    newHandlers <- check handlers Type.Record
+                        { location
+                        , fields = Type.Fields
+                            [ ( "nil", list )
+                            , ( "cons"
+                              , Type.Function
+                                  { location
+                                  , input = element
+                                  , output = Type.Function
+                                      { location
+                                      , input = list
+                                      , output = list
+                                      }
+                                  }
+                              )
+                            ]
+                            Monotype.EmptyFields
+                        }
+
+                    let type_ = Type.Function
                             { location
                             , input = Type.List
                                 { location
@@ -1782,83 +1842,112 @@ infer e₀ = do
                                 }
                             , output = list
                             }
-                        , Syntax.Fold{ handlers = solveSyntax context newHandlers, .. }
-                        )
 
-                Type.Record{ fields = Type.Fields (List.sortBy (Ord.comparing fst) -> [("array", arrayHandler), ("bool", boolHandler), ("integer", integerHandler), ("natural", naturalHandler), ("null", nullHandler), ("object", objectHandler), ("real", realHandler), ("string", stringHandler)]) Monotype.EmptyFields } -> do
-                    let json = nullHandler
-
-                    subtype nullHandler json
-
-                    subtype boolHandler Type.Function
-                        { location
-                        , input = Type.Scalar
+                    let newFold = Syntax.Fold
                             { location
-                            , scalar = Monotype.Bool
+                            , handlers = newHandlers
                             }
-                        , output = json
-                        }
 
-                    subtype stringHandler Type.Function
+                    return (type_, newFold)
+
+            let jsonFold = do
+                    existential <- fresh
+
+                    push (Context.UnsolvedType existential)
+
+                    let json = Type.UnsolvedType{ location, existential }
+
+                    newHandlers <- check handlers Type.Record
                         { location
-                        , input = Type.Scalar
-                            { location
-                            , scalar = Monotype.Text
-                            }
-                        , output = json
+                        , fields = Type.Fields
+                            [ ( "array"
+                              , Type.Function
+                                  { location
+                                  , input = Type.List
+                                      { location
+                                      , type_ = json
+                                      }
+                                  , output = json
+                                  }
+                              )
+                            , ( "bool"
+                              , Type.Function
+                                  { location
+                                  , input = Type.Scalar
+                                      { location
+                                      , scalar = Monotype.Bool
+                                      }
+                                  , output = json
+                                  }
+                              )
+                            , ( "integer"
+                              , Type.Function
+                                  { location
+                                  , input = Type.Scalar
+                                      { location
+                                      , scalar = Monotype.Integer
+                                      }
+                                  , output = json
+                                  }
+                              )
+                            , ( "natural"
+                              , Type.Function
+                                  { location
+                                  , input = Type.Scalar
+                                      { location
+                                      , scalar = Monotype.Natural
+                                      }
+                                  , output = json
+                                  }
+                              )
+                            , ( "null", json )
+                            , ( "object"
+                              , Type.Function
+                                  { location
+                                  , input = Type.List
+                                      { location
+                                      , type_ = Type.Record
+                                          { location
+                                          , fields = Type.Fields
+                                              [ ( "key"
+                                                , Type.Scalar
+                                                    { location
+                                                    , scalar = Monotype.Text
+                                                    }
+                                                )
+                                              , ( "value", json)
+                                              ]
+                                              Monotype.EmptyFields
+                                          }
+                                      }
+                                  , output = json
+                                  }
+                              )
+                            , ( "real"
+                              , Type.Function
+                                  { location
+                                  , input = Type.Scalar
+                                      { location
+                                      , scalar = Monotype.Real
+                                      }
+                                  , output = json
+                                  }
+                              )
+                            , ( "string"
+                              , Type.Function
+                                  { location
+                                  , input = Type.Scalar
+                                      { location
+                                      , scalar = Monotype.Text
+                                      }
+                                  , output = json
+                                  }
+                              )
+                            ]
+                            Monotype.EmptyFields
                         }
 
-                    subtype realHandler Type.Function
-                        { location
-                        , input = Type.Scalar
-                            { location
-                            , scalar = Monotype.Real
-                            }
-                        , output = json
-                        }
-
-                    subtype integerHandler Type.Function
-                        { location
-                        , input = Type.Scalar
-                            { location
-                            , scalar = Monotype.Integer
-                            }
-                        , output = json
-                        }
-
-                    subtype naturalHandler Type.Function
-                        { location
-                        , input = Type.Scalar
-                            { location
-                            , scalar = Monotype.Natural
-                            }
-                        , output = json
-                        }
-
-                    subtype arrayHandler Type.Function
-                        { location
-                        , input = Type.List{ location, type_ = json }
-                        , output = json
-                        }
-
-                    subtype objectHandler Type.Function
-                        { location
-                        , input = Type.List
-                            { location
-                            , type_ = Type.Record
-                                { location
-                                , fields = Type.Fields
-                                    [ ("key", Type.Scalar{ location, scalar = Monotype.Text })
-                                    , ("value", json)
-                                    ]
-                                    Monotype.EmptyFields
-                                }
-                            }
-                        , output = json
-                        }
-
-                    return
-                        ( Type.Function
+                    let type_ = Type.Function
                             { location
                             , input = Type.Scalar
                                 { location
@@ -1866,46 +1955,111 @@ infer e₀ = do
                                 }
                             , output = json
                             }
-                        , Syntax.Fold{ handlers = solveSyntax context newHandlers, .. }
-                        )
 
-                Type.Record{ fields = Type.Fields keyTypes Monotype.EmptyFields } -> do
-                    existential <- fresh
+                    let newFold = Syntax.Fold
+                            { location
+                            , handlers = newHandlers
+                            }
 
-                    push (Context.UnsolvedType existential)
+                    return (type_, newFold)
 
-                    let process (key, Type.Function{ location = _, ..}) = do
-                            _ϴ <- get
+            let fold = do
+                    context₀ <- get
 
-                            let b' = Type.UnsolvedType{ location = Type.location output, .. }
+                    existential₀ <- fresh
 
-                            subtype (Context.solveType _ϴ output) (Context.solveType _ϴ b')
+                    push (Context.UnsolvedFields existential₀)
 
-                            return (key, input)
-                        process (_, _A) = do
-                            Exception.throwIO (FoldInvalidHandler (Type.location _A) _A)
+                    let unsolvedRecord = Type.Fields
+                            []
+                            (Monotype.UnsolvedFields existential₀)
 
-                    keyTypes' <- traverse process keyTypes
+                    _ <- check handlers Type.Record
+                        { location
+                        , fields = unsolvedRecord
+                        }
 
-                    _Γ <- get
+                    context₁ <- get
 
-                    return
-                        (   Type.Union
-                                { alternatives =
-                                    Type.Alternatives
-                                        keyTypes'
-                                        Monotype.EmptyAlternatives
-                                , ..
+                    let Type.Fields keyTypes _ =
+                            Context.solveRecord context₁ unsolvedRecord
+
+                    set context₀
+
+                    existential₁ <- fresh
+
+                    push (Context.UnsolvedType existential₁)
+
+                    let union = Type.UnsolvedType
+                            { location
+                            , existential = existential₁
+                            }
+
+                    let process (key, _) = do
+                            existential <- fresh
+
+                            push (Context.UnsolvedType existential)
+
+                            let alternativeType = Type.UnsolvedType
+                                    { location
+                                    , existential
+                                    }
+
+                            let handlerType = Type.Function
+                                    { location
+                                    , input = alternativeType
+                                    , output = union
+                                    }
+
+                            return ((key, handlerType), (key, alternativeType))
+
+                    results <- traverse process keyTypes
+
+                    let (fieldTypes, alternativeTypes) = unzip results
+
+                    newHandlers <- check handlers Type.Record
+                        { location
+                        , fields = Type.Fields
+                            fieldTypes
+                            Monotype.EmptyFields
+                        }
+
+                    let type_ = Type.Function
+                            { location
+                            , input = Type.Union
+                                { location
+                                , alternatives = Type.Alternatives
+                                    alternativeTypes
+                                    Monotype.EmptyAlternatives
                                 }
-                        ~>      Type.UnsolvedType{..}
-                        , Syntax.Fold{ handlers = solveSyntax _Γ newHandlers, .. }
-                        )
+                            , output = union
+                            }
 
-                Type.Record{} -> do
-                    Exception.throwIO (FoldConcreteRecord (Type.location recordType) recordType)
+                    let newFold = Syntax.Fold
+                            { location
+                            , handlers = newHandlers
+                            }
 
-                _ -> do
-                    Exception.throwIO (FoldRecord (Type.location recordType) recordType)
+                    return (type_, newFold)
+
+            context <- get
+
+            listFold `Exception.catch` \(_ :: TypeInferenceError) -> do
+                set context
+
+                optionalFold `Exception.catch` \(_ :: TypeInferenceError) -> do
+                    set context
+
+                    boolFold `Exception.catch` \(_ :: TypeInferenceError) -> do
+                        set context
+
+                        naturalFold `Exception.catch` \(_ :: TypeInferenceError) -> do
+                            set context
+
+                            jsonFold `Exception.catch` \(_ :: TypeInferenceError) -> do
+                                set context
+
+                                fold
 
         Syntax.Project{ location, larger, smaller } -> do
             let processField Syntax.Field{ fieldLocation, field } = do
@@ -3739,9 +3893,7 @@ data TypeInferenceError
     | ZeroDivisor Location
     | NeedConcreteDivisor Location
     --
-    | FoldConcreteRecord Location (Type Location)
     | FoldInvalidHandler Location (Type Location)
-    | FoldRecord Location (Type Location)
     --
     | MissingAllAlternatives (Existential Monotype.Union) (Context Location)
     | MissingAllFields (Existential Monotype.Record) (Context Location)
@@ -3829,18 +3981,6 @@ instance Exception TypeInferenceError where
         \\n\
         \" <> Text.unpack (Location.renderError "" location)
 
-    displayException (FoldConcreteRecord location _R) =
-        "Must fold a concrete record\n\
-        \\n\
-        \The first argument to a fold must be a record where all fields are statically\n\
-        \known.  However, you provided an argument of type:\n\
-        \\n\
-        \" <> insert _R <> "\n\
-        \\n\
-        \" <> Text.unpack (Location.renderError "" location) <> "\n\
-        \\n\
-        \… where not all fields could be inferred."
-
     displayException (FoldInvalidHandler location _A) =
         "Invalid handler\n\
         \\n\
@@ -3852,18 +3992,6 @@ instance Exception TypeInferenceError where
         \" <> Text.unpack (Location.renderError "" location) <> "\n\
         \\n\
         \… which is not a function type."
-
-    displayException (FoldRecord location _R) =
-        "Must fold a record\n\
-        \\n\
-        \The first argument to a fold must be a record, but you provided an expression of\n\
-        \the following type:\n\
-        \\n\
-        \" <> insert _R <> "\n\
-        \\n\
-        \" <> Text.unpack (Location.renderError "" location) <> "\n\
-        \\n\
-        \… which is not a record type."
 
     displayException (MissingAllAlternatives p₀ _Γ) =
         "Internal error: Invalid context\n\
