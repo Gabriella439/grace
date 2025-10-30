@@ -94,7 +94,7 @@ repl keyToMethods = do
                             let annotation = Context.complete context inferred
 
                             let annotated =
-                                    Normalize.strip (Normalize.quote (Value.complete context value))
+                                    Normalize.quote (Value.complete context value)
 
                             return (Right (annotation, annotated))
 

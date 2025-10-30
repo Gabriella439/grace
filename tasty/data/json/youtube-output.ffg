@@ -17,7 +17,7 @@
           { "kind":
               "youtube#channel"
           , "channelId":
-              "UCJowOS1R0FnhipXVqEnYU1A"
+              some "UCJowOS1R0FnhipXVqEnYU1A"
           , "videoId":
               null
           }
@@ -30,7 +30,7 @@
           { "kind":
               "youtube#video"
           , "videoId":
-              "Eqa2nAAhHN0"
+              some "Eqa2nAAhHN0"
           , "channelId":
               null
           }
@@ -43,7 +43,7 @@
           { "kind":
               "youtube#video"
           , "videoId":
-              "IirngItQuVs"
+              some "IirngItQuVs"
           , "channelId":
               null
           }
