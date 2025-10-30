@@ -819,26 +819,52 @@ apply keyToMethods function₀ argument₀ = loop function₀ argument₀
 
             return (fieldName, value)
     loop
-        (Value.Fold (Value.Record (sorted -> [("false", falseHandler), ("true", trueHandler)])))
+        (Value.Fold (Value.Record fieldValues))
         (Value.Scalar (Bool b)) =
             pure (if b then trueHandler else falseHandler)
+      where
+        falseHandler = case HashMap.lookup "false" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
+
+        trueHandler = case HashMap.lookup "true" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
     loop
-        (Value.Fold (Value.Record (sorted -> [("succ", succ), ("zero", zero)])))
+        (Value.Fold (Value.Record fieldValues))
         (Value.Scalar (Natural n)) = go n zero
       where
+        zero = case HashMap.lookup "zero" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
+
+        succ = case HashMap.lookup "succ" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
+
         go 0 !result = do
             return result
         go m !result = do
             x <- loop succ result
             go (m - 1) x
     loop
-        (Value.Fold (Value.Record (sorted -> [("null", _), ("some", some)])))
+        (Value.Fold (Value.Record fieldValues))
         (Value.Application (Value.Builtin Some) x) =
             loop some x
+      where
+        some = case HashMap.lookup "some" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
+
     loop
-        (Value.Fold (Value.Record (sorted -> [("null", null), ("some", _)])))
+        (Value.Fold (Value.Record fieldValues))
         (Value.Scalar Null)  =
             pure null
+      where
+        null = case HashMap.lookup "null" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
+
     loop
         (Value.Fold (Value.Record (sorted -> [("cons", cons), ("nil", nil)])))
         (Value.List elements) = do
@@ -853,23 +879,44 @@ apply keyToMethods function₀ argument₀ = loop function₀ argument₀
                     b <- loop a result
                     inner ys b
     loop
-        (Value.Fold
-            (Value.Record
-                (sorted ->
-                    [ ("array"  , array  )
-                    , ("bool"   , bool   )
-                    , ("integer", integer)
-                    , ("natural", natural)
-                    , ("null"   , null   )
-                    , ("object" , object )
-                    , ("real"   , real   )
-                    , ("string" , string )
-                    ]
-                )
-            )
-        )
-        v0 = inner v0
+        (Value.Fold (Value.Record alternativeHandlers))
+        (Value.Alternative alternative x)
+        | Just f <- HashMap.lookup alternative alternativeHandlers =
+            loop f x
+    loop (Value.Fold (Value.Record fieldValues)) v0 = inner v0
       where
+        array = case HashMap.lookup "array" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
+
+        bool = case HashMap.lookup "bool" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
+
+        integer = case HashMap.lookup "integer" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
+
+        natural = case HashMap.lookup "natural" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
+
+        null = case HashMap.lookup "null" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
+
+        object = case HashMap.lookup "object" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
+
+        real = case HashMap.lookup "real" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
+
+        string = case HashMap.lookup "string" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
+
         inner (Value.Scalar (Bool b)) =
             loop bool (Value.Scalar (Bool b))
         inner (Value.Scalar (Natural n)) =
@@ -894,11 +941,6 @@ apply keyToMethods function₀ argument₀ = loop function₀ argument₀
                 return (Value.Record [("key", Value.Text key), ("value", newValue)])
         inner v =
             pure v
-    loop
-        (Value.Fold (Value.Record alternativeHandlers))
-        (Value.Alternative alternative x)
-        | Just f <- HashMap.lookup alternative alternativeHandlers =
-            loop f x
     loop (Value.Builtin Indexed) (Value.List elements) =
         pure (Value.List (Seq.mapWithIndex adapt elements))
       where

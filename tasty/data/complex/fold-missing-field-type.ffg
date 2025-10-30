@@ -1,0 +1,19 @@
+forall (a : Type) .
+forall (b : Type) .
+forall (c : Type) .
+forall (d : Type) .
+  { "Example 0":
+      Bool -> Optional Natural
+  , "Example 1":
+      Bool -> Optional Natural
+  , "Example 2":
+      Natural -> Optional a
+  , "Example 3":
+      < 'succ': Natural > -> Natural
+  , "Example 4":
+      Optional (Optional b) -> Optional b
+  , "Example 5":
+      Optional Natural -> Optional Natural
+  , "Example 6":
+      List c -> Optional d
+  }
