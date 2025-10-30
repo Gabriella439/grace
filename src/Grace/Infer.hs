@@ -3486,6 +3486,23 @@ check Syntax.Operator{ operator = Syntax.Minus, .. } _B@Type.Scalar{ scalar }
 
     return Syntax.Operator{ operator = Syntax.Minus, left = newLeft, right = newRight, .. }
 
+check Syntax.If{ location, predicate, ifTrue, ifFalse } annotation = do
+    newPredicate <- check predicate Type.Scalar
+        { location
+        , scalar = Monotype.Bool
+        }
+
+    newIfTrue <- check ifTrue annotation
+
+    newIfFalse <- check ifFalse annotation
+
+    return Syntax.If
+        { location
+        , predicate = newPredicate
+        , ifTrue = newIfTrue
+        , ifFalse = newIfFalse
+        }
+
 check Syntax.List{..} Type.List{ location = _, .. } = do
     let process element = do
             _Γ <- get
