@@ -3447,44 +3447,69 @@ check e _B@Type.Optional{ type_ } = do
 
         return Syntax.Application{ function = Syntax.Builtin{ builtin = Syntax.Some, .. }, argument = newE, .. }
 
-check Syntax.Operator{ operator = Syntax.Times, .. } _B@Type.Scalar{ scalar }
-    | scalar `elem` ([ Monotype.Natural, Monotype.Integer, Monotype.Real ] :: [Monotype.Scalar])= do
-    newLeft <- check left _B
+check Syntax.Operator{ location, left, operatorLocation, operator = Syntax.Times, right } annotation@Type.Scalar{ scalar }
+    | scalar `elem` ([ Monotype.Natural, Monotype.Integer, Monotype.Real ] :: [Monotype.Scalar]) = do
+    newLeft <- check left annotation
 
-    _Γ <- get
+    context <- get
 
-    newRight <- check right (Context.solveType _Γ _B)
+    newRight <- check right (Context.solveType context  annotation)
 
-    return Syntax.Operator{ operator = Syntax.Times, left = newLeft, right = newRight, .. }
+    return Syntax.Operator
+        { location
+        , left = newLeft
+        , operatorLocation
+        , operator = Syntax.Times
+        , right = newRight
+        }
 
-check Syntax.Operator{ operator = Syntax.Plus, .. } _B@Type.Scalar{ scalar }
+check Syntax.Operator{ location, left, operatorLocation, operator = Syntax.Plus, right } annotation@Type.Scalar{ scalar }
     | scalar `elem` ([ Monotype.Natural, Monotype.Integer, Monotype.Real, Monotype.Text ] :: [Monotype.Scalar]) = do
-    newLeft <- check left _B
+    newLeft <- check left annotation
 
-    _Γ <- get
+    context <- get
 
-    newRight <- check right (Context.solveType _Γ _B)
+    newRight <- check right (Context.solveType context annotation)
 
-    return Syntax.Operator{ operator = Syntax.Plus, left = newLeft, right = newRight, .. }
+    return Syntax.Operator
+        { location
+        , left = newLeft
+        , operatorLocation
+        , operator = Syntax.Plus
+        , right = newRight
+        }
 
-check Syntax.Operator{ operator = Syntax.Plus, .. } _B@Type.List{} = do
-    newLeft <- check left _B
+check Syntax.Operator{ location, left, operatorLocation, operator = Syntax.Plus, right } annotation@Type.List{ } = do
+    newLeft <- check left annotation
 
-    _Γ <- get
+    context <- get
 
-    newRight <- check right (Context.solveType _Γ _B)
+    newRight <- check right (Context.solveType context  annotation)
 
-    return Syntax.Operator{ operator = Syntax.Plus, left = newLeft, right = newRight, .. }
+    return Syntax.Operator
+        { location
+        , left = newLeft
+        , operatorLocation
+        , operator = Syntax.Plus
+        , right = newRight
+        }
 
-check Syntax.Operator{ operator = Syntax.Minus, .. } _B@Type.Scalar{ scalar }
+
+check Syntax.Operator{ location, left, operatorLocation, operator = Syntax.Minus, right } annotation@Type.Scalar{ scalar }
     | scalar `elem` ([ Monotype.Integer, Monotype.Real ] :: [Monotype.Scalar]) = do
-    newLeft <- check left _B
+    newLeft <- check left annotation
 
-    _Γ <- get
+    context <- get
 
-    newRight <- check right (Context.solveType _Γ _B)
+    newRight <- check right (Context.solveType context annotation)
 
-    return Syntax.Operator{ operator = Syntax.Minus, left = newLeft, right = newRight, .. }
+    return Syntax.Operator
+        { location
+        , left = newLeft
+        , operatorLocation
+        , operator = Syntax.Minus
+        , right = newRight
+        }
 
 check Syntax.If{ location, predicate, ifTrue, ifFalse } annotation = do
     newPredicate <- check predicate Type.Scalar
