@@ -54,6 +54,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
 import qualified Data.Void as Void
 import qualified Grace.Aeson
+import qualified Grace.Context as Context
 import qualified Grace.GitHub as GitHub
 import qualified Grace.HTTP as HTTP
 import qualified Grace.Infer as Infer
@@ -411,7 +412,11 @@ evaluate keyToMethods env₀ syntax₀ = do
                     Left exception -> Exception.throwIO exception
                     Right prompt -> return prompt
 
-                Prompt.prompt (generateContext env location) import_ location prompt schema
+                Status{ context } <- get
+
+                let solvedSchema = fmap (Context.solveType context) schema
+
+                Prompt.prompt (generateContext env location) import_ location prompt solvedSchema
 
             Syntax.HTTP{ schema = Nothing } -> do
                 Exception.throwIO MissingSchema
@@ -443,14 +448,18 @@ evaluate keyToMethods env₀ syntax₀ = do
                         return value
 
                     else do
-                        responseValue <- liftIO (Grace.Aeson.decode responseBody)
+                        Status{ context } <- get
 
-                        let defaultedSchema =
-                                Lens.transform (Type.defaultTo Type.Scalar{ location, scalar = Monotype.JSON }) schema
+                        let solvedSchema = Context.solveType context schema
 
-                        case Value.checkJSON defaultedSchema responseValue of
-                            Left exception -> Exception.throwIO exception
-                            Right value    -> return value
+                        case solvedSchema of
+                            Type.Scalar{ scalar = Monotype.Text } ->
+                                return (Value.Text responseBody)
+
+                            _ -> do
+                                responseValue <- liftIO (Grace.Aeson.decode responseBody)
+
+                                Infer.checkJSON solvedSchema responseValue
 
             Syntax.Read{ schema = Nothing } -> do
                 Exception.throwIO MissingSchema
@@ -480,29 +489,11 @@ evaluate keyToMethods env₀ syntax₀ = do
                     else do
                         aesonValue <- liftIO (Grace.Aeson.decode text)
 
-                        case Value.checkJSON schema aesonValue of
-                            Left exception -> do
-                                let value = Value.inferJSON aesonValue
+                        Status{ context } <- get
 
-                                let annotated =
-                                        first (\_ -> Unknown)
-                                            (fmap Void.absurd (quote value))
+                        let solvedSchema = Context.solveType context schema
 
-                                let expression = Syntax.Annotation
-                                        { location = Unknown
-                                        , annotated
-                                        , annotation = schema
-                                        }
-
-                                let input =
-                                        Code "(read)" (Pretty.toSmart @(Syntax Location Input) expression)
-
-                                _ <- Infer.typeOf input expression
-
-                                Exception.throwIO exception
-
-                            Right value -> do
-                                return value
+                        Infer.checkJSON solvedSchema aesonValue
 
             Syntax.GitHub{ schema = Nothing } -> do
                 Exception.throwIO MissingSchema
@@ -540,35 +531,18 @@ evaluate keyToMethods env₀ syntax₀ = do
                             , parameters = Nothing
                             }
 
-                        aesonValue <- liftIO (Grace.Aeson.decode responseBody)
+                        Status{ context } <- get
 
-                        let defaultedSchema =
-                                Lens.transform (Type.defaultTo Type.Scalar{ location, scalar = Monotype.JSON }) schema
+                        let solvedSchema = Context.solveType context schema
 
-                        case Value.checkJSON defaultedSchema aesonValue of
-                            Left exception -> do
-                                let value = Value.inferJSON aesonValue
+                        case solvedSchema of
+                            Type.Scalar{ scalar = Monotype.Text } ->
+                                return (Value.Text responseBody)
 
-                                let annotated =
-                                        first (\_ -> Unknown)
-                                            (fmap Void.absurd (quote value))
+                            _ -> do
+                                aesonValue <- liftIO (Grace.Aeson.decode responseBody)
 
-                                let expression = Syntax.Annotation
-                                        { location = Unknown
-                                        , annotated
-                                        , annotation = schema
-                                        }
-
-                                let input =
-                                        Code "(read)" (Pretty.toSmart @(Syntax Location Input) expression)
-
-                                _ <- Infer.typeOf input expression
-
-                                Exception.throwIO exception
-
-                            Right value -> do
-                                return value
-
+                                Infer.checkJSON solvedSchema aesonValue
 
             Syntax.Scalar{ scalar } ->
                 pure (Value.Scalar scalar)

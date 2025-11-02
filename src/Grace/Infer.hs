@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RecordWildCards  #-}
+{-# LANGUAGE OverloadedLists  #-}
 
 {-| This module is based on the bidirectional type-checking algorithm from:
 
@@ -18,6 +19,8 @@ module Grace.Infer
       typeOf
     , typeWith
     , infer
+    , inferJSON
+    , checkJSON
 
       -- * Types
     , HTTP(..)
@@ -32,8 +35,9 @@ import Control.Exception.Safe (Exception(..), MonadCatch, MonadThrow)
 import Control.Monad (when)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.State.Strict (MonadState)
-import Data.Foldable (for_, traverse_)
+import Data.Foldable (for_, toList, traverse_)
 import Data.Sequence (ViewL(..), (<|))
+import Data.Typeable (Typeable)
 import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Context (Context, Entry)
@@ -41,12 +45,13 @@ import Grace.Decode (FromGrace(..))
 import Grace.Existential (Existential)
 import Grace.GitHub (GitHub(..))
 import Grace.HTTP.Type (HTTP(..))
-import Grace.Input (Input)
+import Grace.Input (Input(..))
 import Grace.Location (Location(..))
 import Grace.Monotype (Monotype)
 import Grace.Pretty (Pretty(..))
 import Grace.Prompt.Types (Prompt(..))
 import Grace.Type (Type(..))
+import Grace.Value (Value)
 
 import Grace.Syntax
     (Assignment, Binding, BindMonad(..), Definition(..), NameBinding, Syntax)
@@ -55,10 +60,16 @@ import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
 import qualified Control.Monad as Monad
 import qualified Control.Monad.State as State
+import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Encode.Pretty as Aeson.Pretty
+import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.HashMap.Strict.InsOrd as Map
 import qualified Data.List.NonEmpty as NonEmpty
+import qualified Data.Scientific as Scientific
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Encoding
+import qualified Grace.Compat as Compat
 import qualified Grace.Context as Context
 import qualified Grace.Domain as Domain
 import qualified Grace.Import as Import
@@ -67,6 +78,7 @@ import qualified Grace.Monotype as Monotype
 import qualified Grace.Pretty
 import qualified Grace.Syntax as Syntax
 import qualified Grace.Type as Type
+import qualified Grace.Value as Value
 import qualified Prettyprinter as Pretty
 
 -- | Type-checking state
@@ -2217,88 +2229,113 @@ infer e₀ = do
 
             return (Type.Scalar{ scalar = Monotype.Text, .. }, Syntax.Text{ chunks = Syntax.Chunks text₀ newRest, .. })
 
-        Syntax.Prompt{ arguments, .. } -> do
-            newArguments <- check arguments (fmap (\_ -> location) (expected @Prompt))
+        Syntax.Prompt{ location, import_, arguments, schema } -> do
+            let argumentsType = fmap (\_ -> location) (expected @Prompt)
+
+            newArguments <- check arguments argumentsType
 
             newSchema <- case schema of
                 Just t -> do
                     return t
+
                 Nothing -> do
                     existential <- fresh
 
                     preserve (Context.UnsolvedType existential)
 
-                    return Type.UnsolvedType{..}
+                    return Type.UnsolvedType{ location, existential }
 
             context <- get
 
-            return (newSchema, Syntax.Prompt{ arguments = solveSyntax context newArguments, schema = Just newSchema, .. })
+            let newPrompt = Syntax.Prompt
+                    { location
+                    , import_
+                    , arguments = solveSyntax context newArguments
+                    , schema = Just newSchema
+                    }
+
+            return (newSchema, newPrompt)
 
         Syntax.HTTP{ location, import_, arguments, schema } -> do
-            let input = fmap (\_ -> location) (expected @HTTP)
+            let argumentsType = fmap (\_ -> location) (expected @HTTP)
 
-            newArguments <- check arguments input
+            newArguments <- check arguments argumentsType
 
             newSchema <- case schema of
-                    Just output -> do
-                        return output
-                    Nothing
-                        | import_ -> do
-                            existential <- fresh
+                Just output -> do
+                    return output
 
-                            preserve (Context.UnsolvedType existential)
+                Nothing -> do
+                    existential <- fresh
 
-                            return Type.UnsolvedType{..}
-                        | otherwise -> do
-                            return Type.Scalar{ scalar = Monotype.JSON, .. }
+                    preserve (Context.UnsolvedType existential)
+
+                    return Type.UnsolvedType{ location, existential }
 
             context <- get
 
-            return (newSchema, Syntax.HTTP{ import_, arguments = solveSyntax context newArguments, schema = Just newSchema, .. })
+            let newHTTP = Syntax.HTTP
+                    { location
+                    , import_
+                    , arguments = solveSyntax context newArguments
+                    , schema = Just newSchema
+                    }
+
+            return (newSchema, newHTTP)
 
         Syntax.Read{ location, import_, arguments, schema } -> do
-            let input = fmap (\_ -> location) (expected @Text)
+            let argumentsType = fmap (\_ -> location) (expected @Text)
 
-            newArguments <- check arguments input
+            newArguments <- check arguments argumentsType
 
             newSchema <- case schema of
-                    Just output -> do
-                        return output
-                    Nothing
-                        | import_ -> do
-                            existential <- fresh
+                Just output -> do
+                    return output
 
-                            preserve (Context.UnsolvedType existential)
+                Nothing -> do
+                    existential <- fresh
 
-                            return Type.UnsolvedType{..}
-                        | otherwise -> do
-                            return Type.Scalar{ scalar = Monotype.JSON, .. }
+                    preserve (Context.UnsolvedType existential)
+
+                    return Type.UnsolvedType{ location, existential }
 
             context <- get
 
-            return (newSchema, Syntax.Read{ import_, arguments = solveSyntax context newArguments, schema = Just newSchema, .. })
+            let newRead = Syntax.Read
+                    { location
+                    , import_
+                    , arguments = solveSyntax context newArguments
+                    , schema = Just newSchema
+                    }
+
+            return (newSchema, newRead)
 
         Syntax.GitHub{ location, import_, arguments, schema } -> do
-            let input = fmap (\_ -> location) (expected @GitHub)
+            let argumentsType = fmap (\_ -> location) (expected @GitHub)
 
-            newArguments <- check arguments input
+            newArguments <- check arguments argumentsType
 
             newSchema <- case schema of
-                    Just output -> do
-                        return output
-                    Nothing
-                        | import_ -> do
-                            existential <- fresh
+                Just output -> do
+                    return output
 
-                            preserve(Context.UnsolvedType existential)
+                Nothing -> do
+                    existential <- fresh
 
-                            return Type.UnsolvedType{..}
-                        | otherwise -> do
-                            return Type.Scalar{ scalar = Monotype.JSON, .. }
+                    preserve(Context.UnsolvedType existential)
+
+                    return Type.UnsolvedType{ location, existential}
 
             context <- get
 
-            return (newSchema, Syntax.GitHub{ import_, arguments = solveSyntax context newArguments, schema = Just newSchema, .. })
+            let newGitHub = Syntax.GitHub
+                    { location
+                    , import_
+                    , arguments = solveSyntax context newArguments
+                    , schema = Just newSchema
+                    }
+
+            return (newSchema, newGitHub)
 
         -- All the type inference rules for scalars go here.  This part is
         -- pretty self-explanatory: a scalar literal returns the matching
@@ -3313,6 +3350,20 @@ check Syntax.Read{ import_, schema = Nothing, .. } annotation = do
 
     return Syntax.Read{ arguments = newArguments, schema = Just (Context.solveType context₁ annotation), .. }
 
+check Syntax.GitHub{ import_, schema = Nothing, .. } annotation = do
+    let input = fmap (\_ -> location) (expected @GitHub)
+
+    newArguments <- check arguments input
+
+    context₀ <- get
+
+    Monad.unless import_ do
+        subtype (Context.solveType context₀ annotation) Type.Scalar{ location, scalar = Monotype.JSON }
+
+    context₁ <- get
+
+    return Syntax.GitHub{ arguments = newArguments, schema = Just (Context.solveType context₁ annotation), .. }
+
 check Syntax.Project{ location, larger, smaller = smaller@Syntax.Single{ single = Syntax.Field{ fieldLocation, field } } } annotation = do
     context <- get
 
@@ -3832,6 +3883,146 @@ typeWith input context syntax = do
 solveSyntax :: Context s -> Syntax s a -> Syntax s a
 solveSyntax _Γ = Lens.transform (Lens.over Syntax.types (Context.solveType _Γ))
 
+-- | Convert from JSON, inferring the value purely from the JSON data
+inferJSON :: Aeson.Value -> Value
+inferJSON (Aeson.Object [("contents", contents), ("tag", Aeson.String tag)]) =
+    Value.Alternative tag value
+  where
+    value = inferJSON contents
+inferJSON (Aeson.Object object) = Value.Record (Map.fromList textValues)
+  where
+    properties = Map.toList (Compat.fromAesonMap object)
+
+    textValues = fmap (fmap inferJSON) properties
+inferJSON (Aeson.Array vector) = Value.List (Seq.fromList (toList elements))
+  where
+    elements = fmap inferJSON vector
+inferJSON (Aeson.String text) = Value.Text text
+inferJSON (Aeson.Number scientific) =
+    case Scientific.floatingOrInteger scientific of
+        Left (_ :: Double) ->
+            Value.Scalar (Syntax.Real scientific)
+        Right (integer :: Integer)
+            | 0 <= integer -> do
+                Value.Scalar (Syntax.Natural (fromInteger integer))
+            | otherwise -> do
+                Value.Scalar (Syntax.Integer integer)
+inferJSON (Aeson.Bool bool) =
+    Value.Scalar (Syntax.Bool bool)
+inferJSON Aeson.Null =
+    Value.Scalar Syntax.Null
+
+-- | Check an `Aeson.Value` against an excepted `Type`
+checkJSON
+    :: (MonadCatch m, MonadState Status m, MonadIO m)
+    => Type Location -> Aeson.Value -> m Value
+checkJSON = loop []
+  where
+    loop path Type.Union{ Type.alternatives = Type.Alternatives alternativeTypes _ } (Aeson.Object [("contents", contents), ("tag", Aeson.String tag)])
+        | Just alternativeType <- Prelude.lookup tag alternativeTypes = do
+            value <- loop ("contents" : path) alternativeType contents
+
+            return (Value.Alternative tag value)
+    loop path Type.Record{ Type.fields = Type.Fields fieldTypes _ } (Aeson.Object object) = do
+        let properties = Compat.fromAesonMap object
+
+        let process (field, type_) = do
+                let property = case Map.lookup field properties of
+                        Just p -> p
+                        Nothing -> Aeson.Null
+
+                expression <- loop (field : path) type_ property
+
+                return (field, expression)
+
+        fieldValues <- traverse process fieldTypes
+
+        return (Value.Record (Map.fromList fieldValues))
+    loop path type_@Type.Scalar{ scalar = Monotype.JSON } (Aeson.Object object) = do
+        let properties = Map.toList (Compat.fromAesonMap object)
+
+        let process (key, property) = do
+                expression <- loop (key : path) type_ property
+
+                return (key, expression)
+
+        textValues <- traverse process properties
+
+        return (Value.Record (Map.fromList textValues))
+    loop path Type.List{ Type.type_ } (Aeson.Array vector) = do
+        elements <- traverse (loop ("*" : path) type_) vector
+
+        return (Value.List (Seq.fromList (toList elements)))
+    loop path type_@Type.Scalar{ scalar = Monotype.JSON } (Aeson.Array vector) = do
+        elements <- traverse (loop ("*" : path) type_) vector
+
+        return (Value.List (Seq.fromList (toList elements)))
+    loop _ Type.Scalar{ scalar = Monotype.Text } (Aeson.String text) = do
+        return (Value.Text text)
+    loop _ Type.Scalar{ scalar = Monotype.JSON } (Aeson.String text) = do
+        return (Value.Text text)
+    loop _ Type.Scalar{ scalar = Monotype.Real } (Aeson.Number scientific) = do
+        return (Value.Scalar (Syntax.Real scientific))
+    loop path type_@Type.Scalar{ scalar = Monotype.Integer } value@(Aeson.Number scientific) = do
+        case Scientific.floatingOrInteger @Double @Integer scientific of
+            Right integer -> do
+                return (Value.Scalar (Syntax.Integer integer))
+            _ -> do
+                Exception.throwIO InvalidJSON{ path, value, type_ }
+    loop path type_@Type.Scalar{ scalar = Monotype.Natural } value@(Aeson.Number scientific) =
+        case Scientific.floatingOrInteger @Double @Integer scientific of
+            Right integer
+                | 0 <= integer -> do
+                    return (Value.Scalar (Syntax.Natural (fromInteger integer)))
+            _ -> do
+                Exception.throwIO InvalidJSON{ path, value, type_ }
+    loop _ Type.Scalar{ scalar = Monotype.JSON } (Aeson.Number scientific) =
+        case Scientific.floatingOrInteger scientific of
+            Left (_ :: Double) -> do
+                return (Value.Scalar (Syntax.Real scientific))
+            Right (integer :: Integer)
+                | 0 <= integer -> do
+                    return (Value.Scalar (Syntax.Natural (fromInteger integer)))
+                | otherwise -> do
+                    return (Value.Scalar (Syntax.Integer integer))
+    loop _ Type.Scalar{ Type.scalar = Monotype.Bool } (Aeson.Bool bool) =
+        return (Value.Scalar (Syntax.Bool bool))
+    loop _ Type.Scalar{ Type.scalar = Monotype.JSON } (Aeson.Bool bool) =
+        return (Value.Scalar (Syntax.Bool bool))
+    loop _ Type.Optional{ } Aeson.Null =
+        return (Value.Scalar Syntax.Null)
+    loop path Type.Optional{ type_ } value = do
+        result <- loop path type_ value
+        return (Value.Application (Value.Builtin Syntax.Some) result)
+    loop _ Type.Scalar{ scalar = Monotype.JSON } Aeson.Null =
+        return (Value.Scalar Syntax.Null)
+    loop _ type₀ value = do
+        let bytes = Aeson.Pretty.encodePretty value
+
+        text <- case Encoding.decodeUtf8' (ByteString.Lazy.toStrict bytes) of
+            Left exception -> Exception.throwIO exception
+            Right text     -> return text
+
+        let input = Code "(json)" text
+
+        expression <- liftIO (Import.resolve input)
+
+        (type₁, _) <- infer expression
+
+        context₀ <- get
+
+        subtype (Context.solveType context₀ type₁) (Context.solveType context₀ type₀)
+        let json = Type.Scalar
+                { location = Type.location type₀
+                , scalar = Monotype.JSON
+                }
+
+        context₁ <- get
+
+        subtype (Context.solveType context₁ type₁) json
+
+        return (inferJSON value)
+
 -- | A data type holding all errors related to type inference
 data TypeInferenceError
     = IllFormedAlternatives Location (Existential Monotype.Union) (Context Location)
@@ -4179,6 +4370,35 @@ instance Exception TypeInferenceError where
         \" <> Text.unpack (Location.renderError "" monadLocation₁) <> "\n\
         \\n\
         \… within the same group of assignments."
+
+-- | Invalid JSON output which didn't match the expected type
+data InvalidJSON a = InvalidJSON
+    { path :: [Text]
+    , value :: Aeson.Value
+    , type_ :: Type a
+    } deriving stock (Show)
+
+instance (Show a, Typeable a) => Exception (InvalidJSON a) where
+    displayException InvalidJSON{ path, value, type_} =
+        "Invalid JSON\n\
+        \\n\
+        \The following JSON value:\n\
+        \\n\
+        \" <> string <> "\n\
+        \\n\
+        \… does not match the following expected type:\n\
+        \\n\
+        \" <> Text.unpack (Grace.Pretty.toSmart type_) <> "\n\
+        \\n\
+        \… at the following location:\n\
+        \\n\
+        \" <> Text.unpack (Text.intercalate "." (reverse path))
+      where
+        bytes = Aeson.Pretty.encodePretty value
+
+        string = case Encoding.decodeUtf8' (ByteString.Lazy.toStrict bytes) of
+            Left  _    -> show bytes
+            Right text -> Text.unpack text
 
 -- Helper functions for displaying errors
 

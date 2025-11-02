@@ -433,15 +433,12 @@ alternativesFreeIn unsolved =
         . Lens.only unsolved
         )
 
--- | Default universally quantified variables
+-- | Default unsolved type variables
 defaultTo :: Type s -> Type s -> Type s
-defaultTo def Forall{ name, domain = Domain.Type, type_ } =
-    substituteType name 0 def type_
-defaultTo _ Forall{ name, domain = Domain.Fields, type_ } =
-    substituteFields name 0 (Fields [] Monotype.EmptyFields) type_
-defaultTo _ Forall{ name, domain = Domain.Alternatives, type_ } =
-    substituteAlternatives name 0 (Alternatives [] Monotype.EmptyAlternatives) type_
-defaultTo _ type_ = type_
+defaultTo type₀ = Lens.transform transformation
+  where
+    transformation UnsolvedType{ } = type₀
+    transformation type₁           = type₁
 
 prettyQuantifiedType :: Type s -> Doc AnsiStyle
 prettyQuantifiedType type0@Forall{} =
