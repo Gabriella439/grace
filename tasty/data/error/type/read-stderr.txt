@@ -1,0 +1,19 @@
+Not a subtype
+
+The following type:
+
+  Natural
+
+(json):1:1: 
+  │
+1 │ 1
+  │ ↑
+
+… cannot be a subtype of:
+
+  Text
+
+tasty/data/error/type/read-input.ffg:1:27: 
+  │
+1 │ read "[ 1, 2, 3 ]" : List Text
+  │                           ↑

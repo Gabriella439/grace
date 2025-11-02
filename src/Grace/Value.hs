@@ -10,18 +10,12 @@ module Grace.Value
 
       -- * Utilities
     , toJSON
-    , inferJSON
-    , checkJSON
     , syntax
     , complete
     , effects
-
-      -- * Exceptions
-    , InvalidJSON(..)
     ) where
 
 import Control.Applicative (empty)
-import Control.Exception.Safe (Exception(..))
 import Control.Lens (Getting, Plated(..), Traversal')
 import Data.Aeson (FromJSON(..))
 import Data.Foldable (toList)
@@ -31,28 +25,17 @@ import Data.HashMap.Strict.InsOrd (InsOrdHashMap)
 import Data.Monoid (Any)
 import Data.Sequence (Seq)
 import Data.Text (Text)
-import Data.Typeable (Typeable)
 import Data.Void (Void)
 import GHC.Generics (Generic)
 import Grace.Context (Context)
 import Grace.Location (Location)
 import Grace.Syntax (Builtin, Scalar, Syntax)
-import Grace.Type (Type)
 
 import qualified Control.Lens as Lens
 import qualified Data.Aeson as Aeson
-import qualified Data.Aeson.Encode.Pretty as Aeson.Pretty
-import qualified Data.ByteString.Lazy as ByteString.Lazy
-import qualified Data.HashMap.Strict.InsOrd as HashMap
-import qualified Data.Scientific as Scientific
 import qualified Data.Sequence as Seq
-import qualified Data.Text as Text
-import qualified Data.Text.Encoding as Encoding
 import qualified Grace.Compat as Compat
-import qualified Grace.Monotype as Monotype
-import qualified Grace.Pretty as Pretty
 import qualified Grace.Syntax as Syntax
-import qualified Grace.Type as Type
 
 {-| This is basically `Syntax.NameBinding` but with only the names and not
     the values or locations
@@ -147,149 +130,6 @@ toJSON (Scalar scalar) = do
     return (Aeson.toJSON scalar)
 toJSON _ = do
     empty
-
--- | Convert from JSON, inferring the value purely from the JSON data
-inferJSON :: Aeson.Value -> Value
-inferJSON (Aeson.Object [("contents", contents), ("tag", Aeson.String tag)]) =
-    Alternative tag value
-  where
-    value = inferJSON contents
-inferJSON (Aeson.Object object) = Record (HashMap.fromList textValues)
-  where
-    properties = HashMap.toList (Compat.fromAesonMap object)
-
-    textValues = fmap (fmap inferJSON) properties
-inferJSON (Aeson.Array vector) = List (Seq.fromList (toList elements))
-  where
-    elements = fmap inferJSON vector
-inferJSON (Aeson.String text) = Text text
-inferJSON (Aeson.Number scientific) =
-    case Scientific.floatingOrInteger scientific of
-        Left (_ :: Double) ->
-            Scalar (Syntax.Real scientific)
-        Right (integer :: Integer)
-            | 0 <= integer -> do
-                Scalar (Syntax.Natural (fromInteger integer))
-            | otherwise -> do
-                Scalar (Syntax.Integer integer)
-inferJSON (Aeson.Bool bool) =
-    Scalar (Syntax.Bool bool)
-inferJSON Aeson.Null =
-    Scalar Syntax.Null
-
--- | Convert from JSON using the given type to aid in the conversion process
-checkJSON :: Type a -> Aeson.Value -> Either (InvalidJSON a) Value
-checkJSON = loop []
-  where
-    loop path Type.Union{ Type.alternatives = Type.Alternatives alternativeTypes _ } (Aeson.Object [("contents", contents), ("tag", Aeson.String tag)])
-        | Just alternativeType <- Prelude.lookup tag alternativeTypes = do
-            value <- loop ("contents" : path) alternativeType contents
-
-            return (Alternative tag value)
-    loop path Type.Record{ Type.fields = Type.Fields fieldTypes _ } (Aeson.Object object) = do
-        let properties = Compat.fromAesonMap object
-
-        let process (field, type_) = do
-                let property = case HashMap.lookup field properties of
-                        Just p -> p
-                        Nothing -> Aeson.Null
-
-                expression <- loop (field : path) type_ property
-
-                return (field, expression)
-
-        fieldValues <- traverse process fieldTypes
-
-        return (Record (HashMap.fromList fieldValues))
-    loop path type_@Type.Scalar{ scalar = Monotype.JSON } (Aeson.Object object) = do
-        let properties = HashMap.toList (Compat.fromAesonMap object)
-
-        let process (key, property) = do
-                expression <- loop (key : path) type_ property
-
-                return (key, expression)
-
-        textValues <- traverse process properties
-
-        return (Record (HashMap.fromList textValues))
-    loop path Type.List{ Type.type_ } (Aeson.Array vector) = do
-        elements <- traverse (loop ("*" : path) type_) vector
-
-        return (List (Seq.fromList (toList elements)))
-    loop path type_@Type.Scalar{ scalar = Monotype.JSON } (Aeson.Array vector) = do
-        elements <- traverse (loop ("*" : path) type_) vector
-
-        return (List (Seq.fromList (toList elements)))
-    loop _ Type.Scalar{ scalar = Monotype.Text } (Aeson.String text) = do
-        return (Text text)
-    loop _ Type.Scalar{ scalar = Monotype.JSON } (Aeson.String text) = do
-        return (Text text)
-    loop _ Type.Scalar{ scalar = Monotype.Real } (Aeson.Number scientific) = do
-        return (Scalar (Syntax.Real scientific))
-    loop path type_@Type.Scalar{ scalar = Monotype.Integer } value@(Aeson.Number scientific) = do
-        case Scientific.floatingOrInteger @Double @Integer scientific of
-            Right integer -> do
-                return (Scalar (Syntax.Integer integer))
-            _ -> do
-                Left InvalidJSON{ path, value, type_ }
-    loop path type_@Type.Scalar{ scalar = Monotype.Natural } value@(Aeson.Number scientific) =
-        case Scientific.floatingOrInteger @Double @Integer scientific of
-            Right integer
-                | 0 <= integer -> do
-                    return (Scalar (Syntax.Natural (fromInteger integer)))
-            _ -> do
-                Left InvalidJSON{ path, value, type_ }
-    loop _ Type.Scalar{ scalar = Monotype.JSON } (Aeson.Number scientific) =
-        case Scientific.floatingOrInteger scientific of
-            Left (_ :: Double) -> do
-                return (Scalar (Syntax.Real scientific))
-            Right (integer :: Integer)
-                | 0 <= integer -> do
-                    return (Scalar (Syntax.Natural (fromInteger integer)))
-                | otherwise -> do
-                    return (Scalar (Syntax.Integer integer))
-    loop _ Type.Scalar{ Type.scalar = Monotype.Bool } (Aeson.Bool bool) =
-        return (Scalar (Syntax.Bool bool))
-    loop _ Type.Scalar{ Type.scalar = Monotype.JSON } (Aeson.Bool bool) =
-        return (Scalar (Syntax.Bool bool))
-    loop _ Type.Optional{ } Aeson.Null =
-        return (Scalar Syntax.Null)
-    loop path Type.Optional{ type_ } value = do
-        result <- loop path type_ value
-        return (Application (Builtin Syntax.Some) result)
-    loop _ Type.Scalar{ scalar = Monotype.JSON } Aeson.Null =
-        return (Scalar Syntax.Null)
-    loop path type_ value = do
-        Left InvalidJSON{ path, value, type_ }
-
--- | Invalid JSON output which didn't match the expected type
-data InvalidJSON a = InvalidJSON
-    { path :: [Text]
-    , value :: Aeson.Value
-    , type_ :: Type a
-    } deriving stock (Show)
-
-instance (Show a, Typeable a) => Exception (InvalidJSON a) where
-    displayException InvalidJSON{ path, value, type_} =
-        "Invalid JSON\n\
-        \\n\
-        \The following JSON value:\n\
-        \\n\
-        \" <> string <> "\n\
-        \\n\
-        \… does not match the following expected type:\n\
-        \\n\
-        \" <> Text.unpack (Pretty.toSmart type_) <> "\n\
-        \\n\
-        \… at the following location:\n\
-        \\n\
-        \" <> Text.unpack (Text.intercalate "." (reverse path))
-      where
-        bytes = Aeson.Pretty.encodePretty value
-
-        string = case Encoding.decodeUtf8' (ByteString.Lazy.toStrict bytes) of
-            Left  _    -> show bytes
-            Right text -> Text.unpack text
 
 -- | @Traversal'@ from a `Value` to a 
 syntax :: Traversal' Value (Syntax Location Void)
