@@ -34,6 +34,7 @@ import qualified Grace.HTTP as HTTP
 import qualified Grace.Parser as Parser
 import qualified Grace.Pretty as Pretty
 import qualified Grace.Syntax as Syntax
+import qualified System.Directory as Directory
 import qualified System.Environment as Environment
 import qualified System.IO.Unsafe as Unsafe
 import qualified Text.URI as URI
@@ -158,7 +159,14 @@ resolve input = case input of
         return (first locate result)
   where
     readPath mode path = do
-        text <- Text.IO.readFile path
+        adjustedPath <- case path of
+            '~' : '/' : suffix -> do
+                home <- Directory.getHomeDirectory
+                return (home </> suffix)
+            _ -> do
+                return path
+
+        text <- Text.IO.readFile adjustedPath
 
         result <- case mode of
             AsCode -> case Parser.parse path text of

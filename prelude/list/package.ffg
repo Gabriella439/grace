@@ -1,5 +1,6 @@
 { all: ./all.ffg
 , any: ./any.ffg
+, concat: ./concat.ffg
 , generate: ./generate.ffg
 , null: ./null.ffg
 , reject: ./reject.ffg

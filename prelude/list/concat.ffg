@@ -1,0 +1,10 @@
+let concat
+      : forall (a : Type) . List (List a) -> List a
+      = \lists ->
+          for list of lists
+
+          for element of list
+
+          in  element
+
+in  concat

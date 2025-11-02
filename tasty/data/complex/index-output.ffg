@@ -1,1 +1,11 @@
-{ "example0": 2, "example1": 5, "example2": 2, "example3": 5, "example4": null }
+{ "example0":
+    some 2
+, "example1":
+    some 5
+, "example2":
+    some 2
+, "example3":
+    some 5
+, "example4":
+    null
+}

@@ -22,6 +22,7 @@ library
                      , bytestring
                      , containers
                      , case-insensitive
+                     , directory
                      , filepath
                      , generic-lens
                      , http-types
