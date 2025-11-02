@@ -265,9 +265,9 @@ Of course, you *can* specify types if you want (and they're more lightweight tha
 
 ```bash
 $ grace repl
->>> prompt{ key: ./openai.key : Key, text: "Give me a first and last name" } : { first: Text, last: Text }
+>>> prompt{ key: ./openai.key, text: "Give me a first and last name" } : { first: Text, last: Text }
 { "first": "Emily", "last": "Johnson" }
->>> prompt{ key: ./openai.key : Key, text: "Give me a list of names" } : List Text
+>>> prompt{ key: ./openai.key, text: "Give me a list of names" } : List Text
 [ "Alice"
 , "Bob"
 , "Charlie"
@@ -384,7 +384,7 @@ What's particularly neat about this example is that the prompt is so incredibly 
 We can explore this idea of using the schema to drive the prompt instead of prose using an example like this:
 
 ```haskell
-prompt{ key: ./openai.key : Key, text: "Generate some characters for a story" }
+prompt{ key: ./openai.key, text: "Generate some characters for a story" }
   : List
     { "The character's name": Text
     , "The most memorable thing about the character": Text

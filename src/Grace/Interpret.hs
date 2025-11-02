@@ -16,7 +16,7 @@ import Data.Text (Text)
 import Grace.Decode (FromGrace(..))
 import Grace.HTTP (Methods)
 import Grace.Infer (Status(..))
-import Grace.Input (Input(..))
+import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
 import Grace.Type (Type)
 import Grace.Value (Value)
@@ -60,7 +60,7 @@ interpretWith
 interpretWith keyToMethods bindings maybeAnnotation = do
     Status{ input } <- State.get
 
-    expression <- liftIO (Import.resolve input)
+    expression <- liftIO (Import.resolve AsCode input)
 
     let annotatedExpression = case maybeAnnotation of
             Just annotation ->

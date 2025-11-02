@@ -69,6 +69,7 @@ import qualified Grace.Decode as Decode
 import qualified Grace.HTTP as HTTP
 import qualified Grace.Import as Import
 import qualified Grace.Infer as Infer
+import qualified Grace.Input as Input
 import qualified Grace.Interpret as Interpret
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Normalize as Normalize
@@ -1717,7 +1718,7 @@ main = do
                             }
 
                     let interpretOutput = do
-                            expression <- liftIO (Import.resolve input_)
+                            expression <- liftIO (Import.resolve Input.AsCode input_)
 
                             (inferred, elaboratedExpression) <- Infer.infer expression
 
