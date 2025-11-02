@@ -45,7 +45,7 @@ import Grace.Decode (FromGrace(..))
 import Grace.Existential (Existential)
 import Grace.GitHub (GitHub(..))
 import Grace.HTTP.Type (HTTP(..))
-import Grace.Input (Input(..))
+import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
 import Grace.Monotype (Monotype)
 import Grace.Pretty (Pretty(..))
@@ -3098,7 +3098,7 @@ infer e₀ = do
 
             State.put Status{ input = absolute, .. }
 
-            syntax <- liftIO (Import.resolve absolute)
+            syntax <- liftIO (Import.resolve AsCode absolute)
 
             result <- infer syntax
 
@@ -3828,20 +3828,23 @@ check annotated annotation@Type.Scalar{ scalar = Monotype.Integer } = do
 
             return newAnnotated
 
-check Syntax.Embed{ embedded } _B = do
-    _Γ <- get
-
-    Status{ input, .. } <- State.get
+check Syntax.Embed{ embedded } annotation = do
+    Status{ input, context, .. } <- State.get
 
     let absolute = input <> embedded
 
     Import.referentiallySane input absolute
 
-    State.put Status{ input = absolute, .. }
+    State.put Status{ input = absolute, context, .. }
 
-    syntax <- liftIO (Import.resolve absolute)
+    let mode = case Context.solveType context annotation of
+            Type.Scalar{ scalar = Monotype.Text } -> AsText
+            Type.Scalar{ scalar = Monotype.Key  } -> AsKey
+            _                                     -> AsCode
 
-    result <- check syntax _B
+    syntax <- liftIO (Import.resolve mode absolute)
+
+    result <- check syntax annotation
 
     State.modify (\s -> s{ Grace.Infer.input = input })
 
@@ -4098,7 +4101,12 @@ checkJSON = loop []
 
         let input = Code "(json)" text
 
-        expression <- liftIO (Import.resolve input)
+        let mode = case type₀ of
+                Type.Scalar{ scalar = Monotype.Text } -> AsText
+                Type.Scalar{ scalar = Monotype.Key  } -> AsKey
+                _                                     -> AsCode
+
+        expression <- liftIO (Import.resolve mode input)
 
         (type₁, _) <- infer expression
 

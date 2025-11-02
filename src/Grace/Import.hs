@@ -61,9 +61,9 @@ remoteSchemes :: [RText 'Scheme]
 remoteSchemes = map (fromJust . URI.mkScheme) [ "http", "https" ]
 
 -- | Resolve an `Input` by returning the source code that it represents
-resolve :: Input -> IO (Syntax Location Input)
-resolve input = case input of
-    URI uri mode
+resolve :: Mode -> Input -> IO (Syntax Location Input)
+resolve mode₀ input = case input of
+    URI uri mode₁
         | any (`elem` remoteSchemes) (URI.uriScheme uri) -> do
             let name = URI.renderStr uri
 
@@ -71,7 +71,7 @@ resolve input = case input of
 
             text <- Exception.handle handler (fetch (Text.pack name))
 
-            result <- case mode of
+            result <- case mode₀ <> mode₁ of
                 AsCode -> case Parser.parse name text of
                     Left e -> Exception.throw e
                     Right result -> return result
@@ -106,7 +106,7 @@ resolve input = case input of
 
                     let name = "env:" <> Text.unpack var
 
-                    result <- case mode of
+                    result <- case mode₀ <> mode₁ of
                         AsCode -> case Parser.parse name text of
                             Left e -> Exception.throw e
                             Right result -> return result
@@ -139,15 +139,15 @@ resolve input = case input of
                     let pathPiecesToFilePath =
                             foldl' (</>) "/" . map (Text.unpack . URI.unRText) . NonEmpty.toList
 
-                    readPath mode (pathPiecesToFilePath pieces)
+                    readPath (mode₀ <> mode₁) (pathPiecesToFilePath pieces)
                 else do
                     throw UnsupportedAuthority
 
         | otherwise -> do
             throw InvalidURI
 
-    Path path mode -> do
-        readPath mode path
+    Path path mode₁ -> do
+        readPath (mode₀ <> mode₁) path
 
     Code name code -> do
         result <- case Parser.parse name code of
