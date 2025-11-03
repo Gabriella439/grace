@@ -903,7 +903,19 @@ data REPLCommand
 
 grammar :: GrammaticalForm a -> Grammar r (Parser r a)
 grammar form = mdo
-    parseBinding <- rule do
+    parseUnadornedBinding <- rule do
+        ~(nameLocation, name) <- locatedLabel
+
+        pure PlainBinding
+            { plain = NameBinding
+                { nameLocation
+                , name
+                , annotation = Nothing
+                , assignment = Nothing
+                }
+            }
+
+    parseAdornedBinding <- rule do
         let annotated = do
                 parseToken Grace.Parser.OpenParenthesis
 
@@ -931,18 +943,6 @@ grammar form = mdo
                         , name
                         , annotation
                         , assignment
-                        }
-                    }
-
-        let unannotated = do
-                ~(nameLocation, name) <- locatedLabel
-
-                pure PlainBinding
-                    { plain = NameBinding
-                        { nameLocation
-                        , name
-                        , annotation = Nothing
-                        , assignment = Nothing
                         }
                     }
 
@@ -977,7 +977,9 @@ grammar form = mdo
 
                 pure RecordBinding{ fieldNamesLocation, fieldNames }
 
-        annotated <|> unannotated <|> fields
+        annotated <|> fields
+
+    parseBinding <- rule (parseUnadornedBinding <|> parseAdornedBinding)
 
     expression <- rule
         (   do  location <- locatedToken Grace.Parser.Lambda
@@ -1371,7 +1373,7 @@ grammar form = mdo
                 return e
         )
 
-    parseREPLCommand <- rule do
+    parseLetAssignment <- rule do
         let parseDefinition = do
                 ~(nameLocation, name) <- locatedLabel
 
@@ -1400,7 +1402,15 @@ grammar form = mdo
                     }
 
         let parseBind = do
-                binding <- parseBinding
+                -- We don't use `parseBinding` here because otherwise
+                -- `parseDefinition` and `parseBind` will overlap for
+                -- assignments of the form `let x = e …` and then the parser
+                -- will double the number of branches it tracks for each such
+                -- assignment, leading to an exponential blowup in the parser.
+                -- Using `parseAdornedBinding` here ensures that every `let`
+                -- assignment is parsed unambiguously as a `Definition` or
+                -- `Bind`.
+                binding <- parseAdornedBinding
 
                 parseToken Grace.Parser.Equals
 
@@ -1436,7 +1446,7 @@ grammar form = mdo
                     , assignment
                     }
 
-        parseREPLCommand <|> parseForAssignment
+        parseLetAssignment <|> parseForAssignment
 
     recordLabel <- rule (reservedLabel <|> label <|> alternative <|> text)
 
@@ -1680,7 +1690,7 @@ grammar form = mdo
         return a
 
     replCommand <- rule
-        (fmap Evaluate expression <|> fmap Assign parseREPLCommand)
+        (fmap Evaluate expression <|> fmap Assign parseLetAssignment)
 
     return case form of
         Expression continuation ->
