@@ -1259,12 +1259,6 @@ grammar form = mdo
 
                 return Syntax.Variable{ location, name }
 
-        <|> do  ~(location, name) <- locatedAlternative
-
-                argument <- primitiveExpression
-
-                return Syntax.Alternative{ location, name, argument }
-
         <|> do  location <- locatedToken Grace.Parser.OpenBracket
 
                 optional (parseToken Grace.Parser.Comma)
