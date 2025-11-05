@@ -2163,20 +2163,30 @@ infer e₀ = do
 
                     return (optional, Syntax.Project{ location, larger = newLarger, .. })
 
-        Syntax.If{..} -> do
-            newPredicate <- check predicate Type.Scalar{ scalar = Monotype.Bool, .. }
+        Syntax.If{ location, predicate, ifTrue, ifFalse} -> do
+            newPredicate <- check predicate Type.Scalar
+                { location
+                , scalar = Monotype.Bool
+                }
 
-            (_L₀, newIfTrue) <- infer ifTrue
+            (annotation₀, newIfTrue) <- infer ifTrue
 
-            _Γ  <- get
+            context₀ <- get
 
-            let _L₁ = Context.solveType _Γ _L₀
+            let annotation₁ = Context.solveType context₀ annotation₀
 
-            newIfFalse <- check ifFalse _L₁
+            newIfFalse <- check ifFalse annotation₁
 
-            _Γ <- get
+            context₁ <- get
 
-            return (_L₁, Syntax.If{ predicate = solveSyntax _Γ newPredicate, ifTrue = solveSyntax _Γ newIfTrue, ifFalse = solveSyntax _Γ newIfFalse, .. })
+            let newIf = Syntax.If
+                    { location
+                    , predicate = solveSyntax context₁ newPredicate
+                    , ifTrue = solveSyntax context₁ newIfTrue
+                    , ifFalse = solveSyntax context₁ newIfFalse
+                    }
+
+            return (annotation₁, newIf)
 
         Syntax.Text{ chunks = Syntax.Chunks text₀ rest, .. } -> do
             let process (interpolation, text) = do
@@ -3337,7 +3347,7 @@ check Syntax.Let{ location, assignments, body } annotation₀ = do
         _ -> do
             assign annotation₀ Nothing
 
-check Syntax.Alternative{ location, name , argument } annotation@Type.Union{ alternatives = Type.Alternatives alternativeTypes remainingAlternatives } = do
+check Syntax.Alternative{ location, name, argument } annotation@Type.Union{ alternatives = Type.Alternatives alternativeTypes remainingAlternatives } = do
     existential <- fresh
 
     push (Context.UnsolvedAlternatives existential)
@@ -3355,8 +3365,6 @@ check Syntax.Alternative{ location, name , argument } annotation@Type.Union{ alt
                     [ (name, innerType₀) ]
                     (Monotype.UnsolvedAlternatives existential)
 
-            let actual = Type.Union{ location, alternatives }
-
             case remainingAlternatives of
                 Monotype.UnsolvedAlternatives p -> do
                     instantiateAlternativesR location alternatives p
@@ -3368,6 +3376,8 @@ check Syntax.Alternative{ location, name , argument } annotation@Type.Union{ alt
                         }
 
                 _ -> do
+                    let actual = Type.Union{ location, alternatives }
+
                     Exception.throwIO (UnionTypeMismatch actual annotation [ name ])
 
 check Syntax.Prompt{ schema = Nothing, .. } annotation = do
@@ -3592,11 +3602,11 @@ check Syntax.List{..} Type.List{ location = _, .. } = do
 check e@Syntax.Record{ fieldValues = fieldValues₀ } _B@Type.Record{ fields = Type.Fields fieldTypes fields }
     | let mapValues = Map.fromList fieldValues₁
     , let mapTypes  = Map.fromList fieldTypes
+    , let both = Map.intersectionWith (,) mapValues mapTypes
 
     -- This is to prevent an infinite loop because we're going to recursively
     -- call `check` again below with two non-intersecting records to generate a
-    -- type error if they're not both empty.
-    , let both = Map.intersectionWith (,) mapValues mapTypes
+    -- type error if the check fails
     , not (Map.null both) = do
         let extraValues = Map.difference mapValues mapTypes
         let extraTypes  = Map.difference mapTypes  mapValues
