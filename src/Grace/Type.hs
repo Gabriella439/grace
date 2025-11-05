@@ -54,10 +54,9 @@ import qualified Control.Lens as Lens
 import qualified Data.List as List
 import qualified Data.Text as Text
 import qualified Grace.Domain as Domain
+import qualified Grace.Label as Label
 import qualified Grace.Monotype as Monotype
 import qualified Prettyprinter as Pretty
-
-import {-# SOURCE #-} qualified Grace.Parser as Parser
 
 {- $setup
 
@@ -745,7 +744,7 @@ prettyRecordLabel
     -> Text
     -> Doc AnsiStyle
 prettyRecordLabel alwaysQuote field
-    | Parser.validRecordLabel field && not alwaysQuote =
+    | Label.validRecordLabel field && not alwaysQuote =
         label (pretty field)
     | otherwise =
         label (prettyTextLiteral field)
@@ -755,7 +754,7 @@ prettyAlternativeLabel
     :: Text
     -> Doc AnsiStyle
 prettyAlternativeLabel alternative
-    | Parser.validAlternativeLabel alternative =
+    | Label.validAlternativeLabel alternative =
         label (pretty alternative)
     | otherwise =
         label (prettyQuotedAlternative alternative)
@@ -765,7 +764,7 @@ prettyLabel
     :: Text
     -> Doc AnsiStyle
 prettyLabel name
-    | Parser.validLabel name =
+    | Label.validLabel name =
         label (pretty name)
     | otherwise =
         punctuation "." <> label (prettyQuotedAlternative name)

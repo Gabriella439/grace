@@ -18,7 +18,7 @@ import Grace.HTTP (Methods)
 import Grace.Infer (Status(..))
 import Grace.Interpret (Input(..))
 import Grace.Location (Location(..))
-import Grace.Parser (REPLCommand(..), reserved)
+import Grace.Parser (REPLCommand(..))
 import System.Console.Haskeline (Interrupt(..))
 import System.Console.Repline (CompleterStyle(..), MultiLine(..), ReplOpts(..))
 
@@ -32,6 +32,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.IO as Text.IO
 import qualified Grace.Context as Context
 import qualified Grace.Infer as Infer
+import qualified Grace.Label as Label
 import qualified Grace.Normalize as Normalize
 import qualified Grace.Parser as Parser
 import qualified Grace.Pretty as Pretty
@@ -174,7 +175,7 @@ repl keyToMethods = do
                     ]
 
             completeReserved =
-                Repline.listCompleter (fmap Text.unpack (toList reserved))
+                Repline.listCompleter (fmap Text.unpack (toList Label.reservedLabels))
 
             completeIdentifiers args = do
                 assignments <- get
