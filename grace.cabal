@@ -53,10 +53,11 @@ library
                      , Grace.Existential
                      , Grace.GitHub
                      , Grace.HTTP
-                     , Grace.Input
                      , Grace.Import
-                     , Grace.Interpret
                      , Grace.Infer
+                     , Grace.Input
+                     , Grace.Interpret
+                     , Grace.Label
                      , Grace.Location
                      , Grace.Monotype
                      , Grace.Normalize

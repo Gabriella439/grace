@@ -25,11 +25,6 @@ module Grace.Parser
     , REPLCommand(..)
       -- * Errors related to parsing
     , ParseError(..)
-      -- * Utilities
-    , reserved
-    , validLabel
-    , validRecordLabel
-    , validAlternativeLabel
     ) where
 
 import Control.Applicative (empty, many, optional, some, (<|>))
@@ -39,7 +34,6 @@ import Control.Exception.Safe (Exception(..))
 import Control.Monad.Combinators (manyTill)
 import Data.Functor (void)
 import Data.Foldable (toList)
-import Data.HashSet (HashSet)
 import Data.List.NonEmpty (NonEmpty(..), some1)
 import Data.Maybe (fromJust)
 import Data.Scientific (Scientific)
@@ -75,6 +69,7 @@ import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
 import qualified Data.Text.Read as Read
 import qualified Grace.Domain as Domain
+import qualified Grace.Label as Label
 import qualified Grace.Location as Location
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Syntax as Syntax
@@ -189,7 +184,6 @@ lexToken =
 
         , lexText
         , lexAlternative
-        , lexQuotedAlternative
         ]
 
 lexLocatedToken :: Lexer LocatedToken
@@ -436,124 +430,43 @@ lexText = lexeme do
 
     return (TextLiteral dedented)
 
-isLabel0 :: Char -> Bool
-isLabel0 c = Char.isLower c || c == '_'
-
-isLabel :: Char -> Bool
-isLabel c = Char.isAlphaNum c || c == '_' || c == '-' || c == '/'
-
--- | Returns `True` if the given label is valid when unquoted
-validLabel :: Text -> Bool
-validLabel text_ =
-    case Text.uncons text_ of
-        Nothing ->
-            False
-        Just (h, t) ->
-                isLabel0 h
-            &&  Text.all isLabel t
-            &&  not (HashSet.member text_ reserved)
-
--- | Returns `True` if the given record label is valid when unquoted
-validRecordLabel :: Text -> Bool
-validRecordLabel text_ =
-    case Text.uncons text_ of
-        Nothing ->
-            False
-        Just (h, t) ->
-                (   isLabel0 h
-                &&  Text.all isLabel t
-                &&  not (HashSet.member text_ reserved)
-                )
-            ||  text_ == "null"
-            ||  text_ == "some"
-            ||  text_ == "true"
-            ||  text_ == "false"
-
--- | Returns `True` if the given alternative label is valid when unquoted
-validAlternativeLabel :: Text -> Bool
-validAlternativeLabel text_ =
-    case Text.uncons text_ of
-        Nothing ->
-            False
-        Just (h, t) ->
-                Char.isUpper h
-            &&  Text.all isLabel t
-            &&  not (HashSet.member text_ reserved)
-
--- | Reserved tokens, which can't be used for labels unless they are quoted
-reserved :: HashSet Text
-reserved =
-    HashSet.fromList
-        [ "Alternatives"
-        , "Bool"
-        , "Fields"
-        , "Integer"
-        , "List"
-        , "Natural"
-        , "Optional"
-        , "Real"
-        , "Text"
-        , "Type"
-        , "abs"
-        , "else"
-        , "false"
-        , "fold"
-        , "for"
-        , "forall"
-        , "github"
-        , "http"
-        , "if"
-        , "import"
-        , "in"
-        , "indexed"
-        , "length"
-        , "let"
-        , "map"
-        , "null"
-        , "of"
-        , "prompt"
-        , "read"
-        , "reveal"
-        , "show"
-        , "some"
-        , "then"
-        , "true"
-        , "yaml"
-        ]
-
 lexLabel :: Lexer Token
-lexLabel = lexeme (try lexUnquotedLabel <|> try lexQuotedLabel)
+lexLabel = lexUnquotedLabel <|> lexQuotedLabel
 
 lexUnquotedLabel :: Lexer Token
-lexUnquotedLabel = do
-    c0 <- Megaparsec.satisfy isLabel0 Megaparsec.<?> "label character"
+lexUnquotedLabel = (try . lexeme) do
+    c0 <- Megaparsec.satisfy Label.isLabel0 Megaparsec.<?> "label character"
 
-    cs <- Megaparsec.takeWhileP (Just "label character") isLabel
+    cs <- Megaparsec.takeWhileP (Just "label character") Label.isLabel
 
     let name = Text.cons c0 cs
 
-    Monad.guard (not (HashSet.member name reserved))
+    Monad.guard (not (HashSet.member name Label.reservedLabels))
 
     return (Label name)
 
 lexQuotedLabel :: Lexer Token
-lexQuotedLabel = do
+lexQuotedLabel = (try . lexeme) do
     "."
 
     name <- lexSingleQuoted
 
     return (Label name)
 
-lexAlternative :: Lexer Token
-lexAlternative = lexeme do
-    c0 <- Megaparsec.satisfy Char.isUpper Megaparsec.<?> "alternative character"
+lexUnquotedAlternative :: Lexer Token
+lexUnquotedAlternative = (try . lexeme) do
+    c0 <- Megaparsec.satisfy Label.isAlternativeLabel0 Megaparsec.<?> "alternative character"
 
-    cs <- Megaparsec.takeWhileP (Just "alternative character") isLabel
+    cs <- Megaparsec.takeWhileP (Just "alternative character") Label.isLabel
 
-    return (Grace.Parser.Alternative (Text.cons c0 cs))
+    let name = Text.cons c0 cs
+
+    Monad.guard (not (HashSet.member name Label.reservedLabels))
+
+    return (Grace.Parser.Alternative name)
 
 lexSingleQuoted :: Lexer Text
-lexSingleQuoted = lexeme do
+lexSingleQuoted = do
     "'"
 
     let isText c =
@@ -594,10 +507,13 @@ lexSingleQuoted = lexeme do
     return (Text.concat texts)
 
 lexQuotedAlternative :: Lexer Token
-lexQuotedAlternative = do
+lexQuotedAlternative = lexeme do
     name <- lexSingleQuoted
 
     return (Grace.Parser.Alternative name)
+
+lexAlternative :: Lexer Token
+lexAlternative = lexUnquotedAlternative <|> lexQuotedAlternative
 
 -- | Tokens produced by lexing
 data Token
