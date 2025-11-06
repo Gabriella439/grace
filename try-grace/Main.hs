@@ -12,11 +12,12 @@
 module Main where
 
 import Control.Applicative (empty, liftA2)
-import Control.Concurrent.Async (Async)
+import Control.Concurrent.Async (Async, Concurrently(..))
 import Control.Exception.Safe (catch, Exception(..), SomeException)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Maybe (MaybeT)
 import Control.Monad.Trans.Reader (ReaderT)
+import Control.Monad.Trans.State (StateT)
 import Data.Foldable (toList, traverse_)
 import Data.IORef (IORef)
 import Data.JSString (JSString)
@@ -84,6 +85,12 @@ instance (Applicative m, Semigroup a) => Semigroup (ReaderT r m a) where
     (<>) = liftA2 (<>)
 
 instance (Applicative m, Monoid a) => Monoid (ReaderT r m a) where
+    mempty = pure mempty
+
+instance (Monad m, Semigroup a) => Semigroup (StateT r m a) where
+    (<>) = liftA2 (<>)
+
+instance (Monad m, Monoid a) => Monoid (StateT r m a) where
     mempty = pure mempty
 
 foreign import javascript unsafe "document.getElementById($1)"
@@ -1760,92 +1767,73 @@ main = do
 
             setTextContent stopTutorial "Exit the tutorial"
 
-            let createExample active name file = do
-                    text <- liftIO (DataFile.readDataFile ("examples" </> "tutorial" </> file))
-                    let code = Text.strip text
-
+            let createExample (active, name, file) = do
                     n <- State.get
 
                     State.put (n + 1)
 
-                    let id = "example-" <> Text.pack (show n)
+                    (return . Concurrently) do
+                        text <- DataFile.readDataFile ("examples" </> "tutorial" </> file)
+                        let code = Text.strip text
 
-                    a <- createElement "a"
+                        let id = "example-" <> Text.pack (show n)
 
-                    setAttribute a "id"           id
-                    setAttribute a "aria-current" "page"
-                    setAttribute a "href"         "#"
-                    setAttribute a "onclick"      "return false;"
+                        a <- createElement "a"
 
-                    setAttribute a "class"
-                        (if active then "nav-link example-tab active" else "example-tab nav-link")
+                        setAttribute a "id"           id
+                        setAttribute a "aria-current" "page"
+                        setAttribute a "href"         "#"
+                        setAttribute a "onclick"      "return false;"
 
-                    setTextContent a name
+                        setAttribute a "class"
+                            (if active then "nav-link example-tab active" else "example-tab nav-link")
 
-                    li <- createElement "li"
+                        setTextContent a name
 
-                    setAttribute li "class" "nav-item"
+                        li <- createElement "li"
 
-                    replaceChild li a
+                        setAttribute li "class" "nav-item"
 
-                    callback <- (liftIO . Callback.asyncCallback) do
-                        setCodeValue codeInput code
+                        replaceChild li a
 
-                        elements <- getElementsByClassName "example-tab"
+                        callback <- Callback.asyncCallback do
+                            setCodeValue codeInput code
 
-                        Monad.forM_ elements \element -> do
-                            removeClass element "active"
+                            elements <- getElementsByClassName "example-tab"
 
-                        element <- getElementById id
+                            Monad.forM_ elements \element -> do
+                                removeClass element "active"
 
-                        addClass element "active"
+                            element <- getElementById id
 
-                    Monad.when active (setCodeValue codeInput code)
+                            addClass element "active"
 
-                    addEventListener a "click" callback
+                        Monad.when active (setCodeValue codeInput code)
 
-                    return li
+                        addEventListener a "click" callback
+
+                        return [li]
 
             ul <- createElement "ul"
 
-            flip State.evalStateT (0 :: Int) do
-                helloWorld <- createExample True "Hello, world!" "hello.ffg"
+            let examples =
+                    [ (True , "Hello, world!", "hello.ffg"     )
+                    , (False, "HTML"         , "checkboxes.ffg")
+                    , (False, "Data"         , "data.ffg"      )
+                    , (False, "Prompting"    , "prompting.ffg" )
+                    , (False, "Variables"    , "variables.ffg" )
+                    , (False, "Functions"    , "functions.ffg" )
+                    , (False, "Imports"      , "imports.ffg"   )
+                    , (False, "Lists"        , "lists.ffg"     )
+                    , (False, "Coding"       , "coding.ffg"    )
+                    , (False, "Prelude"      , "prelude.ffg"   )
+                    ]
 
-                checkboxes <- createExample False "HTML" "checkboxes.ffg"
+            children <- Async.runConcurrently (State.evalState (foldMap createExample examples) (0 :: Int))
 
-                data_ <- createExample False "Data" "data.ffg"
+            setAttribute ul "class" "nav nav-tabs"
 
-                prompting <- createExample False "Prompting" "prompting.ffg"
-
-                variables <- createExample False "Variables" "variables.ffg"
-
-                functions <- createExample False "Functions" "functions.ffg"
-
-                imports <- createExample False "Imports" "imports.ffg"
-
-
-                lists <- createExample False "Lists" "lists.ffg"
-
-                coding <- createExample False "Coding" "coding.ffg"
-
-                prelude <- createExample False "Prelude" "prelude.ffg"
-
-                setAttribute ul "class" "nav nav-tabs"
-
-                replaceChildren ul
-                    (Array.fromList
-                        [ helloWorld
-                        , checkboxes
-                        , data_
-                        , prompting
-                        , variables
-                        , functions
-                        , imports
-                        , lists
-                        , coding
-                        , prelude
-                        ]
-                    )
+            replaceChildren ul (Array.fromList children)
 
             before inputArea ul
 
