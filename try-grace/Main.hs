@@ -43,6 +43,7 @@ import Prelude hiding (div, error, id, length, span, subtract)
 import System.FilePath ((</>))
 
 import qualified Control.Concurrent.Async as Async
+import qualified Control.Concurrent.MVar as MVar
 import qualified Control.Concurrent.STM as STM
 import qualified Control.Concurrent.STM.TVar as TVar
 import qualified Control.Exception.Safe as Exception
@@ -1753,123 +1754,136 @@ main = do
 
     onChange codeInput inputCallback
 
-    stopTutorial <- createElement "button"
+    enableTutorialMVar <- MVar.newMVar Nothing
 
-    setAttribute stopTutorial "type"  "button"
-    setAttribute stopTutorial "class" "btn btn-primary"
-    setAttribute stopTutorial "id"    "stop-tutorial"
+    let loadTutorial = do
+            stopTutorial <- createElement "button"
 
-    setTextContent stopTutorial "Exit the tutorial"
+            setAttribute stopTutorial "type"  "button"
+            setAttribute stopTutorial "class" "btn btn-primary"
+            setAttribute stopTutorial "id"    "stop-tutorial"
 
-    setDisplay stopTutorial "none"
+            setTextContent stopTutorial "Exit the tutorial"
 
-    let createExample (name, file) = do
-            n <- State.get
+            setDisplay stopTutorial "none"
 
-            State.put (n + 1)
+            let createExample (name, file) = do
+                    n <- State.get
 
-            (return . Concurrently) do
-                text <- DataFile.readDataFile ("examples" </> "tutorial" </> file)
+                    State.put (n + 1)
 
-                let code = Text.strip text
+                    (return . Concurrently) do
+                        text <- DataFile.readDataFile ("examples" </> "tutorial" </> file)
 
-                let id = "example-" <> Text.pack (show n)
+                        let code = Text.strip text
 
-                a <- createElement "a"
+                        let id = "example-" <> Text.pack (show n)
 
-                setAttribute a "id"           id
-                setAttribute a "aria-current" "page"
-                setAttribute a "href"         "#"
-                setAttribute a "onclick"      "return false;"
-                setAttribute a "class"        "example-tab nav-link"
+                        a <- createElement "a"
 
-                setTextContent a name
+                        setAttribute a "id"           id
+                        setAttribute a "aria-current" "page"
+                        setAttribute a "href"         "#"
+                        setAttribute a "onclick"      "return false;"
+                        setAttribute a "class"        "example-tab nav-link"
 
-                li <- createElement "li"
+                        setTextContent a name
 
-                setAttribute li "class" "nav-item"
+                        li <- createElement "li"
 
-                replaceChild li a
+                        setAttribute li "class" "nav-item"
 
-                let click = do
-                        setCodeValue codeInput code
+                        replaceChild li a
 
-                        elements <- getElementsByClassName "example-tab"
+                        let click = do
+                                setCodeValue codeInput code
 
-                        Monad.forM_ elements \element -> do
-                            removeClass element "active"
+                                elements <- getElementsByClassName "example-tab"
 
-                        element <- getElementById id
+                                Monad.forM_ elements \element -> do
+                                    removeClass element "active"
 
-                        addClass element "active"
+                                element <- getElementById id
 
-                callback <- Callback.asyncCallback click
+                                addClass element "active"
 
-                addEventListener a "click" callback
+                        callback <- Callback.asyncCallback click
 
-                return [(li, click)]
+                        addEventListener a "click" callback
 
-    let examples =
-            [ ("Hello, world!", "hello.ffg"     )
-            , ("HTML"         , "checkboxes.ffg")
-            , ("Data"         , "data.ffg"      )
-            , ("Prompting"    , "prompting.ffg" )
-            , ("Variables"    , "variables.ffg" )
-            , ("Functions"    , "functions.ffg" )
-            , ("Imports"      , "imports.ffg"   )
-            , ("Lists"        , "lists.ffg"     )
-            , ("Coding"       , "coding.ffg"    )
-            , ("Prelude"      , "prelude.ffg"   )
-            ]
+                        return [(li, click)]
 
-    results <- Async.runConcurrently (State.evalState (foldMap createExample examples) (0 :: Int))
+            let examples =
+                    [ ("Hello, world!", "hello.ffg"     )
+                    , ("HTML"         , "checkboxes.ffg")
+                    , ("Data"         , "data.ffg"      )
+                    , ("Prompting"    , "prompting.ffg" )
+                    , ("Variables"    , "variables.ffg" )
+                    , ("Functions"    , "functions.ffg" )
+                    , ("Imports"      , "imports.ffg"   )
+                    , ("Lists"        , "lists.ffg"     )
+                    , ("Coding"       , "coding.ffg"    )
+                    , ("Prelude"      , "prelude.ffg"   )
+                    ]
 
-    let (children, clickFirstExample : _) = unzip results
+            results <- Async.runConcurrently (State.evalState (foldMap createExample examples) (0 :: Int))
 
-    navigationBar <- createElement "ul"
+            let (children, clickFirstExample : _) = unzip results
 
-    setAttribute navigationBar "class" "nav nav-tabs"
+            navigationBar <- createElement "ul"
 
-    replaceChildren navigationBar (Array.fromList children)
+            setAttribute navigationBar "class" "nav nav-tabs"
 
-    setDisplay navigationBar "none"
+            replaceChildren navigationBar (Array.fromList children)
 
-    before inputArea navigationBar
+            setDisplay navigationBar "none"
 
-    stopTutorialCallback <- Callback.asyncCallback do
-        deleteParam params "tutorial"
+            before inputArea navigationBar
 
-        saveSearchParams params
+            stopTutorialCallback <- Callback.asyncCallback do
+                deleteParam params "tutorial"
 
-        setDisplay stopTutorial  "none"
-        setDisplay navigationBar "none"
+                saveSearchParams params
 
-        text <- getValue codeInput
+                setDisplay stopTutorial  "none"
+                setDisplay navigationBar "none"
 
-        if Text.null text
-            then do
-                setDisplay startTutorial "inline-block"
-            else do
+                text <- getValue codeInput
+
+                if Text.null text
+                    then do
+                        setDisplay startTutorial "inline-block"
+                    else do
+                        setDisplay startTutorial "none"
+
+                focus codeInput
+
+            addEventListener stopTutorial "click" stopTutorialCallback
+
+            after startTutorial stopTutorial
+
+            return do
+                setParam params "tutorial" "true"
+
+                saveSearchParams params
+
+                clickFirstExample
+
                 setDisplay startTutorial "none"
+                setDisplay navigationBar "flex"
+                setDisplay stopTutorial  "inline-block"
 
-        focus codeInput
-
-    addEventListener stopTutorial "click" stopTutorialCallback
-
-    after startTutorial stopTutorial
+                focus codeInput
 
     let enableTutorial = do
-            setParam params "tutorial" "true"
+            enable <- MVar.modifyMVar enableTutorialMVar \maybeEnable -> do
+                enable <- case maybeEnable of
+                    Nothing     -> loadTutorial
+                    Just enable -> return enable
 
-            saveSearchParams params
+                return (Just enable, enable)
 
-            clickFirstExample
-
-            setDisplay startTutorial "none"
-            setDisplay navigationBar "flex"
-            setDisplay stopTutorial  "inline-block"
-
-            focus codeInput
+            enable
 
     startTutorialCallback <- Callback.asyncCallback enableTutorial
 
