@@ -12,11 +12,12 @@
 module Main where
 
 import Control.Applicative (empty, liftA2)
-import Control.Concurrent.Async (Async)
+import Control.Concurrent.Async (Async, Concurrently(..))
 import Control.Exception.Safe (catch, Exception(..), SomeException)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Maybe (MaybeT)
 import Control.Monad.Trans.Reader (ReaderT)
+import Control.Monad.Trans.State (StateT)
 import Data.Foldable (toList, traverse_)
 import Data.IORef (IORef)
 import Data.JSString (JSString)
@@ -42,6 +43,7 @@ import Prelude hiding (div, error, id, length, span, subtract)
 import System.FilePath ((</>))
 
 import qualified Control.Concurrent.Async as Async
+import qualified Control.Concurrent.MVar as MVar
 import qualified Control.Concurrent.STM as STM
 import qualified Control.Concurrent.STM.TVar as TVar
 import qualified Control.Exception.Safe as Exception
@@ -84,6 +86,12 @@ instance (Applicative m, Semigroup a) => Semigroup (ReaderT r m a) where
     (<>) = liftA2 (<>)
 
 instance (Applicative m, Monoid a) => Monoid (ReaderT r m a) where
+    mempty = pure mempty
+
+instance (Monad m, Semigroup a) => Semigroup (StateT r m a) where
+    (<>) = liftA2 (<>)
+
+instance (Monad m, Monoid a) => Monoid (StateT r m a) where
     mempty = pure mempty
 
 foreign import javascript unsafe "document.getElementById($1)"
@@ -1675,8 +1683,6 @@ main = do
         else do
             setDisplay (getWrapperElement codeInput) "none"
 
-    tutorialRef <- IORef.newIORef hasTutorial
-
     keyToMethods <- HTTP.getMethods
 
     output <- getElementById "output"
@@ -1690,18 +1696,15 @@ main = do
                 then deleteParam params "expression"
                 else setParam params "expression" (URI.Encode.encodeText text)
 
-            tutorial <- IORef.readIORef tutorialRef
-
-            if tutorial == False
-                then deleteParam params "tutorial"
-                else setParam params "tutorial" "true"
+            tutorial <- hasParam params "tutorial"
 
             saveSearchParams params
 
-            if  | Text.null text -> do
-                    Monad.unless tutorial do
-                        setDisplay startTutorial "inline-block"
+            if not tutorial && Text.null text
+                then setDisplay startTutorial "inline-block"
+                else setDisplay startTutorial "none"
 
+            if  | Text.null text -> do
                     replaceChildren output (Array.fromList [])
 
                 | otherwise -> do
@@ -1751,7 +1754,9 @@ main = do
 
     onChange codeInput inputCallback
 
-    let enableTutorial = do
+    enableTutorialMVar <- MVar.newMVar Nothing
+
+    let loadTutorial = do
             stopTutorial <- createElement "button"
 
             setAttribute stopTutorial "type"  "button"
@@ -1760,105 +1765,96 @@ main = do
 
             setTextContent stopTutorial "Exit the tutorial"
 
-            let createExample active name file = do
-                    text <- liftIO (DataFile.readDataFile ("examples" </> "tutorial" </> file))
-                    let code = Text.strip text
+            setDisplay stopTutorial "none"
 
+            let createExample (name, file) = do
                     n <- State.get
 
                     State.put (n + 1)
 
-                    let id = "example-" <> Text.pack (show n)
+                    (return . Concurrently) do
+                        text <- DataFile.readDataFile ("examples" </> "tutorial" </> file)
 
-                    a <- createElement "a"
+                        let code = Text.strip text
 
-                    setAttribute a "id"           id
-                    setAttribute a "aria-current" "page"
-                    setAttribute a "href"         "#"
-                    setAttribute a "onclick"      "return false;"
+                        let id = "example-" <> Text.pack (show n)
 
-                    setAttribute a "class"
-                        (if active then "nav-link example-tab active" else "example-tab nav-link")
+                        a <- createElement "a"
 
-                    setTextContent a name
+                        setAttribute a "id"           id
+                        setAttribute a "aria-current" "page"
+                        setAttribute a "href"         "#"
+                        setAttribute a "onclick"      "return false;"
+                        setAttribute a "class"        "example-tab nav-link"
 
-                    li <- createElement "li"
+                        setTextContent a name
 
-                    setAttribute li "class" "nav-item"
+                        li <- createElement "li"
 
-                    replaceChild li a
+                        setAttribute li "class" "nav-item"
 
-                    callback <- (liftIO . Callback.asyncCallback) do
-                        setCodeValue codeInput code
+                        replaceChild li a
 
-                        elements <- getElementsByClassName "example-tab"
+                        let click = do
+                                setCodeValue codeInput code
 
-                        Monad.forM_ elements \element -> do
-                            removeClass element "active"
+                                elements <- getElementsByClassName "example-tab"
 
-                        element <- getElementById id
+                                Monad.forM_ elements \element -> do
+                                    removeClass element "active"
 
-                        addClass element "active"
+                                element <- getElementById id
 
-                    Monad.when active (setCodeValue codeInput code)
+                                addClass element "active"
 
-                    addEventListener a "click" callback
+                        callback <- Callback.asyncCallback click
 
-                    return li
+                        addEventListener a "click" callback
 
-            ul <- createElement "ul"
+                        return [(li, click)]
 
-            flip State.evalStateT (0 :: Int) do
-                helloWorld <- createExample True "Hello, world!" "hello.ffg"
+            let examples =
+                    [ ("Hello, world!", "hello.ffg"     )
+                    , ("HTML"         , "checkboxes.ffg")
+                    , ("Data"         , "data.ffg"      )
+                    , ("Prompting"    , "prompting.ffg" )
+                    , ("Variables"    , "variables.ffg" )
+                    , ("Functions"    , "functions.ffg" )
+                    , ("Imports"      , "imports.ffg"   )
+                    , ("Lists"        , "lists.ffg"     )
+                    , ("Coding"       , "coding.ffg"    )
+                    , ("Prelude"      , "prelude.ffg"   )
+                    ]
 
-                checkboxes <- createExample False "HTML" "checkboxes.ffg"
+            results <- Async.runConcurrently (State.evalState (foldMap createExample examples) (0 :: Int))
 
-                data_ <- createExample False "Data" "data.ffg"
+            let (children, clickFirstExample : _) = unzip results
 
-                prompting <- createExample False "Prompting" "prompting.ffg"
+            navigationBar <- createElement "ul"
 
-                variables <- createExample False "Variables" "variables.ffg"
+            setAttribute navigationBar "class" "nav nav-tabs"
 
-                functions <- createExample False "Functions" "functions.ffg"
+            replaceChildren navigationBar (Array.fromList children)
 
-                imports <- createExample False "Imports" "imports.ffg"
+            setDisplay navigationBar "none"
 
-
-                lists <- createExample False "Lists" "lists.ffg"
-
-                coding <- createExample False "Coding" "coding.ffg"
-
-                prelude <- createExample False "Prelude" "prelude.ffg"
-
-                setAttribute ul "class" "nav nav-tabs"
-
-                replaceChildren ul
-                    (Array.fromList
-                        [ helloWorld
-                        , checkboxes
-                        , data_
-                        , prompting
-                        , variables
-                        , functions
-                        , imports
-                        , lists
-                        , coding
-                        , prelude
-                        ]
-                    )
-
-            before inputArea ul
+            before inputArea navigationBar
 
             stopTutorialCallback <- Callback.asyncCallback do
+                deleteParam params "tutorial"
+
+                saveSearchParams params
+
                 setDisplay stopTutorial  "none"
+                setDisplay navigationBar "none"
 
-                IORef.writeIORef tutorialRef False
+                text <- getValue codeInput
 
-                debouncedInterpret ()
-
-                remove stopTutorial
-
-                remove ul
+                if Text.null text
+                    then do
+                        setDisplay startTutorial "inline-block"
+                    else do
+                        setDisplay startTutorial "none"
 
                 focus codeInput
 
@@ -1866,11 +1862,28 @@ main = do
 
             after startTutorial stopTutorial
 
-            IORef.writeIORef tutorialRef True
+            return do
+                setParam params "tutorial" "true"
 
-            setDisplay startTutorial "none"
+                saveSearchParams params
 
-            focus codeInput
+                clickFirstExample
+
+                setDisplay startTutorial "none"
+                setDisplay navigationBar "flex"
+                setDisplay stopTutorial  "inline-block"
+
+                focus codeInput
+
+    let enableTutorial = do
+            enable <- MVar.modifyMVar enableTutorialMVar \maybeEnable -> do
+                enable <- case maybeEnable of
+                    Nothing     -> loadTutorial
+                    Just enable -> return enable
+
+                return (Just enable, enable)
+
+            enable
 
     startTutorialCallback <- Callback.asyncCallback enableTutorial
 
