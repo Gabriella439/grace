@@ -1682,8 +1682,6 @@ main = do
         else do
             setDisplay (getWrapperElement codeInput) "none"
 
-    tutorialRef <- IORef.newIORef hasTutorial
-
     keyToMethods <- HTTP.getMethods
 
     output <- getElementById "output"
@@ -1697,11 +1695,7 @@ main = do
                 then deleteParam params "expression"
                 else setParam params "expression" (URI.Encode.encodeText text)
 
-            tutorial <- IORef.readIORef tutorialRef
-
-            if tutorial == False
-                then deleteParam params "tutorial"
-                else setParam params "tutorial" "true"
+            tutorial <- hasParam params "tutorial"
 
             saveSearchParams params
 
@@ -1840,7 +1834,7 @@ main = do
             stopTutorialCallback <- Callback.asyncCallback do
                 setDisplay stopTutorial  "none"
 
-                IORef.writeIORef tutorialRef False
+                deleteParam params "tutorial"
 
                 debouncedInterpret ()
 
@@ -1854,7 +1848,7 @@ main = do
 
             after startTutorial stopTutorial
 
-            IORef.writeIORef tutorialRef True
+            setParam params "tutorial" "true"
 
             setDisplay startTutorial "none"
 
