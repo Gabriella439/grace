@@ -1699,10 +1699,11 @@ main = do
 
             saveSearchParams params
 
-            if  | Text.null text -> do
-                    Monad.unless tutorial do
-                        setDisplay startTutorial "inline-block"
+            if not tutorial && Text.null text
+                then setDisplay startTutorial "inline-block"
+                else setDisplay startTutorial "none"
 
+            if  | Text.null text -> do
                     replaceChildren output (Array.fromList [])
 
                 | otherwise -> do
@@ -1752,105 +1753,121 @@ main = do
 
     onChange codeInput inputCallback
 
+    stopTutorial <- createElement "button"
+
+    setAttribute stopTutorial "type"  "button"
+    setAttribute stopTutorial "class" "btn btn-primary"
+    setAttribute stopTutorial "id"    "stop-tutorial"
+
+    setTextContent stopTutorial "Exit the tutorial"
+
+    setDisplay stopTutorial "none"
+
+    let createExample (name, file) = do
+            n <- State.get
+
+            State.put (n + 1)
+
+            (return . Concurrently) do
+                text <- DataFile.readDataFile ("examples" </> "tutorial" </> file)
+
+                let code = Text.strip text
+
+                let id = "example-" <> Text.pack (show n)
+
+                a <- createElement "a"
+
+                setAttribute a "id"           id
+                setAttribute a "aria-current" "page"
+                setAttribute a "href"         "#"
+                setAttribute a "onclick"      "return false;"
+                setAttribute a "class"        "example-tab nav-link"
+
+                setTextContent a name
+
+                li <- createElement "li"
+
+                setAttribute li "class" "nav-item"
+
+                replaceChild li a
+
+                let click = do
+                        setCodeValue codeInput code
+
+                        elements <- getElementsByClassName "example-tab"
+
+                        Monad.forM_ elements \element -> do
+                            removeClass element "active"
+
+                        element <- getElementById id
+
+                        addClass element "active"
+
+                callback <- Callback.asyncCallback click
+
+                addEventListener a "click" callback
+
+                return [(li, click)]
+
+    let examples =
+            [ ("Hello, world!", "hello.ffg"     )
+            , ("HTML"         , "checkboxes.ffg")
+            , ("Data"         , "data.ffg"      )
+            , ("Prompting"    , "prompting.ffg" )
+            , ("Variables"    , "variables.ffg" )
+            , ("Functions"    , "functions.ffg" )
+            , ("Imports"      , "imports.ffg"   )
+            , ("Lists"        , "lists.ffg"     )
+            , ("Coding"       , "coding.ffg"    )
+            , ("Prelude"      , "prelude.ffg"   )
+            ]
+
+    results <- Async.runConcurrently (State.evalState (foldMap createExample examples) (0 :: Int))
+
+    let (children, clickFirstExample : _) = unzip results
+
+    navigationBar <- createElement "ul"
+
+    setAttribute navigationBar "class" "nav nav-tabs"
+
+    replaceChildren navigationBar (Array.fromList children)
+
+    setDisplay navigationBar "none"
+
+    before inputArea navigationBar
+
+    stopTutorialCallback <- Callback.asyncCallback do
+        deleteParam params "tutorial"
+
+        saveSearchParams params
+
+        setDisplay stopTutorial  "none"
+        setDisplay navigationBar "none"
+
+        text <- getValue codeInput
+
+        if Text.null text
+            then do
+                setDisplay startTutorial "inline-block"
+            else do
+                setDisplay startTutorial "none"
+
+        focus codeInput
+
+    addEventListener stopTutorial "click" stopTutorialCallback
+
+    after startTutorial stopTutorial
+
     let enableTutorial = do
-            stopTutorial <- createElement "button"
-
-            setAttribute stopTutorial "type"  "button"
-            setAttribute stopTutorial "class" "btn btn-primary"
-            setAttribute stopTutorial "id"    "stop-tutorial"
-
-            setTextContent stopTutorial "Exit the tutorial"
-
-            let createExample (active, name, file) = do
-                    n <- State.get
-
-                    State.put (n + 1)
-
-                    (return . Concurrently) do
-                        text <- DataFile.readDataFile ("examples" </> "tutorial" </> file)
-                        let code = Text.strip text
-
-                        let id = "example-" <> Text.pack (show n)
-
-                        a <- createElement "a"
-
-                        setAttribute a "id"           id
-                        setAttribute a "aria-current" "page"
-                        setAttribute a "href"         "#"
-                        setAttribute a "onclick"      "return false;"
-
-                        setAttribute a "class"
-                            (if active then "nav-link example-tab active" else "example-tab nav-link")
-
-                        setTextContent a name
-
-                        li <- createElement "li"
-
-                        setAttribute li "class" "nav-item"
-
-                        replaceChild li a
-
-                        callback <- Callback.asyncCallback do
-                            setCodeValue codeInput code
-
-                            elements <- getElementsByClassName "example-tab"
-
-                            Monad.forM_ elements \element -> do
-                                removeClass element "active"
-
-                            element <- getElementById id
-
-                            addClass element "active"
-
-                        Monad.when active (setCodeValue codeInput code)
-
-                        addEventListener a "click" callback
-
-                        return [li]
-
-            ul <- createElement "ul"
-
-            let examples =
-                    [ (True , "Hello, world!", "hello.ffg"     )
-                    , (False, "HTML"         , "checkboxes.ffg")
-                    , (False, "Data"         , "data.ffg"      )
-                    , (False, "Prompting"    , "prompting.ffg" )
-                    , (False, "Variables"    , "variables.ffg" )
-                    , (False, "Functions"    , "functions.ffg" )
-                    , (False, "Imports"      , "imports.ffg"   )
-                    , (False, "Lists"        , "lists.ffg"     )
-                    , (False, "Coding"       , "coding.ffg"    )
-                    , (False, "Prelude"      , "prelude.ffg"   )
-                    ]
-
-            children <- Async.runConcurrently (State.evalState (foldMap createExample examples) (0 :: Int))
-
-            setAttribute ul "class" "nav nav-tabs"
-
-            replaceChildren ul (Array.fromList children)
-
-            before inputArea ul
-
-            stopTutorialCallback <- Callback.asyncCallback do
-                setDisplay stopTutorial  "none"
-
-                deleteParam params "tutorial"
-
-                debouncedInterpret ()
-
-                remove stopTutorial
-
-                remove ul
-
-                focus codeInput
-
-            addEventListener stopTutorial "click" stopTutorialCallback
-
-            after startTutorial stopTutorial
-
             setParam params "tutorial" "true"
 
+            saveSearchParams params
+
+            clickFirstExample
+
             setDisplay startTutorial "none"
+            setDisplay navigationBar "flex"
+            setDisplay stopTutorial  "inline-block"
 
             focus codeInput
 
