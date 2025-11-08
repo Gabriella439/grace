@@ -1,1 +1,2 @@
-\{ x, y : Natural } -> x + y
+# This test exercises all of the supported syntax for destructuring a lambda
+\{ a, b: Natural, c = 0, d: Natural = 0 } -> a + b + c + d

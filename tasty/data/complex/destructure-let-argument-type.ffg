@@ -1,1 +1,18 @@
-Natural
+forall (a : Type) .
+  { a:
+      Natural
+  , b:
+      Natural
+  , c:
+      Natural
+  , d:
+      Natural
+  , e:
+      Optional a
+  , f:
+      Natural
+  , g:
+      Optional Natural
+  , h:
+      Natural
+  }
