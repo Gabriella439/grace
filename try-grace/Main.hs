@@ -25,7 +25,7 @@ import Data.Sequence (ViewR(..), (|>))
 import Data.Text (Text)
 import Data.Traversable (forM)
 import Data.Void (Void)
-import Grace.Infer (Status(..))
+import Grace.Monad (Status(..))
 import Grace.Type (Type(..))
 import GHCJS.Foreign.Callback (Callback)
 import GHCJS.Types (JSVal)
@@ -73,6 +73,7 @@ import qualified Grace.Import as Import
 import qualified Grace.Infer as Infer
 import qualified Grace.Input as Input
 import qualified Grace.Interpret as Interpret
+import qualified Grace.Monad as Grace
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Normalize as Normalize
 import qualified Grace.Pretty as Pretty
@@ -634,7 +635,7 @@ renderValue parent Type.Function{ input, output } function = do
 
                     liftIO refreshOutput
 
-            eitherResult <- liftIO (Exception.try (State.evalStateT interpretOutput status))
+            eitherResult <- liftIO (Exception.try (Grace.evalGrace status interpretOutput))
 
             case eitherResult of
                 Left exception -> do
@@ -1441,14 +1442,14 @@ renderInputDefault path type_ = do
 
                 setSessionStorage (renderPath path type_) text
 
-                let newStatus = status{ Infer.input = Infer.input status <> Code "(input)" text }
+                let newStatus = status{ Grace.input = Grace.input status <> Code "(input)" text }
 
                 let interpretInput = do
                         (_, value) <- Interpret.interpretWith keyToMethods [] (Just type_)
 
                         return value
 
-                result <- liftIO (Exception.try (State.evalStateT interpretInput newStatus))
+                result <- liftIO (Exception.try (Grace.evalGrace newStatus interpretInput))
 
                 case result of
                     Left exception -> do
@@ -1739,7 +1740,7 @@ main = do
 
                             liftIO refreshOutput
 
-                    result <- Exception.try (State.evalStateT interpretOutput initialStatus)
+                    result <- Exception.try (Grace.evalGrace initialStatus interpretOutput)
 
 
                     case result of

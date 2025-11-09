@@ -11,9 +11,9 @@ import Control.Exception.Safe (Exception(..), SomeException)
 import Data.Foldable (traverse_)
 import Data.Functor (void)
 import Data.Void (Void)
-import Grace.Infer (Status(..))
 import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
+import Grace.Monad (Status(..))
 import Grace.Syntax (Builtin(..), Syntax(..))
 import Grace.Type (Type(..))
 import Options.Applicative (Parser, ParserInfo)
@@ -21,13 +21,13 @@ import Prettyprinter (Doc)
 import Prettyprinter.Render.Terminal (AnsiStyle)
 
 import qualified Control.Exception.Safe as Exception
-import qualified Control.Monad.State as State
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text.IO
 import qualified GHC.IO.Encoding
 import qualified Grace.HTTP as HTTP
 import qualified Grace.Infer as Infer
 import qualified Grace.Interpret as Interpret
+import qualified Grace.Monad as Grace
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Normalize as Normalize
 import qualified Grace.Parser as Parser
@@ -224,7 +224,7 @@ main = Exception.handle handler do
 
             let initialStatus = Status{ count = 0, input, context = [] }
 
-            (_, value) <- State.evalStateT (Interpret.interpretWith keyToMethods [] (Just expected)) initialStatus
+            (_, value) <- Grace.evalGrace initialStatus (Interpret.interpretWith keyToMethods [] (Just expected))
 
             case value of
                 Value.Text text -> Text.IO.putStr text

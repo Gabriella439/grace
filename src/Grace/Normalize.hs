@@ -16,9 +16,8 @@ module Grace.Normalize
     , MissingSchema(..)
     ) where
 
-import Control.Exception.Safe (Exception(..), MonadCatch)
+import Control.Exception.Safe (Exception(..))
 import Control.Monad.IO.Class (MonadIO(..))
-import Control.Monad.State (MonadState(..))
 import Data.Bifunctor (first)
 import Data.Foldable (toList)
 import Data.HashMap.Strict.InsOrd (InsOrdHashMap)
@@ -29,9 +28,9 @@ import Data.Void (Void)
 import Grace.Aeson (JSONDecodingFailed(..))
 import Grace.Decode (FromGrace(..))
 import Grace.HTTP (HTTP(..), Methods)
-import Grace.Infer (Status(..))
 import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
+import Grace.Monad (Grace, Status(..))
 import Grace.Syntax (BindMonad(..), Builtin(..), Scalar(..), Syntax)
 import Grace.Value (Value)
 import Prelude hiding (lookup, null, succ)
@@ -40,6 +39,7 @@ import {-# SOURCE #-} qualified Grace.Interpret as Interpret
 
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
+import qualified Control.Monad as Monad
 import qualified Control.Monad.State as State
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Yaml as YAML
@@ -96,14 +96,13 @@ sorted = List.sortBy (Ord.comparing fst) . HashMap.toList
     sub-expression multiple times.
 -}
 evaluate
-    :: (MonadCatch m, MonadState Status m, MonadIO m)
-    => (Text -> Methods)
+    :: (Text -> Methods)
     -- ^ OpenAI methods
     -> [(Text, Value)]
     -- ^ Evaluation environment (starting at @[]@ for a top-level expression)
     -> Syntax Location Void
     -- ^ Surface syntax
-    -> m Value
+    -> Grace Value
     -- ^ Result, free of reducible sub-expressions
 evaluate keyToMethods env₀ syntax₀ = do
     loop env₀ syntax₀
@@ -121,18 +120,16 @@ evaluate keyToMethods env₀ syntax₀ = do
 
         traverse infer env
 
-    loop
-        :: (MonadIO m, MonadState Status m, MonadCatch m)
-        => [(Text, Value)] -> Syntax Location Void -> m Value
+    loop :: [(Text, Value)] -> Syntax Location Void -> Grace Value
     loop env syntax =
         case syntax of
             Syntax.Variable{ name } -> do
                 pure (lookupVariable name env)
 
-            Syntax.Application{ function, argument } -> do
+            Syntax.Application{ function, argument } -> Monad.join do
                 function' <- loop env function
                 argument' <- loop env argument
-                apply keyToMethods function' argument'
+                pure (apply keyToMethods function' argument')
 
             Syntax.Lambda{ binding = Syntax.PlainBinding{ plain = Syntax.NameBinding{ name, assignment } }, body } -> do
                 newAssignment <- traverse (loop env) assignment
@@ -143,7 +140,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                 let process Syntax.NameBinding{ name, assignment } = do
                         newAssignment <- traverse (loop env) assignment
 
-                        return (name, newAssignment)
+                        pure (name, newAssignment)
 
                 newFieldNames <- traverse process fieldNames
 
@@ -152,7 +149,7 @@ evaluate keyToMethods env₀ syntax₀ = do
             Syntax.Annotation{ annotated, annotation  } -> do
                 newAnnotated <- loop env annotated
 
-                return do
+                pure do
                     let promote (Value.Scalar (Natural n)) Type.Scalar{ scalar = Monotype.Real } =
                             Value.Scalar (Real (fromIntegral n))
                         promote (Value.Scalar (Integer n)) Type.Scalar{ scalar = Monotype.Real } =
@@ -286,11 +283,13 @@ evaluate keyToMethods env₀ syntax₀ = do
                                 Value.List [ value ]
                             Just OptionalMonad ->
                                 Value.Application (Value.Builtin Some) value
+
                 foldr cons nil assignments env
 
             Syntax.List{ elements } -> do
                 values <- traverse (loop env) elements
-                return (Value.List values)
+
+                pure (Value.List values)
 
             Syntax.Record{ fieldValues } -> do
                 let process Syntax.Definition{ nameLocation, name, bindings, assignment = assignment₀ } = do
@@ -304,17 +303,17 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                         assignment₂ <- loop env assignment₁
 
-                        return (name, assignment₂)
+                        pure (name, assignment₂)
 
                 newFieldValues <- traverse process fieldValues
 
-                return (Value.Record (HashMap.fromList newFieldValues))
+                pure (Value.Record (HashMap.fromList newFieldValues))
 
             Syntax.Text{ chunks = Syntax.Chunks text rest } -> do
                 let onChunk (interpolation, text₁) = do
                         value <- loop env interpolation
 
-                        return case value of
+                        pure case value of
                             Value.Text text₀ ->
                                 text₀ <> text₁
                             _ ->
@@ -322,7 +321,7 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                 suffixes <- traverse onChunk rest
 
-                return (Value.Text (text <> Text.concat suffixes))
+                pure (Value.Text (text <> Text.concat suffixes))
 
             Syntax.Project{ larger, smaller } -> do
                 let lookup field fieldValues = case HashMap.lookup field fieldValues of
@@ -331,7 +330,7 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                 larger' <- loop env larger
 
-                return case (larger', smaller) of
+                pure case (larger', smaller) of
                     (Value.Record fieldValues, Syntax.Single{ single = Syntax.Field{ field } }) ->
                         lookup field fieldValues
 
@@ -392,7 +391,7 @@ evaluate keyToMethods env₀ syntax₀ = do
             Syntax.Fold{ handlers } -> do
                 newHandlers <- loop env handlers
 
-                return (Value.Fold newHandlers)
+                pure (Value.Fold newHandlers)
 
             Syntax.If{ predicate, ifTrue, ifFalse } -> do
                 predicate' <- loop env predicate
@@ -400,7 +399,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                 ifTrue'  <- loop env ifTrue
                 ifFalse' <- loop env ifFalse
 
-                return case predicate' of
+                pure case predicate' of
                     Value.Scalar (Bool True) -> ifTrue'
                     Value.Scalar (Bool False) -> ifFalse'
                     _ -> error "Grace.Normalize.evaluate: if predicate must be a boolean value"
@@ -412,7 +411,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                     Left exception -> Exception.throwIO exception
                     Right prompt -> return prompt
 
-                Status{ context } <- get
+                Status{ context } <- State.get
 
                 let solvedSchema = fmap (Context.solveType context) schema
 
@@ -433,7 +432,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                     then do
                         bindings <- liftIO (generateContext env location)
 
-                        uri <- URI.mkURI (HTTP.url http)
+                        uri <- liftIO (URI.mkURI (HTTP.url http))
 
                         Status{ input = parent } <- State.get
 
@@ -448,7 +447,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                         return value
 
                     else do
-                        Status{ context } <- get
+                        Status{ context } <- State.get
 
                         let solvedSchema = Context.solveType context schema
 
@@ -489,7 +488,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                     else do
                         aesonValue <- liftIO (Grace.Aeson.decode text)
 
-                        Status{ context } <- get
+                        Status{ context } <- State.get
 
                         let solvedSchema = Context.solveType context schema
 
@@ -510,7 +509,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                     then do
                         bindings <- generateContext env location
 
-                        uri <- URI.mkURI url
+                        uri <- liftIO (URI.mkURI url)
 
                         Status{ input = parent } <- State.get
 
@@ -531,7 +530,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                             , parameters = Nothing
                             }
 
-                        Status{ context } <- get
+                        Status{ context } <- State.get
 
                         let solvedSchema = Context.solveType context schema
 
@@ -551,7 +550,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
+                pure case (left', right') of
                     (Value.Scalar (Bool l), Value.Scalar (Bool r)) ->
                         Value.Scalar (Bool (l && r))
                     _ ->
@@ -561,7 +560,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
+                pure case (left', right') of
                     (Value.Scalar (Bool l), Value.Scalar (Bool r)) ->
                         Value.Scalar (Bool (l || r))
                     _ ->
@@ -571,19 +570,19 @@ evaluate keyToMethods env₀ syntax₀ = do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return (Value.Scalar (Bool (left' == right')))
+                pure (Value.Scalar (Bool (left' == right')))
 
             Syntax.Operator{ operator = Syntax.NotEqual, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return (Value.Scalar (Bool (left' /= right')))
+                pure (Value.Scalar (Bool (left' /= right')))
 
             Syntax.Operator{ operator = Syntax.LessThan, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
+                pure case (left', right') of
                     (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
                         Value.Scalar (Bool (m < n))
                     (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
@@ -598,7 +597,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
+                pure case (left', right') of
                     (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
                         Value.Scalar (Bool (m <= n))
                     (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
@@ -612,7 +611,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
+                pure case (left', right') of
                     (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
                         Value.Scalar (Bool (m > n))
                     (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
@@ -626,7 +625,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
+                pure case (left', right') of
                     (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
                         Value.Scalar (Bool (m >= n))
                     (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
@@ -640,7 +639,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
+                pure case (left', right') of
                     (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
                         Value.Scalar (Natural (m * n))
                     (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
@@ -654,7 +653,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
+                pure case (left', right') of
                     (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
                         Value.Scalar (Natural (m + n))
                     (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
@@ -672,7 +671,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
+                pure case (left', right') of
                     (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
                         Value.Scalar (Integer (fromIntegral m - fromIntegral n))
                     (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
@@ -754,14 +753,13 @@ evaluate keyToMethods env₀ syntax₀ = do
     evaluating anonymous functions and evaluating all built-in functions.
 -}
 apply
-    :: (MonadCatch m, MonadState Status m, MonadIO m)
-    => (Text -> Methods)
+    :: (Text -> Methods)
     -- ^ OpenAI methods
     -> Value
     -- ^ Function
     -> Value
     -- ^ Argument
-    -> m Value
+    -> Grace Value
 apply keyToMethods function₀ argument₀ = loop function₀ argument₀
   where
     loop (Value.Lambda capturedEnv (Value.Name name Nothing) body) argument =

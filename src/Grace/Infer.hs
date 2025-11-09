@@ -24,17 +24,16 @@ module Grace.Infer
 
       -- * Types
     , HTTP(..)
-    , Status(..)
 
       -- * Errors related to type inference
     , TypeInferenceError(..)
     ) where
 
 import Control.Applicative ((<|>))
-import Control.Exception.Safe (Exception(..), MonadCatch, MonadThrow)
+import Control.Exception.Safe (Exception(..), MonadThrow)
 import Control.Monad (when)
 import Control.Monad.IO.Class (MonadIO(..))
-import Control.Monad.State.Strict (MonadState)
+import Control.Monad.State (MonadState)
 import Data.Foldable (for_, toList, traverse_)
 import Data.Sequence (ViewL(..), (<|))
 import Data.Typeable (Typeable)
@@ -47,6 +46,7 @@ import Grace.GitHub (GitHub(..))
 import Grace.HTTP.Type (HTTP(..))
 import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
+import Grace.Monad (Grace, Status(..))
 import Grace.Monotype (Monotype)
 import Grace.Pretty (Pretty(..))
 import Grace.Prompt.Types (Prompt(..))
@@ -74,25 +74,13 @@ import qualified Grace.Context as Context
 import qualified Grace.Domain as Domain
 import qualified Grace.Import as Import
 import qualified Grace.Location as Location
+import qualified Grace.Monad as Grace
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Pretty
 import qualified Grace.Syntax as Syntax
 import qualified Grace.Type as Type
 import qualified Grace.Value as Value
 import qualified Prettyprinter as Pretty
-
--- | Type-checking state
-data Status = Status
-    { count :: !Int
-      -- ^ Used to generate fresh unsolved variables (e.g. α̂, β̂ from the
-      --   original paper)
-
-    , context :: Context Location
-      -- ^ The type-checking context (e.g. Γ, Δ, Θ)
-
-    , input :: Input
-      -- ^ The parent import, used to resolve relative imports
-    }
 
 orDie :: (Exception e, MonadThrow m) => Maybe a -> e -> m a
 Just x  `orDie` _ = return x
@@ -247,8 +235,7 @@ wellFormed _ Type.Scalar{} = do
 -- The reason we don't just check if @superType₁@ is @Optional { }@ is because
 -- it might be an unsolved variable.  Checking if it is a subtype of
 -- @Optional a?@ is the most robust way to check.
-isFieldRequired
-    :: (MonadState Status m, MonadCatch m) => Type Location -> m Bool
+isFieldRequired :: Type Location -> Grace Bool
 isFieldRequired fieldType = do
     context <- get
 
@@ -276,9 +263,7 @@ isFieldRequired fieldType = do
         return True
 
 -- | @subtype sub super@ checks that @sub@ is a subtype of @super@
-subtype
-    :: (MonadState Status m, MonadCatch m)
-    => Type Location -> Type Location -> m ()
+subtype :: Type Location -> Type Location -> Grace ()
 subtype subType₀ superType₀ = do
     context₀ <- get
 
@@ -711,9 +696,7 @@ subtype subType₀ superType₀ = do
     because their job is to solve an unsolved variable within the context.
     However, for consistency with the paper we still name them @instantiate*@.
 -}
-instantiateTypeL
-    :: (MonadState Status m, MonadCatch m)
-    => Existential Monotype -> Type Location -> m ()
+instantiateTypeL :: Existential Monotype -> Type Location -> Grace ()
 instantiateTypeL a _A₀ = do
     _Γ₀ <- get
 
@@ -877,9 +860,7 @@ instantiateTypeL a _A₀ = do
     … which updates the context Γ to produce the new context Δ, by instantiating
     α̂ such that A :< α̂.
 -}
-instantiateTypeR
-    :: (MonadState Status m, MonadCatch m)
-    => Type Location -> Existential Monotype -> m ()
+instantiateTypeR :: Type Location -> Existential Monotype -> Grace ()
 instantiateTypeR _A₀ a = do
     _Γ₀ <- get
 
@@ -1025,8 +1006,7 @@ instantiateTypeR _A₀ a = do
 -}
 
 equateFields
-    :: (MonadState Status m, MonadThrow m)
-    => Existential Monotype.Record -> Existential Monotype.Record -> m ()
+    :: Existential Monotype.Record -> Existential Monotype.Record -> Grace ()
 equateFields p₀ p₁ = do
     _Γ₀ <- get
 
@@ -1052,11 +1032,10 @@ equateFields p₀ p₁ = do
             setContext
 
 instantiateFieldsL
-    :: (MonadState Status m, MonadCatch m)
-    => Existential Monotype.Record
+    :: Existential Monotype.Record
     -> Location
     -> Type.Record Location
-    -> m ()
+    -> Grace ()
 instantiateFieldsL p₀ location fields@(Type.Fields kAs rest) = do
     when (p₀ `Type.fieldsFreeIn` Type.Record{..}) do
         Exception.throwIO (NotFieldsSubtype location p₀ fields)
@@ -1097,11 +1076,10 @@ instantiateFieldsL p₀ location fields@(Type.Fields kAs rest) = do
     traverse_ instantiate kAbs
 
 instantiateFieldsR
-    :: (MonadState Status m, MonadCatch m)
-    => Location
+    :: Location
     -> Type.Record Location
     -> Existential Monotype.Record
-    -> m ()
+    -> Grace ()
 instantiateFieldsR location fields@(Type.Fields kAs rest) p₀ = do
     when (p₀ `Type.fieldsFreeIn` Type.Record{..}) do
         Exception.throwIO (NotFieldsSubtype location p₀ fields)
@@ -1142,8 +1120,7 @@ instantiateFieldsR location fields@(Type.Fields kAs rest) p₀ = do
     traverse_ instantiate kAbs
 
 equateAlternatives
-    :: (MonadState Status m, MonadThrow m)
-    => Existential Monotype.Union-> Existential Monotype.Union -> m ()
+    :: Existential Monotype.Union-> Existential Monotype.Union -> Grace ()
 equateAlternatives p₀ p₁ = do
     _Γ₀ <- get
 
@@ -1169,11 +1146,10 @@ equateAlternatives p₀ p₁ = do
             setContext
 
 instantiateAlternativesL
-    :: (MonadState Status m, MonadCatch m)
-    => Existential Monotype.Union
+    :: Existential Monotype.Union
     -> Location
     -> Type.Union Location
-    -> m ()
+    -> Grace ()
 instantiateAlternativesL p₀ location alternatives@(Type.Alternatives kAs rest) = do
     when (p₀ `Type.alternativesFreeIn` Type.Union{..}) do
         Exception.throwIO (NotAlternativesSubtype location p₀ alternatives)
@@ -1214,11 +1190,10 @@ instantiateAlternativesL p₀ location alternatives@(Type.Alternatives kAs rest)
     traverse_ instantiate kAbs
 
 instantiateAlternativesR
-    :: (MonadState Status m, MonadCatch m)
-    => Location
+    :: Location
     -> Type.Union Location
     -> Existential Monotype.Union
-    -> m ()
+    -> Grace ()
 instantiateAlternativesR location alternatives@(Type.Alternatives kAs rest) p₀ = do
     when (p₀ `Type.alternativesFreeIn` Type.Union{..}) do
         Exception.throwIO (NotAlternativesSubtype location p₀ alternatives)
@@ -1259,9 +1234,8 @@ instantiateAlternativesR location alternatives@(Type.Alternatives kAs rest) p₀
     traverse_ instantiate kAbs
 
 onNameBinding
-    :: (MonadCatch m, MonadState Status m, MonadIO m)
-    => NameBinding Location Input
-    -> m ((Text, Type Location), Entry Location, NameBinding Location Void)
+    :: NameBinding Location Input
+    -> Grace ((Text, Type Location), Entry Location, NameBinding Location Void)
 onNameBinding Syntax.NameBinding{ nameLocation, name, annotation = Nothing, assignment = Nothing } = do
     existential <- fresh
 
@@ -1341,9 +1315,8 @@ onNameBinding Syntax.NameBinding{ nameLocation, name, annotation = Just annotati
     return (fieldType, entry, newNameBinding)
 
 onBinding
-    :: (MonadCatch m, MonadState Status m, MonadIO m)
-    => Binding Location Input
-    -> m (Type Location, Context Location, Binding Location Void)
+    :: Binding Location Input
+    -> Grace (Type Location, Context Location, Binding Location Void)
 onBinding Syntax.PlainBinding{ plain } = do
     ((_, annotation), entry, newPlain) <- onNameBinding plain
 
@@ -1371,9 +1344,8 @@ onBinding Syntax.RecordBinding{ fieldNamesLocation, fieldNames } = do
     return (annotation, entries, newBinding)
 
 onDefinition
-    :: (MonadCatch m, MonadState Status m, MonadIO m)
-    => Definition Location Input
-    -> m ((Text, Type Location), Definition Location Void)
+    :: Definition Location Input
+    -> Grace ((Text, Type Location), Definition Location Void)
 onDefinition Syntax.Definition
     { nameLocation
     , name
@@ -1431,10 +1403,7 @@ onDefinition Syntax.Definition
     … which infers the type of e under input context Γ, producing an inferred
     type of A and an updated context Δ.
 -}
-infer
-    :: (MonadState Status m, MonadCatch m, MonadIO m)
-    => Syntax Location Input
-    -> m (Type Location, Syntax Location Void)
+infer :: Syntax Location Input -> Grace (Type Location, Syntax Location Void)
 infer e₀ = do
     let input ~> output = Type.Function{ location = Syntax.location e₀, ..}
 
@@ -3112,7 +3081,7 @@ infer e₀ = do
 
             result <- infer syntax
 
-            State.modify (\s -> s{ Grace.Infer.input = input })
+            State.modify (\s -> s{ Grace.Monad.input = input })
 
             return result
 
@@ -3123,11 +3092,7 @@ infer e₀ = do
     … which checks that e has type A under input context Γ, producing an updated
     context Δ.
 -}
-check
-    :: (MonadState Status m, MonadCatch m, MonadIO m)
-    => Syntax Location Input
-    -> Type Location
-    -> m (Syntax Location Void)
+check :: Syntax Location Input -> Type Location -> Grace (Syntax Location Void)
 -- The check function is the most important function to understand for the
 -- bidirectional type-checking algorithm.
 --
@@ -3856,7 +3821,7 @@ check Syntax.Embed{ embedded } annotation = do
 
     result <- check syntax annotation
 
-    State.modify (\s -> s{ Grace.Infer.input = input })
+    State.modify (\s -> s{ Grace.Monad.input = input })
 
     return result
 
@@ -3911,10 +3876,9 @@ check e _B = do
     input argument e, under input context Γ, producing an updated context Δ.
 -}
 inferApplication
-    :: (MonadState Status m, MonadCatch m, MonadIO m)
-    => Type Location
+    :: Type Location
     -> Syntax Location Input
-    -> m (Type Location, Syntax Location Void)
+    -> Grace (Type Location, Syntax Location Void)
 -- ∀App
 inferApplication Type.Forall{ domain = Domain.Type, .. } e = do
     a <- fresh
@@ -3966,7 +3930,7 @@ inferApplication _A _ = do
 
 -- | Infer the `Type` of the given `Syntax` tree
 typeOf
-    :: (MonadCatch m, MonadIO m)
+    :: MonadIO m
     => Input
     -> Syntax Location Input
     -> m (Type Location, Syntax Location Void)
@@ -3974,7 +3938,7 @@ typeOf input = typeWith input []
 
 -- | Like `typeOf`, but accepts a custom type-checking `Context`
 typeWith
-    :: (MonadCatch m, MonadIO m)
+    :: MonadIO m
     => Input
     -> Context Location
     -> Syntax Location Input
@@ -3982,7 +3946,7 @@ typeWith
 typeWith input context syntax = do
     let initialStatus = Status{ count = 0, context, input }
 
-    ((_A, elaborated), Status{ context = _Δ }) <- State.runStateT (infer syntax) initialStatus
+    ((_A, elaborated), Status{ context = _Δ }) <- Grace.runGrace initialStatus (infer syntax)
 
     return (Context.complete _Δ _A, solveSyntax _Δ elaborated)
 
@@ -4018,17 +3982,15 @@ inferJSON (Aeson.Bool bool) =
 inferJSON Aeson.Null =
     Value.Scalar Syntax.Null
 
--- | Check an `Aeson.Value` against an excepted `Type`
-checkJSON
-    :: (MonadCatch m, MonadState Status m, MonadIO m)
-    => Type Location -> Aeson.Value -> m Value
+-- | Check an `Aeson.Value` against an expected `Type`
+checkJSON :: Type Location -> Aeson.Value -> Grace Value
 checkJSON = loop []
   where
     loop path Type.Union{ Type.alternatives = Type.Alternatives alternativeTypes _ } (Aeson.Object [("contents", contents), ("tag", Aeson.String tag)])
         | Just alternativeType <- Prelude.lookup tag alternativeTypes = do
             value <- loop ("contents" : path) alternativeType contents
 
-            return (Value.Alternative tag value)
+            pure (Value.Alternative tag value)
     loop path Type.Record{ Type.fields = Type.Fields fieldTypes _ } (Aeson.Object object) = do
         let properties = Compat.fromAesonMap object
 
@@ -4043,7 +4005,7 @@ checkJSON = loop []
 
         fieldValues <- traverse process fieldTypes
 
-        return (Value.Record (Map.fromList fieldValues))
+        pure (Value.Record (Map.fromList fieldValues))
     loop path type_@Type.Scalar{ scalar = Monotype.JSON } (Aeson.Object object) = do
         let properties = Map.toList (Compat.fromAesonMap object)
 
@@ -4054,54 +4016,55 @@ checkJSON = loop []
 
         textValues <- traverse process properties
 
-        return (Value.Record (Map.fromList textValues))
+        pure (Value.Record (Map.fromList textValues))
     loop path Type.List{ Type.type_ } (Aeson.Array vector) = do
         elements <- traverse (loop ("*" : path) type_) vector
 
-        return (Value.List (Seq.fromList (toList elements)))
+        pure (Value.List (Seq.fromList (toList elements)))
     loop path type_@Type.Scalar{ scalar = Monotype.JSON } (Aeson.Array vector) = do
         elements <- traverse (loop ("*" : path) type_) vector
 
-        return (Value.List (Seq.fromList (toList elements)))
+        pure (Value.List (Seq.fromList (toList elements)))
     loop _ Type.Scalar{ scalar = Monotype.Text } (Aeson.String text) = do
-        return (Value.Text text)
+        pure (Value.Text text)
     loop _ Type.Scalar{ scalar = Monotype.JSON } (Aeson.String text) = do
-        return (Value.Text text)
+        pure (Value.Text text)
     loop _ Type.Scalar{ scalar = Monotype.Real } (Aeson.Number scientific) = do
-        return (Value.Scalar (Syntax.Real scientific))
+        pure (Value.Scalar (Syntax.Real scientific))
     loop path type_@Type.Scalar{ scalar = Monotype.Integer } value@(Aeson.Number scientific) = do
         case Scientific.floatingOrInteger @Double @Integer scientific of
             Right integer -> do
-                return (Value.Scalar (Syntax.Integer integer))
+                pure (Value.Scalar (Syntax.Integer integer))
             _ -> do
                 Exception.throwIO InvalidJSON{ path, value, type_ }
     loop path type_@Type.Scalar{ scalar = Monotype.Natural } value@(Aeson.Number scientific) =
         case Scientific.floatingOrInteger @Double @Integer scientific of
             Right integer
                 | 0 <= integer -> do
-                    return (Value.Scalar (Syntax.Natural (fromInteger integer)))
+                    pure (Value.Scalar (Syntax.Natural (fromInteger integer)))
             _ -> do
                 Exception.throwIO InvalidJSON{ path, value, type_ }
     loop _ Type.Scalar{ scalar = Monotype.JSON } (Aeson.Number scientific) =
         case Scientific.floatingOrInteger scientific of
             Left (_ :: Double) -> do
-                return (Value.Scalar (Syntax.Real scientific))
+                pure (Value.Scalar (Syntax.Real scientific))
             Right (integer :: Integer)
                 | 0 <= integer -> do
-                    return (Value.Scalar (Syntax.Natural (fromInteger integer)))
+                    pure (Value.Scalar (Syntax.Natural (fromInteger integer)))
                 | otherwise -> do
-                    return (Value.Scalar (Syntax.Integer integer))
+                    pure (Value.Scalar (Syntax.Integer integer))
     loop _ Type.Scalar{ Type.scalar = Monotype.Bool } (Aeson.Bool bool) =
-        return (Value.Scalar (Syntax.Bool bool))
+        pure (Value.Scalar (Syntax.Bool bool))
     loop _ Type.Scalar{ Type.scalar = Monotype.JSON } (Aeson.Bool bool) =
-        return (Value.Scalar (Syntax.Bool bool))
+        pure (Value.Scalar (Syntax.Bool bool))
     loop _ Type.Optional{ } Aeson.Null =
-        return (Value.Scalar Syntax.Null)
+        pure (Value.Scalar Syntax.Null)
     loop path Type.Optional{ type_ } value = do
         result <- loop path type_ value
-        return (Value.Application (Value.Builtin Syntax.Some) result)
+
+        pure (Value.Application (Value.Builtin Syntax.Some) result)
     loop _ Type.Scalar{ scalar = Monotype.JSON } Aeson.Null =
-        return (Value.Scalar Syntax.Null)
+        pure (Value.Scalar Syntax.Null)
     loop _ type₀ value = do
         let bytes = Aeson.Pretty.encodePretty value
 

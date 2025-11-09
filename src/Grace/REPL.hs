@@ -15,9 +15,9 @@ import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text)
 import Grace.HTTP (Methods)
-import Grace.Infer (Status(..))
 import Grace.Interpret (Input(..))
 import Grace.Location (Location(..))
+import Grace.Monad (Status(..))
 import Grace.Parser (REPLCommand(..))
 import System.Console.Haskeline (Interrupt(..))
 import System.Console.Repline (CompleterStyle(..), MultiLine(..), ReplOpts(..))
@@ -33,6 +33,7 @@ import qualified Data.Text.IO as Text.IO
 import qualified Grace.Context as Context
 import qualified Grace.Infer as Infer
 import qualified Grace.Label as Label
+import qualified Grace.Monad as Grace
 import qualified Grace.Normalize as Normalize
 import qualified Grace.Parser as Parser
 import qualified Grace.Pretty as Pretty
@@ -85,7 +86,7 @@ repl keyToMethods = do
 
                             return (inferred, value)
 
-                    result <- liftIO (Exception.try (State.runStateT action status))
+                    result <- liftIO (Exception.try (Grace.runGrace status action))
 
                     case result of
                         Left (e :: SomeException) -> do
