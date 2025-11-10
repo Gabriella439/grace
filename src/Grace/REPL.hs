@@ -73,9 +73,10 @@ repl keyToMethods = do
                               , body = first locate syntax₀
                               }
 
+                    let input = Code "(input)" text
+
                     let status = Status
                             { count = 0
-                            , input = Code "(input)" text
                             , context = []
                             }
 
@@ -86,7 +87,7 @@ repl keyToMethods = do
 
                             return (inferred, value)
 
-                    result <- liftIO (Exception.try (Grace.runGrace status action))
+                    result <- liftIO (Exception.try (Grace.runGrace input status action))
 
                     case result of
                         Left (e :: SomeException) -> do

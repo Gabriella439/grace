@@ -59,6 +59,7 @@ import Grace.Syntax
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
 import qualified Control.Monad as Monad
+import qualified Control.Monad.Reader as Reader
 import qualified Control.Monad.State as State
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Encode.Pretty as Aeson.Pretty
@@ -3066,24 +3067,19 @@ infer e₀ = do
                 , Syntax.Builtin{ builtin = Syntax.Reveal, .. }
                 )
 
-        Syntax.Embed{..} -> do
+        Syntax.Embed{ embedded } -> do
             _Γ <- get
 
-            Status{ input, .. } <- State.get
+            input <- Reader.ask
 
-            let absolute = input <> embedded
+            Reader.local (\i -> i <> embedded) do
+                absolute <- Reader.ask
 
-            Import.referentiallySane input absolute
+                Import.referentiallySane input absolute
 
-            State.put Status{ input = absolute, .. }
+                syntax <- liftIO (Import.resolve AsCode absolute)
 
-            syntax <- liftIO (Import.resolve AsCode absolute)
-
-            result <- infer syntax
-
-            State.modify (\s -> s{ Grace.Monad.input = input })
-
-            return result
+                infer syntax
 
 {-| This corresponds to the judgment:
 
@@ -3804,26 +3800,23 @@ check annotated annotation@Type.Scalar{ scalar = Monotype.Integer } = do
             return newAnnotated
 
 check Syntax.Embed{ embedded } annotation = do
-    Status{ input, context, .. } <- State.get
+    Status{ context } <- State.get
 
-    let absolute = input <> embedded
+    input <- Reader.ask
 
-    Import.referentiallySane input absolute
+    Reader.local (\i -> i <> embedded) do
+        absolute <- Reader.ask
 
-    State.put Status{ input = absolute, context, .. }
+        Import.referentiallySane input absolute
 
-    let mode = case Context.solveType context annotation of
-            Type.Scalar{ scalar = Monotype.Text } -> AsText
-            Type.Scalar{ scalar = Monotype.Key  } -> AsKey
-            _                                     -> AsCode
+        let mode = case Context.solveType context annotation of
+                Type.Scalar{ scalar = Monotype.Text } -> AsText
+                Type.Scalar{ scalar = Monotype.Key  } -> AsKey
+                _                                     -> AsCode
 
-    syntax <- liftIO (Import.resolve mode absolute)
+        syntax <- liftIO (Import.resolve mode absolute)
 
-    result <- check syntax annotation
-
-    State.modify (\s -> s{ Grace.Monad.input = input })
-
-    return result
+        check syntax annotation
 
 check Syntax.Text{ chunks = Syntax.Chunks text₀ [], .. } Type.Scalar{ scalar = Monotype.Key } = do
     return Syntax.Scalar{ scalar = Syntax.Key text₀, .. }
@@ -3944,9 +3937,9 @@ typeWith
     -> Syntax Location Input
     -> m (Type Location, Syntax Location Void)
 typeWith input context syntax = do
-    let initialStatus = Status{ count = 0, context, input }
+    let initialStatus = Status{ count = 0, context }
 
-    ((_A, elaborated), Status{ context = _Δ }) <- Grace.runGrace initialStatus (infer syntax)
+    ((_A, elaborated), Status{ context = _Δ }) <- Grace.runGrace input initialStatus (infer syntax)
 
     return (Context.complete _Δ _A, solveSyntax _Δ elaborated)
 

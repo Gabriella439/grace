@@ -24,7 +24,7 @@ import Data.Vector (Vector)
 import Grace.Decode (FromGrace(..), Key(..))
 import Grace.Input (Input(..))
 import Grace.Location (Location(..))
-import Grace.Monad (Grace, Status(..))
+import Grace.Monad (Grace)
 import Grace.Pretty (Pretty(..))
 import Grace.Prompt.Types (Effort(..), Prompt(..))
 import Grace.Type (Type(..))
@@ -47,7 +47,7 @@ import OpenAI.V1.Chat.Completions
 import {-# SOURCE #-} qualified Grace.Interpret as Interpret
 
 import qualified Control.Exception.Safe as Exception
-import qualified Control.Monad.State as State
+import qualified Control.Monad.Reader as Reader
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.Foldable as Foldable
@@ -56,6 +56,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
 import qualified Grace.DataFile as DataFile
 import qualified Grace.HTTP as HTTP
+import qualified Grace.Import as Import
 import qualified Grace.Infer as Infer
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Pretty as Pretty
@@ -347,19 +348,17 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
 
                         output <- toOutput chatCompletionObject
 
-                        Status{ input = parent } <- State.get
+                        parent <- Reader.ask
 
-                        let child = parent <> Code "(prompt)" output
+                        Reader.local (\i -> i <> Code "(prompt)" output) do
+                            child <- Reader.ask
 
-                        State.modify (\s -> (s :: Status){ input = child })
+                            Import.referentiallySane parent child
 
-                        expression <- Interpret.interpretWith keyToMethods bindings schema
-                            `Exception.catch` \(interpretError :: SomeException) -> do
-                                retry ((output, interpretError) : errors)
+                            Interpret.interpretWith keyToMethods bindings schema
+                                `Exception.catch` \(interpretError :: SomeException) -> do
+                                    retry ((output, interpretError) : errors)
 
-                        State.modify (\s -> (s :: Status){ input = parent })
-
-                        return expression
 
             (_, e) <- retry []
 

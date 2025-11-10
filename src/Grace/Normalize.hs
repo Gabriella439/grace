@@ -40,6 +40,7 @@ import {-# SOURCE #-} qualified Grace.Interpret as Interpret
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
 import qualified Control.Monad as Monad
+import qualified Control.Monad.Reader as Reader
 import qualified Control.Monad.State as State
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Yaml as YAML
@@ -57,6 +58,7 @@ import qualified Grace.Aeson
 import qualified Grace.Context as Context
 import qualified Grace.GitHub as GitHub
 import qualified Grace.HTTP as HTTP
+import qualified Grace.Import as Import
 import qualified Grace.Infer as Infer
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Pretty as Pretty
@@ -434,17 +436,16 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                         uri <- liftIO (URI.mkURI (HTTP.url http))
 
-                        Status{ input = parent } <- State.get
+                        parent <- Reader.ask
 
-                        let child = parent <> URI uri AsCode
+                        Reader.local (\i -> i <> URI uri AsCode) do
+                            child <- Reader.ask
 
-                        State.modify (\s -> s{ input = child })
+                            Import.referentiallySane parent child
 
-                        (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema)
+                            (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema)
 
-                        State.modify (\s -> s{ input = parent })
-
-                        return value
+                            return value
 
                     else do
                         Status{ context } <- State.get
@@ -473,17 +474,16 @@ evaluate keyToMethods env₀ syntax₀ = do
                     then do
                         bindings <- generateContext env location
 
-                        Status{ input = parent } <- State.get
+                        parent <- Reader.ask
 
-                        let child = parent <> Code "(read)" text
+                        Reader.local (\i -> i <> Code "(read)" text) do
+                            child <- Reader.ask
 
-                        State.modify (\s -> s{ input = child })
+                            Import.referentiallySane parent child
 
-                        (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema)
+                            (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema)
 
-                        State.modify (\s -> s{ input = parent })
-
-                        return value
+                            return value
 
                     else do
                         aesonValue <- liftIO (Grace.Aeson.decode text)
@@ -511,17 +511,16 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                         uri <- liftIO (URI.mkURI url)
 
-                        Status{ input = parent } <- State.get
+                        parent <- Reader.ask
 
-                        let child = parent <> URI uri AsCode
+                        Reader.local (\i -> i <> URI uri AsCode) do
+                            child <- Reader.ask
 
-                        State.modify (\s -> s{ input = child })
+                            Import.referentiallySane parent child
 
-                        (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema)
+                            (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema)
 
-                        State.modify (\s -> s{ input = parent })
-
-                        return value
+                            return value
 
                     else do
                         responseBody <- liftIO $ HTTP.http import_ GET

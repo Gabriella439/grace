@@ -222,9 +222,9 @@ main = Exception.handle handler do
 
             let expected = Type.Scalar{ scalar = Monotype.Text, location }
 
-            let initialStatus = Status{ count = 0, input, context = [] }
+            let initialStatus = Status{ count = 0, context = [] }
 
-            (_, value) <- Grace.evalGrace initialStatus (Interpret.interpretWith keyToMethods [] (Just expected))
+            (_, value) <- Grace.evalGrace input initialStatus (Interpret.interpretWith keyToMethods [] (Just expected))
 
             case value of
                 Value.Text text -> Text.IO.putStr text

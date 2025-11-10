@@ -421,6 +421,7 @@ data RenderValue = RenderValue
     { keyToMethods :: Text -> Methods
     , counter :: IORef Natural
     , status :: Status
+    , input :: Input
     , edit :: Bool
     }
 
@@ -610,7 +611,7 @@ renderValue parent outer (Value.Alternative alternative value) = do
     renderValue parent recordType recordValue
 
 renderValue parent Type.Function{ input, output } function = do
-    r@RenderValue{ counter, keyToMethods, status, edit } <- Reader.ask
+    r@RenderValue{ counter, keyToMethods, status, input = input_, edit } <- Reader.ask
 
     outputVal <- createElement "div"
 
@@ -635,7 +636,7 @@ renderValue parent Type.Function{ input, output } function = do
 
                     liftIO refreshOutput
 
-            eitherResult <- liftIO (Exception.try (Grace.evalGrace status interpretOutput))
+            eitherResult <- liftIO (Exception.try (Grace.evalGrace input_ status interpretOutput))
 
             case eitherResult of
                 Left exception -> do
@@ -656,6 +657,7 @@ renderValue parent Type.Function{ input, output } function = do
         , renderOutput
         , counter
         , status
+        , input = input_
         , edit
         })
 
@@ -719,6 +721,7 @@ data RenderInput = RenderInput
     , renderOutput :: Mode -> Value -> IO ()
     , counter :: IORef Natural
     , status :: Status
+    , input :: Input
     , edit :: Bool
     }
 
@@ -1419,7 +1422,7 @@ renderInputDefault path type_ = do
             Nothing -> ""
 
     return $ (,) (Value.Scalar Null) do
-        RenderInput{ keyToMethods, renderOutput, status } <- Reader.ask
+        RenderInput{ keyToMethods, renderOutput, status, input } <- Reader.ask
 
         textarea <- createElement "textarea"
 
@@ -1442,14 +1445,14 @@ renderInputDefault path type_ = do
 
                 setSessionStorage (renderPath path type_) text
 
-                let newStatus = status{ Grace.input = Grace.input status <> Code "(input)" text }
+                let newInput = input <> Code "(input)" text
 
                 let interpretInput = do
                         (_, value) <- Interpret.interpretWith keyToMethods [] (Just type_)
 
                         return value
 
-                result <- liftIO (Exception.try (Grace.evalGrace newStatus interpretInput))
+                result <- liftIO (Exception.try (Grace.evalGrace newInput status interpretInput))
 
                 case result of
                     Left exception -> do
@@ -1717,7 +1720,6 @@ main = do
 
                     let initialStatus = Status
                             { count = 0
-                            , input = input_
                             , context = []
                             }
 
@@ -1736,11 +1738,11 @@ main = do
                             let solvedType = Context.solveType context inferred
 
                             refreshOutput <- liftIO $ setSuccess completedType value \htmlWrapper -> do
-                                Reader.runReaderT (renderValue htmlWrapper solvedType value) RenderValue{ keyToMethods, counter, status, edit }
+                                Reader.runReaderT (renderValue htmlWrapper solvedType value) RenderValue{ keyToMethods, counter, status, input = input_, edit }
 
                             liftIO refreshOutput
 
-                    result <- Exception.try (Grace.evalGrace initialStatus interpretOutput)
+                    result <- Exception.try (Grace.evalGrace input_ initialStatus interpretOutput)
 
 
                     case result of

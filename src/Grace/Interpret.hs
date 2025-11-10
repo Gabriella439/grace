@@ -20,6 +20,7 @@ import Grace.Type (Type)
 import Grace.Value (Value)
 
 import qualified Control.Exception.Safe as Exception
+import qualified Control.Monad.Reader as Reader
 import qualified Control.Monad.State as State
 import qualified Grace.Context as Context
 import qualified Grace.HTTP as HTTP
@@ -38,10 +39,10 @@ import qualified Grace.Value as Value
 interpret
     :: MonadIO io => (Text -> Methods) -> Input -> io (Type Location, Value)
 interpret keyToMethods input = do
-    let initialStatus = Status{ count = 0, input, context = [] }
+    let initialStatus = Status{ count = 0, context = [] }
 
     ((inferred, value), Status{ context }) <- do
-        Grace.runGrace initialStatus (interpretWith keyToMethods [] Nothing)
+        Grace.runGrace input initialStatus (interpretWith keyToMethods [] Nothing)
 
     return (Context.complete context inferred, Value.complete context value)
 
@@ -55,7 +56,7 @@ interpretWith
     -- ^ Optional expected type for the input
     -> Grace (Type Location, Value)
 interpretWith keyToMethods bindings maybeAnnotation = do
-    Status{ input } <- State.get
+    input <- Reader.ask
 
     expression <- liftIO (Import.resolve AsCode input)
 
@@ -94,9 +95,9 @@ load input = do
 
     let type_ = fmap (\_ -> Unknown) (expected @a)
 
-    let initialStatus = Status{ count = 0, input, context = [] }
+    let initialStatus = Status{ count = 0, context = [] }
 
-    (_, value) <- Grace.evalGrace initialStatus (interpretWith keyToMethods [] (Just type_) )
+    (_, value) <- Grace.evalGrace input initialStatus (interpretWith keyToMethods [] (Just type_) )
 
     case decode value of
         Left exception -> liftIO (Exception.throwIO exception)
