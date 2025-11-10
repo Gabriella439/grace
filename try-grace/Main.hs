@@ -25,7 +25,7 @@ import Data.Sequence (ViewR(..), (|>))
 import Data.Text (Text)
 import Data.Traversable (forM)
 import Data.Void (Void)
-import Grace.Infer (Status(..))
+import Grace.Monad (Status(..))
 import Grace.Type (Type(..))
 import GHCJS.Foreign.Callback (Callback)
 import GHCJS.Types (JSVal)
@@ -73,6 +73,7 @@ import qualified Grace.Import as Import
 import qualified Grace.Infer as Infer
 import qualified Grace.Input as Input
 import qualified Grace.Interpret as Interpret
+import qualified Grace.Monad as Grace
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Normalize as Normalize
 import qualified Grace.Pretty as Pretty
@@ -420,6 +421,7 @@ data RenderValue = RenderValue
     { keyToMethods :: Text -> Methods
     , counter :: IORef Natural
     , status :: Status
+    , input :: Input
     , edit :: Bool
     }
 
@@ -609,7 +611,7 @@ renderValue parent outer (Value.Alternative alternative value) = do
     renderValue parent recordType recordValue
 
 renderValue parent Type.Function{ input, output } function = do
-    r@RenderValue{ counter, keyToMethods, status, edit } <- Reader.ask
+    r@RenderValue{ counter, keyToMethods, status, input = input_, edit } <- Reader.ask
 
     outputVal <- createElement "div"
 
@@ -634,7 +636,7 @@ renderValue parent Type.Function{ input, output } function = do
 
                     liftIO refreshOutput
 
-            eitherResult <- liftIO (Exception.try (State.evalStateT interpretOutput status))
+            eitherResult <- liftIO (Exception.try (Grace.evalGrace input_ status interpretOutput))
 
             case eitherResult of
                 Left exception -> do
@@ -655,6 +657,7 @@ renderValue parent Type.Function{ input, output } function = do
         , renderOutput
         , counter
         , status
+        , input = input_
         , edit
         })
 
@@ -718,6 +721,7 @@ data RenderInput = RenderInput
     , renderOutput :: Mode -> Value -> IO ()
     , counter :: IORef Natural
     , status :: Status
+    , input :: Input
     , edit :: Bool
     }
 
@@ -1418,7 +1422,7 @@ renderInputDefault path type_ = do
             Nothing -> ""
 
     return $ (,) (Value.Scalar Null) do
-        RenderInput{ keyToMethods, renderOutput, status } <- Reader.ask
+        RenderInput{ keyToMethods, renderOutput, status, input } <- Reader.ask
 
         textarea <- createElement "textarea"
 
@@ -1441,14 +1445,14 @@ renderInputDefault path type_ = do
 
                 setSessionStorage (renderPath path type_) text
 
-                let newStatus = status{ Infer.input = Infer.input status <> Code "(input)" text }
+                let newInput = input <> Code "(input)" text
 
                 let interpretInput = do
                         (_, value) <- Interpret.interpretWith keyToMethods [] (Just type_)
 
                         return value
 
-                result <- liftIO (Exception.try (State.evalStateT interpretInput newStatus))
+                result <- liftIO (Exception.try (Grace.evalGrace newInput status interpretInput))
 
                 case result of
                     Left exception -> do
@@ -1716,7 +1720,6 @@ main = do
 
                     let initialStatus = Status
                             { count = 0
-                            , input = input_
                             , context = []
                             }
 
@@ -1735,11 +1738,11 @@ main = do
                             let solvedType = Context.solveType context inferred
 
                             refreshOutput <- liftIO $ setSuccess completedType value \htmlWrapper -> do
-                                Reader.runReaderT (renderValue htmlWrapper solvedType value) RenderValue{ keyToMethods, counter, status, edit }
+                                Reader.runReaderT (renderValue htmlWrapper solvedType value) RenderValue{ keyToMethods, counter, status, input = input_, edit }
 
                             liftIO refreshOutput
 
-                    result <- Exception.try (State.evalStateT interpretOutput initialStatus)
+                    result <- Exception.try (Grace.evalGrace input_ initialStatus interpretOutput)
 
 
                     case result of
