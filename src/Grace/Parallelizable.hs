@@ -93,11 +93,8 @@ instance MonadTrans Parallelizable where
 
             return (Pure a)
 
-instance Monad io => MonadIO (Parallelizable io) where
-    liftIO io = Serial{ serial }
-      where
-        serial = do
-            pure (Concurrent (Concurrently (fmap pure io)))
+instance MonadIO io => MonadIO (Parallelizable io) where
+    liftIO io = lift (liftIO io)
 
 instance (Monad io, Semigroup a) => Semigroup (Parallelizable io a) where
     (<>) = liftA2 (<>)
