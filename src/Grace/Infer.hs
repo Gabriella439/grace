@@ -3218,7 +3218,7 @@ check e Type.Forall{..} = do
         check e type_
 
 check Syntax.Let{ location, assignments, body } annotation₀ = do
-    let assign element monad₀ = do
+    let assign monad₀ = do
             let cons Syntax.Define{ assignmentLocation, definition } action = do
                     ((name, annotation₁), newDefinition) <- onDefinition definition
 
@@ -3244,26 +3244,76 @@ check Syntax.Let{ location, assignments, body } annotation₀ = do
 
                             (newAssignments, newBody) <- foldr scoped action newEntries
 
-                            context <- get
+                            annotation₂ <- case monad₀ of
+                                Just ListMonad -> do
+                                    context <- get
 
-                            let annotation₂ = Context.solveType context annotation₁
+                                    existential <- fresh
 
-                            let annotation₃ = case monad₀ of
-                                    Just ListMonad -> Type.List
-                                        { location = assignmentLocation
-                                        , type_ = annotation₂
-                                        }
+                                    push (Context.UnsolvedType existential)
 
-                                    Just OptionalMonad -> Type.Optional
-                                        { location = assignmentLocation
-                                        , type_ = annotation₂
-                                        }
+                                    let element = Type.UnsolvedType
+                                            { location = assignmentLocation
+                                            , existential
+                                            }
 
-                                    Just UnknownMonad -> annotation₂
+                                    let list = Type.List
+                                            { location = assignmentLocation
+                                            , type_ = element
+                                            }
 
-                                    Nothing -> annotation₂
+                                    _ <- check value list `Exception.catch` \(_ :: TypeInferenceError) -> do
+                                        set context
 
-                            newValue <- check value annotation₃
+                                        Exception.throwIO (MonadMismatch assignmentLocation)
+
+                                    set context
+
+                                    let annotation₂ = Type.List
+                                            { location = assignmentLocation
+                                            , type_ = annotation₁
+                                            }
+
+                                    return annotation₂
+
+                                Just OptionalMonad -> do
+                                    context <- get
+
+                                    existential <- fresh
+
+                                    push (Context.UnsolvedType existential)
+
+                                    let element = Type.UnsolvedType
+                                            { location = assignmentLocation
+                                            , existential
+                                            }
+
+                                    let optional = Type.Optional
+                                            { location = assignmentLocation
+                                            , type_ = element
+                                            }
+
+                                    _ <- check value optional `Exception.catch` \(_ :: TypeInferenceError) -> do
+                                        set context
+
+                                        Exception.throwIO (MonadMismatch assignmentLocation)
+
+                                    set context
+
+                                    let annotation₂ = Type.Optional
+                                            { location = assignmentLocation
+                                            , type_ = annotation₁
+                                            }
+
+                                    return annotation₂
+
+                                Just UnknownMonad -> do
+                                    return annotation₁
+
+                                Nothing -> do
+                                    return annotation₁
+
+                            newValue <- check value annotation₂
 
                             let newAssignment = Syntax.Bind
                                     { assignmentLocation
@@ -3275,13 +3325,62 @@ check Syntax.Let{ location, assignments, body } annotation₀ = do
                             return (newAssignment : newAssignments, newBody)
 
             let nil = do
-                    newBody <- check body element
+                    element <- case monad₀ of
+                        Just ListMonad -> do
+                            existential <- fresh
+
+                            push (Context.UnsolvedType existential)
+
+                            let element = Type.UnsolvedType
+                                    { location
+                                    , existential
+                                    }
+
+                            let list = Type.List
+                                    { location
+                                    , type_ = element
+                                    }
+
+                            context <- get
+
+                            subtype (Context.solveType context annotation₀) list
+
+                            return element
+
+                        Just OptionalMonad -> do
+                            existential <- fresh
+
+                            push (Context.UnsolvedType existential)
+
+                            let element = Type.UnsolvedType
+                                    { location
+                                    , existential
+                                    }
+
+                            let optional = Type.Optional
+                                    { location
+                                    , type_ = element
+                                    }
+
+                            context <- get
+
+                            subtype (Context.solveType context annotation₀) optional
+
+                            return element
+
+                        Just UnknownMonad -> do
+                            return annotation₀
+
+                        Nothing -> do
+                            return annotation₀
+
+                    context <- get
+
+                    newBody <- check body (Context.solveType context element)
 
                     return ([], newBody)
 
             (newAssignments, newBody) <- foldr cons nil assignments
-
-            context <- get
 
             let newLet = Syntax.Let
                     { location
@@ -3289,25 +3388,19 @@ check Syntax.Let{ location, assignments, body } annotation₀ = do
                     , body = newBody
                     }
 
+            context <- get
+
             return (solveSyntax context newLet)
 
     context <- get
 
-    case annotation₀ of
-        Type.Optional{ type_ } ->
-            assign annotation₀ Nothing `Exception.catch` \(_ :: MonadMismatch) -> do
-                set context
+    assign Nothing `Exception.catch` \(_ :: MonadMismatch) -> do
+        set context
 
-                assign type_ (Just OptionalMonad)
+        assign (Just ListMonad) `Exception.catch` \(_ :: MonadMismatch) -> do
+            set context
 
-        Type.List{ type_ } ->
-            assign annotation₀ Nothing `Exception.catch` \(_ :: MonadMismatch) -> do
-                set context
-
-                assign type_ (Just ListMonad)
-
-        _ -> do
-            assign annotation₀ Nothing
+            assign (Just OptionalMonad)
 
 check Syntax.Alternative{ location, name, argument } annotation@Type.Union{ alternatives = Type.Alternatives alternativeTypes remainingAlternatives } = do
     existential <- fresh

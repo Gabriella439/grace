@@ -1,0 +1,15 @@
+# This test verifies that the `check` rule for `for` assignments works
+# correctly when the type annotation is an unsolved variable,such as
+# when checking the body of a lambda without an annotation.
+\y ->
+
+{ "Example 0":
+    # This should get elaborated to `for x of some 1 in x` and have an
+    # inferred type of `Optional Natural` because if there is at least
+    # one `for` assignment then the type checker assumes that it must
+    # be *some* monad and the monad of last resort is always `Optional`
+    # (which will always succeed).
+    for x of 1 in x
+, "Example 1":
+    for x of [ 1 ] in x
+}
