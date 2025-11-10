@@ -90,11 +90,12 @@ Nothing `orDie` e = Exception.throwIO e
 -- | Generate a fresh existential variable (of any type)
 fresh :: MonadState Status m => m (Existential a)
 fresh = do
-    Status{ count = n, .. } <- State.get
+    let update Status{ count = count₀, .. } =
+            (fromIntegral count₀, Status{ count = count₁, .. })
+          where
+            count₁ = count₀ + 1
 
-    State.put $! Status{ count = n + 1, .. }
-
-    return (fromIntegral n)
+    State.state update
 
 -- Unlike the original paper, we don't explicitly thread the `Context` around.
 -- Instead, we modify the ambient state using the following utility functions:
@@ -3800,7 +3801,7 @@ check annotated annotation@Type.Scalar{ scalar = Monotype.Integer } = do
             return newAnnotated
 
 check Syntax.Embed{ embedded } annotation = do
-    Status{ context } <- State.get
+    context <- get
 
     input <- Reader.ask
 
