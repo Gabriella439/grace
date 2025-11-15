@@ -1,1 +1,1 @@
-\x -> [ x, "hi", [ 1, 2 ] : JSON, true, { "x": "bye" } ]
+\x -> [ x, "hi", [ 1, 2 ] : JSON, some true, { "x": "bye" } ]

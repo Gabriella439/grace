@@ -78,6 +78,11 @@ data Mode
     -- ^ Interpret the string as a Key
     deriving stock (Eq, Show)
 
+instance Semigroup Mode where
+    mode <> AsCode = mode
+
+    _ <> mode = mode
+
 instance Pretty Mode where
     pretty AsCode = mempty
     pretty AsText =

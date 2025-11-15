@@ -1,0 +1,22 @@
+forall (a : Type) .
+forall (b : Fields) .
+  { array:
+      List a -> a
+  , bool:
+      Bool -> a
+  , integer:
+      Integer -> a
+  , natural:
+      Natural -> a
+  , null:
+      a
+  , object:
+      List { key: Text, value: a } -> a
+  , real:
+      Real -> a
+  , string:
+      Text -> a
+  , b
+  } ->
+  JSON ->
+    a

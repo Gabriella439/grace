@@ -1,0 +1,4 @@
+forall (a : Type) .
+forall (b : Type) .
+forall (c : Fields) .
+  { nil: a, cons: b -> a -> a, c } -> List b -> a

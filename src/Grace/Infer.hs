@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RecordWildCards  #-}
+{-# LANGUAGE OverloadedLists  #-}
 
 {-| This module is based on the bidirectional type-checking algorithm from:
 
@@ -18,22 +19,24 @@ module Grace.Infer
       typeOf
     , typeWith
     , infer
+    , inferJSON
+    , checkJSON
 
       -- * Types
     , HTTP(..)
-    , Status(..)
 
       -- * Errors related to type inference
     , TypeInferenceError(..)
     ) where
 
 import Control.Applicative ((<|>))
-import Control.Exception.Safe (Exception(..), MonadCatch, MonadThrow)
+import Control.Exception.Safe (Exception(..), MonadThrow)
 import Control.Monad (when)
 import Control.Monad.IO.Class (MonadIO(..))
-import Control.Monad.State.Strict (MonadState)
-import Data.Foldable (for_, traverse_)
+import Control.Monad.State (MonadState)
+import Data.Foldable (for_, toList, traverse_)
 import Data.Sequence (ViewL(..), (<|))
+import Data.Typeable (Typeable)
 import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Context (Context, Entry)
@@ -41,48 +44,44 @@ import Grace.Decode (FromGrace(..))
 import Grace.Existential (Existential)
 import Grace.GitHub (GitHub(..))
 import Grace.HTTP.Type (HTTP(..))
-import Grace.Input (Input)
+import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
+import Grace.Monad (Grace, Status(..))
 import Grace.Monotype (Monotype)
 import Grace.Pretty (Pretty(..))
 import Grace.Prompt.Types (Prompt(..))
 import Grace.Type (Type(..))
+import Grace.Value (Value)
 
 import Grace.Syntax
-    (Assignment, Binding, BindMonad(..), Definition(..), NameBinding, Syntax)
+    (Binding, BindMonad(..), Definition(..), NameBinding, Syntax)
 
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
 import qualified Control.Monad as Monad
+import qualified Control.Monad.Reader as Reader
 import qualified Control.Monad.State as State
+import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Encode.Pretty as Aeson.Pretty
+import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.HashMap.Strict.InsOrd as Map
-import qualified Data.List as List
 import qualified Data.List.NonEmpty as NonEmpty
-import qualified Data.Ord as Ord
+import qualified Data.Scientific as Scientific
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Encoding
+import qualified Grace.Compat as Compat
 import qualified Grace.Context as Context
 import qualified Grace.Domain as Domain
 import qualified Grace.Import as Import
 import qualified Grace.Location as Location
+import qualified Grace.Monad as Grace
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Pretty
 import qualified Grace.Syntax as Syntax
 import qualified Grace.Type as Type
+import qualified Grace.Value as Value
 import qualified Prettyprinter as Pretty
-
--- | Type-checking state
-data Status = Status
-    { count :: !Int
-      -- ^ Used to generate fresh unsolved variables (e.g. α̂, β̂ from the
-      --   original paper)
-
-    , context :: Context Location
-      -- ^ The type-checking context (e.g. Γ, Δ, Θ)
-
-    , input :: Input
-      -- ^ The parent import, used to resolve relative imports
-    }
 
 orDie :: (Exception e, MonadThrow m) => Maybe a -> e -> m a
 Just x  `orDie` _ = return x
@@ -91,11 +90,12 @@ Nothing `orDie` e = Exception.throwIO e
 -- | Generate a fresh existential variable (of any type)
 fresh :: MonadState Status m => m (Existential a)
 fresh = do
-    Status{ count = n, .. } <- State.get
+    let update Status{ count = count₀, .. } =
+            (fromIntegral count₀, Status{ count = count₁, .. })
+          where
+            count₁ = count₀ + 1
 
-    State.put $! Status{ count = n + 1, .. }
-
-    return (fromIntegral n)
+    State.state update
 
 -- Unlike the original paper, we don't explicitly thread the `Context` around.
 -- Instead, we modify the ambient state using the following utility functions:
@@ -237,8 +237,7 @@ wellFormed _ Type.Scalar{} = do
 -- The reason we don't just check if @superType₁@ is @Optional { }@ is because
 -- it might be an unsolved variable.  Checking if it is a subtype of
 -- @Optional a?@ is the most robust way to check.
-isFieldRequired
-    :: (MonadState Status m, MonadCatch m) => Type Location -> m Bool
+isFieldRequired :: Type Location -> Grace Bool
 isFieldRequired fieldType = do
     context <- get
 
@@ -266,9 +265,7 @@ isFieldRequired fieldType = do
         return True
 
 -- | @subtype sub super@ checks that @sub@ is a subtype of @super@
-subtype
-    :: (MonadState Status m, MonadCatch m)
-    => Type Location -> Type Location -> m ()
+subtype :: Type Location -> Type Location -> Grace ()
 subtype subType₀ superType₀ = do
     context₀ <- get
 
@@ -701,9 +698,7 @@ subtype subType₀ superType₀ = do
     because their job is to solve an unsolved variable within the context.
     However, for consistency with the paper we still name them @instantiate*@.
 -}
-instantiateTypeL
-    :: (MonadState Status m, MonadCatch m)
-    => Existential Monotype -> Type Location -> m ()
+instantiateTypeL :: Existential Monotype -> Type Location -> Grace ()
 instantiateTypeL a _A₀ = do
     _Γ₀ <- get
 
@@ -867,9 +862,7 @@ instantiateTypeL a _A₀ = do
     … which updates the context Γ to produce the new context Δ, by instantiating
     α̂ such that A :< α̂.
 -}
-instantiateTypeR
-    :: (MonadState Status m, MonadCatch m)
-    => Type Location -> Existential Monotype -> m ()
+instantiateTypeR :: Type Location -> Existential Monotype -> Grace ()
 instantiateTypeR _A₀ a = do
     _Γ₀ <- get
 
@@ -1015,8 +1008,7 @@ instantiateTypeR _A₀ a = do
 -}
 
 equateFields
-    :: (MonadState Status m, MonadThrow m)
-    => Existential Monotype.Record -> Existential Monotype.Record -> m ()
+    :: Existential Monotype.Record -> Existential Monotype.Record -> Grace ()
 equateFields p₀ p₁ = do
     _Γ₀ <- get
 
@@ -1042,11 +1034,10 @@ equateFields p₀ p₁ = do
             setContext
 
 instantiateFieldsL
-    :: (MonadState Status m, MonadCatch m)
-    => Existential Monotype.Record
+    :: Existential Monotype.Record
     -> Location
     -> Type.Record Location
-    -> m ()
+    -> Grace ()
 instantiateFieldsL p₀ location fields@(Type.Fields kAs rest) = do
     when (p₀ `Type.fieldsFreeIn` Type.Record{..}) do
         Exception.throwIO (NotFieldsSubtype location p₀ fields)
@@ -1087,11 +1078,10 @@ instantiateFieldsL p₀ location fields@(Type.Fields kAs rest) = do
     traverse_ instantiate kAbs
 
 instantiateFieldsR
-    :: (MonadState Status m, MonadCatch m)
-    => Location
+    :: Location
     -> Type.Record Location
     -> Existential Monotype.Record
-    -> m ()
+    -> Grace ()
 instantiateFieldsR location fields@(Type.Fields kAs rest) p₀ = do
     when (p₀ `Type.fieldsFreeIn` Type.Record{..}) do
         Exception.throwIO (NotFieldsSubtype location p₀ fields)
@@ -1132,8 +1122,7 @@ instantiateFieldsR location fields@(Type.Fields kAs rest) p₀ = do
     traverse_ instantiate kAbs
 
 equateAlternatives
-    :: (MonadState Status m, MonadThrow m)
-    => Existential Monotype.Union-> Existential Monotype.Union -> m ()
+    :: Existential Monotype.Union-> Existential Monotype.Union -> Grace ()
 equateAlternatives p₀ p₁ = do
     _Γ₀ <- get
 
@@ -1159,11 +1148,10 @@ equateAlternatives p₀ p₁ = do
             setContext
 
 instantiateAlternativesL
-    :: (MonadState Status m, MonadCatch m)
-    => Existential Monotype.Union
+    :: Existential Monotype.Union
     -> Location
     -> Type.Union Location
-    -> m ()
+    -> Grace ()
 instantiateAlternativesL p₀ location alternatives@(Type.Alternatives kAs rest) = do
     when (p₀ `Type.alternativesFreeIn` Type.Union{..}) do
         Exception.throwIO (NotAlternativesSubtype location p₀ alternatives)
@@ -1204,11 +1192,10 @@ instantiateAlternativesL p₀ location alternatives@(Type.Alternatives kAs rest)
     traverse_ instantiate kAbs
 
 instantiateAlternativesR
-    :: (MonadState Status m, MonadCatch m)
-    => Location
+    :: Location
     -> Type.Union Location
     -> Existential Monotype.Union
-    -> m ()
+    -> Grace ()
 instantiateAlternativesR location alternatives@(Type.Alternatives kAs rest) p₀ = do
     when (p₀ `Type.alternativesFreeIn` Type.Union{..}) do
         Exception.throwIO (NotAlternativesSubtype location p₀ alternatives)
@@ -1249,9 +1236,8 @@ instantiateAlternativesR location alternatives@(Type.Alternatives kAs rest) p₀
     traverse_ instantiate kAbs
 
 onNameBinding
-    :: (MonadCatch m, MonadState Status m, MonadIO m)
-    => NameBinding Location Input
-    -> m ((Text, Type Location), Entry Location, NameBinding Location Void)
+    :: NameBinding Location Input
+    -> Grace ((Text, Type Location), Entry Location, NameBinding Location Void)
 onNameBinding Syntax.NameBinding{ nameLocation, name, annotation = Nothing, assignment = Nothing } = do
     existential <- fresh
 
@@ -1331,9 +1317,8 @@ onNameBinding Syntax.NameBinding{ nameLocation, name, annotation = Just annotati
     return (fieldType, entry, newNameBinding)
 
 onBinding
-    :: (MonadCatch m, MonadState Status m, MonadIO m)
-    => Binding Location Input
-    -> m (Type Location, Context Location, Binding Location Void)
+    :: Binding Location Input
+    -> Grace (Type Location, Context Location, Binding Location Void)
 onBinding Syntax.PlainBinding{ plain } = do
     ((_, annotation), entry, newPlain) <- onNameBinding plain
 
@@ -1361,9 +1346,8 @@ onBinding Syntax.RecordBinding{ fieldNamesLocation, fieldNames } = do
     return (annotation, entries, newBinding)
 
 onDefinition
-    :: (MonadCatch m, MonadState Status m, MonadIO m)
-    => Definition Location Input
-    -> m ((Text, Type Location), Definition Location Void)
+    :: Definition Location Input
+    -> Grace ((Text, Type Location), Definition Location Void)
 onDefinition Syntax.Definition
     { nameLocation
     , name
@@ -1421,10 +1405,7 @@ onDefinition Syntax.Definition
     … which infers the type of e under input context Γ, producing an inferred
     type of A and an updated context Δ.
 -}
-infer
-    :: (MonadState Status m, MonadCatch m, MonadIO m)
-    => Syntax Location Input
-    -> m (Type Location, Syntax Location Void)
+infer :: Syntax Location Input -> Grace (Type Location, Syntax Location Void)
 infer e₀ = do
     let input ~> output = Type.Function{ location = Syntax.location e₀, ..}
 
@@ -1502,151 +1483,110 @@ infer e₀ = do
                     return (annotation, Syntax.Annotation{ annotated = annotated₁, annotation, location })
 
         Syntax.Let{ location, assignments, body } -> do
-            let cons
-                    :: (MonadCatch m, MonadState Status m, MonadIO m)
-                    => Assignment Location Input
-                    -> m ([(BindMonad, Location)], [Assignment Location Void], Syntax Location Void)
-                    -> m ([(BindMonad, Location)], [Assignment Location Void], Syntax Location Void)
-                cons Syntax.Define{ assignmentLocation, definition } action = do
-                    ((name, annotation), newDefinition) <- onDefinition definition
+            let assign monad₀ = do
+                    let cons Syntax.Define{ assignmentLocation, definition } action = do
+                            ((name, annotation), newDefinition) <- onDefinition definition
 
-                    let entry = Context.Annotation name annotation
+                            let entry = Context.Annotation name annotation
 
-                    let newAssignment = Syntax.Define
-                            { assignmentLocation
-                            , definition = newDefinition
+                            let newAssignment = Syntax.Define
+                                    { assignmentLocation
+                                    , definition = newDefinition
+                                    }
+
+                            scoped entry do
+                                (newAssignments, newBody) <- action
+
+                                return (newAssignment : newAssignments, newBody)
+
+                        cons Syntax.Bind{ assignmentLocation, monad = monad₁, binding, assignment = value } action = do
+                            case (monad₀, monad₁) of
+                                (Nothing, Just _) -> do
+                                    Exception.throwIO (MonadMismatch assignmentLocation)
+
+                                _ -> do
+                                    (annotation₀, newEntries, newBinding) <- onBinding binding
+
+                                    (newAssignments, newBody) <- foldr scoped action newEntries
+
+                                    context <- get
+
+                                    let annotation₁ = Context.solveType context annotation₀
+
+                                    let annotation₂ = case monad₀ of
+                                            Just ListMonad -> Type.List
+                                                { location = assignmentLocation
+                                                , type_ = annotation₁
+                                                }
+
+                                            Just OptionalMonad -> Type.Optional
+                                                { location = assignmentLocation
+                                                , type_ = annotation₁
+                                                }
+
+                                            Just UnknownMonad -> annotation₁
+
+                                            Nothing -> annotation₁
+
+                                    newValue <- check value annotation₂
+
+                                    let newAssignment = Syntax.Bind
+                                            { assignmentLocation
+                                            , monad = monad₀
+                                            , binding = newBinding
+                                            , assignment = newValue
+                                            }
+
+                                    return (newAssignment : newAssignments, newBody)
+
+                    b <- fresh
+
+                    push (Context.UnsolvedType b)
+
+                    let unsolved = Type.UnsolvedType
+                            { location = Syntax.location body
+                            , existential = b
                             }
 
-                    scoped entry do
-                        (monads, newAssignments, newBody) <- action
+                    let nil = do
+                            newBody <- check body unsolved
 
-                        return (monads, newAssignment : newAssignments, newBody)
+                            return ([], newBody)
 
-                cons Syntax.Bind{ assignmentLocation, monad = Nothing, binding, assignment = value } action = do
-                    (annotation₀, newEntries, newBinding) <- onBinding binding
+                    (newAssignments, newBody) <- foldr cons nil assignments
 
-                    (monads, newAssignments, newBody) <- foldr scoped action newEntries
+                    let output = case monad₀ of
+                            Just OptionalMonad -> Type.Optional
+                                { location = location
+                                , type_ = unsolved
+                                }
+                            Just ListMonad -> Type.List
+                                { location = location
+                                , type_ = unsolved
+                                }
+                            Just UnknownMonad -> unsolved
+                            Nothing -> unsolved
 
                     context <- get
 
-                    let annotation₁ = Context.solveType context annotation₀
-
-                    newValue <- check value annotation₁
-
-                    let newAssignment = Syntax.Bind
-                            { assignmentLocation
-                            , monad = Nothing
-                            , binding = newBinding
-                            , assignment = newValue
+                    let newLet = Syntax.Let
+                            { location
+                            , assignments = NonEmpty.fromList newAssignments
+                            , body = newBody
                             }
 
-                    return (monads, newAssignment : newAssignments, newBody)
-
-                cons Syntax.Bind{ assignmentLocation, monad = Just monad₀, binding, assignment = value } action = do
-                    (annotation₀, newEntries, newBinding) <- onBinding binding
-
-                    (monads, newAssignments, newBody) <- foldr scoped action newEntries
-
-                    context <- get
-
-                    let annotation₁ = Context.solveType context annotation₀
-
-                    let listMonad = do
-                            let annotation₂ = Type.List
-                                    { location = assignmentLocation
-                                    , type_ = annotation₁
-                                    }
-
-                            newValue <- check value annotation₂
-
-                            let monad₁ = ListMonad
-
-                            let newAssignment = Syntax.Bind
-                                    { assignmentLocation
-                                    , monad = Just monad₁
-                                    , binding = newBinding
-                                    , assignment = newValue
-                                    }
-
-                            return (monad₁, newAssignment)
-
-                    let optionalMonad = do
-                            let annotation₂ = Type.Optional
-                                    { location = assignmentLocation
-                                    , type_ = annotation₁
-                                    }
-
-                            newValue <- check value annotation₂
-
-                            let monad₁ = OptionalMonad
-
-                            let newAssignment = Syntax.Bind
-                                    { assignmentLocation
-                                    , monad = Just monad₁
-                                    , binding = newBinding
-                                    , assignment = newValue
-                                    }
-
-                            return (monad₁, newAssignment)
-
-                    (monad₁, newAssignment) <- case monad₀ of
-                         ListMonad -> do
-                            listMonad
-                         OptionalMonad -> do
-                            optionalMonad
-                         UnknownMonad -> do
-                            listMonad `Exception.catch` \(_ :: TypeInferenceError) -> do
-                                set context
-
-                                optionalMonad
-
-                    return ((monad₁, assignmentLocation) : monads, newAssignment : newAssignments, newBody)
-
-
-            b <- fresh
-
-            push (Context.UnsolvedType b)
-
-            let unsolved = Type.UnsolvedType
-                    { location = Syntax.location body
-                    , existential = b
-                    }
-
-            let nil = do
-                    newBody <- check body unsolved
-
-                    return ([], [], newBody)
-
-            (monads₀, newAssignments, newBody) <- foldr cons nil assignments
-
-            output <- case monads₀ of
-                [] -> do
-                    return unsolved
-
-                (monad₀, location₀) : monads -> do
-                    let process (monad₁, location₁)
-                            | monad₀ == monad₁ = return ()
-                            | otherwise = Exception.throwIO (MonadMismatch location₀ monad₀ location₁ monad₁)
-
-                    traverse_ process monads
-
-                    return case monad₀ of
-                        OptionalMonad -> Type.Optional
-                            { location = location₀
-                            , type_ = unsolved
-                            }
-                        ListMonad -> Type.List
-                            { location = location₀
-                            , type_ = unsolved
-                            }
-                        UnknownMonad -> Type.Optional
-                            { location = location₀
-                            , type_ = unsolved
-                            }
+                    return (Context.solveType context output, solveSyntax context newLet)
 
             context <- get
 
-            return (Context.solveType context output, solveSyntax context Syntax.Let{ location, assignments = NonEmpty.fromList newAssignments, body = newBody })
+            assign Nothing `Exception.catch` \(_ :: MonadMismatch) -> do
+                set context
+
+                assign (Just ListMonad) `Exception.catch` \(e :: TypeInferenceError) -> do
+                    set context
+
+                    assign (Just OptionalMonad) `Exception.catch` \(_ :: TypeInferenceError) -> do
+                        Exception.throwIO e
 
         Syntax.List{ location, elements = elements₀ } -> do
             case Seq.viewl elements₀ of
@@ -1719,18 +1659,23 @@ infer e₀ = do
             return (inferred, newAlternative)
 
         Syntax.Fold{ location, handlers } -> do
-            (recordType,newHandlers) <- infer handlers
+            let boolFold = do
+                    existential <- fresh
 
-            context <- get
+                    push (Context.UnsolvedType existential)
 
-            case Context.solveType context recordType  of
-                Type.Record{ fields = Type.Fields (List.sortBy (Ord.comparing fst) -> [("false", falseHandler), ("true", trueHandler)]) Monotype.EmptyFields } -> do
-                    let bool = falseHandler
+                    let bool = Type.UnsolvedType{ location, existential }
 
-                    subtype trueHandler bool
+                    newHandlers <- check handlers Type.Record
+                        { location
+                        , fields = Type.Fields
+                            [ ("false", bool)
+                            , ("true", bool)
+                            ]
+                            Monotype.EmptyFields
+                        }
 
-                    return
-                        ( Type.Function
+                    let type_ = Type.Function
                             { location
                             , input = Type.Scalar
                                 { location
@@ -1738,20 +1683,37 @@ infer e₀ = do
                                 }
                             , output = bool
                             }
-                        , Syntax.Fold{ handlers = solveSyntax context newHandlers, .. }
-                        )
 
-                Type.Record{ fields = Type.Fields (List.sortBy (Ord.comparing fst) -> [("succ", succHandler), ("zero", zeroHandler)]) Monotype.EmptyFields } -> do
-                    let natural = zeroHandler
+                    let newFold = Syntax.Fold
+                            { location
+                            , handlers = newHandlers
+                            }
 
-                    subtype succHandler Type.Function
+                    return (type_, newFold)
+
+            let naturalFold = do
+                    existential <- fresh
+
+                    push (Context.UnsolvedType existential)
+
+                    let natural = Type.UnsolvedType{ location, existential }
+
+                    newHandlers <- check handlers Type.Record
                         { location
-                        , input = natural
-                        , output = natural
+                        , fields = Type.Fields
+                            [ ( "zero", natural )
+                            , ( "succ"
+                              , Type.Function
+                                  { location
+                                  , input = natural
+                                  , output = natural
+                                  }
+                              )
+                            ]
+                            Monotype.EmptyFields
                         }
 
-                    return
-                        ( Type.Function
+                    let type_ = Type.Function
                             { location
                             , input = Type.Scalar
                                 { location
@@ -1759,63 +1721,103 @@ infer e₀ = do
                                 }
                             , output = natural
                             }
-                        , Syntax.Fold{ handlers = solveSyntax context newHandlers, .. }
-                        )
 
-                Type.Record{ fields = Type.Fields (List.sortBy (Ord.comparing fst) -> [("null", nullHandler), ("some", someHandler)]) Monotype.EmptyFields } -> do
-                    existential <- fresh
-
-                    push (Context.UnsolvedType existential)
-
-                    let element = Type.UnsolvedType
-                            { location = Type.location someHandler
-                            , existential
-                            }
-
-                    let optional = nullHandler
-
-                    subtype someHandler Type.Function
-                        { location
-                        , input = element
-                        , output = optional
-                        }
-
-                    return
-                        ( Type.Function
-                              { location
-                              , input = Type.Optional
-                                  { location
-                                  , type_ = element
-                                  }
-                              , output = optional
-                              }
-                        , Syntax.Fold{ handlers = solveSyntax context newHandlers, .. }
-                        )
-
-                Type.Record{ fields = Type.Fields (List.sortBy (Ord.comparing fst) -> [("cons", consHandler), ("nil", nilHandler)]) Monotype.EmptyFields } -> do
-                    existential <- fresh
-
-                    push (Context.UnsolvedType existential)
-
-                    let element = Type.UnsolvedType
-                            { location = Type.location consHandler
-                            , existential
-                            }
-
-                    let list = nilHandler
-
-                    subtype consHandler Type.Function
-                        { location
-                        , input = element
-                        , output = Type.Function
+                    let newFold = Syntax.Fold
                             { location
-                            , input = list
-                            , output = list
+                            , handlers = newHandlers
                             }
+
+                    return (type_, newFold)
+
+            let optionalFold = do
+                    existential₀ <- fresh
+
+                    push (Context.UnsolvedType existential₀)
+
+                    let element = Type.UnsolvedType
+                            { location
+                            , existential = existential₀
+                            }
+
+                    existential₁ <- fresh
+
+                    push (Context.UnsolvedType existential₁)
+
+                    let optional = Type.UnsolvedType
+                            { location
+                            , existential = existential₁
+                            }
+
+                    newHandlers <- check handlers Type.Record
+                        { location
+                        , fields = Type.Fields
+                            [ ( "null", optional )
+                            , ( "some"
+                              , Type.Function
+                                  { location
+                                  , input = element
+                                  , output = optional
+                                  }
+                              )
+                            ]
+                            Monotype.EmptyFields
                         }
 
-                    return
-                        ( Type.Function
+                    let type_ = Type.Function
+                            { location
+                            , input = Type.Optional
+                                { location
+                                , type_ = element
+                                }
+                            , output = optional
+                            }
+
+                    let newFold = Syntax.Fold
+                            { location
+                            , handlers = newHandlers
+                            }
+
+                    return (type_, newFold)
+
+            let listFold = do
+                    existential₀ <- fresh
+
+                    push (Context.UnsolvedType existential₀)
+
+                    let element = Type.UnsolvedType
+                            { location
+                            , existential = existential₀
+                            }
+
+                    existential₁ <- fresh
+
+                    push (Context.UnsolvedType existential₁)
+
+                    let list = Type.UnsolvedType
+                            { location
+                            , existential = existential₁
+                            }
+
+                    newHandlers <- check handlers Type.Record
+                        { location
+                        , fields = Type.Fields
+                            [ ( "nil", list )
+                            , ( "cons"
+                              , Type.Function
+                                  { location
+                                  , input = element
+                                  , output = Type.Function
+                                      { location
+                                      , input = list
+                                      , output = list
+                                      }
+                                  }
+                              )
+                            ]
+                            Monotype.EmptyFields
+                        }
+
+                    let type_ = Type.Function
                             { location
                             , input = Type.List
                                 { location
@@ -1823,83 +1825,112 @@ infer e₀ = do
                                 }
                             , output = list
                             }
-                        , Syntax.Fold{ handlers = solveSyntax context newHandlers, .. }
-                        )
 
-                Type.Record{ fields = Type.Fields (List.sortBy (Ord.comparing fst) -> [("array", arrayHandler), ("bool", boolHandler), ("integer", integerHandler), ("natural", naturalHandler), ("null", nullHandler), ("object", objectHandler), ("real", realHandler), ("string", stringHandler)]) Monotype.EmptyFields } -> do
-                    let json = nullHandler
-
-                    subtype nullHandler json
-
-                    subtype boolHandler Type.Function
-                        { location
-                        , input = Type.Scalar
+                    let newFold = Syntax.Fold
                             { location
-                            , scalar = Monotype.Bool
+                            , handlers = newHandlers
                             }
-                        , output = json
-                        }
 
-                    subtype stringHandler Type.Function
+                    return (type_, newFold)
+
+            let jsonFold = do
+                    existential <- fresh
+
+                    push (Context.UnsolvedType existential)
+
+                    let json = Type.UnsolvedType{ location, existential }
+
+                    newHandlers <- check handlers Type.Record
                         { location
-                        , input = Type.Scalar
-                            { location
-                            , scalar = Monotype.Text
-                            }
-                        , output = json
+                        , fields = Type.Fields
+                            [ ( "array"
+                              , Type.Function
+                                  { location
+                                  , input = Type.List
+                                      { location
+                                      , type_ = json
+                                      }
+                                  , output = json
+                                  }
+                              )
+                            , ( "bool"
+                              , Type.Function
+                                  { location
+                                  , input = Type.Scalar
+                                      { location
+                                      , scalar = Monotype.Bool
+                                      }
+                                  , output = json
+                                  }
+                              )
+                            , ( "integer"
+                              , Type.Function
+                                  { location
+                                  , input = Type.Scalar
+                                      { location
+                                      , scalar = Monotype.Integer
+                                      }
+                                  , output = json
+                                  }
+                              )
+                            , ( "natural"
+                              , Type.Function
+                                  { location
+                                  , input = Type.Scalar
+                                      { location
+                                      , scalar = Monotype.Natural
+                                      }
+                                  , output = json
+                                  }
+                              )
+                            , ( "null", json )
+                            , ( "object"
+                              , Type.Function
+                                  { location
+                                  , input = Type.List
+                                      { location
+                                      , type_ = Type.Record
+                                          { location
+                                          , fields = Type.Fields
+                                              [ ( "key"
+                                                , Type.Scalar
+                                                    { location
+                                                    , scalar = Monotype.Text
+                                                    }
+                                                )
+                                              , ( "value", json)
+                                              ]
+                                              Monotype.EmptyFields
+                                          }
+                                      }
+                                  , output = json
+                                  }
+                              )
+                            , ( "real"
+                              , Type.Function
+                                  { location
+                                  , input = Type.Scalar
+                                      { location
+                                      , scalar = Monotype.Real
+                                      }
+                                  , output = json
+                                  }
+                              )
+                            , ( "string"
+                              , Type.Function
+                                  { location
+                                  , input = Type.Scalar
+                                      { location
+                                      , scalar = Monotype.Text
+                                      }
+                                  , output = json
+                                  }
+                              )
+                            ]
+                            Monotype.EmptyFields
                         }
 
-                    subtype realHandler Type.Function
-                        { location
-                        , input = Type.Scalar
-                            { location
-                            , scalar = Monotype.Real
-                            }
-                        , output = json
-                        }
-
-                    subtype integerHandler Type.Function
-                        { location
-                        , input = Type.Scalar
-                            { location
-                            , scalar = Monotype.Integer
-                            }
-                        , output = json
-                        }
-
-                    subtype naturalHandler Type.Function
-                        { location
-                        , input = Type.Scalar
-                            { location
-                            , scalar = Monotype.Natural
-                            }
-                        , output = json
-                        }
-
-                    subtype arrayHandler Type.Function
-                        { location
-                        , input = Type.List{ location, type_ = json }
-                        , output = json
-                        }
-
-                    subtype objectHandler Type.Function
-                        { location
-                        , input = Type.List
-                            { location
-                            , type_ = Type.Record
-                                { location
-                                , fields = Type.Fields
-                                    [ ("key", Type.Scalar{ location, scalar = Monotype.Text })
-                                    , ("value", json)
-                                    ]
-                                    Monotype.EmptyFields
-                                }
-                            }
-                        , output = json
-                        }
-
-                    return
-                        ( Type.Function
+                    let type_ = Type.Function
                             { location
                             , input = Type.Scalar
                                 { location
@@ -1907,46 +1938,111 @@ infer e₀ = do
                                 }
                             , output = json
                             }
-                        , Syntax.Fold{ handlers = solveSyntax context newHandlers, .. }
-                        )
 
-                Type.Record{ fields = Type.Fields keyTypes Monotype.EmptyFields } -> do
-                    existential <- fresh
+                    let newFold = Syntax.Fold
+                            { location
+                            , handlers = newHandlers
+                            }
 
-                    push (Context.UnsolvedType existential)
+                    return (type_, newFold)
 
-                    let process (key, Type.Function{ location = _, ..}) = do
-                            _ϴ <- get
+            let fold = do
+                    context₀ <- get
 
-                            let b' = Type.UnsolvedType{ location = Type.location output, .. }
+                    existential₀ <- fresh
 
-                            subtype (Context.solveType _ϴ output) (Context.solveType _ϴ b')
+                    push (Context.UnsolvedFields existential₀)
 
-                            return (key, input)
-                        process (_, _A) = do
-                            Exception.throwIO (FoldInvalidHandler (Type.location _A) _A)
+                    let unsolvedRecord = Type.Fields
+                            []
+                            (Monotype.UnsolvedFields existential₀)
 
-                    keyTypes' <- traverse process keyTypes
+                    _ <- check handlers Type.Record
+                        { location
+                        , fields = unsolvedRecord
+                        }
 
-                    _Γ <- get
+                    context₁ <- get
 
-                    return
-                        (   Type.Union
-                                { alternatives =
-                                    Type.Alternatives
-                                        keyTypes'
-                                        Monotype.EmptyAlternatives
-                                , ..
+                    let Type.Fields keyTypes _ =
+                            Context.solveRecord context₁ unsolvedRecord
+
+                    set context₀
+
+                    existential₁ <- fresh
+
+                    push (Context.UnsolvedType existential₁)
+
+                    let union = Type.UnsolvedType
+                            { location
+                            , existential = existential₁
+                            }
+
+                    let process (key, _) = do
+                            existential <- fresh
+
+                            push (Context.UnsolvedType existential)
+
+                            let alternativeType = Type.UnsolvedType
+                                    { location
+                                    , existential
+                                    }
+
+                            let handlerType = Type.Function
+                                    { location
+                                    , input = alternativeType
+                                    , output = union
+                                    }
+
+                            return ((key, handlerType), (key, alternativeType))
+
+                    results <- traverse process keyTypes
+
+                    let (fieldTypes, alternativeTypes) = unzip results
+
+                    newHandlers <- check handlers Type.Record
+                        { location
+                        , fields = Type.Fields
+                            fieldTypes
+                            Monotype.EmptyFields
+                        }
+
+                    let type_ = Type.Function
+                            { location
+                            , input = Type.Union
+                                { location
+                                , alternatives = Type.Alternatives
+                                    alternativeTypes
+                                    Monotype.EmptyAlternatives
                                 }
-                        ~>      Type.UnsolvedType{..}
-                        , Syntax.Fold{ handlers = solveSyntax _Γ newHandlers, .. }
-                        )
+                            , output = union
+                            }
 
-                Type.Record{} -> do
-                    Exception.throwIO (FoldConcreteRecord (Type.location recordType) recordType)
+                    let newFold = Syntax.Fold
+                            { location
+                            , handlers = newHandlers
+                            }
 
-                _ -> do
-                    Exception.throwIO (FoldRecord (Type.location recordType) recordType)
+                    return (type_, newFold)
+
+            context <- get
+
+            listFold `Exception.catch` \(_ :: TypeInferenceError) -> do
+                set context
+
+                optionalFold `Exception.catch` \(_ :: TypeInferenceError) -> do
+                    set context
+
+                    boolFold `Exception.catch` \(_ :: TypeInferenceError) -> do
+                        set context
+
+                        naturalFold `Exception.catch` \(_ :: TypeInferenceError) -> do
+                            set context
+
+                            jsonFold `Exception.catch` \(_ :: TypeInferenceError) -> do
+                                set context
+
+                                fold
 
         Syntax.Project{ location, larger, smaller } -> do
             let processField Syntax.Field{ fieldLocation, field } = do
@@ -2038,20 +2134,30 @@ infer e₀ = do
 
                     return (optional, Syntax.Project{ location, larger = newLarger, .. })
 
-        Syntax.If{..} -> do
-            newPredicate <- check predicate Type.Scalar{ scalar = Monotype.Bool, .. }
+        Syntax.If{ location, predicate, ifTrue, ifFalse} -> do
+            newPredicate <- check predicate Type.Scalar
+                { location
+                , scalar = Monotype.Bool
+                }
 
-            (_L₀, newIfTrue) <- infer ifTrue
+            (annotation₀, newIfTrue) <- infer ifTrue
 
-            _Γ  <- get
+            context₀ <- get
 
-            let _L₁ = Context.solveType _Γ _L₀
+            let annotation₁ = Context.solveType context₀ annotation₀
 
-            newIfFalse <- check ifFalse _L₁
+            newIfFalse <- check ifFalse annotation₁
 
-            _Γ <- get
+            context₁ <- get
 
-            return (_L₁, Syntax.If{ predicate = solveSyntax _Γ newPredicate, ifTrue = solveSyntax _Γ newIfTrue, ifFalse = solveSyntax _Γ newIfFalse, .. })
+            let newIf = Syntax.If
+                    { location
+                    , predicate = solveSyntax context₁ newPredicate
+                    , ifTrue = solveSyntax context₁ newIfTrue
+                    , ifFalse = solveSyntax context₁ newIfFalse
+                    }
+
+            return (annotation₁, newIf)
 
         Syntax.Text{ chunks = Syntax.Chunks text₀ rest, .. } -> do
             let process (interpolation, text) = do
@@ -2063,88 +2169,113 @@ infer e₀ = do
 
             return (Type.Scalar{ scalar = Monotype.Text, .. }, Syntax.Text{ chunks = Syntax.Chunks text₀ newRest, .. })
 
-        Syntax.Prompt{ arguments, .. } -> do
-            newArguments <- check arguments (fmap (\_ -> location) (expected @Prompt))
+        Syntax.Prompt{ location, import_, arguments, schema } -> do
+            let argumentsType = fmap (\_ -> location) (expected @Prompt)
+
+            newArguments <- check arguments argumentsType
 
             newSchema <- case schema of
                 Just t -> do
                     return t
+
                 Nothing -> do
                     existential <- fresh
 
                     preserve (Context.UnsolvedType existential)
 
-                    return Type.UnsolvedType{..}
+                    return Type.UnsolvedType{ location, existential }
 
             context <- get
 
-            return (newSchema, Syntax.Prompt{ arguments = solveSyntax context newArguments, schema = Just newSchema, .. })
+            let newPrompt = Syntax.Prompt
+                    { location
+                    , import_
+                    , arguments = solveSyntax context newArguments
+                    , schema = Just newSchema
+                    }
+
+            return (newSchema, newPrompt)
 
         Syntax.HTTP{ location, import_, arguments, schema } -> do
-            let input = fmap (\_ -> location) (expected @HTTP)
+            let argumentsType = fmap (\_ -> location) (expected @HTTP)
 
-            newArguments <- check arguments input
+            newArguments <- check arguments argumentsType
 
             newSchema <- case schema of
-                    Just output -> do
-                        return output
-                    Nothing
-                        | import_ -> do
-                            existential <- fresh
+                Just output -> do
+                    return output
 
-                            preserve (Context.UnsolvedType existential)
+                Nothing -> do
+                    existential <- fresh
 
-                            return Type.UnsolvedType{..}
-                        | otherwise -> do
-                            return Type.Scalar{ scalar = Monotype.JSON, .. }
+                    preserve (Context.UnsolvedType existential)
+
+                    return Type.UnsolvedType{ location, existential }
 
             context <- get
 
-            return (newSchema, Syntax.HTTP{ import_, arguments = solveSyntax context newArguments, schema = Just newSchema, .. })
+            let newHTTP = Syntax.HTTP
+                    { location
+                    , import_
+                    , arguments = solveSyntax context newArguments
+                    , schema = Just newSchema
+                    }
+
+            return (newSchema, newHTTP)
 
         Syntax.Read{ location, import_, arguments, schema } -> do
-            let input = fmap (\_ -> location) (expected @Text)
+            let argumentsType = fmap (\_ -> location) (expected @Text)
 
-            newArguments <- check arguments input
+            newArguments <- check arguments argumentsType
 
             newSchema <- case schema of
-                    Just output -> do
-                        return output
-                    Nothing
-                        | import_ -> do
-                            existential <- fresh
+                Just output -> do
+                    return output
 
-                            preserve (Context.UnsolvedType existential)
+                Nothing -> do
+                    existential <- fresh
 
-                            return Type.UnsolvedType{..}
-                        | otherwise -> do
-                            return Type.Scalar{ scalar = Monotype.JSON, .. }
+                    preserve (Context.UnsolvedType existential)
+
+                    return Type.UnsolvedType{ location, existential }
 
             context <- get
 
-            return (newSchema, Syntax.Read{ import_, arguments = solveSyntax context newArguments, schema = Just newSchema, .. })
+            let newRead = Syntax.Read
+                    { location
+                    , import_
+                    , arguments = solveSyntax context newArguments
+                    , schema = Just newSchema
+                    }
+
+            return (newSchema, newRead)
 
         Syntax.GitHub{ location, import_, arguments, schema } -> do
-            let input = fmap (\_ -> location) (expected @GitHub)
+            let argumentsType = fmap (\_ -> location) (expected @GitHub)
 
-            newArguments <- check arguments input
+            newArguments <- check arguments argumentsType
 
             newSchema <- case schema of
-                    Just output -> do
-                        return output
-                    Nothing
-                        | import_ -> do
-                            existential <- fresh
+                Just output -> do
+                    return output
 
-                            preserve(Context.UnsolvedType existential)
+                Nothing -> do
+                    existential <- fresh
 
-                            return Type.UnsolvedType{..}
-                        | otherwise -> do
-                            return Type.Scalar{ scalar = Monotype.JSON, .. }
+                    preserve(Context.UnsolvedType existential)
+
+                    return Type.UnsolvedType{ location, existential}
 
             context <- get
 
-            return (newSchema, Syntax.GitHub{ import_, arguments = solveSyntax context newArguments, schema = Just newSchema, .. })
+            let newGitHub = Syntax.GitHub
+                    { location
+                    , import_
+                    , arguments = solveSyntax context newArguments
+                    , schema = Just newSchema
+                    }
+
+            return (newSchema, newGitHub)
 
         -- All the type inference rules for scalars go here.  This part is
         -- pretty self-explanatory: a scalar literal returns the matching
@@ -2937,24 +3068,19 @@ infer e₀ = do
                 , Syntax.Builtin{ builtin = Syntax.Reveal, .. }
                 )
 
-        Syntax.Embed{..} -> do
+        Syntax.Embed{ embedded } -> do
             _Γ <- get
 
-            Status{ input, .. } <- State.get
+            input <- Reader.ask
 
-            let absolute = input <> embedded
+            Reader.local (\i -> i <> embedded) do
+                absolute <- Reader.ask
 
-            Import.referentiallySane input absolute
+                Import.referentiallySane input absolute
 
-            State.put Status{ input = absolute, .. }
+                syntax <- liftIO (Import.resolve AsCode absolute)
 
-            syntax <- liftIO (Import.resolve absolute)
-
-            result <- infer syntax
-
-            State.modify (\s -> s{ Grace.Infer.input = input })
-
-            return result
+                infer syntax
 
 {-| This corresponds to the judgment:
 
@@ -2963,11 +3089,7 @@ infer e₀ = do
     … which checks that e has type A under input context Γ, producing an updated
     context Δ.
 -}
-check
-    :: (MonadState Status m, MonadCatch m, MonadIO m)
-    => Syntax Location Input
-    -> Type Location
-    -> m (Syntax Location Void)
+check :: Syntax Location Input -> Type Location -> Grace (Syntax Location Void)
 -- The check function is the most important function to understand for the
 -- bidirectional type-checking algorithm.
 --
@@ -3095,7 +3217,192 @@ check e Type.Forall{..} = do
     scoped (Context.Variable domain name) do
         check e type_
 
-check Syntax.Alternative{ location, name , argument } annotation@Type.Union{ alternatives = Type.Alternatives alternativeTypes remainingAlternatives } = do
+check Syntax.Let{ location, assignments, body } annotation₀ = do
+    let assign monad₀ = do
+            let cons Syntax.Define{ assignmentLocation, definition } action = do
+                    ((name, annotation₁), newDefinition) <- onDefinition definition
+
+                    let entry = Context.Annotation name annotation₁
+
+                    let newAssignment = Syntax.Define
+                            { assignmentLocation
+                            , definition = newDefinition
+                            }
+
+                    scoped entry do
+                        (newAssignments, newBody) <- action
+
+                        return (newAssignment : newAssignments, newBody)
+
+                cons Syntax.Bind{ assignmentLocation, monad = monad₁, binding, assignment = value } action =
+                    case (monad₀, monad₁) of
+                        (Nothing, Just _) -> do
+                            Exception.throwIO (MonadMismatch assignmentLocation)
+
+                        _ -> do
+                            (annotation₁, newEntries, newBinding) <- onBinding binding
+
+                            (newAssignments, newBody) <- foldr scoped action newEntries
+
+                            annotation₂ <- case monad₀ of
+                                Just ListMonad -> do
+                                    context <- get
+
+                                    existential <- fresh
+
+                                    push (Context.UnsolvedType existential)
+
+                                    let element = Type.UnsolvedType
+                                            { location = assignmentLocation
+                                            , existential
+                                            }
+
+                                    let list = Type.List
+                                            { location = assignmentLocation
+                                            , type_ = element
+                                            }
+
+                                    _ <- check value list `Exception.catch` \(_ :: TypeInferenceError) -> do
+                                        set context
+
+                                        Exception.throwIO (MonadMismatch assignmentLocation)
+
+                                    set context
+
+                                    let annotation₂ = Type.List
+                                            { location = assignmentLocation
+                                            , type_ = annotation₁
+                                            }
+
+                                    return annotation₂
+
+                                Just OptionalMonad -> do
+                                    context <- get
+
+                                    existential <- fresh
+
+                                    push (Context.UnsolvedType existential)
+
+                                    let element = Type.UnsolvedType
+                                            { location = assignmentLocation
+                                            , existential
+                                            }
+
+                                    let optional = Type.Optional
+                                            { location = assignmentLocation
+                                            , type_ = element
+                                            }
+
+                                    _ <- check value optional `Exception.catch` \(_ :: TypeInferenceError) -> do
+                                        set context
+
+                                        Exception.throwIO (MonadMismatch assignmentLocation)
+
+                                    set context
+
+                                    let annotation₂ = Type.Optional
+                                            { location = assignmentLocation
+                                            , type_ = annotation₁
+                                            }
+
+                                    return annotation₂
+
+                                Just UnknownMonad -> do
+                                    return annotation₁
+
+                                Nothing -> do
+                                    return annotation₁
+
+                            newValue <- check value annotation₂
+
+                            let newAssignment = Syntax.Bind
+                                    { assignmentLocation
+                                    , monad = monad₀
+                                    , binding = newBinding
+                                    , assignment = newValue
+                                    }
+
+                            return (newAssignment : newAssignments, newBody)
+
+            let nil = do
+                    element <- case monad₀ of
+                        Just ListMonad -> do
+                            existential <- fresh
+
+                            push (Context.UnsolvedType existential)
+
+                            let element = Type.UnsolvedType
+                                    { location
+                                    , existential
+                                    }
+
+                            let list = Type.List
+                                    { location
+                                    , type_ = element
+                                    }
+
+                            context <- get
+
+                            subtype (Context.solveType context annotation₀) list
+
+                            return element
+
+                        Just OptionalMonad -> do
+                            existential <- fresh
+
+                            push (Context.UnsolvedType existential)
+
+                            let element = Type.UnsolvedType
+                                    { location
+                                    , existential
+                                    }
+
+                            let optional = Type.Optional
+                                    { location
+                                    , type_ = element
+                                    }
+
+                            context <- get
+
+                            subtype (Context.solveType context annotation₀) optional
+
+                            return element
+
+                        Just UnknownMonad -> do
+                            return annotation₀
+
+                        Nothing -> do
+                            return annotation₀
+
+                    context <- get
+
+                    newBody <- check body (Context.solveType context element)
+
+                    return ([], newBody)
+
+            (newAssignments, newBody) <- foldr cons nil assignments
+
+            let newLet = Syntax.Let
+                    { location
+                    , assignments = NonEmpty.fromList newAssignments
+                    , body = newBody
+                    }
+
+            context <- get
+
+            return (solveSyntax context newLet)
+
+    context <- get
+
+    assign Nothing `Exception.catch` \(_ :: MonadMismatch) -> do
+        set context
+
+        assign (Just ListMonad) `Exception.catch` \(_ :: MonadMismatch) -> do
+            set context
+
+            assign (Just OptionalMonad)
+
+check Syntax.Alternative{ location, name, argument } annotation@Type.Union{ alternatives = Type.Alternatives alternativeTypes remainingAlternatives } = do
     existential <- fresh
 
     push (Context.UnsolvedAlternatives existential)
@@ -3113,8 +3420,6 @@ check Syntax.Alternative{ location, name , argument } annotation@Type.Union{ alt
                     [ (name, innerType₀) ]
                     (Monotype.UnsolvedAlternatives existential)
 
-            let actual = Type.Union{ location, alternatives }
-
             case remainingAlternatives of
                 Monotype.UnsolvedAlternatives p -> do
                     instantiateAlternativesR location alternatives p
@@ -3126,6 +3431,8 @@ check Syntax.Alternative{ location, name , argument } annotation@Type.Union{ alt
                         }
 
                 _ -> do
+                    let actual = Type.Union{ location, alternatives }
+
                     Exception.throwIO (UnionTypeMismatch actual annotation [ name ])
 
 check Syntax.Prompt{ schema = Nothing, .. } annotation = do
@@ -3158,6 +3465,20 @@ check Syntax.Read{ import_, schema = Nothing, .. } annotation = do
     context₁ <- get
 
     return Syntax.Read{ arguments = newArguments, schema = Just (Context.solveType context₁ annotation), .. }
+
+check Syntax.GitHub{ import_, schema = Nothing, .. } annotation = do
+    let input = fmap (\_ -> location) (expected @GitHub)
+
+    newArguments <- check arguments input
+
+    context₀ <- get
+
+    Monad.unless import_ do
+        subtype (Context.solveType context₀ annotation) Type.Scalar{ location, scalar = Monotype.JSON }
+
+    context₁ <- get
+
+    return Syntax.GitHub{ arguments = newArguments, schema = Just (Context.solveType context₁ annotation), .. }
 
 check Syntax.Project{ location, larger, smaller = smaller@Syntax.Single{ single = Syntax.Field{ fieldLocation, field } } } annotation = do
     context <- get
@@ -3242,44 +3563,86 @@ check e _B@Type.Optional{ type_ } = do
 
         return Syntax.Application{ function = Syntax.Builtin{ builtin = Syntax.Some, .. }, argument = newE, .. }
 
-check Syntax.Operator{ operator = Syntax.Times, .. } _B@Type.Scalar{ scalar }
-    | scalar `elem` ([ Monotype.Natural, Monotype.Integer, Monotype.Real ] :: [Monotype.Scalar])= do
-    newLeft <- check left _B
+check Syntax.Operator{ location, left, operatorLocation, operator = Syntax.Times, right } annotation@Type.Scalar{ scalar }
+    | scalar `elem` ([ Monotype.Natural, Monotype.Integer, Monotype.Real ] :: [Monotype.Scalar]) = do
+    newLeft <- check left annotation
 
-    _Γ <- get
+    context <- get
 
-    newRight <- check right (Context.solveType _Γ _B)
+    newRight <- check right (Context.solveType context  annotation)
 
-    return Syntax.Operator{ operator = Syntax.Times, left = newLeft, right = newRight, .. }
+    return Syntax.Operator
+        { location
+        , left = newLeft
+        , operatorLocation
+        , operator = Syntax.Times
+        , right = newRight
+        }
 
-check Syntax.Operator{ operator = Syntax.Plus, .. } _B@Type.Scalar{ scalar }
+check Syntax.Operator{ location, left, operatorLocation, operator = Syntax.Plus, right } annotation@Type.Scalar{ scalar }
     | scalar `elem` ([ Monotype.Natural, Monotype.Integer, Monotype.Real, Monotype.Text ] :: [Monotype.Scalar]) = do
-    newLeft <- check left _B
+    newLeft <- check left annotation
 
-    _Γ <- get
+    context <- get
 
-    newRight <- check right (Context.solveType _Γ _B)
+    newRight <- check right (Context.solveType context annotation)
 
-    return Syntax.Operator{ operator = Syntax.Plus, left = newLeft, right = newRight, .. }
+    return Syntax.Operator
+        { location
+        , left = newLeft
+        , operatorLocation
+        , operator = Syntax.Plus
+        , right = newRight
+        }
 
-check Syntax.Operator{ operator = Syntax.Plus, .. } _B@Type.List{} = do
-    newLeft <- check left _B
+check Syntax.Operator{ location, left, operatorLocation, operator = Syntax.Plus, right } annotation@Type.List{ } = do
+    newLeft <- check left annotation
 
-    _Γ <- get
+    context <- get
 
-    newRight <- check right (Context.solveType _Γ _B)
+    newRight <- check right (Context.solveType context  annotation)
 
-    return Syntax.Operator{ operator = Syntax.Plus, left = newLeft, right = newRight, .. }
+    return Syntax.Operator
+        { location
+        , left = newLeft
+        , operatorLocation
+        , operator = Syntax.Plus
+        , right = newRight
+        }
 
-check Syntax.Operator{ operator = Syntax.Minus, .. } _B@Type.Scalar{ scalar }
+
+check Syntax.Operator{ location, left, operatorLocation, operator = Syntax.Minus, right } annotation@Type.Scalar{ scalar }
     | scalar `elem` ([ Monotype.Integer, Monotype.Real ] :: [Monotype.Scalar]) = do
-    newLeft <- check left _B
+    newLeft <- check left annotation
 
-    _Γ <- get
+    context <- get
 
-    newRight <- check right (Context.solveType _Γ _B)
+    newRight <- check right (Context.solveType context annotation)
 
-    return Syntax.Operator{ operator = Syntax.Minus, left = newLeft, right = newRight, .. }
+    return Syntax.Operator
+        { location
+        , left = newLeft
+        , operatorLocation
+        , operator = Syntax.Minus
+        , right = newRight
+        }
+
+check Syntax.If{ location, predicate, ifTrue, ifFalse } annotation = do
+    newPredicate <- check predicate Type.Scalar
+        { location
+        , scalar = Monotype.Bool
+        }
+
+    newIfTrue <- check ifTrue annotation
+
+    newIfFalse <- check ifFalse annotation
+
+    return Syntax.If
+        { location
+        , predicate = newPredicate
+        , ifTrue = newIfTrue
+        , ifFalse = newIfFalse
+        }
 
 check Syntax.List{..} Type.List{ location = _, .. } = do
     let process element = do
@@ -3294,11 +3657,11 @@ check Syntax.List{..} Type.List{ location = _, .. } = do
 check e@Syntax.Record{ fieldValues = fieldValues₀ } _B@Type.Record{ fields = Type.Fields fieldTypes fields }
     | let mapValues = Map.fromList fieldValues₁
     , let mapTypes  = Map.fromList fieldTypes
+    , let both = Map.intersectionWith (,) mapValues mapTypes
 
     -- This is to prevent an infinite loop because we're going to recursively
     -- call `check` again below with two non-intersecting records to generate a
-    -- type error if they're not both empty.
-    , let both = Map.intersectionWith (,) mapValues mapTypes
+    -- type error if the check fails
     , not (Map.null both) = do
         let extraValues = Map.difference mapValues mapTypes
         let extraTypes  = Map.difference mapTypes  mapValues
@@ -3530,24 +3893,24 @@ check annotated annotation@Type.Scalar{ scalar = Monotype.Integer } = do
 
             return newAnnotated
 
-check Syntax.Embed{ embedded } _B = do
-    _Γ <- get
+check Syntax.Embed{ embedded } annotation = do
+    context <- get
 
-    Status{ input, .. } <- State.get
+    input <- Reader.ask
 
-    let absolute = input <> embedded
+    Reader.local (\i -> i <> embedded) do
+        absolute <- Reader.ask
 
-    Import.referentiallySane input absolute
+        Import.referentiallySane input absolute
 
-    State.put Status{ input = absolute, .. }
+        let mode = case Context.solveType context annotation of
+                Type.Scalar{ scalar = Monotype.Text } -> AsText
+                Type.Scalar{ scalar = Monotype.Key  } -> AsKey
+                _                                     -> AsCode
 
-    syntax <- liftIO (Import.resolve absolute)
+        syntax <- liftIO (Import.resolve mode absolute)
 
-    result <- check syntax _B
-
-    State.modify (\s -> s{ Grace.Infer.input = input })
-
-    return result
+        check syntax annotation
 
 check Syntax.Text{ chunks = Syntax.Chunks text₀ [], .. } Type.Scalar{ scalar = Monotype.Key } = do
     return Syntax.Scalar{ scalar = Syntax.Key text₀, .. }
@@ -3600,10 +3963,9 @@ check e _B = do
     input argument e, under input context Γ, producing an updated context Δ.
 -}
 inferApplication
-    :: (MonadState Status m, MonadCatch m, MonadIO m)
-    => Type Location
+    :: Type Location
     -> Syntax Location Input
-    -> m (Type Location, Syntax Location Void)
+    -> Grace (Type Location, Syntax Location Void)
 -- ∀App
 inferApplication Type.Forall{ domain = Domain.Type, .. } e = do
     a <- fresh
@@ -3655,7 +4017,7 @@ inferApplication _A _ = do
 
 -- | Infer the `Type` of the given `Syntax` tree
 typeOf
-    :: (MonadCatch m, MonadIO m)
+    :: MonadIO m
     => Input
     -> Syntax Location Input
     -> m (Type Location, Syntax Location Void)
@@ -3663,20 +4025,164 @@ typeOf input = typeWith input []
 
 -- | Like `typeOf`, but accepts a custom type-checking `Context`
 typeWith
-    :: (MonadCatch m, MonadIO m)
+    :: MonadIO m
     => Input
     -> Context Location
     -> Syntax Location Input
     -> m (Type Location, Syntax Location Void)
 typeWith input context syntax = do
-    let initialStatus = Status{ count = 0, context, input }
+    let initialStatus = Status{ count = 0, context }
 
-    ((_A, elaborated), Status{ context = _Δ }) <- State.runStateT (infer syntax) initialStatus
+    ((_A, elaborated), Status{ context = _Δ }) <- Grace.runGrace input initialStatus (infer syntax)
 
     return (Context.complete _Δ _A, solveSyntax _Δ elaborated)
 
 solveSyntax :: Context s -> Syntax s a -> Syntax s a
 solveSyntax _Γ = Lens.transform (Lens.over Syntax.types (Context.solveType _Γ))
+
+-- | Convert from JSON, inferring the value purely from the JSON data
+inferJSON :: Aeson.Value -> Value
+inferJSON (Aeson.Object [("contents", contents), ("tag", Aeson.String tag)]) =
+    Value.Alternative tag value
+  where
+    value = inferJSON contents
+inferJSON (Aeson.Object object) = Value.Record (Map.fromList textValues)
+  where
+    properties = Map.toList (Compat.fromAesonMap object)
+
+    textValues = fmap (fmap inferJSON) properties
+inferJSON (Aeson.Array vector) = Value.List (Seq.fromList (toList elements))
+  where
+    elements = fmap inferJSON vector
+inferJSON (Aeson.String text) = Value.Text text
+inferJSON (Aeson.Number scientific) =
+    case Scientific.floatingOrInteger scientific of
+        Left (_ :: Double) ->
+            Value.Scalar (Syntax.Real scientific)
+        Right (integer :: Integer)
+            | 0 <= integer -> do
+                Value.Scalar (Syntax.Natural (fromInteger integer))
+            | otherwise -> do
+                Value.Scalar (Syntax.Integer integer)
+inferJSON (Aeson.Bool bool) =
+    Value.Scalar (Syntax.Bool bool)
+inferJSON Aeson.Null =
+    Value.Scalar Syntax.Null
+
+-- | Check an `Aeson.Value` against an expected `Type`
+checkJSON :: Type Location -> Aeson.Value -> Grace Value
+checkJSON = loop []
+  where
+    loop path Type.Union{ Type.alternatives = Type.Alternatives alternativeTypes _ } (Aeson.Object [("contents", contents), ("tag", Aeson.String tag)])
+        | Just alternativeType <- Prelude.lookup tag alternativeTypes = do
+            value <- loop ("contents" : path) alternativeType contents
+
+            pure (Value.Alternative tag value)
+    loop path Type.Record{ Type.fields = Type.Fields fieldTypes _ } (Aeson.Object object) = do
+        let properties = Compat.fromAesonMap object
+
+        let process (field, type_) = do
+                let property = case Map.lookup field properties of
+                        Just p -> p
+                        Nothing -> Aeson.Null
+
+                expression <- loop (field : path) type_ property
+
+                return (field, expression)
+
+        fieldValues <- traverse process fieldTypes
+
+        pure (Value.Record (Map.fromList fieldValues))
+    loop path type_@Type.Scalar{ scalar = Monotype.JSON } (Aeson.Object object) = do
+        let properties = Map.toList (Compat.fromAesonMap object)
+
+        let process (key, property) = do
+                expression <- loop (key : path) type_ property
+
+                return (key, expression)
+
+        textValues <- traverse process properties
+
+        pure (Value.Record (Map.fromList textValues))
+    loop path Type.List{ Type.type_ } (Aeson.Array vector) = do
+        elements <- traverse (loop ("*" : path) type_) vector
+
+        pure (Value.List (Seq.fromList (toList elements)))
+    loop path type_@Type.Scalar{ scalar = Monotype.JSON } (Aeson.Array vector) = do
+        elements <- traverse (loop ("*" : path) type_) vector
+
+        pure (Value.List (Seq.fromList (toList elements)))
+    loop _ Type.Scalar{ scalar = Monotype.Text } (Aeson.String text) = do
+        pure (Value.Text text)
+    loop _ Type.Scalar{ scalar = Monotype.JSON } (Aeson.String text) = do
+        pure (Value.Text text)
+    loop _ Type.Scalar{ scalar = Monotype.Real } (Aeson.Number scientific) = do
+        pure (Value.Scalar (Syntax.Real scientific))
+    loop path type_@Type.Scalar{ scalar = Monotype.Integer } value@(Aeson.Number scientific) = do
+        case Scientific.floatingOrInteger @Double @Integer scientific of
+            Right integer -> do
+                pure (Value.Scalar (Syntax.Integer integer))
+            _ -> do
+                Exception.throwIO InvalidJSON{ path, value, type_ }
+    loop path type_@Type.Scalar{ scalar = Monotype.Natural } value@(Aeson.Number scientific) =
+        case Scientific.floatingOrInteger @Double @Integer scientific of
+            Right integer
+                | 0 <= integer -> do
+                    pure (Value.Scalar (Syntax.Natural (fromInteger integer)))
+            _ -> do
+                Exception.throwIO InvalidJSON{ path, value, type_ }
+    loop _ Type.Scalar{ scalar = Monotype.JSON } (Aeson.Number scientific) =
+        case Scientific.floatingOrInteger scientific of
+            Left (_ :: Double) -> do
+                pure (Value.Scalar (Syntax.Real scientific))
+            Right (integer :: Integer)
+                | 0 <= integer -> do
+                    pure (Value.Scalar (Syntax.Natural (fromInteger integer)))
+                | otherwise -> do
+                    pure (Value.Scalar (Syntax.Integer integer))
+    loop _ Type.Scalar{ Type.scalar = Monotype.Bool } (Aeson.Bool bool) =
+        pure (Value.Scalar (Syntax.Bool bool))
+    loop _ Type.Scalar{ Type.scalar = Monotype.JSON } (Aeson.Bool bool) =
+        pure (Value.Scalar (Syntax.Bool bool))
+    loop _ Type.Optional{ } Aeson.Null =
+        pure (Value.Scalar Syntax.Null)
+    loop path Type.Optional{ type_ } value = do
+        result <- loop path type_ value
+
+        pure (Value.Application (Value.Builtin Syntax.Some) result)
+    loop _ Type.Scalar{ scalar = Monotype.JSON } Aeson.Null =
+        pure (Value.Scalar Syntax.Null)
+    loop _ type₀ value = do
+        let bytes = Aeson.Pretty.encodePretty value
+
+        text <- case Encoding.decodeUtf8' (ByteString.Lazy.toStrict bytes) of
+            Left exception -> Exception.throwIO exception
+            Right text     -> return text
+
+        let input = Code "(json)" text
+
+        let mode = case type₀ of
+                Type.Scalar{ scalar = Monotype.Text } -> AsText
+                Type.Scalar{ scalar = Monotype.Key  } -> AsKey
+                _                                     -> AsCode
+
+        expression <- liftIO (Import.resolve mode input)
+
+        (type₁, _) <- infer expression
+
+        context₀ <- get
+
+        subtype (Context.solveType context₀ type₁) (Context.solveType context₀ type₀)
+        let json = Type.Scalar
+                { location = Type.location type₀
+                , scalar = Monotype.JSON
+                }
+
+        context₁ <- get
+
+        subtype (Context.solveType context₁ type₁) json
+
+        return (inferJSON value)
 
 -- | A data type holding all errors related to type inference
 data TypeInferenceError
@@ -3688,9 +4194,7 @@ data TypeInferenceError
     | ZeroDivisor Location
     | NeedConcreteDivisor Location
     --
-    | FoldConcreteRecord Location (Type Location)
     | FoldInvalidHandler Location (Type Location)
-    | FoldRecord Location (Type Location)
     --
     | MissingAllAlternatives (Existential Monotype.Union) (Context Location)
     | MissingAllFields (Existential Monotype.Record) (Context Location)
@@ -3712,7 +4216,7 @@ data TypeInferenceError
     --
     | RecordTypeMismatch (Type Location) (Type Location) [Text]
     | UnionTypeMismatch (Type Location) (Type Location) [Text]
-    | MonadMismatch Location BindMonad Location BindMonad
+    --
     deriving stock (Eq, Show)
 
 instance Exception TypeInferenceError where
@@ -3778,18 +4282,6 @@ instance Exception TypeInferenceError where
         \\n\
         \" <> Text.unpack (Location.renderError "" location)
 
-    displayException (FoldConcreteRecord location _R) =
-        "Must fold a concrete record\n\
-        \\n\
-        \The first argument to a fold must be a record where all fields are statically\n\
-        \known.  However, you provided an argument of type:\n\
-        \\n\
-        \" <> insert _R <> "\n\
-        \\n\
-        \" <> Text.unpack (Location.renderError "" location) <> "\n\
-        \\n\
-        \… where not all fields could be inferred."
-
     displayException (FoldInvalidHandler location _A) =
         "Invalid handler\n\
         \\n\
@@ -3801,18 +4293,6 @@ instance Exception TypeInferenceError where
         \" <> Text.unpack (Location.renderError "" location) <> "\n\
         \\n\
         \… which is not a function type."
-
-    displayException (FoldRecord location _R) =
-        "Must fold a record\n\
-        \\n\
-        \The first argument to a fold must be a record, but you provided an expression of\n\
-        \the following type:\n\
-        \\n\
-        \" <> insert _R <> "\n\
-        \\n\
-        \" <> Text.unpack (Location.renderError "" location) <> "\n\
-        \\n\
-        \… which is not a record type."
 
     displayException (MissingAllAlternatives p₀ _Γ) =
         "Internal error: Invalid context\n\
@@ -4039,18 +4519,43 @@ instance Exception TypeInferenceError where
         \\n\
         \" <> listToText extraA
 
-    displayException (MonadMismatch monadLocation₀ monad₀ monadLocation₁ monad₁) =
-        "Type constructor mismatch\n\
+data MonadMismatch = MonadMismatch Location
+    deriving stock (Eq, Show)
+
+instance Exception MonadMismatch where
+    displayException (MonadMismatch location) =
+        "For comprehensions mismatch\n\
         \\n\
-        \You cannot bind " <> Text.unpack (Grace.Pretty.toText monad₀) <> " expressions:\n\
+        \" <> Text.unpack (Location.renderError "" location)
+
+-- | Invalid JSON output which didn't match the expected type
+data InvalidJSON a = InvalidJSON
+    { path :: [Text]
+    , value :: Aeson.Value
+    , type_ :: Type a
+    } deriving stock (Show)
+
+instance (Show a, Typeable a) => Exception (InvalidJSON a) where
+    displayException InvalidJSON{ path, value, type_} =
+        "Invalid JSON\n\
         \\n\
-        \" <> Text.unpack (Location.renderError "" monadLocation₀) <> "\n\
+        \The following JSON value:\n\
         \\n\
-        \ … and " <> Text.unpack (Grace.Pretty.toText monad₁) <> " expressions:\n\
+        \" <> string <> "\n\
         \\n\
-        \" <> Text.unpack (Location.renderError "" monadLocation₁) <> "\n\
+        \… does not match the following expected type:\n\
         \\n\
-        \… within the same group of assignments."
+        \" <> Text.unpack (Grace.Pretty.toSmart type_) <> "\n\
+        \\n\
+        \… at the following location:\n\
+        \\n\
+        \" <> Text.unpack (Text.intercalate "." (reverse path))
+      where
+        bytes = Aeson.Pretty.encodePretty value
+
+        string = case Encoding.decodeUtf8' (ByteString.Lazy.toStrict bytes) of
+            Left  _    -> show bytes
+            Right text -> Text.unpack text
 
 -- Helper functions for displaying errors
 

@@ -54,10 +54,9 @@ import qualified Control.Lens as Lens
 import qualified Data.List as List
 import qualified Data.Text as Text
 import qualified Grace.Domain as Domain
+import qualified Grace.Label as Label
 import qualified Grace.Monotype as Monotype
 import qualified Prettyprinter as Pretty
-
-import {-# SOURCE #-} qualified Grace.Parser as Parser
 
 {- $setup
 
@@ -433,15 +432,12 @@ alternativesFreeIn unsolved =
         . Lens.only unsolved
         )
 
--- | Default universally quantified variables
+-- | Default unsolved type variables
 defaultTo :: Type s -> Type s -> Type s
-defaultTo def Forall{ name, domain = Domain.Type, type_ } =
-    substituteType name 0 def type_
-defaultTo _ Forall{ name, domain = Domain.Fields, type_ } =
-    substituteFields name 0 (Fields [] Monotype.EmptyFields) type_
-defaultTo _ Forall{ name, domain = Domain.Alternatives, type_ } =
-    substituteAlternatives name 0 (Alternatives [] Monotype.EmptyAlternatives) type_
-defaultTo _ type_ = type_
+defaultTo type₀ = Lens.transform transformation
+  where
+    transformation UnsolvedType{ } = type₀
+    transformation type₁           = type₁
 
 prettyQuantifiedType :: Type s -> Doc AnsiStyle
 prettyQuantifiedType type0@Forall{} =
@@ -748,7 +744,7 @@ prettyRecordLabel
     -> Text
     -> Doc AnsiStyle
 prettyRecordLabel alwaysQuote field
-    | Parser.validRecordLabel field && not alwaysQuote =
+    | Label.validRecordLabel field && not alwaysQuote =
         label (pretty field)
     | otherwise =
         label (prettyTextLiteral field)
@@ -758,7 +754,7 @@ prettyAlternativeLabel
     :: Text
     -> Doc AnsiStyle
 prettyAlternativeLabel alternative
-    | Parser.validAlternativeLabel alternative =
+    | Label.validAlternativeLabel alternative =
         label (pretty alternative)
     | otherwise =
         label (prettyQuotedAlternative alternative)
@@ -768,7 +764,7 @@ prettyLabel
     :: Text
     -> Doc AnsiStyle
 prettyLabel name
-    | Parser.validLabel name =
+    | Label.validLabel name =
         label (pretty name)
     | otherwise =
         punctuation "." <> label (prettyQuotedAlternative name)

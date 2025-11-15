@@ -15,10 +15,10 @@ import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text)
 import Grace.HTTP (Methods)
-import Grace.Infer (Status(..))
 import Grace.Interpret (Input(..))
 import Grace.Location (Location(..))
-import Grace.Parser (REPLCommand(..), reserved)
+import Grace.Monad (Status(..))
+import Grace.Parser (REPLCommand(..))
 import System.Console.Haskeline (Interrupt(..))
 import System.Console.Repline (CompleterStyle(..), MultiLine(..), ReplOpts(..))
 
@@ -32,6 +32,8 @@ import qualified Data.Text as Text
 import qualified Data.Text.IO as Text.IO
 import qualified Grace.Context as Context
 import qualified Grace.Infer as Infer
+import qualified Grace.Label as Label
+import qualified Grace.Monad as Grace
 import qualified Grace.Normalize as Normalize
 import qualified Grace.Parser as Parser
 import qualified Grace.Pretty as Pretty
@@ -71,9 +73,10 @@ repl keyToMethods = do
                               , body = first locate syntax₀
                               }
 
+                    let input = Code "(input)" text
+
                     let status = Status
                             { count = 0
-                            , input = Code "(input)" text
                             , context = []
                             }
 
@@ -84,7 +87,7 @@ repl keyToMethods = do
 
                             return (inferred, value)
 
-                    result <- liftIO (Exception.try (State.runStateT action status))
+                    result <- liftIO (Exception.try (Grace.runGrace input status action))
 
                     case result of
                         Left (e :: SomeException) -> do
@@ -94,7 +97,7 @@ repl keyToMethods = do
                             let annotation = Context.complete context inferred
 
                             let annotated =
-                                    Normalize.strip (Normalize.quote (Value.complete context value))
+                                    Normalize.quote (Value.complete context value)
 
                             return (Right (annotation, annotated))
 
@@ -174,7 +177,7 @@ repl keyToMethods = do
                     ]
 
             completeReserved =
-                Repline.listCompleter (fmap Text.unpack (toList reserved))
+                Repline.listCompleter (fmap Text.unpack (toList Label.reservedLabels))
 
             completeIdentifiers args = do
                 assignments <- get

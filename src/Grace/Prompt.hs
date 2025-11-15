@@ -15,9 +15,8 @@ module Grace.Prompt
     ) where
 
 import Control.Applicative (empty)
-import Control.Exception.Safe (Exception(..), MonadCatch, SomeException(..))
+import Control.Exception.Safe (Exception(..), SomeException(..))
 import Control.Monad.IO.Class (MonadIO(..))
-import Control.Monad.State (MonadState)
 import Data.Foldable (toList)
 import Data.Text (Text)
 import Data.Typeable (Typeable)
@@ -25,6 +24,7 @@ import Data.Vector (Vector)
 import Grace.Decode (FromGrace(..), Key(..))
 import Grace.Input (Input(..))
 import Grace.Location (Location(..))
+import Grace.Monad (Grace)
 import Grace.Pretty (Pretty(..))
 import Grace.Prompt.Types (Effort(..), Prompt(..))
 import Grace.Type (Type(..))
@@ -44,21 +44,20 @@ import OpenAI.V1.Chat.Completions
     , _CreateChatCompletion
     )
 
-import Grace.Infer (Status(..))
 import {-# SOURCE #-} qualified Grace.Interpret as Interpret
 
 import qualified Control.Exception.Safe as Exception
-import qualified Control.Lens as Lens
-import qualified Control.Monad.State as State
+import qualified Control.Monad.Reader as Reader
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.Foldable as Foldable
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
-import qualified Grace.Context as Context
 import qualified Grace.DataFile as DataFile
 import qualified Grace.HTTP as HTTP
+import qualified Grace.Import as Import
+import qualified Grace.Infer as Infer
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Pretty as Pretty
 import qualified Grace.Type as Type
@@ -227,13 +226,12 @@ toResponseFormat (Just type_) = do
 
 -- | Implementation of the @prompt@ keyword
 prompt
-    :: (MonadCatch m, MonadState Status m, MonadIO m)
-    => IO [(Text, Type Location, Value)]
+    :: IO [(Text, Type Location, Value)]
     -> Bool
     -> Location
     -> Prompt
     -> Maybe (Type Location)
-    -> m Value
+    -> Grace Value
 prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = key }, text, model, search, effort } schema = do
     keyToMethods <- liftIO HTTP.getMethods
 
@@ -350,30 +348,26 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
 
                         output <- toOutput chatCompletionObject
 
-                        Status{ input = parent } <- State.get
+                        parent <- Reader.ask
 
-                        let child = parent <> Code "(prompt)" output
+                        Reader.local (\i -> i <> Code "(prompt)" output) do
+                            child <- Reader.ask
 
-                        State.modify (\s -> (s :: Status){ input = child })
+                            Import.referentiallySane parent child
 
-                        expression <- Interpret.interpretWith keyToMethods bindings schema
-                            `Exception.catch` \(interpretError :: SomeException) -> do
-                                retry ((output, interpretError) : errors)
+                            Interpret.interpretWith keyToMethods bindings schema
+                                `Exception.catch` \(interpretError :: SomeException) -> do
+                                    retry ((output, interpretError) : errors)
 
-                        State.modify (\s -> (s :: Status){ input = parent })
-
-                        return expression
 
             (_, e) <- retry []
 
             return e
         else do
-            Status{ context } <- State.get
-
             let defaultedSchema = do
                     s <- schema
 
-                    return (Lens.transform (Type.defaultTo Type.Scalar{ scalar = Monotype.Text, location }) (Context.complete context s))
+                    return (Type.defaultTo Type.Scalar{ scalar = Monotype.Text, location } s)
 
             let decode_ text_ = do
                     let bytes = Encoding.encodeUtf8 text_
@@ -427,11 +421,9 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
 
                             case defaultedSchema of
                                 Nothing -> do
-                                    return (Value.inferJSON v)
+                                    return (Infer.inferJSON v)
                                 Just s -> do
-                                    case Value.checkJSON s v of
-                                        Left invalidJSON -> Exception.throwIO invalidJSON
-                                        Right e -> return e
+                                    Infer.checkJSON s v
 
                     return
                         ( requestJSON
@@ -454,11 +446,9 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
 
                             expression <- case adjustedSchema of
                                 Nothing -> do
-                                    return (Value.inferJSON v)
+                                    return (Infer.inferJSON v)
                                 Just s -> do
-                                    case Value.checkJSON s v of
-                                        Left invalidJSON -> Exception.throwIO invalidJSON
-                                        Right expression -> return expression
+                                    Infer.checkJSON s v
 
                             case expression of
                                 Value.Record [("response", response)] -> do

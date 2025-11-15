@@ -2,21 +2,21 @@
     [ { "name":
           "Rixos The Palm Dubai"
       , "position":
-          [ 25.1212, 55.1535 ]
+          some [ 25.1212, 55.1535 ]
       , "location":
           null
       }
     , { "name":
           "Shangri-La Hotel"
       , "location":
-          [ 25.2084, 55.2719 ]
+          some [ 25.2084, 55.2719 ]
       , "position":
           null
       }
     , { "name":
           "Grand Hyatt"
       , "location":
-          [ 25.2285, 55.3273 ]
+          some [ 25.2285, 55.3273 ]
       , "position":
           null
       }

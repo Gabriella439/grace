@@ -1,0 +1,1 @@
+forall (a : Type) (b : Fields) . { zero: a, succ: a -> a, b } -> Natural -> a

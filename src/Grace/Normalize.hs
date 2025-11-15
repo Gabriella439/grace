@@ -16,9 +16,8 @@ module Grace.Normalize
     , MissingSchema(..)
     ) where
 
-import Control.Exception.Safe (Exception(..), MonadCatch)
+import Control.Exception.Safe (Exception(..))
 import Control.Monad.IO.Class (MonadIO(..))
-import Control.Monad.State (MonadState(..))
 import Data.Bifunctor (first)
 import Data.Foldable (toList)
 import Data.HashMap.Strict.InsOrd (InsOrdHashMap)
@@ -29,9 +28,9 @@ import Data.Void (Void)
 import Grace.Aeson (JSONDecodingFailed(..))
 import Grace.Decode (FromGrace(..))
 import Grace.HTTP (HTTP(..), Methods)
-import Grace.Infer (Status(..))
 import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
+import Grace.Monad (Grace, Status(..))
 import Grace.Syntax (BindMonad(..), Builtin(..), Scalar(..), Syntax)
 import Grace.Value (Value)
 import Prelude hiding (lookup, null, succ)
@@ -40,6 +39,8 @@ import {-# SOURCE #-} qualified Grace.Interpret as Interpret
 
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
+import qualified Control.Monad as Monad
+import qualified Control.Monad.Reader as Reader
 import qualified Control.Monad.State as State
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Yaml as YAML
@@ -54,8 +55,10 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
 import qualified Data.Void as Void
 import qualified Grace.Aeson
+import qualified Grace.Context as Context
 import qualified Grace.GitHub as GitHub
 import qualified Grace.HTTP as HTTP
+import qualified Grace.Import as Import
 import qualified Grace.Infer as Infer
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Pretty as Pretty
@@ -95,14 +98,13 @@ sorted = List.sortBy (Ord.comparing fst) . HashMap.toList
     sub-expression multiple times.
 -}
 evaluate
-    :: (MonadCatch m, MonadState Status m, MonadIO m)
-    => (Text -> Methods)
+    :: (Text -> Methods)
     -- ^ OpenAI methods
     -> [(Text, Value)]
     -- ^ Evaluation environment (starting at @[]@ for a top-level expression)
     -> Syntax Location Void
     -- ^ Surface syntax
-    -> m Value
+    -> Grace Value
     -- ^ Result, free of reducible sub-expressions
 evaluate keyToMethods env₀ syntax₀ = do
     loop env₀ syntax₀
@@ -120,18 +122,16 @@ evaluate keyToMethods env₀ syntax₀ = do
 
         traverse infer env
 
-    loop
-        :: (MonadIO m, MonadState Status m, MonadCatch m)
-        => [(Text, Value)] -> Syntax Location Void -> m Value
+    loop :: [(Text, Value)] -> Syntax Location Void -> Grace Value
     loop env syntax =
         case syntax of
             Syntax.Variable{ name } -> do
                 pure (lookupVariable name env)
 
-            Syntax.Application{ function, argument } -> do
+            Syntax.Application{ function, argument } -> Monad.join do
                 function' <- loop env function
                 argument' <- loop env argument
-                apply keyToMethods function' argument'
+                pure (apply keyToMethods function' argument')
 
             Syntax.Lambda{ binding = Syntax.PlainBinding{ plain = Syntax.NameBinding{ name, assignment } }, body } -> do
                 newAssignment <- traverse (loop env) assignment
@@ -142,7 +142,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                 let process Syntax.NameBinding{ name, assignment } = do
                         newAssignment <- traverse (loop env) assignment
 
-                        return (name, newAssignment)
+                        pure (name, newAssignment)
 
                 newFieldNames <- traverse process fieldNames
 
@@ -151,7 +151,7 @@ evaluate keyToMethods env₀ syntax₀ = do
             Syntax.Annotation{ annotated, annotation  } -> do
                 newAnnotated <- loop env annotated
 
-                return do
+                pure do
                     let promote (Value.Scalar (Natural n)) Type.Scalar{ scalar = Monotype.Real } =
                             Value.Scalar (Real (fromIntegral n))
                         promote (Value.Scalar (Integer n)) Type.Scalar{ scalar = Monotype.Real } =
@@ -285,11 +285,13 @@ evaluate keyToMethods env₀ syntax₀ = do
                                 Value.List [ value ]
                             Just OptionalMonad ->
                                 Value.Application (Value.Builtin Some) value
+
                 foldr cons nil assignments env
 
             Syntax.List{ elements } -> do
                 values <- traverse (loop env) elements
-                return (Value.List values)
+
+                pure (Value.List values)
 
             Syntax.Record{ fieldValues } -> do
                 let process Syntax.Definition{ nameLocation, name, bindings, assignment = assignment₀ } = do
@@ -303,17 +305,17 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                         assignment₂ <- loop env assignment₁
 
-                        return (name, assignment₂)
+                        pure (name, assignment₂)
 
                 newFieldValues <- traverse process fieldValues
 
-                return (Value.Record (HashMap.fromList newFieldValues))
+                pure (Value.Record (HashMap.fromList newFieldValues))
 
             Syntax.Text{ chunks = Syntax.Chunks text rest } -> do
                 let onChunk (interpolation, text₁) = do
                         value <- loop env interpolation
 
-                        return case value of
+                        pure case value of
                             Value.Text text₀ ->
                                 text₀ <> text₁
                             _ ->
@@ -321,7 +323,7 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                 suffixes <- traverse onChunk rest
 
-                return (Value.Text (text <> Text.concat suffixes))
+                pure (Value.Text (text <> Text.concat suffixes))
 
             Syntax.Project{ larger, smaller } -> do
                 let lookup field fieldValues = case HashMap.lookup field fieldValues of
@@ -330,7 +332,7 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                 larger' <- loop env larger
 
-                return case (larger', smaller) of
+                pure case (larger', smaller) of
                     (Value.Record fieldValues, Syntax.Single{ single = Syntax.Field{ field } }) ->
                         lookup field fieldValues
 
@@ -391,7 +393,7 @@ evaluate keyToMethods env₀ syntax₀ = do
             Syntax.Fold{ handlers } -> do
                 newHandlers <- loop env handlers
 
-                return (Value.Fold newHandlers)
+                pure (Value.Fold newHandlers)
 
             Syntax.If{ predicate, ifTrue, ifFalse } -> do
                 predicate' <- loop env predicate
@@ -399,7 +401,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                 ifTrue'  <- loop env ifTrue
                 ifFalse' <- loop env ifFalse
 
-                return case predicate' of
+                pure case predicate' of
                     Value.Scalar (Bool True) -> ifTrue'
                     Value.Scalar (Bool False) -> ifFalse'
                     _ -> error "Grace.Normalize.evaluate: if predicate must be a boolean value"
@@ -411,7 +413,11 @@ evaluate keyToMethods env₀ syntax₀ = do
                     Left exception -> Exception.throwIO exception
                     Right prompt -> return prompt
 
-                Prompt.prompt (generateContext env location) import_ location prompt schema
+                Status{ context } <- State.get
+
+                let solvedSchema = fmap (Context.solveType context) schema
+
+                Prompt.prompt (generateContext env location) import_ location prompt solvedSchema
 
             Syntax.HTTP{ schema = Nothing } -> do
                 Exception.throwIO MissingSchema
@@ -428,29 +434,32 @@ evaluate keyToMethods env₀ syntax₀ = do
                     then do
                         bindings <- liftIO (generateContext env location)
 
-                        uri <- URI.mkURI (HTTP.url http)
+                        uri <- liftIO (URI.mkURI (HTTP.url http))
 
-                        Status{ input = parent } <- State.get
+                        parent <- Reader.ask
 
-                        let child = parent <> URI uri AsCode
+                        Reader.local (\i -> i <> URI uri AsCode) do
+                            child <- Reader.ask
 
-                        State.modify (\s -> s{ input = child })
+                            Import.referentiallySane parent child
 
-                        (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema)
+                            (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema)
 
-                        State.modify (\s -> s{ input = parent })
-
-                        return value
+                            return value
 
                     else do
-                        responseValue <- liftIO (Grace.Aeson.decode responseBody)
+                        Status{ context } <- State.get
 
-                        let defaultedSchema =
-                                Lens.transform (Type.defaultTo Type.Scalar{ location, scalar = Monotype.JSON }) schema
+                        let solvedSchema = Context.solveType context schema
 
-                        case Value.checkJSON defaultedSchema responseValue of
-                            Left exception -> Exception.throwIO exception
-                            Right value    -> return value
+                        case solvedSchema of
+                            Type.Scalar{ scalar = Monotype.Text } ->
+                                return (Value.Text responseBody)
+
+                            _ -> do
+                                responseValue <- liftIO (Grace.Aeson.decode responseBody)
+
+                                Infer.checkJSON solvedSchema responseValue
 
             Syntax.Read{ schema = Nothing } -> do
                 Exception.throwIO MissingSchema
@@ -465,44 +474,25 @@ evaluate keyToMethods env₀ syntax₀ = do
                     then do
                         bindings <- generateContext env location
 
-                        Status{ input = parent } <- State.get
+                        parent <- Reader.ask
 
-                        let child = parent <> Code "(read)" text
+                        Reader.local (\i -> i <> Code "(read)" text) do
+                            child <- Reader.ask
 
-                        State.modify (\s -> s{ input = child })
+                            Import.referentiallySane parent child
 
-                        (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema)
+                            (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema)
 
-                        State.modify (\s -> s{ input = parent })
-
-                        return value
+                            return value
 
                     else do
                         aesonValue <- liftIO (Grace.Aeson.decode text)
 
-                        case Value.checkJSON schema aesonValue of
-                            Left exception -> do
-                                let value = Value.inferJSON aesonValue
+                        Status{ context } <- State.get
 
-                                let annotated =
-                                        first (\_ -> Unknown)
-                                            (fmap Void.absurd (quote value))
+                        let solvedSchema = Context.solveType context schema
 
-                                let expression = Syntax.Annotation
-                                        { location = Unknown
-                                        , annotated
-                                        , annotation = schema
-                                        }
-
-                                let input =
-                                        Code "(read)" (Pretty.toSmart @(Syntax Location Input) expression)
-
-                                _ <- Infer.typeOf input expression
-
-                                Exception.throwIO exception
-
-                            Right value -> do
-                                return value
+                        Infer.checkJSON solvedSchema aesonValue
 
             Syntax.GitHub{ schema = Nothing } -> do
                 Exception.throwIO MissingSchema
@@ -519,19 +509,18 @@ evaluate keyToMethods env₀ syntax₀ = do
                     then do
                         bindings <- generateContext env location
 
-                        uri <- URI.mkURI url
+                        uri <- liftIO (URI.mkURI url)
 
-                        Status{ input = parent } <- State.get
+                        parent <- Reader.ask
 
-                        let child = parent <> URI uri AsCode
+                        Reader.local (\i -> i <> URI uri AsCode) do
+                            child <- Reader.ask
 
-                        State.modify (\s -> s{ input = child })
+                            Import.referentiallySane parent child
 
-                        (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema)
+                            (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema)
 
-                        State.modify (\s -> s{ input = parent })
-
-                        return value
+                            return value
 
                     else do
                         responseBody <- liftIO $ HTTP.http import_ GET
@@ -540,35 +529,18 @@ evaluate keyToMethods env₀ syntax₀ = do
                             , parameters = Nothing
                             }
 
-                        aesonValue <- liftIO (Grace.Aeson.decode responseBody)
+                        Status{ context } <- State.get
 
-                        let defaultedSchema =
-                                Lens.transform (Type.defaultTo Type.Scalar{ location, scalar = Monotype.JSON }) schema
+                        let solvedSchema = Context.solveType context schema
 
-                        case Value.checkJSON defaultedSchema aesonValue of
-                            Left exception -> do
-                                let value = Value.inferJSON aesonValue
+                        case solvedSchema of
+                            Type.Scalar{ scalar = Monotype.Text } ->
+                                return (Value.Text responseBody)
 
-                                let annotated =
-                                        first (\_ -> Unknown)
-                                            (fmap Void.absurd (quote value))
+                            _ -> do
+                                aesonValue <- liftIO (Grace.Aeson.decode responseBody)
 
-                                let expression = Syntax.Annotation
-                                        { location = Unknown
-                                        , annotated
-                                        , annotation = schema
-                                        }
-
-                                let input =
-                                        Code "(read)" (Pretty.toSmart @(Syntax Location Input) expression)
-
-                                _ <- Infer.typeOf input expression
-
-                                Exception.throwIO exception
-
-                            Right value -> do
-                                return value
-
+                                Infer.checkJSON solvedSchema aesonValue
 
             Syntax.Scalar{ scalar } ->
                 pure (Value.Scalar scalar)
@@ -577,7 +549,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
+                pure case (left', right') of
                     (Value.Scalar (Bool l), Value.Scalar (Bool r)) ->
                         Value.Scalar (Bool (l && r))
                     _ ->
@@ -587,7 +559,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
+                pure case (left', right') of
                     (Value.Scalar (Bool l), Value.Scalar (Bool r)) ->
                         Value.Scalar (Bool (l || r))
                     _ ->
@@ -597,19 +569,19 @@ evaluate keyToMethods env₀ syntax₀ = do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return (Value.Scalar (Bool (left' == right')))
+                pure (Value.Scalar (Bool (left' == right')))
 
             Syntax.Operator{ operator = Syntax.NotEqual, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return (Value.Scalar (Bool (left' /= right')))
+                pure (Value.Scalar (Bool (left' /= right')))
 
             Syntax.Operator{ operator = Syntax.LessThan, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
+                pure case (left', right') of
                     (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
                         Value.Scalar (Bool (m < n))
                     (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
@@ -624,7 +596,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
+                pure case (left', right') of
                     (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
                         Value.Scalar (Bool (m <= n))
                     (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
@@ -638,7 +610,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
+                pure case (left', right') of
                     (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
                         Value.Scalar (Bool (m > n))
                     (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
@@ -652,7 +624,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
+                pure case (left', right') of
                     (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
                         Value.Scalar (Bool (m >= n))
                     (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
@@ -666,7 +638,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
+                pure case (left', right') of
                     (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
                         Value.Scalar (Natural (m * n))
                     (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
@@ -680,7 +652,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
+                pure case (left', right') of
                     (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
                         Value.Scalar (Natural (m + n))
                     (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
@@ -698,7 +670,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
+                pure case (left', right') of
                     (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
                         Value.Scalar (Integer (fromIntegral m - fromIntegral n))
                     (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
@@ -780,14 +752,13 @@ evaluate keyToMethods env₀ syntax₀ = do
     evaluating anonymous functions and evaluating all built-in functions.
 -}
 apply
-    :: (MonadCatch m, MonadState Status m, MonadIO m)
-    => (Text -> Methods)
+    :: (Text -> Methods)
     -- ^ OpenAI methods
     -> Value
     -- ^ Function
     -> Value
     -- ^ Argument
-    -> m Value
+    -> Grace Value
 apply keyToMethods function₀ argument₀ = loop function₀ argument₀
   where
     loop (Value.Lambda capturedEnv (Value.Name name Nothing) body) argument =
@@ -819,26 +790,52 @@ apply keyToMethods function₀ argument₀ = loop function₀ argument₀
 
             return (fieldName, value)
     loop
-        (Value.Fold (Value.Record (sorted -> [("false", falseHandler), ("true", trueHandler)])))
+        (Value.Fold (Value.Record fieldValues))
         (Value.Scalar (Bool b)) =
             pure (if b then trueHandler else falseHandler)
+      where
+        falseHandler = case HashMap.lookup "false" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
+
+        trueHandler = case HashMap.lookup "true" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
     loop
-        (Value.Fold (Value.Record (sorted -> [("succ", succ), ("zero", zero)])))
+        (Value.Fold (Value.Record fieldValues))
         (Value.Scalar (Natural n)) = go n zero
       where
+        zero = case HashMap.lookup "zero" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
+
+        succ = case HashMap.lookup "succ" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
+
         go 0 !result = do
             return result
         go m !result = do
             x <- loop succ result
             go (m - 1) x
     loop
-        (Value.Fold (Value.Record (sorted -> [("null", _), ("some", some)])))
+        (Value.Fold (Value.Record fieldValues))
         (Value.Application (Value.Builtin Some) x) =
             loop some x
+      where
+        some = case HashMap.lookup "some" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
+
     loop
-        (Value.Fold (Value.Record (sorted -> [("null", null), ("some", _)])))
+        (Value.Fold (Value.Record fieldValues))
         (Value.Scalar Null)  =
             pure null
+      where
+        null = case HashMap.lookup "null" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
+
     loop
         (Value.Fold (Value.Record (sorted -> [("cons", cons), ("nil", nil)])))
         (Value.List elements) = do
@@ -853,23 +850,44 @@ apply keyToMethods function₀ argument₀ = loop function₀ argument₀
                     b <- loop a result
                     inner ys b
     loop
-        (Value.Fold
-            (Value.Record
-                (sorted ->
-                    [ ("array"  , array  )
-                    , ("bool"   , bool   )
-                    , ("integer", integer)
-                    , ("natural", natural)
-                    , ("null"   , null   )
-                    , ("object" , object )
-                    , ("real"   , real   )
-                    , ("string" , string )
-                    ]
-                )
-            )
-        )
-        v0 = inner v0
+        (Value.Fold (Value.Record alternativeHandlers))
+        (Value.Alternative alternative x)
+        | Just f <- HashMap.lookup alternative alternativeHandlers =
+            loop f x
+    loop (Value.Fold (Value.Record fieldValues)) v0 = inner v0
       where
+        array = case HashMap.lookup "array" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
+
+        bool = case HashMap.lookup "bool" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
+
+        integer = case HashMap.lookup "integer" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
+
+        natural = case HashMap.lookup "natural" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
+
+        null = case HashMap.lookup "null" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
+
+        object = case HashMap.lookup "object" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
+
+        real = case HashMap.lookup "real" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
+
+        string = case HashMap.lookup "string" fieldValues of
+            Nothing -> Value.Scalar Null
+            Just v  -> v
+
         inner (Value.Scalar (Bool b)) =
             loop bool (Value.Scalar (Bool b))
         inner (Value.Scalar (Natural n)) =
@@ -894,11 +912,6 @@ apply keyToMethods function₀ argument₀ = loop function₀ argument₀
                 return (Value.Record [("key", Value.Text key), ("value", newValue)])
         inner v =
             pure v
-    loop
-        (Value.Fold (Value.Record alternativeHandlers))
-        (Value.Alternative alternative x)
-        | Just f <- HashMap.lookup alternative alternativeHandlers =
-            loop f x
     loop (Value.Builtin Indexed) (Value.List elements) =
         pure (Value.List (Seq.mapWithIndex adapt elements))
       where

@@ -1,0 +1,2 @@
+forall (a : Type) .
+  a -> { "Example 0": Optional Natural, "Example 1": List Natural }

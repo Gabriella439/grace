@@ -29,6 +29,8 @@ library
                      , bytestring
                      , containers
                      , case-insensitive
+                     , directory
+                     , exceptions
                      , filepath
                      , generic-lens
                      , http-types
@@ -36,6 +38,7 @@ library
                      , lens
                      , megaparsec
                      , modern-uri
+                     , mmorph
                      , mtl
                      , openai
                      , parser-combinators
@@ -59,13 +62,16 @@ library
                      , Grace.Existential
                      , Grace.GitHub
                      , Grace.HTTP
-                     , Grace.Input
                      , Grace.Import
-                     , Grace.Interpret
                      , Grace.Infer
+                     , Grace.Input
+                     , Grace.Interpret
+                     , Grace.Label
                      , Grace.Location
+                     , Grace.Monad
                      , Grace.Monotype
                      , Grace.Normalize
+                     , Grace.Parallelizable
                      , Grace.Parser
                      , Grace.Pretty
                      , Grace.Prompt
@@ -94,7 +100,9 @@ library
                      , DerivingStrategies
                      , DuplicateRecordFields
                      , FlexibleContexts
+                     , FlexibleInstances
                      , GeneralizedNewtypeDeriving
+                     , MultiParamTypeClasses
                      , MultiWayIf
                      , NamedFieldPuns
                      , OverloadedStrings
@@ -102,6 +110,7 @@ library
                      , StandaloneDeriving
                      , TypeApplications
                      , TypeOperators
+                     , UndecidableInstances
                      , ViewPatterns
 
   default-language:    Haskell2010

@@ -9,7 +9,7 @@ module Grace.Import
     , ImportError(..)
     ) where
 
-import Control.Exception.Safe (Exception(..), MonadCatch)
+import Control.Exception.Safe (Exception(..))
 import Data.Bifunctor (first)
 import Data.Foldable (foldl')
 import Data.HashMap.Strict (HashMap)
@@ -20,6 +20,7 @@ import Data.Text (Text)
 import Grace.HTTP (HttpException)
 import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
+import Grace.Monad (Grace)
 import Grace.Syntax (Syntax)
 import System.FilePath ((</>))
 import Text.URI (Authority, RText, RTextLabel(..))
@@ -34,6 +35,7 @@ import qualified Grace.HTTP as HTTP
 import qualified Grace.Parser as Parser
 import qualified Grace.Pretty as Pretty
 import qualified Grace.Syntax as Syntax
+import qualified System.Directory as Directory
 import qualified System.Environment as Environment
 import qualified System.IO.Unsafe as Unsafe
 import qualified Text.URI as URI
@@ -60,9 +62,9 @@ remoteSchemes :: [RText 'Scheme]
 remoteSchemes = map (fromJust . URI.mkScheme) [ "http", "https" ]
 
 -- | Resolve an `Input` by returning the source code that it represents
-resolve :: Input -> IO (Syntax Location Input)
-resolve input = case input of
-    URI uri mode
+resolve :: Mode -> Input -> IO (Syntax Location Input)
+resolve mode₀ input = case input of
+    URI uri mode₁
         | any (`elem` remoteSchemes) (URI.uriScheme uri) -> do
             let name = URI.renderStr uri
 
@@ -70,7 +72,7 @@ resolve input = case input of
 
             text <- Exception.handle handler (fetch (Text.pack name))
 
-            result <- case mode of
+            result <- case mode₀ <> mode₁ of
                 AsCode -> case Parser.parse name text of
                     Left e -> Exception.throw e
                     Right result -> return result
@@ -105,7 +107,7 @@ resolve input = case input of
 
                     let name = "env:" <> Text.unpack var
 
-                    result <- case mode of
+                    result <- case mode₀ <> mode₁ of
                         AsCode -> case Parser.parse name text of
                             Left e -> Exception.throw e
                             Right result -> return result
@@ -138,15 +140,15 @@ resolve input = case input of
                     let pathPiecesToFilePath =
                             foldl' (</>) "/" . map (Text.unpack . URI.unRText) . NonEmpty.toList
 
-                    readPath mode (pathPiecesToFilePath pieces)
+                    readPath (mode₀ <> mode₁) (pathPiecesToFilePath pieces)
                 else do
                     throw UnsupportedAuthority
 
         | otherwise -> do
             throw InvalidURI
 
-    Path path mode -> do
-        readPath mode path
+    Path path mode₁ -> do
+        readPath (mode₀ <> mode₁) path
 
     Code name code -> do
         result <- case Parser.parse name code of
@@ -158,7 +160,14 @@ resolve input = case input of
         return (first locate result)
   where
     readPath mode path = do
-        text <- Text.IO.readFile path
+        adjustedPath <- case path of
+            '~' : '/' : suffix -> do
+                home <- Directory.getHomeDirectory
+                return (home </> suffix)
+            _ -> do
+                return path
+
+        text <- Text.IO.readFile adjustedPath
 
         result <- case mode of
             AsCode -> case Parser.parse path text of
@@ -194,7 +203,7 @@ remote _ = False
 
 -- | Fail if the child import tries to access something that the parent import
 -- should not have access to
-referentiallySane :: MonadCatch m => Input -> Input -> m ()
+referentiallySane :: Input -> Input -> Grace ()
 referentiallySane parent child
     | remote parent && not (remote child) = do
         Exception.throwIO (ImportError parent (ReferentiallyInsane child))
