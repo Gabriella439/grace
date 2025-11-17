@@ -3265,7 +3265,7 @@ check Syntax.Let{ location, assignments, body } annotation₀ = do
                                     _ <- check value list `Exception.catch` \(_ :: TypeInferenceError) -> do
                                         set context
 
-                                        Exception.throwIO (MonadMismatch assignmentLocation)
+                                        Exception.throwIO (MonadMismatch (Syntax.location value))
 
                                     set context
 
@@ -3296,7 +3296,7 @@ check Syntax.Let{ location, assignments, body } annotation₀ = do
                                     _ <- check value optional `Exception.catch` \(_ :: TypeInferenceError) -> do
                                         set context
 
-                                        Exception.throwIO (MonadMismatch assignmentLocation)
+                                        Exception.throwIO (MonadMismatch (Syntax.location value))
 
                                     set context
 
@@ -3327,6 +3327,8 @@ check Syntax.Let{ location, assignments, body } annotation₀ = do
             let nil = do
                     element <- case monad₀ of
                         Just ListMonad -> do
+                            context <- get
+
                             existential <- fresh
 
                             push (Context.UnsolvedType existential)
@@ -3341,13 +3343,17 @@ check Syntax.Let{ location, assignments, body } annotation₀ = do
                                     , type_ = element
                                     }
 
-                            context <- get
+                            subtype list (Context.solveType context annotation₀) `Exception.catch` \(_ :: TypeInferenceError) -> do
+                                set context
 
-                            subtype (Context.solveType context annotation₀) list
+                                Exception.throwIO (MonadMismatch (Type.location annotation₀))
+
 
                             return element
 
                         Just OptionalMonad -> do
+                            context <- get
+
                             existential <- fresh
 
                             push (Context.UnsolvedType existential)
@@ -3362,9 +3368,11 @@ check Syntax.Let{ location, assignments, body } annotation₀ = do
                                     , type_ = element
                                     }
 
-                            context <- get
+                            subtype optional (Context.solveType context annotation₀) `Exception.catch` \(_ :: TypeInferenceError) -> do
+                                set context
 
-                            subtype (Context.solveType context annotation₀) optional
+                                Exception.throwIO (MonadMismatch (Type.location annotation₀))
+
 
                             return element
 
