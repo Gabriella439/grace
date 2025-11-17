@@ -16,7 +16,7 @@ forall (c : Type) .
         { hashtags:
             List { text: Text, indices: List Natural }
         , symbols:
-            List a
+            List c
         , user_mentions:
             List b
         , urls:
@@ -63,7 +63,7 @@ forall (c : Type) .
                       }
                 }
             , description:
-                { urls: List c }
+                { urls: List a }
             }
         , protected:
             Bool

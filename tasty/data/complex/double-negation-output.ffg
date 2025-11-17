@@ -1,3 +1,0 @@
-\noMiddle ->
-\doubleNegation ->
-  fold { "Left": \x -> x, "Right": \x -> fold { } (doubleNegation x) } noMiddle

@@ -25,7 +25,6 @@ forall (x : Type) .
 forall (y : Type) .
 forall (z : Type) .
 forall (a0 : Type) .
-  a ->
   a0 ->
   z ->
   y ->
@@ -52,4 +51,5 @@ forall (a0 : Type) .
   d ->
   c ->
   b ->
-    b
+  a ->
+    a

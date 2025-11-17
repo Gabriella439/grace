@@ -1,13 +1,13 @@
-{ example0:
-    List Natural
-, example1:
-    { x: Natural, y: Bool }
-, example2:
-    forall (a : Fields) .
-      { x: Integer, y: Bool, a } -> { x: Integer, y: Bool, a }
-, example3:
-    < A: Natural | B: Bool > -> < A: Natural | B: Bool >
-, example4:
-    forall (a : Alternatives) .
+forall (a : Alternatives) .
+forall (b : Fields) .
+  { example0:
+      List Natural
+  , example1:
+      { x: Natural, y: Bool }
+  , example2:
+      { x: Integer, y: Bool, b } -> { x: Integer, y: Bool, b }
+  , example3:
+      < A: Natural | B: Bool > -> < A: Natural | B: Bool >
+  , example4:
       < A: Natural | B: Bool | a > -> < A: Natural | B: Bool | a >
-}
+  }

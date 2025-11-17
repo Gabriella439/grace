@@ -1,8 +1,8 @@
-forall (a : Fields) .
-forall (b : Alternatives) .
+forall (a : Alternatives) .
+forall (b : Fields) .
 forall (c : Type) .
-  { x: Bool, a } ->
-  { x: Bool, a } ->
-  < L: Natural | b > ->
+  { x: Bool, b } ->
+  { x: Bool, b } ->
+  < L: Natural | a > ->
   c ->
-    { field1: List { x: Bool, a }, field2: List < L: Natural | b > }
+    { field1: List { x: Bool, b }, field2: List < L: Natural | a > }

@@ -1,7 +1,4 @@
-{ a:
-    forall (a : Type) . Optional a
-, b:
-    forall (a : Fields) . Optional { a }
-, c:
-    forall (a : Alternatives) . Optional < a >
-}
+forall (a : Alternatives) .
+forall (b : Fields) .
+forall (c : Type) .
+  { a: Optional c, b: Optional { b }, c: Optional < a > }
