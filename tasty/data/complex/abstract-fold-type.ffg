@@ -1,1 +1,1 @@
-forall (a : Type) (b : Type) . { nil: a, cons: b -> a -> a } -> List b -> a
+forall (a : Type) . { } -> < > -> a

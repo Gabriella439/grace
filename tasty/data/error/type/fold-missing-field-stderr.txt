@@ -1,19 +1,23 @@
-Not a subtype
+Record type mismatch
 
-The following type:
+The following record type:
 
-  Natural
+  { }
 
-tasty/data/error/type/fold-missing-field-input.ffg:24:13: 
+tasty/data/error/type/fold-missing-field-input.ffg:19:5: 
    │
-24 │ fold{ zero: 0 }
-   │             ↑
+19 │ fold{ zero: 0 }
+   │     ↑
 
-… cannot be a subtype of:
+… is not a subtype of the following record type:
 
-  e? -> d?
+  { succ: Natural -> Natural }
 
-tasty/data/error/type/fold-missing-field-input.ffg:24:1: 
+tasty/data/error/type/fold-missing-field-input.ffg:19:1: 
    │
-24 │ fold{ zero: 0 }
+19 │ fold{ zero: 0 }
    │ ↑
+
+The latter record has the following extra fields:
+
+• succ

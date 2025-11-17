@@ -52,6 +52,7 @@ import Grace.Pretty (Pretty(..))
 import Grace.Prompt.Types (Prompt(..))
 import Grace.Type (Type(..))
 import Grace.Value (Value)
+import Prelude hiding (succ)
 
 import Grace.Syntax
     (Binding, BindMonad(..), Definition(..), NameBinding, Syntax)
@@ -231,14 +232,14 @@ wellFormed context Type.Union{ location, alternatives = Type.Alternatives kAs re
 wellFormed _ Type.Scalar{} = do
     return ()
 
--- A field is required if and only if it is a subtype of @Optional T@ for some
+-- A type is required if and only if it is a subtype of @Optional T@ for some
 -- type @T@
 --
 -- The reason we don't just check if @superType₁@ is @Optional { }@ is because
 -- it might be an unsolved variable.  Checking if it is a subtype of
 -- @Optional a?@ is the most robust way to check.
-isFieldRequired :: Type Location -> Grace Bool
-isFieldRequired fieldType = do
+isRequired :: Type Location -> Grace Bool
+isRequired requiredType = do
     context <- get
 
     let assertOptional = do
@@ -248,14 +249,14 @@ isFieldRequired fieldType = do
 
             let optional = Type.Optional{ location, type_ }
                   where
-                    location = Type.location fieldType
+                    location = Type.location requiredType
 
                     type_ = Type.UnsolvedType
                         { existential
                         , location
                         }
 
-            subtype fieldType optional
+            subtype requiredType optional
 
             return False
 
@@ -397,7 +398,7 @@ subtype subType₀ superType₀ = do
             sequence_ (Map.intersectionWith subtypeField subFieldTypes superFieldTypes)
 
             let getRequiredFields = do
-                    m <- traverse isFieldRequired superExtraFieldTypes
+                    m <- traverse isRequired superExtraFieldTypes
 
                     return (Map.keys (Map.filter id m))
 
@@ -1658,12 +1659,194 @@ infer e₀ = do
             return (inferred, newAlternative)
 
         Syntax.Fold{ location, handlers } -> do
+            -- For each type of fold we distinguish between type errors that
+            -- are due to to the field names mismatching (which will fall back
+            -- to trying the next fold) and type errors for unrelated reasons
+            -- (which will stick to the current fold without fallin back).
+
+            let fold = do
+                    context₀ <- get
+
+                    existential₀ <- fresh
+
+                    push (Context.UnsolvedFields existential₀)
+
+                    let unsolvedRecord = Type.Fields
+                            []
+                            (Monotype.UnsolvedFields existential₀)
+
+                    _ <- check handlers Type.Record
+                        { location
+                        , fields = unsolvedRecord
+                        }
+
+                    context₁ <- get
+
+                    let Type.Fields keyTypes _ =
+                            Context.solveRecord context₁ unsolvedRecord
+
+                    set context₀
+
+                    existential₁ <- fresh
+
+                    push (Context.UnsolvedType existential₁)
+
+                    let union = Type.UnsolvedType
+                            { location
+                            , existential = existential₁
+                            }
+
+                    let process (key, _) = do
+                            existential <- fresh
+
+                            push (Context.UnsolvedType existential)
+
+                            let alternativeType = Type.UnsolvedType
+                                    { location
+                                    , existential
+                                    }
+
+                            let handlerType = Type.Function
+                                    { location
+                                    , input = alternativeType
+                                    , output = union
+                                    }
+
+                            return ((key, handlerType), (key, alternativeType))
+
+                    results <- traverse process keyTypes
+
+                    let (fieldTypes, alternativeTypes) = unzip results
+
+                    newHandlers <- check handlers Type.Record
+                        { location
+                        , fields = Type.Fields
+                            fieldTypes
+                            Monotype.EmptyFields
+                        }
+
+                    let type_ = Type.Function
+                            { location
+                            , input = Type.Union
+                                { location
+                                , alternatives = Type.Alternatives
+                                    alternativeTypes
+                                    Monotype.EmptyAlternatives
+                                }
+                            , output = union
+                            }
+
+                    let newFold = Syntax.Fold
+                            { location
+                            , handlers = newHandlers
+                            }
+
+                    return (type_, newFold)
+
+            let emptyFold = do
+                    context₀ <- get
+
+                    existential <- fresh
+
+                    push (Context.UnsolvedFields existential)
+
+                    let fields = Type.Fields
+                            []
+                            (Monotype.UnsolvedFields existential)
+
+                    let record = Type.Record
+                            { location
+                            , fields
+                            }
+
+                    let checkSkeleton = do
+                            _ <- check handlers record
+
+                            context₁ <- get
+
+                            case Context.solveRecord context₁ fields of
+                                Type.Fields [] _ -> do
+                                    return ()
+
+                                _ -> do
+                                    set context₀
+
+                                    Exception.throwIO FoldMismatch
+
+                    checkSkeleton `Exception.catch` \(_ :: TypeInferenceError) -> do
+                        set context₀
+
+                        Exception.throwIO FoldMismatch
+
+                    set context₀
+
+                    fold
+
             let boolFold = do
+                    context₀ <- get
+
+                    existential₀ <- fresh
+
+                    push (Context.UnsolvedType existential₀)
+
+                    let false = Type.UnsolvedType
+                            { location
+                            , existential = existential₀
+                            }
+
+                    existential₁ <- fresh
+
+                    push (Context.UnsolvedType existential₁)
+
+                    let true = Type.UnsolvedType
+                            { location
+                            , existential = existential₁
+                            }
+
+                    existential₂ <- fresh
+
+                    push (Context.UnsolvedFields existential₂)
+
+                    let record = Type.Record
+                            { location
+                            , fields = Type.Fields
+                                [ ("false", false), ("true", true) ]
+                                (Monotype.UnsolvedFields existential₂)
+                            }
+
+                    let checkSkeleton = do
+                            _ <- check handlers record
+
+                            context₁ <- get
+
+                            let fields = Type.Fields
+                                    []
+                                    (Monotype.UnsolvedFields existential₂)
+
+                            case Context.solveRecord context₁ fields of
+                                Type.Fields [] _ -> do
+                                    return ()
+
+                                _ -> do
+                                    set context₀
+
+                                    Exception.throwIO FoldMismatch
+
+                    _ <- checkSkeleton `Exception.catch` \(_ :: TypeInferenceError) -> do
+                        set context₀
+
+                        Exception.throwIO FoldMismatch
+
+                    set context₀
+
                     existential <- fresh
 
                     push (Context.UnsolvedType existential)
 
-                    let bool = Type.UnsolvedType{ location, existential }
+                    let bool = Type.UnsolvedType
+                            { location
+                            , existential
+                            }
 
                     newHandlers <- check handlers Type.Record
                         { location
@@ -1691,6 +1874,62 @@ infer e₀ = do
                     return (type_, newFold)
 
             let naturalFold = do
+                    context₀ <- get
+
+                    existential₀ <- fresh
+
+                    push (Context.UnsolvedType existential₀)
+
+                    let zero = Type.UnsolvedType
+                            { location
+                            , existential = existential₀
+                            }
+
+                    existential₁ <- fresh
+
+                    push (Context.UnsolvedType existential₁)
+
+                    let succ = Type.UnsolvedType
+                            { location
+                            , existential = existential₁
+                            }
+
+                    existential₂ <- fresh
+
+                    push (Context.UnsolvedFields existential₂)
+
+                    let record = Type.Record
+                            { location
+                            , fields = Type.Fields
+                                [ ("zero", zero), ("succ", succ) ]
+                                (Monotype.UnsolvedFields existential₂)
+                            }
+
+                    let checkSkeleton = do
+                            _ <- check handlers record
+
+                            context₁ <- get
+
+                            let fields = Type.Fields
+                                    []
+                                    (Monotype.UnsolvedFields existential₂)
+
+                            case Context.solveRecord context₁ fields of
+                                Type.Fields [] _ -> do
+                                    return ()
+
+                                _ -> do
+                                    set context₀
+
+                                    Exception.throwIO FoldMismatch
+
+                    _ <- checkSkeleton `Exception.catch` \(_ :: TypeInferenceError) -> do
+                        set context₀
+
+                        Exception.throwIO FoldMismatch
+
+                    set context₀
+
                     existential <- fresh
 
                     push (Context.UnsolvedType existential)
@@ -1729,11 +1968,13 @@ infer e₀ = do
                     return (type_, newFold)
 
             let optionalFold = do
+                    context₀ <- get
+
                     existential₀ <- fresh
 
                     push (Context.UnsolvedType existential₀)
 
-                    let element = Type.UnsolvedType
+                    let null_ = Type.UnsolvedType
                             { location
                             , existential = existential₀
                             }
@@ -1742,9 +1983,63 @@ infer e₀ = do
 
                     push (Context.UnsolvedType existential₁)
 
-                    let optional = Type.UnsolvedType
+                    let some = Type.UnsolvedType
                             { location
                             , existential = existential₁
+                            }
+
+                    existential₂ <- fresh
+
+                    push (Context.UnsolvedFields existential₂)
+
+                    let record = Type.Record
+                            { location
+                            , fields = Type.Fields
+                                [ ("null", null_), ("some", some) ]
+                                (Monotype.UnsolvedFields existential₂)
+                            }
+
+                    let checkSkeleton = do
+                            _ <- check handlers record
+
+                            context₁ <- get
+
+                            let fields = Type.Fields
+                                    []
+                                    (Monotype.UnsolvedFields existential₂)
+
+                            case Context.solveRecord context₁ fields of
+                                Type.Fields [] _ -> do
+                                    return ()
+
+                                _ -> do
+                                    set context₀
+
+                                    Exception.throwIO FoldMismatch
+
+                    _ <- checkSkeleton `Exception.catch` \(_ :: TypeInferenceError) -> do
+                        set context₀
+
+                        Exception.throwIO FoldMismatch
+
+                    set context₀
+
+                    existential₃ <- fresh
+
+                    push (Context.UnsolvedType existential₃)
+
+                    let element = Type.UnsolvedType
+                            { location
+                            , existential = existential₃
+                            }
+
+                    existential₄ <- fresh
+
+                    push (Context.UnsolvedType existential₄)
+
+                    let optional = Type.UnsolvedType
+                            { location
+                            , existential = existential₄
                             }
 
                     newHandlers <- check handlers Type.Record
@@ -1779,11 +2074,13 @@ infer e₀ = do
                     return (type_, newFold)
 
             let listFold = do
+                    context₀ <- get
+
                     existential₀ <- fresh
 
                     push (Context.UnsolvedType existential₀)
 
-                    let element = Type.UnsolvedType
+                    let nil = Type.UnsolvedType
                             { location
                             , existential = existential₀
                             }
@@ -1792,9 +2089,63 @@ infer e₀ = do
 
                     push (Context.UnsolvedType existential₁)
 
-                    let list = Type.UnsolvedType
+                    let cons = Type.UnsolvedType
                             { location
                             , existential = existential₁
+                            }
+
+                    existential₂ <- fresh
+
+                    push (Context.UnsolvedFields existential₂)
+
+                    let record = Type.Record
+                            { location
+                            , fields = Type.Fields
+                                [ ("nil", nil), ("cons", cons) ]
+                                (Monotype.UnsolvedFields existential₂)
+                            }
+
+                    let checkSkeleton = do
+                            _ <- check handlers record
+
+                            context₁ <- get
+
+                            let fields = Type.Fields
+                                    []
+                                    (Monotype.UnsolvedFields existential₂)
+
+                            case Context.solveRecord context₁ fields of
+                                Type.Fields [] _ -> do
+                                    return ()
+
+                                _ -> do
+                                    set context₀
+
+                                    Exception.throwIO FoldMismatch
+
+                    _ <- checkSkeleton `Exception.catch` \(_ :: TypeInferenceError) -> do
+                        set context₀
+
+                        Exception.throwIO FoldMismatch
+
+                    set context₀
+
+                    existential₃ <- fresh
+
+                    push (Context.UnsolvedType existential₃)
+
+                    let element = Type.UnsolvedType
+                            { location
+                            , existential = existential₃
+                            }
+
+                    existential₄ <- fresh
+
+                    push (Context.UnsolvedType existential₄)
+
+                    let list = Type.UnsolvedType
+                            { location
+                            , existential = existential₄
                             }
 
                     newHandlers <- check handlers Type.Record
@@ -1833,6 +2184,124 @@ infer e₀ = do
                     return (type_, newFold)
 
             let jsonFold = do
+                    context₀ <- get
+
+                    existential₀ <- fresh
+
+                    push (Context.UnsolvedType existential₀)
+
+                    let array = Type.UnsolvedType
+                            { location
+                            , existential = existential₀
+                            }
+
+                    existential₁ <- fresh
+
+                    push (Context.UnsolvedType existential₁)
+
+                    let bool = Type.UnsolvedType
+                            { location
+                            , existential = existential₁
+                            }
+
+                    existential₂ <- fresh
+
+                    push (Context.UnsolvedType existential₂)
+
+                    let integer = Type.UnsolvedType
+                            { location
+                            , existential = existential₂
+                            }
+
+                    existential₃ <- fresh
+
+                    push (Context.UnsolvedType existential₃)
+
+                    let natural = Type.UnsolvedType
+                            { location
+                            , existential = existential₃
+                            }
+
+                    existential₄ <- fresh
+
+                    push (Context.UnsolvedType existential₄)
+
+                    let null_ = Type.UnsolvedType
+                            { location
+                            , existential = existential₄
+                            }
+
+                    existential₅ <- fresh
+
+                    push (Context.UnsolvedType existential₅)
+
+                    let object = Type.UnsolvedType
+                            { location
+                            , existential = existential₅
+                            }
+
+                    existential₆ <- fresh
+
+                    push (Context.UnsolvedType existential₆)
+
+                    let real = Type.UnsolvedType
+                            { location
+                            , existential = existential₆
+                            }
+
+                    existential₇ <- fresh
+
+                    push (Context.UnsolvedType existential₇)
+
+                    let string = Type.UnsolvedType
+                            { location
+                            , existential = existential₇
+                            }
+
+                    existential₈ <- fresh
+
+                    push (Context.UnsolvedFields existential₈)
+
+                    let record = Type.Record
+                            { location
+                            , fields = Type.Fields
+                                [ ( "array", array )
+                                , ( "bool" , bool )
+                                , ( "integer", integer )
+                                , ( "natural", natural )
+                                , ( "null", null_ )
+                                , ( "object", object )
+                                , ( "real", real )
+                                , ( "string", string )
+                                ]
+                                (Monotype.UnsolvedFields existential₈)
+                            }
+
+                    let checkSkeleton = do
+                            _ <- check handlers record
+
+                            context₁ <- get
+
+                            let fields = Type.Fields
+                                    []
+                                    (Monotype.UnsolvedFields existential₈)
+
+                            case Context.solveRecord context₁ fields of
+                                Type.Fields [] _ -> do
+                                    return ()
+
+                                _ -> do
+                                    set context₀
+
+                                    Exception.throwIO FoldMismatch
+
+                    _ <- checkSkeleton `Exception.catch` \(_ :: TypeInferenceError) -> do
+                        set context₀
+
+                        Exception.throwIO FoldMismatch
+
+                    set context₀
+
                     existential <- fresh
 
                     push (Context.UnsolvedType existential)
@@ -1945,103 +2414,27 @@ infer e₀ = do
 
                     return (type_, newFold)
 
-            let fold = do
-                    context₀ <- get
-
-                    existential₀ <- fresh
-
-                    push (Context.UnsolvedFields existential₀)
-
-                    let unsolvedRecord = Type.Fields
-                            []
-                            (Monotype.UnsolvedFields existential₀)
-
-                    _ <- check handlers Type.Record
-                        { location
-                        , fields = unsolvedRecord
-                        }
-
-                    context₁ <- get
-
-                    let Type.Fields keyTypes _ =
-                            Context.solveRecord context₁ unsolvedRecord
-
-                    set context₀
-
-                    existential₁ <- fresh
-
-                    push (Context.UnsolvedType existential₁)
-
-                    let union = Type.UnsolvedType
-                            { location
-                            , existential = existential₁
-                            }
-
-                    let process (key, _) = do
-                            existential <- fresh
-
-                            push (Context.UnsolvedType existential)
-
-                            let alternativeType = Type.UnsolvedType
-                                    { location
-                                    , existential
-                                    }
-
-                            let handlerType = Type.Function
-                                    { location
-                                    , input = alternativeType
-                                    , output = union
-                                    }
-
-                            return ((key, handlerType), (key, alternativeType))
-
-                    results <- traverse process keyTypes
-
-                    let (fieldTypes, alternativeTypes) = unzip results
-
-                    newHandlers <- check handlers Type.Record
-                        { location
-                        , fields = Type.Fields
-                            fieldTypes
-                            Monotype.EmptyFields
-                        }
-
-                    let type_ = Type.Function
-                            { location
-                            , input = Type.Union
-                                { location
-                                , alternatives = Type.Alternatives
-                                    alternativeTypes
-                                    Monotype.EmptyAlternatives
-                                }
-                            , output = union
-                            }
-
-                    let newFold = Syntax.Fold
-                            { location
-                            , handlers = newHandlers
-                            }
-
-                    return (type_, newFold)
-
             context <- get
 
-            listFold `Exception.catch` \(_ :: TypeInferenceError) -> do
+            emptyFold `Exception.catch` \(_ :: FoldMismatch) -> do
                 set context
 
-                optionalFold `Exception.catch` \(_ :: TypeInferenceError) -> do
+                listFold `Exception.catch` \(_ :: FoldMismatch) -> do
                     set context
 
-                    boolFold `Exception.catch` \(_ :: TypeInferenceError) -> do
+                    optionalFold `Exception.catch` \(_ :: FoldMismatch) -> do
                         set context
 
-                        naturalFold `Exception.catch` \(_ :: TypeInferenceError) -> do
+                        boolFold `Exception.catch` \(_ :: FoldMismatch) -> do
                             set context
 
-                            jsonFold `Exception.catch` \(_ :: TypeInferenceError) -> do
+                            naturalFold `Exception.catch` \(_ :: FoldMismatch) -> do
                                 set context
 
-                                fold
+                                jsonFold `Exception.catch` \(_ :: FoldMismatch) -> do
+                                    set context
+
+                                    fold
 
         Syntax.Project{ location, larger, smaller } -> do
             let processField Syntax.Field{ fieldLocation, field } = do
@@ -3673,7 +4066,7 @@ check e@Syntax.Record{ fieldValues = fieldValues₀ } _B@Type.Record{ fields = T
         let extraValues = Map.difference mapValues mapTypes
         let extraTypes  = Map.difference mapTypes  mapValues
 
-        isRequiredTypes <- traverse isFieldRequired extraTypes
+        isRequiredTypes <- traverse isRequired extraTypes
 
         let extraRequiredTypes =
                 Map.difference extraTypes (Map.filter not isRequiredTypes)
@@ -4534,6 +4927,13 @@ instance Exception MonadMismatch where
         "For comprehensions mismatch\n\
         \\n\
         \" <> Text.unpack (Location.renderError "" location)
+
+data FoldMismatch = FoldMismatch
+    deriving stock (Eq, Show)
+
+instance Exception FoldMismatch where
+    displayException FoldMismatch =
+        "Fold mismatch"
 
 -- | Invalid JSON output which didn't match the expected type
 data InvalidJSON a = InvalidJSON
