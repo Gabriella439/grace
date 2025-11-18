@@ -1,19 +1,19 @@
 forall (a : Type) .
-forall (b : Fields) .
+forall (b : Alternatives) .
 forall (c : Type) .
 forall (d : Type) .
-forall (e : Alternatives) .
-  { x: a, y: c, b } ->
-  { y: c, x: a, b } ->
-  d ->
+forall (e : Fields) .
+  { x: d, y: c, e } ->
+  { y: c, x: d, e } ->
+  a ->
     { example0:
-        List { x: a, y: c, b }
+        List { x: d, y: c, e }
     , example1:
-        List { x: a, y: c, b }
+        List { x: d, y: c, e }
     , example2:
-        List < L: Natural | R: Bool | e >
+        List < L: Natural | R: Bool | b >
     , example3:
-        List < L: Natural | R: Bool | e >
+        List < L: Natural | R: Bool | b >
     , example4:
-        List d
+        List a
     }

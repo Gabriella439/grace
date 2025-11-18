@@ -11,7 +11,7 @@ tasty/data/error/type/invalid-handler-input.ffg:1:11:
 
 … cannot be a subtype of:
 
-  d? -> c?
+  e? -> d?
 
 tasty/data/error/type/invalid-handler-input.ffg:1:1: 
   │

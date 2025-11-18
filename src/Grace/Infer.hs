@@ -1359,44 +1359,46 @@ onDefinition Syntax.Definition
 
         let (inputs, entriess, newBindings) = unzip3 results
 
-        let nil = do
-                (annotation₁, assignment₂) <- case (bindings, annotation₀) of
-                    ([], Just annotation₁) -> do
-                        assignment₂ <- check assignment₀ annotation₁
+        annotation₁ <- case annotation₀ of
+            Just annotation₁ -> do
+                return annotation₁
 
-                        return (annotation₁, assignment₂)
-                    (_, Just annotation₁) -> do
-                        let assignment₁ = Syntax.Annotation
-                                { location = Syntax.location assignment₀
-                                , annotated = assignment₀
-                                , annotation = annotation₁
-                                }
+            Nothing -> do
+                existential <- fresh
 
-                        infer assignment₁
-                    (_, Nothing) -> do
-                        infer assignment₀
+                preserve (Context.UnsolvedType existential)
 
-                let newDefinition = Syntax.Definition
-                        { nameLocation
-                        , name
-                        , bindings = newBindings
-                        , annotation = annotation₀
-                        , assignment = assignment₂
-                        }
+                return Type.UnsolvedType
+                    { location = Syntax.location assignment₀
+                    , existential
+                    }
 
-                let cons input output = Type.Function
-                        { location = nameLocation
-                        , input
-                        , output
-                        }
+        let nil = check assignment₀ annotation₁
 
-                let annotation₂ = foldr cons annotation₁ inputs
+        assignment₁ <- foldr scoped nil (concat entriess)
 
-                let fieldType = (name, annotation₂)
+        context <- get
 
-                return (fieldType, newDefinition)
+        let newDefinition = Syntax.Definition
+                { nameLocation
+                , name
+                , bindings = newBindings
+                , annotation = annotation₀
+                , assignment = solveSyntax context assignment₁
+                }
 
-        foldr scoped nil (concat entriess)
+        let cons input output = Type.Function
+                { location = nameLocation
+                , input
+                , output
+                }
+
+        let annotation₂ =
+                Context.solveType context (foldr cons annotation₁ inputs)
+
+        let fieldType = (name, annotation₂)
+
+        return (fieldType, newDefinition)
 
 {-| This corresponds to the judgment:
 
@@ -1412,7 +1414,6 @@ infer e₀ = do
     let var name = Type.VariableType{ location = Syntax.location e₀, name, .. }
 
     case e₀ of
-        -- Var
         Syntax.Variable{ location, name } -> do
             _Γ <- get
 
@@ -1420,16 +1421,14 @@ infer e₀ = do
 
             return (inferred, Syntax.Variable{ location, name })
 
-        -- →I⇒
         Syntax.Lambda{ location, binding, body } -> do
             (input, entries, newBinding) <- onBinding binding
 
-            output <- do
-                existential <- fresh
+            existential <- fresh
 
-                push (Context.UnsolvedType existential)
+            preserve (Context.UnsolvedType existential)
 
-                return Type.UnsolvedType
+            let output = Type.UnsolvedType
                     { location = Syntax.location body
                     , existential
                     }
@@ -2262,7 +2261,7 @@ infer e₀ = do
                 Nothing -> do
                     existential <- fresh
 
-                    preserve(Context.UnsolvedType existential)
+                    preserve (Context.UnsolvedType existential)
 
                     return Type.UnsolvedType{ location, existential}
 
@@ -3453,40 +3452,40 @@ check Syntax.HTTP{ import_, schema = Nothing, .. } annotation = do
 
     newArguments <- check arguments input
 
-    context₀ <- get
-
     Monad.unless import_ do
-        subtype (Context.solveType context₀ annotation) Type.Scalar{ location, scalar = Monotype.JSON }
+        context <- get
 
-    context₁ <- get
+        subtype (Context.solveType context annotation) Type.Scalar{ location, scalar = Monotype.JSON }
 
-    return Syntax.HTTP{ arguments = newArguments, schema = Just (Context.solveType context₁ annotation), .. }
+    context <- get
+
+    return Syntax.HTTP{ arguments = newArguments, schema = Just (Context.solveType context annotation), .. }
 
 check Syntax.Read{ import_, schema = Nothing, .. } annotation = do
     newArguments <- check arguments (fmap (\_ -> location) (expected @Text))
 
-    context₀ <- get
-
     Monad.unless import_ do
-        subtype (Context.solveType context₀ annotation) Type.Scalar{ location, scalar = Monotype.JSON }
+        context <- get
 
-    context₁ <- get
+        subtype (Context.solveType context annotation) Type.Scalar{ location, scalar = Monotype.JSON }
 
-    return Syntax.Read{ arguments = newArguments, schema = Just (Context.solveType context₁ annotation), .. }
+    context <- get
+
+    return Syntax.Read{ arguments = newArguments, schema = Just (Context.solveType context annotation), .. }
 
 check Syntax.GitHub{ import_, schema = Nothing, .. } annotation = do
-    let input = fmap (\_ -> location) (expected @GitHub)
+    let argumentsType = fmap (\_ -> location) (expected @GitHub)
 
-    newArguments <- check arguments input
-
-    context₀ <- get
+    newArguments <- check arguments argumentsType
 
     Monad.unless import_ do
-        subtype (Context.solveType context₀ annotation) Type.Scalar{ location, scalar = Monotype.JSON }
+        context <- get
 
-    context₁ <- get
+        subtype (Context.solveType context annotation) Type.Scalar{ location, scalar = Monotype.JSON }
 
-    return Syntax.GitHub{ arguments = newArguments, schema = Just (Context.solveType context₁ annotation), .. }
+    context <- get
+
+    return Syntax.GitHub{ arguments = newArguments, schema = Just (Context.solveType context annotation), .. }
 
 check Syntax.Project{ location, larger, smaller = smaller@Syntax.Single{ single = Syntax.Field{ fieldLocation, field } } } annotation = do
     context <- get
@@ -3831,9 +3830,9 @@ check Syntax.Scalar{ scalar = Syntax.Natural n, .. } Type.Scalar{ scalar = Monot
 check annotated annotation@Type.Scalar{ scalar = Monotype.Real } = do
     (_A₀, newAnnotated) <- infer annotated
 
-    _Γ <- get
+    context <- get
 
-    let _A₁ = Context.solveType _Γ _A₀
+    let _A₁ = Context.solveType context _A₀
 
     let real = do
             subtype _A₁ annotation
@@ -3874,9 +3873,9 @@ check annotated annotation@Type.Scalar{ scalar = Monotype.Real } = do
 check annotated annotation@Type.Scalar{ scalar = Monotype.Integer } = do
     (_A₀, newAnnotated) <- infer annotated
 
-    _Γ <- get
+    context <- get
 
-    let _A₁ = Context.solveType _Γ _A₀
+    let _A₁ = Context.solveType context _A₀
 
     let integer = do
             subtype _A₁ annotation
@@ -3926,9 +3925,9 @@ check Syntax.Text{ chunks = Syntax.Chunks text₀ [], .. } Type.Scalar{ scalar =
 check annotated annotation@Type.Scalar{ scalar = Monotype.Key } = do
     (_A₀, newAnnotated) <- infer annotated
 
-    _Γ <- get
+    context <- get
 
-    let _A₁ = Context.solveType _Γ _A₀
+    let _A₁ = Context.solveType context _A₀
 
     let key = do
             subtype _A₁ annotation

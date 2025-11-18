@@ -11,7 +11,7 @@ tasty/data/error/type/missing-required-field-input.ffg:1:1:
 
 … is not a subtype of the following record type:
 
-  { y: Bool, a? }
+  { y: Bool, b? }
 
 tasty/data/error/type/missing-required-field-input.ffg:1:10: 
   │

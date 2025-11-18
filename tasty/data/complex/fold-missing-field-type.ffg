@@ -7,13 +7,13 @@ forall (d : Type) .
   , "Example 1":
       Bool -> Optional Natural
   , "Example 2":
-      Natural -> Optional a
+      Natural -> Optional d
   , "Example 3":
       < 'succ': Natural > -> Natural
   , "Example 4":
-      Optional (Optional b) -> Optional b
+      Optional (Optional c) -> Optional c
   , "Example 5":
       Optional Natural -> Optional Natural
   , "Example 6":
-      List c -> Optional d
+      List b -> Optional a
   }
