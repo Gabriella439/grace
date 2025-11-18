@@ -1508,26 +1508,72 @@ infer e₀ = do
 
                                     (newAssignments, newBody) <- foldr scoped action newEntries
 
-                                    context <- get
+                                    annotation₁ <- case monad₀ of
+                                        Just ListMonad -> do
+                                            context <- get
 
-                                    let annotation₁ = Context.solveType context annotation₀
+                                            existential <- fresh
 
-                                    let annotation₂ = case monad₀ of
-                                            Just ListMonad -> Type.List
-                                                { location = assignmentLocation
-                                                , type_ = annotation₁
-                                                }
+                                            push (Context.UnsolvedType existential)
 
-                                            Just OptionalMonad -> Type.Optional
-                                                { location = assignmentLocation
-                                                , type_ = annotation₁
-                                                }
+                                            let element = Type.UnsolvedType
+                                                    { location = assignmentLocation
+                                                    , existential
+                                                    }
 
-                                            Just UnknownMonad -> annotation₁
+                                            let list = Type.List
+                                                    { location = assignmentLocation
+                                                    , type_ = element
+                                                    }
 
-                                            Nothing -> annotation₁
+                                            _ <- check value list `Exception.catch` \(_ :: TypeInferenceError) -> do
+                                                set context
 
-                                    newValue <- check value annotation₂
+                                                Exception.throwIO (MonadMismatch (Syntax.location value))
+
+                                            let annotation₁ = Type.List
+                                                    { location = assignmentLocation
+                                                    , type_ = annotation₀
+                                                    }
+
+                                            return annotation₁
+
+                                        Just OptionalMonad -> do
+                                            context <- get
+
+                                            existential <- fresh
+
+                                            push (Context.UnsolvedType existential)
+
+                                            let element = Type.UnsolvedType
+                                                    { location = assignmentLocation
+                                                    , existential
+                                                    }
+
+                                            let optional = Type.Optional
+                                                    { location = assignmentLocation
+                                                    , type_ = element
+                                                    }
+
+                                            _ <- check value optional `Exception.catch` \(_ :: TypeInferenceError) -> do
+                                                set context
+
+                                                Exception.throwIO (MonadMismatch (Syntax.location value))
+
+                                            let annotation₁ = Type.Optional
+                                                    { location = assignmentLocation
+                                                    , type_ = annotation₀
+                                                    }
+
+                                            return annotation₁
+
+                                        Just UnknownMonad -> do
+                                            return annotation₀
+
+                                        Nothing -> do
+                                            return annotation₀
+
+                                    newValue <- check value annotation₁
 
                                     let newAssignment = Syntax.Bind
                                             { assignmentLocation
@@ -1566,13 +1612,13 @@ infer e₀ = do
                             Just UnknownMonad -> unsolved
                             Nothing -> unsolved
 
-                    context <- get
-
                     let newLet = Syntax.Let
                             { location
                             , assignments = NonEmpty.fromList newAssignments
                             , body = newBody
                             }
+
+                    context <- get
 
                     return (Context.solveType context output, solveSyntax context newLet)
 
@@ -1581,11 +1627,10 @@ infer e₀ = do
             assign Nothing `Exception.catch` \(_ :: MonadMismatch) -> do
                 set context
 
-                assign (Just ListMonad) `Exception.catch` \(e :: TypeInferenceError) -> do
+                assign (Just ListMonad) `Exception.catch` \(_ :: MonadMismatch) -> do
                     set context
 
-                    assign (Just OptionalMonad) `Exception.catch` \(_ :: TypeInferenceError) -> do
-                        Exception.throwIO e
+                    assign (Just OptionalMonad)
 
         Syntax.List{ location, elements = elements₀ } -> do
             case Seq.viewl elements₀ of
