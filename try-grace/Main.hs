@@ -1818,7 +1818,7 @@ main = do
 
             let examples =
                     [ ("Hello, world!", "hello.ffg"     )
-                    , ("HTML"         , "checkboxes.ffg")
+                    , ("HTML"         , "html.ffg"      )
                     , ("Data"         , "data.ffg"      )
                     , ("Prompting"    , "prompting.ffg" )
                     , ("Variables"    , "variables.ffg" )

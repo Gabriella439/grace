@@ -1,0 +1,197 @@
+forall (a : Type) .
+forall (b : Type) .
+forall (c : Type) .
+forall (d : Type) .
+forall (e : Type) .
+forall (f : Type) .
+forall (g : Type) .
+forall (h : Type) .
+forall (i : Type) .
+forall (j : Type) .
+forall (k : Fields) .
+forall (l : Fields) .
+forall (m : Fields) .
+forall (n : Fields) .
+forall (o : Type) .
+forall (p : Fields) .
+  { hello:
+      Text
+  , html:
+      List Bool
+  , data:
+      { "An example string":
+          Text
+      , "An example string with a type annotation":
+          Text
+      , "A boolean value":
+          Bool
+      , "Annotated boolean value":
+          Bool
+      , "A natural number":
+          Natural
+      , "An integer":
+          Integer
+      , "A real number":
+          Real
+      , "A list of natural numbers":
+          List Natural
+      , "Annotated list of natural numbers":
+          List Natural
+      , "Annotated record":
+          { x: Natural, y: Natural }
+      , "A list of records (using JSON syntax with quoted field names)":
+          List
+            { isActive:
+                Bool
+            , age:
+                Natural
+            , name:
+                Text
+            , email:
+                Text
+            , phone:
+                Text
+            }
+      }
+  , prompting:
+      { "OpenAI API key": Key, p } ->
+        { names:
+            o
+        , structuredNames:
+            List Text
+        , fullNames:
+            List { firstName: Text, lastName: Text }
+        , tacitFullNames:
+            List { firstName: Text, lastName: Text }
+        , differentModel:
+            List { firstName: Text, lastName: Text }
+        }
+  , variables:
+      Natural
+  , functions:
+      { greet:
+          { name: Text, n } -> Text
+      , greeting:
+          Text
+      , makeUser:
+          { user: Text } -> { home: Text, privateKey: Text, publicKey: Text }
+      , users:
+          List { home: Text, privateKey: Text, publicKey: Text }
+      }
+  , imports:
+      { "URL import":
+          { "Filing status":
+              < 'Single filers':
+                  { }
+              | 'Married, filing jointly':
+                  { }
+              | 'Married, filing separately':
+                  { }
+              | 'Head of household':
+                  { }
+              >
+          , "Taxable income":
+              Real
+          , m
+          } ->
+            { "Tax": Real }
+      , "GitHub import":
+          { "Filing status":
+              < 'Single filers':
+                  { }
+              | 'Married, filing jointly':
+                  { }
+              | 'Married, filing separately':
+                  { }
+              | 'Head of household':
+                  { }
+              >
+          , "Taxable income":
+              Real
+          , l
+          } ->
+            { "Tax": Real }
+      , "Short link":
+          Text
+      }
+  , lists:
+      { somePrimes:
+          List Natural
+      , two:
+          Optional Natural
+      , three:
+          Optional Natural
+      , eleven:
+          Optional Natural
+      , seven:
+          Optional Natural
+      , middleThreeElements:
+          Optional (List Natural)
+      , firstThreeElements:
+          Optional (List Natural)
+      , lastThreeElements:
+          Optional (List Natural)
+      }
+  , coding:
+      { "OpenAI API key": Key, k } ->
+      { "Job Description": Text } ->
+        { "Is Finance?": Bool, "Rationale": Text }
+  , prelude:
+      { not:
+          Bool -> Bool
+      , clamp:
+          Integer -> Natural
+      , "The entire Prelude":
+          { integer:
+              { clamp:
+                  Integer -> Natural
+              , product:
+                  List Integer -> Integer
+              , sum:
+                  List Integer -> Integer
+              , toNatural:
+                  Integer -> Optional Natural
+              }
+          , bool:
+              { and:
+                  List Bool -> Bool
+              , not:
+                  Bool -> Bool
+              , or:
+                  List Bool -> Bool
+              }
+          , real:
+              { product: List Real -> Real, sum: List Real -> Real }
+          , list:
+              { all:
+                  (j -> Bool) -> List j -> Bool
+              , any:
+                  (i -> Bool) -> List i -> Bool
+              , concat:
+                  List (List h) -> List h
+              , generate:
+                  Natural -> (Natural -> g) -> List g
+              , null:
+                  List f -> Bool
+              , reject:
+                  (e -> Bool) -> List e -> List e
+              , replicate:
+                  Natural -> d -> List d
+              , select:
+                  (c -> Bool) -> List c -> List c
+              }
+          , natural:
+              { product: List Natural -> Natural, sum: List Natural -> Natural }
+          , text:
+              { concat:
+                  List Text -> Text
+              , concatMap:
+                  (b -> Text) -> List b -> Text
+              , concatMapSep:
+                  Text -> (a -> Text) -> List a -> Text
+              , concatSep:
+                  Text -> List Text -> Text
+              }
+          }
+      }
+  }

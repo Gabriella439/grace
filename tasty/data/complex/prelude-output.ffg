@@ -1,0 +1,114 @@
+{ "bool":
+    { "and":
+        fold { "cons": \x y -> x && y, "nil": true }
+    , "not":
+        \b -> b == false
+    , "or":
+        fold { "cons": \x y -> x || y, "nil": false }
+    }
+, "real":
+    { "product":
+        fold { "cons": \x y -> x * y : Real, "nil": 1.0 }
+    , "sum":
+        fold { "cons": \x y -> x + y : Real, "nil": 0.0 }
+    }
+, "integer":
+    { "clamp":
+        \n -> if (n : Real) < 0.0 then 0 else abs n
+    , "product":
+        fold { "cons": \x y -> x * y : Integer, "nil": 1 }
+    , "sum":
+        fold { "cons": \x y -> x + y : Integer, "nil": 0 }
+    , "toNatural":
+        \n -> if (n : Real) < 0.0 then null else some (abs n)
+    }
+, "list":
+    { "all":
+        \predicate ->
+          fold
+            { "cons":
+                \element result -> predicate element && result
+            , "nil":
+                true
+            }
+    , "any":
+        \predicate ->
+          fold
+            { "cons":
+                \element result -> predicate element || result
+            , "nil":
+                false
+            }
+    , "concat":
+        \lists -> for list of lists for element of list in element
+    , "generate":
+        let replicate
+              = \n x -> fold { "succ": \xs -> [ x ] + xs, "zero": [ ] } n
+
+        in  \n f -> map (\x -> f x.index) (indexed (replicate n { }))
+    , "null":
+        \xs -> length xs == 0
+    , "reject":
+        \f ->
+          fold { "cons": \x xs -> if f x then xs else [ x ] + xs, "nil": [ ] }
+    , "replicate":
+        \n x -> fold { "succ": \xs -> [ x ] + xs, "zero": [ ] } n
+    , "select":
+        \f ->
+          fold { "cons": \x xs -> if f x then [ x ] + xs else xs, "nil": [ ] }
+    }
+, "natural":
+    { "product":
+        fold { "cons": \x y -> x * y : Natural, "nil": 1 }
+    , "sum":
+        fold { "cons": \x y -> x + y : Natural, "nil": 0 }
+    }
+, "text":
+    { "concat":
+        fold { "cons": \x y -> x + y : Text, "nil": "" }
+    , "concatMap":
+        \f -> fold { "cons": \x y -> f x + y, "nil": "" }
+    , "concatMapSep":
+        let concatSep
+              = \separator ->
+                \(xs : List Text) ->
+                  let status
+                        = fold
+                            { "cons":
+                                \element ->
+                                  fold
+                                    { "null":
+                                        some element
+                                    , "some":
+                                        \result ->
+                                          some (element + separator + result)
+                                    }
+                            , "nil":
+                                null
+                            }
+                            xs
+
+                  in  fold { "null": "", "some": \result -> result } status
+
+        in  \separator f xs -> concatSep separator (map f xs)
+    , "concatSep":
+        \separator ->
+        \(xs : List Text) ->
+          let status
+                = fold
+                    { "cons":
+                        \element ->
+                          fold
+                            { "null":
+                                some element
+                            , "some":
+                                \result -> some (element + separator + result)
+                            }
+                    , "nil":
+                        null
+                    }
+                    xs
+
+          in  fold { "null": "", "some": \result -> result } status
+    }
+}
