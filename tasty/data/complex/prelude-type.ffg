@@ -1,0 +1,55 @@
+forall (a : Type) .
+forall (b : Type) .
+forall (c : Type) .
+forall (d : Type) .
+forall (e : Type) .
+forall (f : Type) .
+forall (g : Type) .
+forall (h : Type) .
+forall (i : Type) .
+forall (j : Type) .
+  { bool:
+      { and: List Bool -> Bool, not: Bool -> Bool, or: List Bool -> Bool }
+  , real:
+      { product: List Real -> Real, sum: List Real -> Real }
+  , integer:
+      { clamp:
+          Integer -> Natural
+      , product:
+          List Integer -> Integer
+      , sum:
+          List Integer -> Integer
+      , toNatural:
+          Integer -> Optional Natural
+      }
+  , list:
+      { all:
+          (j -> Bool) -> List j -> Bool
+      , any:
+          (i -> Bool) -> List i -> Bool
+      , concat:
+          List (List h) -> List h
+      , generate:
+          Natural -> (Natural -> g) -> List g
+      , null:
+          List f -> Bool
+      , reject:
+          (e -> Bool) -> List e -> List e
+      , replicate:
+          Natural -> d -> List d
+      , select:
+          (c -> Bool) -> List c -> List c
+      }
+  , natural:
+      { product: List Natural -> Natural, sum: List Natural -> Natural }
+  , text:
+      { concat:
+          List Text -> Text
+      , concatMap:
+          (b -> Text) -> List b -> Text
+      , concatMapSep:
+          Text -> (a -> Text) -> List a -> Text
+      , concatSep:
+          Text -> List Text -> Text
+      }
+  }
