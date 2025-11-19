@@ -174,7 +174,17 @@ repl keyToMethods = do
                     [ completeReserved
                     , completeIdentifiers
                     , completeFields
+                    , completeFile
                     ]
+
+            completeFile =
+                Repline.runMatcher
+                    [ ("/"  , Repline.fileCompleter)
+                    , ("./" , Repline.fileCompleter)
+                    , ("../", Repline.fileCompleter)
+                    , ("~/" , Repline.fileCompleter)
+                    ]
+                    Completion.noCompletion
 
             completeReserved =
                 Repline.listCompleter (fmap Text.unpack (toList Label.reservedLabels))
