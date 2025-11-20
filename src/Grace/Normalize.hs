@@ -542,6 +542,29 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                                 Infer.checkJSON solvedSchema aesonValue
 
+            Syntax.Show{ export = False, arguments = v } -> do
+                v' <- loop env v
+
+                case Value.toJSON v' of
+                    Just value -> do
+                        let lazyBytes = Aeson.encode value
+
+                        let strictBytes = ByteString.Lazy.toStrict lazyBytes
+
+                        case Encoding.decodeUtf8' strictBytes of
+                            Left _ ->
+                                error "Grace.Normalize.evaluate: show produced non-UTF8 text"
+                            Right text ->
+                                pure (Value.Text text)
+
+                    Nothing -> do
+                        error "Grace.Normalize.evaluate: show argument is not valid JSON"
+
+            Syntax.Show{ export = True, arguments = v } -> do
+                v' <- loop env v
+
+                return (Value.Text (Pretty.toSmart (quote v')))
+
             Syntax.Scalar{ scalar } ->
                 pure (Value.Scalar scalar)
 
@@ -929,20 +952,6 @@ apply keyToMethods function₀ argument₀ = loop function₀ argument₀
             return (Value.List newElements)
     loop (Value.Builtin Abs) (Value.Scalar (Integer n)) =
         pure (Value.Scalar (Natural (fromInteger (abs n))))
-    loop (Value.Builtin Show) v = do
-        case Value.toJSON v of
-            Just value -> do
-                let lazyBytes = Aeson.encode value
-
-                let strictBytes = ByteString.Lazy.toStrict lazyBytes
-
-                case Encoding.decodeUtf8' strictBytes of
-                    Left _ ->
-                        error "Grace.Normalize.evaluate: show produced non-UTF8 text"
-                    Right text ->
-                        pure (Value.Text text)
-            Nothing -> do
-                error "Grace.Normalize.evaluate: show argument is not valid JSON"
     loop (Value.Builtin YAML) v = do
         case Value.toJSON v of
             Just value -> do

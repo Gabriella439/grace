@@ -1,0 +1,15 @@
+{ "Example 0":
+    # Expressions should be normalized before they are shown, meaning that the
+    # following expression should render as "1" and not "let x = 1 in x"
+    export show (let x = 1 in x)
+
+, "Example 1":
+    # Test that a read followed by show works without a type annotation
+    export show (import read "\\x -> x")
+
+, "Example 2":
+    # This test illustrates that `export show` has an effective type of
+    # `forall (a : Type) . a -> Text` which means that we are very intentionally
+    # breaking parametricity by permitting this feature.
+    \x -> export show x
+}

@@ -142,6 +142,7 @@ data Syntax s a
     | HTTP{ location :: s, import_ :: Bool, arguments :: Syntax s a, schema :: Maybe (Type s) }
     | Read{ location :: s, import_ :: Bool, arguments :: Syntax s a, schema :: Maybe (Type s) }
     | GitHub{ location :: s, import_ :: Bool, arguments :: Syntax s a, schema :: Maybe (Type s) }
+    | Show{ location :: s, export :: Bool, arguments :: Syntax s a, schema :: Maybe (Type s) }
     | Scalar { location :: s, scalar :: Scalar }
     | Operator { location :: s, left :: Syntax s a, operatorLocation :: s, operator :: Operator, right :: Syntax s a }
     -- ^
@@ -322,6 +323,9 @@ instance Monad (Syntax ()) where
 
     GitHub{ location, import_, arguments, schema } >>= f =
         GitHub{ location, import_, arguments = arguments >>= f, schema }
+
+    Show{ location, export, arguments, schema } >>= f =
+        Show{ location, export, arguments = arguments >>= f, schema }
 
     Scalar{ location, scalar } >>= _ =
         Scalar{ location, scalar }
@@ -549,6 +553,11 @@ instance Plated (Syntax s a) where
 
                 return GitHub{ location, import_, arguments = newArguments, schema }
 
+            Show{ location, export, arguments, schema } -> do
+                newArguments <- onSyntax arguments
+
+                return Show{ location, export, arguments = newArguments, schema }
+
             Scalar{ location, scalar } -> do
                 pure Scalar{ location, scalar }
 
@@ -654,6 +663,13 @@ instance Bifunctor Syntax where
         , schema = fmap (fmap f) schema
         }
 
+    first f Show{ location, export, arguments, schema } = Show
+        { location = f location
+        , export
+        , arguments = first f arguments
+        , schema = fmap (fmap f) schema
+        }
+
     first f Scalar{ location, scalar } =
         Scalar{ location = f location, scalar }
 
@@ -743,6 +759,8 @@ usedIn name₀ HTTP{ arguments } =
 usedIn name₀ Read{ arguments } =
     usedIn name₀ arguments
 usedIn name₀ GitHub{ arguments } =
+    usedIn name₀ arguments
+usedIn name₀ Show{ arguments } =
     usedIn name₀ arguments
 usedIn name₀ Operator{ left, right } =
     usedIn name₀ left && usedIn name₀ right
@@ -874,6 +892,10 @@ types onType GitHub{ location, import_, arguments, schema } = do
     newSchema <- traverse onType schema
 
     return GitHub{ location, import_, arguments, schema = newSchema }
+types onType Show{ location, export, arguments, schema } = do
+    newSchema <- traverse onType schema
+
+    return Show{ location, export, arguments, schema = newSchema }
 types onType Let{ location, assignments, body } = do
     newAssignments <- traverse onAssignment assignments
 
@@ -1082,10 +1104,6 @@ data Builtin
     -- ^
     --   >>> pretty Reveal
     --   reveal
-    | Show
-    -- ^
-    --   >>> pretty Show
-    --   show
     | Some
     -- ^
     --   >>> pretty Some
@@ -1102,7 +1120,6 @@ instance Pretty Builtin where
     pretty Length  = Pretty.builtin "length"
     pretty Map     = Pretty.builtin "map"
     pretty Reveal  = Pretty.builtin "reveal"
-    pretty Show    = Pretty.builtin "show"
     pretty Some    = Pretty.builtin "some"
     pretty YAML    = Pretty.builtin "yaml"
 
@@ -1390,6 +1407,7 @@ prettyApplicationExpression expression
     isApplication HTTP{}        = True
     isApplication Read{}        = True
     isApplication GitHub{}      = True
+    isApplication Show{}        = True
     isApplication _             = False
 
     short = prettyShort expression
@@ -1418,6 +1436,19 @@ prettyApplicationExpression expression
         prefix <> keyword "github" <> " " <> prettyProjectExpression arguments
       where
         prefix = if import_ then keyword "import" <> " " else mempty
+    prettyShort Show{ arguments, export, schema } =
+        prefix <> keyword "show" <> " " <> prettyProjectExpression annotatedArguments
+      where
+        prefix = if export then keyword "export" <> " " else mempty
+
+        annotatedArguments = case schema of
+            Nothing -> arguments
+
+            Just s -> Annotation
+                { location = Type.location s
+                , annotated = arguments
+                , annotation = s
+                }
     prettyShort other =
         prettyProjectExpression other
 
@@ -1463,6 +1494,23 @@ prettyApplicationExpression expression
         <>  Pretty.nest 2 (prettyProjectExpression arguments)
       where
         prefix = if import_ then keyword "import" <> " " else mempty
+    prettyLong Show{ export, arguments, schema } =
+            prefix
+        <>  keyword "show"
+        <>  Pretty.hardline
+        <>  "  "
+        <>  Pretty.nest 2 (prettyProjectExpression annotatedArguments)
+      where
+        prefix = if export then keyword "export" <> " " else mempty
+
+        annotatedArguments = case schema of
+            Nothing -> arguments
+
+            Just s -> Annotation
+                { location = Type.location s
+                , annotated = arguments
+                , annotation = s
+                }
     prettyLong other =
         prettyProjectExpression other
 
