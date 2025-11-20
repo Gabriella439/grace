@@ -2321,6 +2321,46 @@ infer e₀ = do
 
             return (newSchema, newGitHub)
 
+        Syntax.Show{ location, export, arguments, schema } -> do
+            let json = Type.Scalar
+                    { location
+                    , scalar = Monotype.JSON
+                    }
+
+            input <- case schema of
+                Just input -> do
+                    Monad.unless export (subtype input json)
+
+                    return input
+
+                Nothing
+                    | export -> do
+                        existential <- fresh
+
+                        push (Context.UnsolvedType existential)
+
+                        return Type.UnsolvedType
+                            { location
+                            , existential
+                            }
+                    | otherwise -> do
+                        return json
+
+            newArguments <- check arguments input
+
+            context <- get
+
+            let newShow = Syntax.Show
+                    { location
+                    , export
+                    , arguments = solveSyntax context newArguments
+                    , schema = Just input
+                    }
+
+            let type_ = Type.Scalar{ location, scalar = Monotype.Text }
+
+            return (type_, newShow)
+
         -- All the type inference rules for scalars go here.  This part is
         -- pretty self-explanatory: a scalar literal returns the matching
         -- scalar type.
@@ -3020,13 +3060,6 @@ infer e₀ = do
                         , ..
                         }
                 , Syntax.Builtin{ builtin = Syntax.Some, .. }
-                )
-
-        Syntax.Builtin{ builtin = Syntax.Show, .. } -> do
-            return
-                (   Type.Scalar{ scalar = Monotype.JSON, .. }
-                ~>  Type.Scalar{ scalar = Monotype.Text, .. }
-                , Syntax.Builtin{ builtin = Syntax.Show, .. }
                 )
 
         Syntax.Builtin{ builtin = Syntax.YAML, .. } -> do

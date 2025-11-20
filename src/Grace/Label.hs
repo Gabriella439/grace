@@ -90,6 +90,7 @@ reservedRecordLabels = HashSet.fromList
     , "Type"
     , "abs"
     , "else"
+    , "export"
     , "fold"
     , "for"
     , "forall"

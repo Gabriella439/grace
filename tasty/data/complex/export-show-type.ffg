@@ -1,0 +1,2 @@
+forall (b : Type) .
+  { "Example 0": Text, "Example 1": Text, "Example 2": b -> Text }
