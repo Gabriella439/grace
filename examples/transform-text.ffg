@@ -1,0 +1,14 @@
+\{ "OpenAI API key", passage, code } ->
+
+prompt
+  { key: .'OpenAI API key'
+  , text: "
+      Take this passage:
+
+      ${passage}
+
+      … and return a new passage whose meaning is transformed by the following code:
+
+      ${export show code}
+    "
+  }
