@@ -1421,7 +1421,7 @@ renderInputDefault path type_ = do
             Just t -> t
             Nothing -> ""
 
-    return $ (,) (Value.Scalar Null) do
+    return $ (,) (Value.Text text₀) do
         RenderInput{ keyToMethods, renderOutput, status, input } <- Reader.ask
 
         textarea <- createElement "textarea"
