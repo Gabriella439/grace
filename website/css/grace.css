@@ -1,36 +1,48 @@
 @font-face {
-    font-family: 'FiraMono';
-    src: url('fonts/firamono-regular-webfont.woff2') format('woff2'),
-         url('fonts/firamono-regular-webfont.woff') format('woff');
+    font-family: 'Fira Mono';
+    src: url('fonts/firamono-regular-webfont.woff2') format('woff2');
     font-weight: normal;
     font-style: normal;
     font-display: swap;
+}
+
+@font-face {
+  font-family: 'Fira Sans';
+  font-style: normal;
+  font-weight: normal;
+  src: url('fonts/fira-sans-v18-latin-regular.woff2') format('woff2');
+  font-display: swap;
 }
 
 * {
   box-sizing: border-box;
 }
 
+:root {
+  font-family: 'Fira Sans', sans-serif;
+}
+
 code {
-  font-family: 'FiraMono', monospace;
+  font-family: 'Fira Mono', monospace;
   white-space: pre;
 }
 
 pre {
-  font-family: 'FiraMono', monospace;
+  font-family: 'Fira Mono', monospace;
   line-height: 1.3;
 }
 
 .CodeMirror {
+  font-family: 'Fira Mono', monospace;
   height: auto;
 }
 
 .grace-input-json {
-  font-family: 'FiraMono', monospace;
+  font-family: 'Fira Mono', monospace;
 }
 
 .grace-output-json {
-  font-family: 'FiraMono', monospace;
+  font-family: 'Fira Mono', monospace;
 }
 
 .grace-printable {
