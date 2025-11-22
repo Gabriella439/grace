@@ -8,24 +8,20 @@
 <meta name="twitter:card" content="summary" />
 <meta name="twitter:title" content="Grace browser" />
 <meta name="twitter:description" content="Live demo for the Fall-from-Grace functional programming language" />
-<link rel="stylesheet" href="./css/bootstrap.min.css">
 <link rel="stylesheet" href="./css/codemirror.css">
 <link rel="stylesheet" href="./css/grace.css">
 <script src="https://cdn.usefathom.com/script.js" data-site="UZITDBCC" defer></script>
 </head>
 <body>
-<div class="container">
 <header>
 <h1 id="title" style="display: none;" class="display-4">Grace browser</h1>
 </header>
 <main>
 <textarea style="display: none;" id="input"></textarea>
-<br/>
-<button id="start-tutorial" type="button" class="btn btn-primary" style="display: none;">Try the tutorial</button>
-<div id="output"></div>
+<button id="start-tutorial" class="grace-tutorial-begin" style="display: none;">Try the tutorial</button>
+<div id="output" class="grace-result"></div>
 <div id="codemirror-buffer"></div>
 </main>
-</div>
 </body>
 <script language="javascript" src="js/codemirror.js"></script>
 <script language="javascript" src="js/python.js"></script>
