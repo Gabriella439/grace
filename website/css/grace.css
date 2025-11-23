@@ -16,6 +16,7 @@
 
 :root {
   --measure: 90ch;
+
   --ratio: 1.5;
   --s-5: calc(var(--s-4) / var(--ratio));
   --s-4: calc(var(--s-3) / var(--ratio));
@@ -59,6 +60,18 @@ pre {
   line-height: 1.3;
 }
 
+dt {
+  font-weight: bold;
+}
+
+dd {
+  margin-inline-start: var(--s1);
+}
+
+ul {
+  padding-inline-start: var(--s1);
+}
+
 .grace-center {
   box-sizing: content-box;
   margin-inline: auto;
@@ -76,7 +89,7 @@ pre {
 } 
 
 .grace-stack > * + * {
-  margin-block-start: var(--space, 1.5rem);
+  margin-block-start: var(--s1);
 }
 
 .grace-cluster {
@@ -115,4 +128,37 @@ pre {
   font-family: 'Fira Mono', monospace;
   height: auto;
   margin-block-start: 0;
+}
+
+.grace-spinner {
+  width: var(--s3);
+  height: var(--s3);
+  border-radius: 50%;
+  display: inline-block;
+  border-top: var(--s-3) solid #000;
+  border-right: var(--s-3) solid transparent;
+  animation: rotation 1s linear infinite;
+}
+
+.grace-spinner::after {
+  content: '';
+  box-sizing: border-box;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--s3);
+  height: var(--s3);
+  border-radius: 50%;
+  border-left: var(--s-3) solid #FF3D00;
+  border-bottom: var(--s-3) solid transparent;
+  animation: rotation 0.5s linear infinite reverse;
+}
+
+@keyframes rotation {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }

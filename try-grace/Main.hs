@@ -445,6 +445,7 @@ renderValue parent _ (Value.Text text) = do
 
     printButton <- createElement "button"
     addClass printButton "grace-print"
+    setAttribute printButton "type" "button"
     setInnerText printButton "Print"
     setDisplay printButton "none"
 
@@ -453,6 +454,7 @@ renderValue parent _ (Value.Text text) = do
 
     copyButton <- createElement "button"
     addClass copyButton "grace-copy"
+    setAttribute copyButton "type" "button"
     setInnerText copyButton "Copy"
     setDisplay copyButton "none"
 
@@ -568,16 +570,20 @@ renderValue parent outer (Value.Record keyValues) = do
 
             refreshOutput <- renderValue dd type_ value
 
-            return ([ dt, dd ], refreshOutput)
+            definition <- createElement "div"
+            replaceChildren definition (Array.fromList [ dt, dd ])
+
+            return (definition, refreshOutput)
 
     result <- HashMap.traverseWithKey process keyValues
 
-    let (dss, refreshOutputs) = unzip (HashMap.elems result)
+    let (definitions, refreshOutputs) = unzip (HashMap.elems result)
 
     dl <- createElement "dl"
     addClass dl "grace-output-record"
+    addClass dl "grace-stack"
 
-    replaceChildren dl (Array.fromList (concat dss))
+    replaceChildren dl (Array.fromList definitions)
 
     replaceChild parent dl
 
@@ -669,6 +675,7 @@ renderValue parent Type.Function{ input, output } function = do
                 then do
                     button <- createElement "button"
                     addClass button "grace-submit"
+                    setAttribute button "type" "button"
                     setTextContent button "Submit"
 
                     hr <- createElement "hr"
@@ -1021,16 +1028,20 @@ renderInput path Type.Record{ fields = Type.Fields keyTypes _ } = do
 
                 replaceChild dd inputField
 
-                return ([ dt, dd ], refreshField)
+                definition <- createElement "div"
+                replaceChildren definition (Array.fromList [ dt, dd ])
+
+                return (definition, refreshField)
 
         results <- traverse inner keyReaders
 
-        let (dss, refreshOutputs) = unzip results
+        let (definitions, refreshOutputs) = unzip results
 
         dl <- createElement "dl"
         addClass dl "grace-input-record"
+        addClass dl "grace-stack"
 
-        replaceChildren dl (Array.fromList (concat dss))
+        replaceChildren dl (Array.fromList definitions)
 
         RenderInput{ renderOutput } <- Reader.ask
 
@@ -1588,7 +1599,7 @@ createForm showTabs output = liftIO do
 
     spinner <- do
         spinner <- createElement "div"
-        addClass spinner "spinner"
+        addClass spinner "grace-spinner"
         setAttribute spinner "role"     "status"
         setAttribute spinner "overflow" "hidden"
 
