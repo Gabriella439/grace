@@ -33,12 +33,21 @@
   --rosewater: #f5e0dc;
   --peach: #fab387;
   --blue: #89b4fa;
+  --text: #cdd6f4;
   --overlay2: #9399b2;
+  --overlay1: #7f849c;
+  --overlay0: #6c7086;
+  --surface2: #585b70;
   --surface1: #45475a;
   --surface0: #313244;
   --base: #1e1e2e;
+  --mantle: #181825;
 
   font-family: 'Fira Sans', sans-serif;
+}
+
+::selection {
+  background-color: color-mix(in oklch, var(--overlay2) 30%, var(--base));
 }
 
 * {
@@ -67,17 +76,17 @@ a {
 }
 
 button {
-  background-color: var(--surface0);
+  background-color: var(--surface1);
   color: var(--blue);
   border: 0;
-  border-radius: var(--s-1);
+  border-radius: var(--s-2);
   padding-block: var(--s-2);
   padding-inline: var(--s-1);
   font-size: var(--s0);
 }
 
 button:hover {
-  background-color: rgb(147, 153, 178, 0.3);
+  background-color: color-mix(in oklch, var(--overlay1) 30%, var(--surface1));
   cursor: pointer;
 }
 
@@ -187,16 +196,10 @@ fieldset {
 }
 
 .grace-print, .grace-copy {
-  border-radius: var(--s-2);
+  border-radius: var(--s-3);
   padding-block: var(--s-3);
   padding-inline: var(--s-2);
   font-size: var(--s-1);
-}
-
-.CodeMirror {
-  font-family: 'Fira Mono', monospace;
-  height: auto;
-  margin-block-start: 0;
 }
 
 .grace-spinner {
@@ -230,4 +233,30 @@ fieldset {
   100% {
     transform: rotate(360deg);
   }
+}
+
+.CodeMirror {
+  font-family: 'Fira Mono', monospace;
+  height: auto;
+  margin-block-start: 0;
+  background-color: var(--mantle);
+  color: var(--text);
+  border-style: solid;
+  border-color: var(--overlay0);
+  border-width: var(--s-5);
+  border-radius: var(--s-2);
+}
+
+.CodeMirror-gutters {
+  background: var(--surface0);
+}
+
+.CodeMirror-line::selection,
+.CodeMirror-line > span::selection,
+.CodeMirror-line > span > span::selection {
+  background: color-mix(in oklch, var(--overlay2) 30%, var(--surface0)) !important;
+}
+
+.CodeMirror-selected {
+  background: color-mix(in oklch, var(--overlay2) 30%, var(--surface0)) !important;
 }
