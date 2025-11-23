@@ -460,8 +460,8 @@ renderValue parent _ (Value.Text text) = do
     addEventListener copyButton "click" copyCallback
 
     showCallback <- (liftIO . Callback.asyncCallback) do
-        setDisplay printButton "block"
-        setDisplay copyButton  "block"
+        setDisplay printButton "inline-block"
+        setDisplay copyButton  "inline-block"
 
     hideCallback <- (liftIO . Callback.asyncCallback) do
         setDisplay printButton "none"
@@ -1508,7 +1508,7 @@ createForm showTabs output = liftIO do
             setAttribute link "href"  "#"
             setTextContent link name
 
-            item <- createElement "li"
+            item <- createElement "span"
             addClass item "grace-tab"
 
             replaceChild item link
@@ -1522,8 +1522,9 @@ createForm showTabs output = liftIO do
     let tabs = [ formTab, codeTab, typeTab ]
     let links = [ formLink, codeLink, typeLink ]
 
-    tabsList <- createElement "ul"
+    tabsList <- createElement "div"
     addClass tabsList "grace-tabs"
+    addClass tabsList "grace-cluster"
 
     replaceChildren tabsList (Array.fromList tabs)
 
@@ -1773,10 +1774,10 @@ main = do
 
                         setTextContent a name
 
-                        li <- createElement "li"
-                        addClass li "grace-tab"
+                        tab <- createElement "span"
+                        addClass tab "grace-tab"
 
-                        replaceChild li a
+                        replaceChild tab a
 
                         let click = do
                                 setCodeValue codeInput code
@@ -1794,7 +1795,7 @@ main = do
 
                         addEventListener a "click" callback
 
-                        return [(li, click)]
+                        return [(tab, click)]
 
             let examples =
                     [ ("Hello, world!", "hello.ffg"     )
@@ -1811,12 +1812,13 @@ main = do
 
             results <- Async.runConcurrently (State.evalState (foldMap createExample examples) (0 :: Int))
 
-            let (children, clickFirstExample : _) = unzip results
+            let (tabs, clickFirstExample : _) = unzip results
 
-            navigationBar <- createElement "ul"
+            navigationBar <- createElement "div"
             addClass navigationBar "grace-tabs"
+            addClass navigationBar "grace-cluster"
 
-            replaceChildren navigationBar (Array.fromList children)
+            replaceChildren navigationBar (Array.fromList tabs)
 
             setDisplay navigationBar "none"
 
@@ -1852,7 +1854,7 @@ main = do
                 clickFirstExample
 
                 setDisplay startTutorial "none"
-                setDisplay navigationBar "block"
+                setDisplay navigationBar "flex"
                 setDisplay stopTutorial  "inline-block"
 
                 focus codeInput
