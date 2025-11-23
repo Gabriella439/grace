@@ -1,9 +1,9 @@
 @font-face {
-    font-family: 'Fira Mono';
-    src: url('fonts/firamono-regular-webfont.woff2') format('woff2');
-    font-weight: normal;
-    font-style: normal;
-    font-display: swap;
+  font-family: 'Fira Mono';
+  src: url('fonts/firamono-regular-webfont.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
 }
 
 @font-face {
@@ -30,6 +30,14 @@
   --s4: calc(var(--s3) * var(--ratio));
   --s5: calc(var(--s4) * var(--ratio));
 
+  --rosewater: #f5e0dc;
+  --peach: #fab387;
+  --blue: #89b4fa;
+  --overlay2: #9399b2;
+  --surface1: #45475a;
+  --surface0: #313244;
+  --base: #1e1e2e;
+
   font-family: 'Fira Sans', sans-serif;
 }
 
@@ -46,6 +54,31 @@ nav,
 main,
 footer {
   max-inline-size: none;
+}
+
+body {
+  background-color: var(--base);
+  color: #cdd6f4;
+}
+
+a {
+  color: var(--blue);
+  text-decoration: none;
+}
+
+button {
+  background-color: var(--surface0);
+  color: var(--blue);
+  border: 0;
+  border-radius: var(--s-1);
+  padding-block: var(--s-2);
+  padding-inline: var(--s-1);
+  font-size: var(--s0);
+}
+
+button:hover {
+  background-color: rgb(147, 153, 178, 0.3);
+  cursor: pointer;
 }
 
 fieldset {
@@ -132,7 +165,8 @@ fieldset {
 }
 
 .grace-output-text > :last-child {
-  margin-block-end: 0;
+  /* This margin ensures that the "Print"/"Copy" buttons have enough height */
+  margin-block-end: var(--s-4);
 }
 
 .grace-printable {
@@ -152,6 +186,13 @@ fieldset {
   min-inline-size: 50%;
 }
 
+.grace-print, .grace-copy {
+  border-radius: var(--s-2);
+  padding-block: var(--s-3);
+  padding-inline: var(--s-2);
+  font-size: var(--s-1);
+}
+
 .CodeMirror {
   font-family: 'Fira Mono', monospace;
   height: auto;
@@ -163,7 +204,7 @@ fieldset {
   height: var(--s3);
   border-radius: 50%;
   display: inline-block;
-  border-top: var(--s-3) solid #000;
+  border-top: var(--s-3) solid var(--rosewater);
   border-right: var(--s-3) solid transparent;
   animation: rotation 1s linear infinite;
 }
@@ -177,7 +218,7 @@ fieldset {
   width: var(--s3);
   height: var(--s3);
   border-radius: 50%;
-  border-left: var(--s-3) solid #FF3D00;
+  border-left: var(--s-3) solid var(--peach);
   border-bottom: var(--s-3) solid transparent;
   animation: rotation 0.5s linear infinite reverse;
 }
