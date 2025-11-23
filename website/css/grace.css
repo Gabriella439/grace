@@ -36,8 +36,6 @@
 * {
   box-sizing: border-box;
   max-inline-size: var(--measure);
-  margin: 0;
-  padding; 0;
 }
 
 html,
@@ -48,6 +46,14 @@ nav,
 main,
 footer {
   max-inline-size: none;
+}
+
+fieldset {
+  padding: 0;
+}
+
+textarea {
+  resize: none;
 }
 
 code {
@@ -61,6 +67,7 @@ pre {
 }
 
 dt {
+  font-family: 'Fira Mono', monospace;
   font-weight: bold;
 }
 
@@ -72,10 +79,14 @@ ul {
   padding-inline-start: var(--s1);
 }
 
+fieldset {
+  border: 0;
+}
+
 .grace-center {
   box-sizing: content-box;
   margin-inline: auto;
-  max-inline-size: 90ch;
+  max-inline-size: var(--measure);
 }
 
 .grace-stack {
@@ -84,12 +95,20 @@ ul {
   justify-content: flex-start;
 }
 
+.grace-stack > header > * {
+  margin-block: 0;
+}
+
+.grace-stack > main > * {
+  margin-block: 0;
+}
+
 .grace-stack > * {
   margin-block: 0;
 } 
 
 .grace-stack > * + * {
-  margin-block-start: var(--s1);
+  margin-block-start: var(--s-2);
 }
 
 .grace-cluster {
@@ -108,6 +127,14 @@ ul {
   font-family: 'Fira Mono', monospace;
 }
 
+.grace-output-text > :first-child {
+  margin-block-start: 0;
+}
+
+.grace-output-text > :last-child {
+  margin-block-end: 0;
+}
+
 .grace-printable {
   display: flex;
   flex-wrap: wrap;
@@ -116,6 +143,7 @@ ul {
 
 .grace-printable > :last-child {
   flex-grow: 1;
+  flex-basis: 10em;
 }
 
 .grace-printable > :first-child {

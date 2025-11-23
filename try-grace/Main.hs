@@ -531,6 +531,7 @@ renderValue parent outer (Value.List values) = do
 
     ul <- createElement "ul"
     addClass ul "grace-output-list"
+    addClass ul "grace-stack"
 
     replaceChildren ul (Array.fromList lis)
 
@@ -1265,6 +1266,7 @@ renderInput path listType@Type.List{ type_ } = do
 
         buttons <- createElement "li"
         addClass buttons "grace-input-list-element"
+        addClass buttons "grace-stack"
 
         replaceChildren buttons (Array.fromList [ plus, minus ])
 
