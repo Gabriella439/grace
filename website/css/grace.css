@@ -114,23 +114,20 @@ textarea {
 }
 
 form {
-  border-block-start-style: solid;
-  border-color: var(--overlay0);
-  border-width: var(--s-6);
-  padding-block-start: var(--s0);
+  padding: var(--s0);
+  background-color: var(--crust);
 }
 
 input[type="number"],
 input[type="password"],
 input[type="text"],
 textarea {
-  background-color: var(--mantle);
+  background-color: var(--surface0);
   color: var(--text);
   padding-inline: var(--s-1);
   padding-block: var(--s-2);
+  border-style: none;
   border-radius: var(--s-2);
-  border-style: solid;
-  border-width: var(--s-6);
   font-size: var(--s0);
 }
 
@@ -142,8 +139,7 @@ input[type="number"]:focus,
 input[type="password"]:focus,
 input[type="text"]:focus,
 textarea:focus {
-  box-shadow: 0 0 0 var(--s-4) var(--lavender);
-  border-color: transparent;
+  box-shadow: 0 0 0 var(--s-6) var(--lavender);
 }
 
 code {
@@ -276,25 +272,27 @@ fieldset {
 }
 
 .grace-tabs {
-  --space: 0;
+  --space: var(--s-6);
 }
+
+.grace-tabs:has(+ * + .CodeMirror) {
+  padding-inline-start: 29px;  /* … to match CodeMirror's gutter */
+}
+
 .grace-tab-link {
   border-radius: var(--s-2) var(--s-2) 0 0;
-  border-inline-style: solid;
-  border-block-start-style: solid;
-  border-color: transparent;
-  border-width: var(--s-6);
   display: inline-block;
   padding-inline: var(--s-1);
   padding-block: var(--s-2);
+  background-color: var(--surface0);
 }
 
 .grace-tab-link:hover {
-  border-color: var(--overlay0);
+  background-color: var(--surface1);
 }
 
 .grace-tab-selected {
-  border-color: var(--overlay2);
+  background-color: var(--crust);
 }
 
 .grace-spinner {
@@ -335,15 +333,13 @@ fieldset {
   font-family: 'Fira Mono', monospace;
   height: auto;
   margin-block-start: 0;
-  background-color: var(--mantle);
+  background-color: var(--crust);
   color: var(--text);
-  border-style: solid;
-  border-color: var(--overlay2);
-  border-width: var(--s-6);
 }
 
 .CodeMirror-gutters {
   background: var(--surface0);
+  border-style: none;
 }
 
 .CodeMirror-linenumber {

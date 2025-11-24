@@ -960,6 +960,7 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Text } = do
         input <- createElement "textarea"
         addClass input "grace-input-text"
         setAttribute input "rows" "1"
+        setAttribute input "placeholder" "Enter text…"
 
         autoResize input
 
@@ -1292,6 +1293,7 @@ renderInput path listType@Type.List{ type_ } = do
 
         ul <- createElement "ul"
         addClass ul "grace-input-list"
+        addClass ul "grace-stack"
 
         replaceChild ul buttons
 
