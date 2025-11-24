@@ -82,7 +82,7 @@ footer {
 
 body {
   background-color: var(--base);
-  color: #cdd6f4;
+  color: var(--text);
 }
 
 a {
@@ -118,6 +118,14 @@ form {
   border-color: var(--overlay0);
   border-width: var(--s-6);
   padding-block-start: var(--s0);
+}
+
+input[type="number"],
+input[type="password"],
+input[type="text"],
+textarea {
+  background-color: var(--mantle);
+  color: var(--text);
 }
 
 code {

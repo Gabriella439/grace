@@ -690,22 +690,31 @@ renderValue parent Type.Function{ input, output } function = do
                     setAttribute button "type" "button"
                     setTextContent button "Submit"
 
-                    hr <- createElement "hr"
-                    addClass hr "grace-horizontal-rule"
-
                     callback <- liftIO (Callback.asyncCallback (invoke Submit))
 
                     addEventListener button "click" callback
 
-                    replaceChildren parent (Array.fromList [ inputVal, button, hr, outputVal ])
+                    buttons <- createElement "div"
+                    addClass buttons "grace-cluster"
+                    replaceChild buttons button
+
+                    stack <- createElement "div"
+                    addClass stack "grace-stack-large"
+
+                    replaceChildren stack (Array.fromList [ inputVal, buttons, outputVal ])
+
+                    replaceChild parent stack
 
                 else do
                     liftIO (invoke Submit)
 
-                    hr <- createElement "hr"
-                    addClass hr "grace-horizontal-rule"
+                    stack <- createElement "div"
+                    addClass stack "grace-stack-large"
 
-                    replaceChildren parent (Array.fromList [ inputVal, hr, outputVal ])
+                    replaceChildren stack (Array.fromList [ inputVal, outputVal ])
+
+                    replaceChild parent stack
+
             return refreshOutput
 
 -- At the time of this writing this case should (in theory) never be hit,
@@ -1277,7 +1286,7 @@ renderInput path listType@Type.List{ type_ } = do
 
         buttons <- createElement "li"
         addClass buttons "grace-input-list-element"
-        addClass buttons "grace-stack"
+        addClass buttons "grace-cluster-start"
 
         replaceChildren buttons (Array.fromList [ plus, minus ])
 
