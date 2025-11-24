@@ -31,9 +31,15 @@
   --s5: calc(var(--s4) * var(--ratio));
 
   --rosewater: #f5e0dc;
+  --mauve: #cba6f7;
+  --red: #f38ba8;
   --peach: #fab387;
+  --green: #a6e3a1;
+  --sky: #89dceb;
   --blue: #89b4fa;
   --text: #cdd6f4;
+  --subtext1: #bac2de;
+  --subtext0: #a6adc8;
   --overlay2: #9399b2;
   --overlay1: #7f849c;
   --overlay0: #6c7086;
@@ -47,7 +53,7 @@
 }
 
 ::selection {
-  background-color: color-mix(in oklch, var(--overlay2) 30%, var(--base));
+  background-color: color-mix(in oklch, var(--overlay2) 30%, transparent);
 }
 
 * {
@@ -106,6 +112,7 @@ code {
 pre {
   font-family: 'Fira Mono', monospace;
   line-height: 1.3;
+  margin: 0;
 }
 
 dt {
@@ -153,12 +160,24 @@ fieldset {
   margin-block-start: var(--s-2);
 }
 
-.grace-cluster {
+.grace-stack > * + .grace-ignore {
+  margin-block-start: 0;
+}
+
+.grace-cluster-start {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space, 1rem);
   justify-content: flex-start;
   align-items: center;
+}
+
+.grace-printable-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space, 1rem);
+  justify-content: flex-end;
+  align-items: flex-start;
 }
 
 .grace-input-json {
@@ -251,12 +270,44 @@ fieldset {
   background: var(--surface0);
 }
 
+.CodeMirror-linenumber {
+  color: var(--subtext0);
+}
+
+.CodeMirror-cursor {
+  border-inline-start-style: solid;
+  border-inline-start-color: var(--rosewater);
+  border-inline-start-width: var(--s-5);
+}
+
+.cm-s-default .cm-keyword { color: inherit; }
+.cm-s-default .cm-atom { color: var(--red); }
+.cm-s-default .cm-number { color: var(--peach); }
+.cm-s-default .cm-def { color: inherit; }
+.cm-s-default .cm-variable, .cm-variable-2, .cm-variable3 { color: inherit; }
+.cm-s-default .cm-punctuation { color: var(--subtext1); }
+.cm-s-default .cm-property, { color: inherit; }
+.cm-s-default .cm-operator { color: inherit; }
+.cm-s-default .cm-type { color: inherit; }
+.cm-s-default .cm-comment { color: var(--overlay2); }
+.cm-s-default .cm-string, .cm-string-2 { color: var(--green); }
+.cm-s-default .cm-meta { color: inherit; }
+.cm-s-default .cm-qualifier { color: inherit; }
+.cm-s-default .cm-builtin { color: inherit; }
+.cm-s-default .cm-bracket { color: var(--subtext1); }
+.cm-s-default .cm-tag { color: inherit; }
+.cm-s-default .cm-attribute { color: inherit; }
+.cm-s-default .cm-hr { color: inherit; }
+.cm-s-default .cm-link { color: inherit; }
+.cm-s-default .cm-error { color: var(--red); }
+.cm-s-default .cm-invalidchar { color: var(--red); }
+
 .CodeMirror-line::selection,
 .CodeMirror-line > span::selection,
 .CodeMirror-line > span > span::selection {
-  background: color-mix(in oklch, var(--overlay2) 30%, var(--surface0)) !important;
+  background-color: color-mix(in oklch, var(--overlay2) 30%, transparent) !important;
 }
 
 .CodeMirror-selected {
-  background: color-mix(in oklch, var(--overlay2) 30%, var(--surface0)) !important;
+  background-color: color-mix(in oklch, var(--overlay2) 30%, transparent) !important;
 }

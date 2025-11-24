@@ -417,6 +417,16 @@ typeToText = Pretty.renderStrict False 80
 valueToText :: Value -> Text
 valueToText = Pretty.renderStrict False 80 . Normalize.quote
 
+hideElement :: MonadIO io => JSVal -> io ()
+hideElement element = do
+    setDisplay element "none"
+    addClass element "grace-ignore"
+
+showElement :: MonadIO io => Text -> JSVal -> io ()
+showElement display element = do
+    setDisplay element display
+    removeClass element "grace-ignore"
+
 data RenderValue = RenderValue
     { keyToMethods :: Text -> Methods
     , counter :: IORef Natural
@@ -442,12 +452,13 @@ renderValue parent _ (Value.Text text) = do
     setInnerHTML markdown (markdownToHTML text)
 
     sidebar <- createElement "div"
+    addClass sidebar "grace-printable-buttons"
 
     printButton <- createElement "button"
     addClass printButton "grace-print"
     setAttribute printButton "type" "button"
     setInnerText printButton "Print"
-    setDisplay printButton "none"
+    hideElement printButton
 
     printCallback <- liftIO (Callback.asyncCallback (printElement markdown))
     addEventListener printButton "click" printCallback
@@ -456,18 +467,18 @@ renderValue parent _ (Value.Text text) = do
     addClass copyButton "grace-copy"
     setAttribute copyButton "type" "button"
     setInnerText copyButton "Copy"
-    setDisplay copyButton "none"
+    hideElement copyButton
 
     copyCallback <- liftIO (Callback.asyncCallback (writeClipboard text))
     addEventListener copyButton "click" copyCallback
 
     showCallback <- (liftIO . Callback.asyncCallback) do
-        setDisplay printButton "inline-block"
-        setDisplay copyButton  "inline-block"
+        showElement "inline-block" printButton
+        showElement "inline-block" copyButton
 
     hideCallback <- (liftIO . Callback.asyncCallback) do
-        setDisplay printButton "none"
-        setDisplay copyButton  "none"
+        hideElement printButton
+        hideElement copyButton
 
     addEventListener parent "mouseenter" showCallback
     addEventListener parent "mouseleave" hideCallback
@@ -1260,7 +1271,7 @@ renderInput path listType@Type.List{ type_ } = do
         minus <- createElement "button"
         addClass minus "grace-input-list-minus"
         setAttribute minus "type" "button"
-        setDisplay minus "none"
+        hideElement minus
 
         setTextContent minus "-"
 
@@ -1278,7 +1289,7 @@ renderInput path listType@Type.List{ type_ } = do
         input <- Reader.ask
 
         let insert maybeReader = do
-                setDisplay minus "inline"
+                showElement "inline" minus
 
                 children₀ <- IORef.readIORef childrenRef
 
@@ -1357,7 +1368,7 @@ renderInput path listType@Type.List{ type_ } = do
 
             case Seq.viewr children of
                 prefix :> Child{ li } -> do
-                    Monad.when (Seq.null prefix) (setDisplay minus "none")
+                    Monad.when (Seq.null prefix) (hideElement minus)
 
                     setSessionStorage (renderPath path listType) (toStorage (fromIntegral (Seq.length prefix) :: Natural))
 
@@ -1414,12 +1425,12 @@ renderInputDefault path type_ = do
 
         textarea <- createElement "textarea"
 
-        setDisplay textarea "none"
+        hideElement textarea
 
         error <- createElement "pre"
         addClass error "grace-error"
 
-        setDisplay error "none"
+        hideElement error
 
         div <- createElement "div"
         addClass div "grace-pane"
@@ -1448,16 +1459,16 @@ renderInputDefault path type_ = do
                     Left exception -> do
                         if (text == "")
                             then do
-                                setDisplay error "none"
+                                hideElement error
                             else do
                                 setTextContent error (Text.pack (displayException (exception :: SomeException)))
 
-                                setDisplay error "block"
+                                showElement "block" error
 
                         empty
 
                     Right value -> do
-                        setDisplay error "none"
+                        hideElement error
 
                         setTextContent error ""
 
@@ -1537,7 +1548,7 @@ createForm showTabs output = liftIO do
 
     tabsList <- createElement "div"
     addClass tabsList "grace-tabs"
-    addClass tabsList "grace-cluster"
+    addClass tabsList "grace-cluster-start"
 
     replaceChildren tabsList (Array.fromList tabs)
 
@@ -1674,11 +1685,11 @@ main = do
         then do
             title <- getElementById "title"
 
-            setDisplay title "block"
+            showElement "block" title
 
             focus codeInput
         else do
-            setDisplay (getWrapperElement codeInput) "none"
+            hideElement (getWrapperElement codeInput)
 
     keyToMethods <- HTTP.getMethods
 
@@ -1699,14 +1710,14 @@ main = do
             saveSearchParams params
 
             if not tutorial && Text.null text
-                then setDisplay startTutorial "inline-block"
-                else setDisplay startTutorial "none"
+                then showElement "inline-block" startTutorial
+                else hideElement startTutorial
 
             if  | Text.null text -> do
                     replaceChildren output (Array.fromList [])
 
                 | otherwise -> do
-                    setDisplay startTutorial "none"
+                    hideElement startTutorial
 
                     setBusy
 
@@ -1762,7 +1773,7 @@ main = do
 
             setTextContent stopTutorial "Exit the tutorial"
 
-            setDisplay stopTutorial "none"
+            hideElement stopTutorial
 
             let createExample (name, file) = do
                     n <- State.get
@@ -1829,11 +1840,11 @@ main = do
 
             navigationBar <- createElement "div"
             addClass navigationBar "grace-tabs"
-            addClass navigationBar "grace-cluster"
+            addClass navigationBar "grace-cluster-start"
 
             replaceChildren navigationBar (Array.fromList tabs)
 
-            setDisplay navigationBar "none"
+            hideElement navigationBar
 
             before inputArea navigationBar
 
@@ -1842,16 +1853,16 @@ main = do
 
                 saveSearchParams params
 
-                setDisplay stopTutorial  "none"
-                setDisplay navigationBar "none"
+                hideElement stopTutorial
+                hideElement navigationBar
 
                 text <- getValue codeInput
 
                 if Text.null text
                     then do
-                        setDisplay startTutorial "inline-block"
+                        showElement "inline-block" startTutorial
                     else do
-                        setDisplay startTutorial "none"
+                        hideElement startTutorial
 
                 focus codeInput
 
@@ -1866,9 +1877,9 @@ main = do
 
                 clickFirstExample
 
-                setDisplay startTutorial "none"
-                setDisplay navigationBar "flex"
-                setDisplay stopTutorial  "inline-block"
+                hideElement startTutorial
+                showElement "flex" navigationBar
+                showElement "inline-block" stopTutorial
 
                 focus codeInput
 
