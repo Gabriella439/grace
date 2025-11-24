@@ -85,11 +85,6 @@ body {
   color: var(--text);
 }
 
-a {
-  color: var(--blue);
-  text-decoration: none;
-}
-
 button {
   background-color: var(--surface1);
   color: var(--blue);
@@ -131,6 +126,10 @@ textarea {
 
 .grace-form {
   padding: var(--s0);
+}
+
+.grace-form .grace-form {
+  padding: 0;
 }
 
 .grace-input-json,
@@ -395,4 +394,8 @@ ul {
 .CodeMirror pre.CodeMirror-line,
 .CodeMirror pre.CodeMirror-line-like {
   padding-inline: var(--s-2);
+}
+
+.CodeMirror pre.CodeMirror-placeholder {
+  color: var(--overlay1);
 }

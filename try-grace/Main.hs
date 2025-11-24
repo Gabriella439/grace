@@ -632,7 +632,10 @@ renderValue parent Type.Function{ input, output } function = do
 
     let hasEffects = Lens.has Value.effects function
 
-    (setBusy, setSuccess, setError) <- createForm (edit && hasEffects) outputVal
+    -- TODO: Restore interior tabs with appropriate styling
+    let tabbed = False -- edit && hasEffects
+
+    (setBusy, setSuccess, setError) <- createForm tabbed outputVal
 
     let render value = do
             setBusy
@@ -701,13 +704,7 @@ renderValue parent Type.Function{ input, output } function = do
                     stack <- createElement "div"
                     addClass stack "grace-stack-large"
 
-                    if edit
-                    then do
-                        replaceChildren stack (Array.fromList [ inputVal, button ])
-
-                        after parent outputVal
-                    else do
-                        replaceChildren stack (Array.fromList [ inputVal, buttons, outputVal ])
+                    replaceChildren stack (Array.fromList [ inputVal, buttons, outputVal ])
 
                     replaceChild parent stack
 
@@ -1183,7 +1180,6 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
 
                 div <- createElement "div"
                 addClass div "grace-input-union"
-                addClass div "grace-stack"
 
                 replaceChildren div (Array.fromList children)
 
@@ -1442,6 +1438,7 @@ renderInputDefault path type_ = do
         RenderInput{ keyToMethods, renderOutput, status, input } <- Reader.ask
 
         textarea <- createElement "textarea"
+        setAttribute textarea "placeholder" "Enter code…"
 
         hideElement textarea
 
@@ -1452,7 +1449,6 @@ renderInputDefault path type_ = do
 
         div <- createElement "div"
         addClass div "grace-pane"
-        addClass div "grace-stack-large"
 
         replaceChildren div (Array.fromList [ textarea, error ])
 
@@ -1567,7 +1563,6 @@ createForm showTabs output = liftIO do
 
     pane <- createElement "div"
     addClass pane "grace-pane"
-    addClass pane "grace-stack-large"
     Monad.when showTabs (addClass pane "grace-tabbed")
 
     success <- createElement "div"
@@ -1581,6 +1576,7 @@ createForm showTabs output = liftIO do
 
     let createCodemirrorOutput = do
             textarea <- createElement "textarea"
+            setAttribute textarea "placeholder" "Enter code…"
 
             replaceChild codemirrorBuffer textarea
 
@@ -1730,6 +1726,7 @@ main = do
                 else hideElement startTutorial
 
             if  | Text.null text -> do
+                    hideElement output
                     replaceChildren output (Array.fromList [])
 
                 | otherwise -> do
@@ -1771,6 +1768,8 @@ main = do
                             setError (Text.pack (displayException (exception :: SomeException)))
                         Right () -> do
                             return ()
+
+                    showElement "block" output
 
     debouncedInterpret <- debounce interpret
 
