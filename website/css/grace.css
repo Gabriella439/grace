@@ -91,7 +91,7 @@ a {
 }
 
 button {
-  background-color: var(--surface0);
+  background-color: var(--surface1);
   color: var(--blue);
   border: 0;
   border-radius: var(--s-2);
@@ -115,7 +115,7 @@ textarea {
 
 .grace-form {
   padding: var(--s0);
-  background-color: var(--crust);
+  background-color: var(--surface0);
 }
 
 .grace-pane > * {
@@ -129,7 +129,7 @@ textarea {
 .grace-input-json,
 .grace-input-text,
 .grace-output-text {
-  background-color: var(--surface0);
+  background-color: var(--surface1);
   color: var(--text);
   padding-inline: var(--s-1);
   padding-block: var(--s-2);
@@ -160,7 +160,6 @@ pre {
 }
 
 dt {
-  font-family: 'Fira Mono', monospace;
   font-weight: bold;
   color: var(--mauve);
 }
@@ -250,8 +249,7 @@ fieldset {
 }
 
 .grace-output-text > :last-child {
-  /* This margin ensures that the "Print"/"Copy" buttons have enough height */
-  margin-block-end: var(--s-4);
+  margin-block-end: 0;
 }
 
 .grace-printable {
@@ -290,15 +288,15 @@ fieldset {
   border-radius: var(--s-2) var(--s-2) 0 0;
   padding-inline: var(--s-1);
   padding-block: var(--s-2);
-  background-color: var(--surface0);
-}
-
-.grace-tab:hover {
   background-color: var(--surface1);
 }
 
+.grace-tab:hover {
+  background-color: color-mix(in oklch, var(--overlay2) 30%, transparent);
+}
+
 .grace-tab-selected {
-  background-color: var(--crust);
+  background-color: var(--surface0);
 }
 
 .grace-spinner {
@@ -339,13 +337,13 @@ fieldset {
   font-family: 'Fira Mono', monospace;
   height: auto;
   margin-block-start: 0;
-  background-color: var(--crust);
+  background-color: var(--surface0);
   border-radius: var(--s-2);
   color: var(--text);
 }
 
 .CodeMirror-gutters {
-  background: var(--surface0);
+  background: var(--surface2);
   border-style: none;
 }
 
