@@ -15,7 +15,7 @@
 }
 
 :root {
-  --measure: 90ch;
+  --measure: 91ch;
 
   --ratio: 1.5;
   --s-6: calc(var(--s-5) / var(--ratio));
@@ -106,7 +106,11 @@ button:hover {
 }
 
 fieldset {
+  border: 0;
   padding: 0;
+}
+
+fieldset:disabled {
 }
 
 textarea {
@@ -114,7 +118,6 @@ textarea {
 }
 
 .grace-form {
-  padding: var(--s0);
   background-color: var(--surface0);
 }
 
@@ -124,6 +127,10 @@ textarea {
 
 .grace-pane.grace-tabbed > * {
   border-radius: 0 var(--s-2) var(--s-2) var(--s-2);
+}
+
+.grace-tabbed > .grace-form {
+  padding: var(--s0);
 }
 
 .grace-input-json,
@@ -174,10 +181,6 @@ dd {
 
 ul {
   padding-inline-start: var(--s1);
-}
-
-fieldset {
-  border: 0;
 }
 
 .grace-center {
@@ -343,7 +346,7 @@ fieldset {
 }
 
 .CodeMirror-gutters {
-  background: var(--surface2);
+  background: var(--surface1);
   border-style: none;
 }
 

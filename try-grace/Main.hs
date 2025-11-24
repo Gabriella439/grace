@@ -701,7 +701,13 @@ renderValue parent Type.Function{ input, output } function = do
                     stack <- createElement "div"
                     addClass stack "grace-stack-large"
 
-                    replaceChildren stack (Array.fromList [ inputVal, buttons, outputVal ])
+                    if edit
+                    then do
+                        replaceChildren stack (Array.fromList [ inputVal, button ])
+
+                        after parent outputVal
+                    else do
+                        replaceChildren stack (Array.fromList [ inputVal, buttons, outputVal ])
 
                     replaceChild parent stack
 
@@ -1177,6 +1183,7 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
 
                 div <- createElement "div"
                 addClass div "grace-input-union"
+                addClass div "grace-stack"
 
                 replaceChildren div (Array.fromList children)
 
@@ -1445,6 +1452,7 @@ renderInputDefault path type_ = do
 
         div <- createElement "div"
         addClass div "grace-pane"
+        addClass div "grace-stack-large"
 
         replaceChildren div (Array.fromList [ textarea, error ])
 
@@ -1559,6 +1567,7 @@ createForm showTabs output = liftIO do
 
     pane <- createElement "div"
     addClass pane "grace-pane"
+    addClass pane "grace-stack-large"
     Monad.when showTabs (addClass pane "grace-tabbed")
 
     success <- createElement "div"
