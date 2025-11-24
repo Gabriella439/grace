@@ -129,7 +129,7 @@ textarea {
   border-radius: 0 var(--s-2) var(--s-2) var(--s-2);
 }
 
-.grace-tabbed > .grace-form {
+.grace-form {
   padding: var(--s0);
 }
 
