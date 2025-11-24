@@ -116,6 +116,11 @@ textarea {
 form {
   padding: var(--s0);
   background-color: var(--crust);
+  border-radius: var(--s-2);
+}
+
+.grace-tabs + form {
+  border-radius: var(--s-2);
 }
 
 input[type="number"],
@@ -334,6 +339,7 @@ fieldset {
   height: auto;
   margin-block-start: 0;
   background-color: var(--crust);
+  border-radius: var(--s-2);
   color: var(--text);
 }
 
