@@ -1538,24 +1538,18 @@ createForm
         )
 createForm showTabs output = liftIO do
     let toTab name = do
-            link <- createElement "a"
-            addClass link "grace-tab-link"
-            setAttribute link "href"  "#"
-            setTextContent link name
+            tab <- createElement "button"
+            addClass tab "grace-tab"
+            setAttribute tab "type" "button"
+            setTextContent tab name
 
-            item <- createElement "span"
-            addClass item "grace-tab"
+            return tab
 
-            replaceChild item link
-
-            return (item, link)
-
-    (formTab, formLink) <- toTab "Form"
-    (codeTab, codeLink) <- toTab "Code"
-    (typeTab, typeLink) <- toTab "Type"
+    formTab <- toTab "Form"
+    codeTab <- toTab "Code"
+    typeTab <- toTab "Type"
 
     let tabs = [ formTab, codeTab, typeTab ]
-    let links = [ formLink, codeLink, typeLink ]
 
     tabsList <- createElement "div"
     addClass tabsList "grace-tabs"
@@ -1565,9 +1559,10 @@ createForm showTabs output = liftIO do
 
     pane <- createElement "div"
     addClass pane "grace-pane"
+    Monad.when showTabs (addClass pane "grace-tabbed")
 
     success <- createElement "div"
-    addClass pane "grace-success"
+    addClass success "grace-success"
 
     let successChildren = if showTabs then [ tabsList, pane ] else [ pane ]
 
@@ -1588,36 +1583,37 @@ createForm showTabs output = liftIO do
 
     htmlWrapper <- createElement "form"
     addClass htmlWrapper "grace-form"
+    setAttribute htmlWrapper "autocomplete" "off"
 
     (codeOutput, codeWrapper) <- createCodemirrorOutput
     (typeOutput, typeWrapper) <- createCodemirrorOutput
 
-    let registerTabCallback selectedTab selectedLink action = do
+    let registerTabCallback selectedTab action = do
             callback <- Callback.asyncCallback do
-                let deselect link = removeClass link "grace-tab-selected"
+                let deselect tab = removeClass tab "grace-tab-selected"
 
-                traverse_ deselect links
+                traverse_ deselect tabs
 
-                addClass selectedLink "grace-tab-selected"
+                addClass selectedTab "grace-tab-selected"
 
                 action
 
             addEventListener selectedTab "click" callback
 
-    registerTabCallback formTab formLink do
+    registerTabCallback formTab do
         replaceChild pane htmlWrapper
 
-    registerTabCallback codeTab codeLink do
+    registerTabCallback codeTab do
         replaceChild pane codeWrapper
 
         refresh codeOutput
 
-    registerTabCallback typeTab typeLink do
+    registerTabCallback typeTab do
         replaceChild pane typeWrapper
 
         refresh typeOutput
 
-    addClass formLink "grace-tab-selected"
+    addClass formTab "grace-tab-selected"
 
     replaceChild pane htmlWrapper
 
@@ -1798,21 +1794,15 @@ main = do
 
                         let id = "example-" <> Text.pack (show n)
 
-                        a <- createElement "a"
-                        addClass a "example-tab"
-                        addClass a "grace-tab-link"
-
-                        setAttribute a "id"           id
-                        setAttribute a "aria-current" "page"
-                        setAttribute a "href"         "#"
-                        setAttribute a "onclick"      "return false;"
-
-                        setTextContent a name
-
-                        tab <- createElement "span"
+                        tab <- createElement "button"
+                        addClass tab "example-tab"
                         addClass tab "grace-tab"
 
-                        replaceChild tab a
+                        setAttribute tab "id"           id
+                        setAttribute tab "aria-current" "page"
+                        setAttribute tab "type"         "button"
+
+                        setTextContent tab name
 
                         let click = do
                                 setCodeValue codeInput code
@@ -1828,7 +1818,7 @@ main = do
 
                         callback <- Callback.asyncCallback click
 
-                        addEventListener a "click" callback
+                        addEventListener tab "click" callback
 
                         return [(tab, click)]
 

@@ -113,14 +113,17 @@ textarea {
   resize: none;
 }
 
-form {
+.grace-form {
   padding: var(--s0);
   background-color: var(--crust);
+}
+
+.grace-pane > * {
   border-radius: var(--s-2);
 }
 
-.grace-tabs + form {
-  border-radius: var(--s-2);
+.grace-pane.grace-tabbed > * {
+  border-radius: 0 var(--s-2) var(--s-2) var(--s-2);
 }
 
 input[type="number"],
@@ -284,15 +287,14 @@ fieldset {
   padding-inline-start: 29px;  /* … to match CodeMirror's gutter */
 }
 
-.grace-tab-link {
+.grace-tab {
   border-radius: var(--s-2) var(--s-2) 0 0;
-  display: inline-block;
   padding-inline: var(--s-1);
   padding-block: var(--s-2);
   background-color: var(--surface0);
 }
 
-.grace-tab-link:hover {
+.grace-tab:hover {
   background-color: var(--surface1);
 }
 
@@ -388,4 +390,9 @@ fieldset {
 
 .CodeMirror-selected {
   background-color: color-mix(in oklch, var(--overlay2) 30%, transparent) !important;
+}
+
+.CodeMirror pre.CodeMirror-line,
+.CodeMirror pre.CodeMirror-line-like {
+  padding-inline: var(--s-2);
 }
