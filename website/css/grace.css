@@ -18,6 +18,7 @@
   --measure: 90ch;
 
   --ratio: 1.5;
+  --s-6: calc(var(--s-5) / var(--ratio));
   --s-5: calc(var(--s-4) / var(--ratio));
   --s-4: calc(var(--s-3) / var(--ratio));
   --s-3: calc(var(--s-2) / var(--ratio));
@@ -31,11 +32,18 @@
   --s5: calc(var(--s4) * var(--ratio));
 
   --rosewater: #f5e0dc;
+  --flamingo: #f2cdcd;
+  --pink: #f5c2e7;
   --mauve: #cba6f7;
   --red: #f38ba8;
+  --maroon: #eba0ac;
   --peach: #fab387;
+  --yellow: #f9e2af;
   --green: #a6e3a1;
+  --teal: #94e2d5;
   --sky: #89dceb;
+  --sapphire: #74c7ec;
+  --lavender: #b4befe;
   --blue: #89b4fa;
   --text: #cdd6f4;
   --subtext1: #bac2de;
@@ -48,6 +56,7 @@
   --surface0: #313244;
   --base: #1e1e2e;
   --mantle: #181825;
+  --crust: #11111b;
 
   font-family: 'Fira Sans', sans-serif;
 }
@@ -82,7 +91,7 @@ a {
 }
 
 button {
-  background-color: var(--surface1);
+  background-color: var(--surface0);
   color: var(--blue);
   border: 0;
   border-radius: var(--s-2);
@@ -92,7 +101,7 @@ button {
 }
 
 button:hover {
-  background-color: color-mix(in oklch, var(--overlay1) 30%, var(--surface1));
+  background-color: color-mix(in oklch, var(--overlay2) 30%, transparent);
   cursor: pointer;
 }
 
@@ -104,6 +113,13 @@ textarea {
   resize: none;
 }
 
+form {
+  border-block-start-style: solid;
+  border-color: var(--overlay0);
+  border-width: var(--s-6);
+  padding-block-start: var(--s0);
+}
+
 code {
   font-family: 'Fira Mono', monospace;
   white-space: pre;
@@ -112,12 +128,16 @@ code {
 pre {
   font-family: 'Fira Mono', monospace;
   line-height: 1.3;
-  margin: 0;
 }
 
 dt {
   font-family: 'Fira Mono', monospace;
   font-weight: bold;
+  color: var(--blue);
+}
+
+ul, dl, pre {
+  margin: 0;
 }
 
 dd {
@@ -144,22 +164,30 @@ fieldset {
   justify-content: flex-start;
 }
 
+.grace-stack-large > header > *,
 .grace-stack > header > * {
   margin-block: 0;
 }
 
+.grace-stack-large > main > *,
 .grace-stack > main > * {
   margin-block: 0;
 }
 
+.grace-stack-large > *,
 .grace-stack > * {
   margin-block: 0;
 } 
 
 .grace-stack > * + * {
-  margin-block-start: var(--s-2);
+  margin-block-start: var(--margin, var(--s-2));
 }
 
+.grace-stack-large > * + * {
+  margin-block-start: var(--margin, var(--s1));
+}
+
+.grace-stack-large > * + .grace-ignore,
 .grace-stack > * + .grace-ignore {
   margin-block-start: 0;
 }
@@ -221,7 +249,30 @@ fieldset {
   font-size: var(--s-1);
 }
 
+.grace-tabs {
+  --space: 0;
+}
+.grace-tab-link {
+  border-radius: var(--s-2) var(--s-2) 0 0;
+  border-inline-style: solid;
+  border-block-start-style: solid;
+  border-color: transparent;
+  border-width: var(--s-6);
+  display: inline-block;
+  padding-inline: var(--s-1);
+  padding-block: var(--s-2);
+}
+
+.grace-tab-link:hover {
+  border-color: var(--overlay0);
+}
+
+.grace-tab-selected {
+  border-color: var(--overlay2);
+}
+
 .grace-spinner {
+  margin: var(--s1);
   width: var(--s3);
   height: var(--s3);
   border-radius: 50%;
@@ -261,9 +312,8 @@ fieldset {
   background-color: var(--mantle);
   color: var(--text);
   border-style: solid;
-  border-color: var(--overlay0);
-  border-width: var(--s-5);
-  border-radius: var(--s-2);
+  border-color: var(--overlay2);
+  border-width: var(--s-6);
 }
 
 .CodeMirror-gutters {
@@ -286,7 +336,7 @@ fieldset {
 .cm-s-default .cm-def { color: inherit; }
 .cm-s-default .cm-variable, .cm-variable-2, .cm-variable3 { color: inherit; }
 .cm-s-default .cm-punctuation { color: var(--subtext1); }
-.cm-s-default .cm-property, { color: inherit; }
+.cm-s-default .cm-property { color: inherit; }
 .cm-s-default .cm-operator { color: inherit; }
 .cm-s-default .cm-type { color: inherit; }
 .cm-s-default .cm-comment { color: var(--overlay2); }

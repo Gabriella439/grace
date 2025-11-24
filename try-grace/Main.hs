@@ -1829,7 +1829,6 @@ main = do
                     , ("Variables"    , "variables.ffg" )
                     , ("Functions"    , "functions.ffg" )
                     , ("Imports"      , "imports.ffg"   )
-                    , ("Lists"        , "lists.ffg"     )
                     , ("Coding"       , "coding.ffg"    )
                     , ("Prelude"      , "prelude.ffg"   )
                     ]
