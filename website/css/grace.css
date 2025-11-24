@@ -126,6 +126,24 @@ input[type="text"],
 textarea {
   background-color: var(--mantle);
   color: var(--text);
+  padding-inline: var(--s-1);
+  padding-block: var(--s-2);
+  border-radius: var(--s-2);
+  border-style: solid;
+  border-width: var(--s-6);
+  font-size: var(--s0);
+}
+
+:focus {
+  outline: none;
+}
+
+input[type="number"]:focus,
+input[type="password"]:focus,
+input[type="text"]:focus,
+textarea:focus {
+  box-shadow: 0 0 0 var(--s-4) var(--lavender);
+  border-color: transparent;
 }
 
 code {
@@ -141,7 +159,7 @@ pre {
 dt {
   font-family: 'Fira Mono', monospace;
   font-weight: bold;
-  color: var(--blue);
+  color: var(--mauve);
 }
 
 ul, dl, pre {
