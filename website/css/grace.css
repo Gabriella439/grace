@@ -126,10 +126,9 @@ textarea {
   border-radius: 0 var(--s-2) var(--s-2) var(--s-2);
 }
 
-input[type="number"],
-input[type="password"],
-input[type="text"],
-textarea {
+.grace-input-json,
+.grace-input-text,
+.grace-output-text {
   background-color: var(--surface0);
   color: var(--text);
   padding-inline: var(--s-1);
@@ -234,7 +233,7 @@ fieldset {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space, 1rem);
-  justify-content: flex-end;
+  justify-content: flex-start;
   align-items: flex-start;
 }
 
@@ -263,7 +262,7 @@ fieldset {
 
 .grace-printable > :last-child {
   flex-grow: 1;
-  flex-basis: 10em;
+  flex-basis: var(--s5);
 }
 
 .grace-printable > :first-child {
