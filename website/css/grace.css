@@ -152,7 +152,7 @@ a {
 }
 
 button {
-  background-color: var(--surface1);
+  background-color: var(--surface0);
   color: var(--blue);
   border: 0;
   border-radius: var(--s-2);
@@ -207,7 +207,6 @@ li textarea {
 .grace-input-text,
 .grace-output-json,
 .grace-output-text {
-  background-color: var(--crust);
   color: var(--text);
   padding-inline: var(--s-1);
   padding-block: var(--s-2);
@@ -216,16 +215,30 @@ li textarea {
   font-size: var(--s0);
 }
 
+.grace-input-json,
+.grace-input-text,
+.grace-output-json,
+.grace-output-text {
+  background-color: var(--crust);
+}
+
+.grace-output-json,
+.grace-output-text {
+  overflow-x: auto;
+}
+
 .grace-output-json {
   display: inline-block;
 }
 
-.grace-input-json {
+.grace-input-json,
+.grace-output-json {
   font-family: 'Fira Mono', monospace;
 }
 
-.grace-output-json {
-  font-family: 'Fira Mono', monospace;
+.grace-input-text,
+.grace-output-text {
+  font-family: 'Fira Sans', sans-serif;
 }
 
 .grace-output-text > :first-child {

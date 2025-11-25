@@ -925,6 +925,8 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.JSON } = do
         input <- createElement "input"
         addClass input "grace-input-json"
         addClass input "grace-input-json-valid"
+        setAttribute input "placeholder" "Enter JSON…"
+        setAttribute input "data-1p-ignore" ""
 
         setValue input text₀
 
@@ -966,6 +968,7 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Text } = do
         addClass input "grace-input-text"
         setAttribute input "rows" "1"
         setAttribute input "placeholder" "Enter text…"
+        setAttribute input "data-1p-ignore" ""
 
         autoResize input
 
@@ -994,6 +997,7 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Key } = do
     return $ (,) (Value.Scalar (Key key₀)) do
         input <- createElement "input"
         addClass input "grace-input-json"
+        setAttribute input "placeholder" "Enter key…"
         setAttribute input "type" "password"
         setAttribute input "rows" "1"
 
