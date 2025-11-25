@@ -31,34 +31,95 @@
   --s4: calc(var(--s3) * var(--ratio));
   --s5: calc(var(--s4) * var(--ratio));
 
-  --rosewater: #f5e0dc;
-  --flamingo: #f2cdcd;
-  --pink: #f5c2e7;
-  --mauve: #cba6f7;
-  --red: #f38ba8;
-  --maroon: #eba0ac;
-  --peach: #fab387;
-  --yellow: #f9e2af;
-  --green: #a6e3a1;
-  --teal: #94e2d5;
-  --sky: #89dceb;
-  --sapphire: #74c7ec;
-  --lavender: #b4befe;
-  --blue: #89b4fa;
-  --text: #cdd6f4;
-  --subtext1: #bac2de;
-  --subtext0: #a6adc8;
-  --overlay2: #9399b2;
-  --overlay1: #7f849c;
-  --overlay0: #6c7086;
-  --surface2: #585b70;
-  --surface1: #45475a;
-  --surface0: #313244;
-  --base: #1e1e2e;
-  --mantle: #181825;
-  --crust: #11111b;
-
   font-family: 'Fira Sans', sans-serif;
+
+  --rosewater: #dc8a78;
+  --flamingo: #dd7878;
+  --pink: #ea76cb;
+  --mauve: #8839ef;
+  --red: #d20f39;
+  --maroon: #e64553;
+  --peach: #fe640b;
+  --yellow: #df8e1d;
+  --green: #40a02b;
+  --teal: #179299;
+  --sky: #04a5e5;
+  --sapphire: #209fb5;
+  --blue: #1e66f5;
+  --lavender: #7287fd;
+  --text: #4c4f69;
+  --subtext1: #5c5f77;
+  --subtext0: #6c6f85;
+  --overlay2: #7c7f93;
+  --overlay1: #8c8fa1;
+  --overlay0: #9ca0b0;
+  --surface2: #acb0be;
+  --surface1: #bcc0cc;
+  --surface0: #ccd0da;
+  --base: #eff1f5;
+  --mantle: #e6e9ef;
+  --crust: #dce0e8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --rosewater: #f2d5cf;
+    --flamingo: #eebebe;
+    --pink: #f4b8e4;
+    --mauve: #ca9ee6;
+    --red: #e78284;
+    --maroon: #ea999c;
+    --peach: #ef9f76;
+    --yellow: #e5c890;
+    --green: #a6d189;
+    --teal: #81c8be;
+    --sky: #99d1db;
+    --sapphire: #85c1dc;
+    --blue: #8caaee;
+    --lavender: #babbf1;
+    --text: #c6d0f5;
+    --subtext1: #b5bfe2;
+    --subtext0: #a5adce;
+    --overlay2: #949cbb;
+    --overlay1: #838ba7;
+    --overlay0: #737994;
+    --surface2: #626880;
+    --surface1: #51576d;
+    --surface0: #414559;
+    --base: #303446;
+    --mantle: #292c3c;
+    --crust: #232634;
+  }
+/*
+  :root {
+    --rosewater: #f5e0dc;
+    --flamingo: #f2cdcd;
+    --pink: #f5c2e7;
+    --mauve: #cba6f7;
+    --red: #f38ba8;
+    --maroon: #eba0ac;
+    --peach: #fab387;
+    --yellow: #f9e2af;
+    --green: #a6e3a1;
+    --teal: #94e2d5;
+    --sky: #89dceb;
+    --sapphire: #74c7ec;
+    --blue: #89b4fa;
+    --lavender: #b4befe;
+    --text: #cdd6f4;
+    --subtext1: #bac2de;
+    --subtext0: #a6adc8;
+    --overlay2: #9399b2;
+    --overlay1: #7f849c;
+    --overlay0: #6c7086;
+    --surface2: #585b70;
+    --surface1: #45475a;
+    --surface0: #313244;
+    --base: #1e1e2e;
+    --mantle: #181825;
+    --crust: #11111b;
+  }
+*/
 }
 
 ::selection {
@@ -118,8 +179,12 @@ textarea {
   resize: none;
 }
 
+li textarea {
+  vertical-align: baseline;
+}
+
 .grace-form {
-  background-color: var(--surface0);
+  background-color: var(--mantle);
 }
 
 .grace-pane > * {
@@ -142,7 +207,7 @@ textarea {
 .grace-input-text,
 .grace-output-json,
 .grace-output-text {
-  background-color: var(--surface1);
+  background-color: var(--crust);
   color: var(--text);
   padding-inline: var(--s-1);
   padding-block: var(--s-2);
@@ -155,10 +220,46 @@ textarea {
   display: inline-block;
 }
 
+.grace-input-json {
+  font-family: 'Fira Mono', monospace;
+}
+
+.grace-output-json {
+  font-family: 'Fira Mono', monospace;
+}
+
+.grace-output-text > :first-child {
+  margin-block-start: 0;
+}
+
+.grace-output-text > :last-child {
+  margin-block-end: 0;
+}
+
 .grace-input-list-plus,
 .grace-input-list-minus {
   height: var(--s2);
   width: var(--s2);
+}
+
+.grace-input-optional {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.grace-input-optional > :first-child {
+  flex-grow: 1;
+}
+
+.grace-input-optional > :last-child {
+  flex-basis: 0;
+  flex-grow: 999;
+  min-inline-size: 50%;
+}
+
+.grace-input-bool-box {
+  padding: var(--s-2);
 }
 
 :focus {
@@ -256,22 +357,6 @@ ul {
   align-items: flex-start;
 }
 
-.grace-input-json {
-  font-family: 'Fira Mono', monospace;
-}
-
-.grace-output-json {
-  font-family: 'Fira Mono', monospace;
-}
-
-.grace-output-text > :first-child {
-  margin-block-start: 0;
-}
-
-.grace-output-text > :last-child {
-  margin-block-end: 0;
-}
-
 .grace-printable {
   display: flex;
   flex-wrap: wrap;
@@ -308,7 +393,7 @@ ul {
   border-radius: var(--s-2) var(--s-2) 0 0;
   padding-inline: var(--s-1);
   padding-block: var(--s-2);
-  background-color: var(--surface1);
+  background-color: var(--crust);
 }
 
 .grace-tab:hover {
@@ -316,7 +401,7 @@ ul {
 }
 
 .grace-tab-selected {
-  background-color: var(--surface0);
+  background-color: var(--mantle);
 }
 
 .grace-spinner {
@@ -357,13 +442,13 @@ ul {
   font-family: 'Fira Mono', monospace;
   height: auto;
   margin-block-start: 0;
-  background-color: var(--surface0);
+  background-color: var(--mantle);
   border-radius: var(--s-2);
   color: var(--text);
 }
 
 .CodeMirror-gutters {
-  background: var(--surface1);
+  background: var(--crust);
   border-style: none;
 }
 

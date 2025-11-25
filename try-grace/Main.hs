@@ -1230,6 +1230,14 @@ renderInput path optionalType@Type.Optional{ type_ } = do
 
         (nestedInput, nestedInvoke, nestedRefresh) <- Reader.withReaderT nest reader
 
+        box <- createElement "div"
+        addClass box "grace-input-bool-box"
+        replaceChild box input
+
+        sidebar <- createElement "div"
+        addClass sidebar "grace-stack"
+        replaceChild sidebar box
+
         div <- createElement "div"
         addClass div "grace-input-optional"
 
@@ -1237,7 +1245,7 @@ renderInput path optionalType@Type.Optional{ type_ } = do
 
         replaceChild fieldset nestedInput
 
-        replaceChildren div (Array.fromList [input, fieldset])
+        replaceChildren div (Array.fromList [sidebar, fieldset])
 
         liftIO do
             let update mode = do
