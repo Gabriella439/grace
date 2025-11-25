@@ -1306,7 +1306,7 @@ renderInput path listType@Type.List{ type_ } = do
         input <- Reader.ask
 
         let insert maybeReader = do
-                showElement "inline" minus
+                showElement "inline-block" minus
 
                 children₀ <- IORef.readIORef childrenRef
 

@@ -98,6 +98,7 @@ button {
   padding-block: var(--s-2);
   padding-inline: var(--s-1);
   font-size: var(--s0);
+  font-weight: 600;
 }
 
 button:hover {
@@ -152,6 +153,12 @@ textarea {
 
 .grace-output-json {
   display: inline-block;
+}
+
+.grace-input-list-plus,
+.grace-input-list-minus {
+  height: var(--s2);
+  width: var(--s2);
 }
 
 :focus {
