@@ -1,16 +1,16 @@
 @font-face {
-  font-family: 'Fira Mono';
-  src: url('fonts/firamono-regular-webfont.woff2') format('woff2');
-  font-weight: normal;
+  font-family: 'Noto Sans';
   font-style: normal;
+  font-weight: normal;
+  src: url('fonts/noto-sans-v42-latin-regular.woff2') format('woff2');
   font-display: swap;
 }
 
 @font-face {
-  font-family: 'Fira Sans';
+  font-family: 'Fira Mono';
   font-style: normal;
   font-weight: normal;
-  src: url('fonts/fira-sans-v18-latin-regular.woff2') format('woff2');
+  src: url('fonts/firamono-regular-webfont.woff2') format('woff2');
   font-display: swap;
 }
 
@@ -31,7 +31,7 @@
   --s4: calc(var(--s3) * var(--ratio));
   --s5: calc(var(--s4) * var(--ratio));
 
-  font-family: 'Fira Sans', sans-serif;
+  font-family: 'Noto Sans', sans-serif;
 
   --rosewater: #dc8a78;
   --flamingo: #dd7878;
@@ -238,7 +238,7 @@ li textarea {
 
 .grace-input-text,
 .grace-output-text {
-  font-family: 'Fira Sans', sans-serif;
+  font-family: 'Noto Sans', sans-serif;
 }
 
 .grace-output-text > :first-child {
@@ -255,23 +255,26 @@ li textarea {
   width: var(--s2);
 }
 
-.grace-input-optional {
+.grace-input-optional,
+.grace-input-alternative-selection {
   display: flex;
   flex-wrap: wrap;
   gap: var(--s-2);
 }
 
-.grace-input-optional > :first-child {
+.grace-input-optional > :first-child,
+.grace-input-alternative-selection > :first-child {
   flex-grow: 1;
 }
 
-.grace-input-optional > :last-child {
+.grace-input-optional > :last-child,
+.grace-input-alternative-selection > :last-child {
   flex-basis: 0;
   flex-grow: 999;
   min-inline-size: 50%;
 }
 
-.grace-input-bool-box {
+.grace-input-bool-box, .grace-input-alternative-radio-box {
   padding: var(--s-2);
 }
 
@@ -279,6 +282,10 @@ li textarea {
   background-color: var(--crust);
   border: none;
   height: var(--s-6);
+}
+
+.grace-input-alternative {
+  padding-block: var(--s-2);
 }
 
 :focus {
@@ -299,7 +306,7 @@ code {
 
 pre {
   font-family: 'Fira Mono', monospace;
-  line-height: 1.3;
+  line-height: 1.29;
 }
 
 .grace-input-field-name,
@@ -309,7 +316,7 @@ pre {
   color: var(--mauve);
 }
 
-ul, dl, pre {
+ul, dt, pre, fieldset {
   margin: 0;
 }
 

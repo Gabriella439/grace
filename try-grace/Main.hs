@@ -1114,27 +1114,19 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
                         let id = name <> "-" <> key
 
                         input <- createElement "input"
-                        addClass input "grace-input-alternative-input"
+                        addClass input "grace-input-alternative-radio"
                         setAttribute input "type"  "radio"
                         setAttribute input "name"  name
                         setAttribute input "id"    id
-
                         Monad.when checked (setAttribute input "checked" "")
 
-                        label <- createElement "label"
-                        addClass label "grace-input-alternative-label"
-                        setAttribute label "for"   id
+                        box <- createElement "div"
+                        addClass box "grace-input-alternative-radio-box"
+                        replaceChild box input
 
-                        stack <- createElement "div"
-                        addClass input "grace-cluster-start"
-                        replaceChildren stack (Array.fromList [ input, label ])
-
-                        setTextContent label key
-
-                        fieldset <- createElement "fieldset"
-                        setDisabled fieldset (not checked)
-
-                        liftIO (Monad.when checked (IORef.writeIORef checkedValRef (Just fieldset)))
+                        inputStack <- createElement "div"
+                        addClass inputStack "grace-stack"
+                        replaceChild inputStack box
 
                         let nest x = x{ renderOutput = newRenderOutput }
                               where
@@ -1147,12 +1139,32 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
 
                         (nestedInput, nestedInvoke, nestedRefresh) <- Reader.withReaderT nest reader
 
+                        label <- createElement "label"
+                        addClass label "grace-input-alternative-label"
+                        setAttribute label "for"   id
+                        setTextContent label key
+
+                        fieldset <- createElement "fieldset"
+                        setDisabled fieldset (not checked)
+
                         replaceChild fieldset nestedInput
 
-                        div <- createElement "div"
-                        addClass div "grace-input-alternative"
+                        alternativeStack <- createElement "div"
+                        addClass alternativeStack "grace-input-alternative"
+                        addClass alternativeStack "grace-stack"
 
-                        replaceChildren div (Array.fromList [ stack, fieldset ])
+                        case alternativeType of
+                            Type.Record{ fields = Type.Fields kts _ } | null kts -> do
+                                replaceChild alternativeStack label
+                            _ -> do
+                                replaceChildren alternativeStack (Array.fromList [ label, fieldset ])
+
+                        sidebar <- createElement "div"
+                        addClass sidebar "grace-input-alternative-selection"
+
+                        replaceChildren sidebar (Array.fromList [ inputStack, alternativeStack])
+
+                        liftIO (Monad.when checked (IORef.writeIORef checkedValRef (Just fieldset)))
 
                         liftIO do
                             let update mode = do
@@ -1177,7 +1189,7 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
 
                                 Monad.when enabled (nestedInvoke mode)
 
-                        return (div, invoke, nestedRefresh)
+                        return (sidebar, invoke, nestedRefresh)
 
                 results <- traverse process keyTypes
 
