@@ -703,20 +703,26 @@ renderValue parent Type.Function{ input, output } function = do
                     addClass buttons "grace-cluster"
                     replaceChild buttons button
 
+                    hr <- createElement "hr"
+                    addClass hr "grace-horizontal-rule"
+
                     stack <- createElement "div"
                     addClass stack "grace-stack-large"
 
-                    replaceChildren stack (Array.fromList [ inputVal, buttons, outputVal ])
+                    replaceChildren stack (Array.fromList [ inputVal, buttons, hr, outputVal ])
 
                     replaceChild parent stack
 
                 else do
                     liftIO (invoke Submit)
 
+                    hr <- createElement "hr"
+                    addClass hr "grace-horizontal-rule"
+
                     stack <- createElement "div"
                     addClass stack "grace-stack-large"
 
-                    replaceChildren stack (Array.fromList [ inputVal, outputVal ])
+                    replaceChildren stack (Array.fromList [ inputVal, hr, outputVal ])
 
                     replaceChild parent stack
 

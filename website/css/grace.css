@@ -275,6 +275,12 @@ li textarea {
   padding: var(--s-2);
 }
 
+.grace-horizontal-rule {
+  background-color: var(--crust);
+  border: none;
+  height: var(--s-6);
+}
+
 :focus {
   outline: none;
 }
