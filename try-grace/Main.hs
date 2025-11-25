@@ -571,13 +571,7 @@ renderValue parent outer (Value.Record keyValues) = do
             dt <- createElement "dt"
             addClass dt "grace-output-field-name"
 
-            case value of
-                Value.Record kvs | HashMap.null kvs -> do
-                    setTextContent dt key
-                Value.List xs | Seq.null xs -> do
-                    setTextContent dt key
-                _ -> do
-                    setTextContent dt (key <> ":")
+            setTextContent dt key
 
             dd <- createElement "dd"
             addClass dt "grace-output-field-value"
@@ -1058,7 +1052,7 @@ renderInput path Type.Record{ fields = Type.Fields keyTypes _ } = do
                 dt <- createElement "dt"
                 addClass dt "grace-input-field-name"
 
-                setTextContent dt (key <> ":")
+                setTextContent dt key
 
                 dd <- createElement "dd"
                 addClass dt "grace-input-field-value"
@@ -1131,12 +1125,11 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
                         addClass label "grace-input-alternative-label"
                         setAttribute label "for"   id
 
-                        case alternativeType of
-                            Type.Record{ fields = Type.Fields kts _ } | null kts -> do
-                                setTextContent label key
-                            _ -> do
-                                setTextContent label (key <> ":")
+                        stack <- createElement "div"
+                        addClass input "grace-cluster-start"
+                        replaceChildren stack (Array.fromList [ input, label ])
 
+                        setTextContent label key
 
                         fieldset <- createElement "fieldset"
                         setDisabled fieldset (not checked)
@@ -1159,7 +1152,7 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
                         div <- createElement "div"
                         addClass div "grace-input-alternative"
 
-                        replaceChildren div (Array.fromList [ input, label, fieldset ])
+                        replaceChildren div (Array.fromList [ stack, fieldset ])
 
                         liftIO do
                             let update mode = do

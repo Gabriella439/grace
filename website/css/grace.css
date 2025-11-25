@@ -302,7 +302,9 @@ pre {
   line-height: 1.3;
 }
 
-dt {
+.grace-input-field-name,
+.grace-input-alternative-label,
+.grace-output-field-name {
   font-weight: bold;
   color: var(--mauve);
 }
