@@ -689,10 +689,6 @@ renderValue parent Type.Function{ input, output } function = do
                     setAttribute button "type" "button"
                     setTextContent button "Submit"
 
-                    callback <- liftIO (Callback.asyncCallback (invoke Submit))
-
-                    addEventListener button "click" callback
-
                     buttons <- createElement "div"
                     addClass buttons "grace-cluster"
                     replaceChild buttons button
@@ -703,7 +699,14 @@ renderValue parent Type.Function{ input, output } function = do
                     stack <- createElement "div"
                     addClass stack "grace-stack-large"
 
-                    replaceChildren stack (Array.fromList [ inputVal, buttons, hr, outputVal ])
+                    callback <- (liftIO . Callback.asyncCallback) do
+                        replaceChildren stack (Array.fromList [ inputVal, buttons, hr, outputVal ])
+
+                        invoke Submit
+
+                    addEventListener button "click" callback
+
+                    replaceChildren stack (Array.fromList [ inputVal, buttons ])
 
                     replaceChild parent stack
 
@@ -1197,7 +1200,6 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
 
                 div <- createElement "div"
                 addClass div "grace-input-union"
-                addClass div "grace-stack"
 
                 replaceChildren div (Array.fromList children)
 
