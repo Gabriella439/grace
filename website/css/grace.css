@@ -179,8 +179,12 @@ textarea {
   resize: none;
 }
 
-li textarea {
+li > textarea {
   vertical-align: baseline;
+}
+
+li > span {
+  vertical-align: middle;
 }
 
 .grace-form {
