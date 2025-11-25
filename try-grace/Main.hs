@@ -449,7 +449,9 @@ renderValue parent _ (Value.Text text) = do
 
     markdown <- createElement "div"
     addClass markdown "grace-output-text"
-    setInnerHTML markdown (markdownToHTML text)
+
+    let innerHTML = if text == "" then "<p>\x200B</p>" else markdownToHTML text
+    setInnerHTML markdown innerHTML
 
     sidebar <- createElement "div"
     addClass sidebar "grace-printable-buttons"
@@ -1180,6 +1182,7 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
 
                 div <- createElement "div"
                 addClass div "grace-input-union"
+                addClass div "grace-stack"
 
                 replaceChildren div (Array.fromList children)
 
