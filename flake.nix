@@ -251,6 +251,7 @@
 
           cp ${self.codemirror}/lib/codemirror.css --target-directory=$out/css
           cp ${self.codemirror}/lib/codemirror.js --target-directory=$out/$js
+          cp ${self.codemirror}/addon/display/placeholder.js --target-directory=$out/$js
           cp ${self.codemirror}/mode/python/python.js --target-directory=$out/$js
           cp ${self.haskell.packages."${compiler}".grace}/bin/try-grace.jsexe/all.js --target-directory=$out/$js
 
