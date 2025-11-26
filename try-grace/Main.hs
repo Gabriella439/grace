@@ -1338,12 +1338,12 @@ renderInput path listType@Type.List{ type_ } = do
                 let index = Seq.length children₀
 
                 reader <-  case maybeReader of
-                        Just reader -> do
-                            return reader
-                        Nothing -> do
-                            (_, reader) <- process (fromIntegral index)
+                    Just reader -> do
+                        return reader
+                    Nothing -> do
+                        (_, reader) <- process (fromIntegral index)
 
-                            return reader
+                        return reader
 
                 IORef.atomicModifyIORef' childrenRef (\s -> (s |> _Child, ()))
 
@@ -1371,6 +1371,8 @@ renderInput path listType@Type.List{ type_ } = do
                 li <- createElement "li"
                 addClass li "grace-input-list-element"
 
+                before buttons li
+
                 case result of
                     Nothing -> do
                         return ()
@@ -1383,9 +1385,9 @@ renderInput path listType@Type.List{ type_ } = do
 
                         IORef.atomicModifyIORef' childrenRef (\m -> (adjust m, ()))
 
-                        nestedInvoke Change
+                        nestedRefresh
 
-                before buttons li
+                        nestedInvoke Change
 
         liftIO (traverse_ (insert . Just) readers)
 
