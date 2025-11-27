@@ -1,3 +1,13 @@
-let f { x, y : Natural } = x + y
+# This test exercises all of the supported syntax for destructuring a function
+# argument defined using `let`
+let f { a
+      , b: Natural           # Non-`Optional` fields must be present
+      , c = 0                # Defaults are overriden if the field is present
+      , d: Natural = 0       # Annotation must match default and field
+      , e                    # Absent fields bound as `null`
+      , f = 0                # Absent fields default to default value
+      , g: Optional Natural  # `Optional` fields may be omitted
+      , h: Natural = 0
+      } = { a, b, c, d, e, f, g, h }
 
-in  f { x: 2, y: 3 }
+in  f { a: 1, b: 1, c: 1, d: 1 }

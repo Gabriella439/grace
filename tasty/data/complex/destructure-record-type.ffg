@@ -12,5 +12,7 @@ forall (a : Type) .
   , f:
       Natural
   , g:
+      Optional Natural
+  , h:
       Natural
   }
