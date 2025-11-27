@@ -276,8 +276,8 @@ saveSearchParams a = liftIO (saveSearchParams_ a)
 foreign import javascript unsafe "replaceChildrenWorkaround($1, $2)"
     replaceChildren_ :: JSVal -> JSArray -> IO ()
 
-replaceChildren :: MonadIO io => JSVal -> JSArray -> io ()
-replaceChildren a b = liftIO (replaceChildren_ a b)
+replaceChildren :: MonadIO io => JSVal -> [JSVal] -> io ()
+replaceChildren a b = liftIO (replaceChildren_ a (Array.fromList b))
 
 foreign import javascript unsafe "$1.before($2)"
     before_ :: JSVal -> JSVal -> IO ()
@@ -487,8 +487,8 @@ renderValue parent _ (Value.Text text) = do
     addEventListener parent "mouseenter" showCallback
     addEventListener parent "mouseleave" hideCallback
 
-    replaceChildren sidebar (Array.fromList [ printButton, copyButton ])
-    replaceChildren printable (Array.fromList [ markdown, sidebar ])
+    replaceChildren sidebar [ printButton, copyButton ]
+    replaceChildren printable [ markdown, sidebar ]
     replaceChild parent printable
 
     mempty
@@ -548,7 +548,7 @@ renderValue parent outer (Value.List values) = do
     addClass ul "grace-output-list"
     addClass ul "grace-stack"
 
-    replaceChildren ul (Array.fromList lis)
+    replaceChildren ul lis
 
     replaceChild parent ul
 
@@ -581,7 +581,7 @@ renderValue parent outer (Value.Record keyValues) = do
             refreshOutput <- renderValue dd type_ value
 
             definition <- createElement "div"
-            replaceChildren definition (Array.fromList [ dt, dd ])
+            replaceChildren definition [ dt, dd ]
 
             return (definition, refreshOutput)
 
@@ -593,7 +593,7 @@ renderValue parent outer (Value.Record keyValues) = do
     addClass dl "grace-output-record"
     addClass dl "grace-stack"
 
-    replaceChildren dl (Array.fromList definitions)
+    replaceChildren dl definitions
 
     replaceChild parent dl
 
@@ -636,7 +636,7 @@ renderValue parent Type.Function{ input, output } function = do
     (setBusy, setSuccess, setError) <- createForm tabbed outputVal
 
     let render Nothing = do
-            replaceChildren outputVal (Array.fromList [])
+            replaceChildren outputVal []
 
         render (Just value) = do
             setBusy
@@ -684,7 +684,7 @@ renderValue parent Type.Function{ input, output } function = do
 
     case result of
         Nothing -> do
-            replaceChildren parent (Array.fromList [ ])
+            replaceChildren parent [ ]
 
             mempty
 
@@ -707,13 +707,13 @@ renderValue parent Type.Function{ input, output } function = do
                     addClass stack "grace-stack-large"
 
                     callback <- (liftIO . Callback.asyncCallback) do
-                        replaceChildren stack (Array.fromList [ inputVal, buttons, hr, outputVal ])
+                        replaceChildren stack [ inputVal, buttons, hr, outputVal ]
 
                         invoke Submit
 
                     addEventListener button "click" callback
 
-                    replaceChildren stack (Array.fromList [ inputVal, buttons ])
+                    replaceChildren stack [ inputVal, buttons ]
 
                     replaceChild parent stack
 
@@ -726,7 +726,7 @@ renderValue parent Type.Function{ input, output } function = do
                     stack <- createElement "div"
                     addClass stack "grace-stack-large"
 
-                    replaceChildren stack (Array.fromList [ inputVal, hr, outputVal ])
+                    replaceChildren stack [ inputVal, hr, outputVal ]
 
                     replaceChild parent stack
 
@@ -1095,7 +1095,7 @@ renderInput path Type.Record{ fields = Type.Fields keyTypes _ } = do
                 replaceChild dd inputField
 
                 definition <- createElement "div"
-                replaceChildren definition (Array.fromList [ dt, dd ])
+                replaceChildren definition [ dt, dd ]
 
                 return (definition, refreshField)
 
@@ -1107,7 +1107,7 @@ renderInput path Type.Record{ fields = Type.Fields keyTypes _ } = do
         addClass dl "grace-input-record"
         addClass dl "grace-stack"
 
-        replaceChildren dl (Array.fromList definitions)
+        replaceChildren dl definitions
 
         RenderInput{ renderOutput } <- Reader.ask
 
@@ -1207,12 +1207,12 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
                             Type.Record{ fields = Type.Fields kts _ } | null kts -> do
                                 replaceChild alternativeStack label
                             _ -> do
-                                replaceChildren alternativeStack (Array.fromList [ label, fieldset ])
+                                replaceChildren alternativeStack [ label, fieldset ]
 
                         sidebar <- createElement "div"
                         addClass sidebar "grace-input-alternative-selection"
 
-                        replaceChildren sidebar (Array.fromList [ inputStack, alternativeStack])
+                        replaceChildren sidebar [ inputStack, alternativeStack]
 
                         liftIO (Monad.when checked (IORef.writeIORef checkedValRef (Just fieldset)))
 
@@ -1248,7 +1248,7 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
                 div <- createElement "div"
                 addClass div "grace-input-union"
 
-                replaceChildren div (Array.fromList children)
+                replaceChildren div children
 
                 let invoke mode = sequence_ (map ($ mode) invokes)
 
@@ -1317,7 +1317,7 @@ renderInput path optionalType@Type.Optional{ type_ } = do
 
         replaceChild fieldset nestedInput
 
-        replaceChildren div (Array.fromList [sidebar, fieldset])
+        replaceChildren div [sidebar, fieldset]
 
         liftIO do
             let update mode = do
@@ -1378,7 +1378,7 @@ renderInput path listType@Type.List{ type_ } = do
         addClass buttons "grace-input-list-element"
         addClass buttons "grace-cluster-start"
 
-        replaceChildren buttons (Array.fromList [ plus, minus ])
+        replaceChildren buttons [ plus, minus ]
 
         ul <- createElement "ul"
         addClass ul "grace-input-list"
@@ -1557,7 +1557,7 @@ renderInputDefault path type_ = do
         addClass div "grace-pane"
         addClass div "grace-stack"
 
-        replaceChildren div (Array.fromList [ textarea, error ])
+        replaceChildren div [ textarea, error ]
 
         codeInput <- setupCodemirrorInput textarea
 
@@ -1666,7 +1666,7 @@ createForm showTabs output = liftIO do
     addClass tabsList "grace-tabs"
     addClass tabsList "grace-cluster-start"
 
-    replaceChildren tabsList (Array.fromList tabs)
+    replaceChildren tabsList tabs
 
     pane <- createElement "div"
     addClass pane "grace-pane"
@@ -1677,7 +1677,7 @@ createForm showTabs output = liftIO do
 
     let successChildren = if showTabs then [ tabsList, pane ] else [ pane ]
 
-    replaceChildren success (Array.fromList successChildren)
+    replaceChildren success successChildren
 
     codemirrorBuffer <- getElementById "codemirror-buffer"
 
@@ -1689,7 +1689,7 @@ createForm showTabs output = liftIO do
 
             codeMirror <- setupCodemirrorOutput textarea
 
-            replaceChildren codemirrorBuffer (Array.fromList [])
+            replaceChildren codemirrorBuffer []
 
             return (codeMirror, getWrapperElement codeMirror)
 
@@ -1834,7 +1834,7 @@ main = do
 
             if  | Text.null text -> do
                     hideElement output
-                    replaceChildren output (Array.fromList [])
+                    replaceChildren output []
 
                 | otherwise -> do
                     hideElement startTutorial
@@ -1957,7 +1957,7 @@ main = do
             addClass navigationBar "grace-tabs"
             addClass navigationBar "grace-cluster-start"
 
-            replaceChildren navigationBar (Array.fromList tabs)
+            replaceChildren navigationBar tabs
 
             hideElement navigationBar
 
