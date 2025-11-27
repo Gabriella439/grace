@@ -414,7 +414,22 @@ ul {
 }
 
 .grace-tabs {
-  --space: var(--s-6);
+  display: flex;
+  block-size: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.grace-tabs > * {
+  flex: 0 0 auto;
+}
+
+.grace-tabs > * + * {
+  margin-inline-start: var(--s-6);
+}
+
+.grace-tabs.overflowing {
+  padding-block-end: var(--s-6);
 }
 
 .grace-tabs:has(+ * + .CodeMirror) {
