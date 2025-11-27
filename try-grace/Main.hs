@@ -15,6 +15,8 @@ import Control.Applicative (empty, liftA2)
 import Control.Concurrent.Async (Async, Concurrently(..))
 import Control.Exception.Safe (catch, Exception(..), SomeException)
 import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Morph (hoist)
+import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Maybe (MaybeT)
 import Control.Monad.Trans.Reader (ReaderT)
 import Control.Monad.Trans.State (StateT)
@@ -295,7 +297,7 @@ foreign import javascript unsafe "$1.remove()"
 remove :: MonadIO io => JSVal -> io ()
 remove a = liftIO (remove_ a)
 
-foreign import javascript unsafe "CodeMirror.fromTextArea($1, { mode: 'python', lineNumbers: true, viewportMargin: Infinity, extraKeys: { Tab: false } })"
+foreign import javascript unsafe "CodeMirror.fromTextArea($1, { mode: 'python', lineNumbers: true, viewportMargin: Infinity, extraKeys: { 'Shift-Tab': false, 'Tab': false } })"
     setupCodemirrorInput_ :: JSVal -> IO JSVal
 
 setupCodemirrorInput :: MonadIO io => JSVal -> io JSVal
@@ -633,7 +635,10 @@ renderValue parent Type.Function{ input, output } function = do
 
     (setBusy, setSuccess, setError) <- createForm tabbed outputVal
 
-    let render value = do
+    let render Nothing = do
+            replaceChildren outputVal (Array.fromList [])
+
+        render (Just value) = do
             setBusy
 
             let interpretOutput = do
@@ -661,19 +666,21 @@ renderValue parent Type.Function{ input, output } function = do
 
     debouncedRender <- debounce render
 
-    (_, reader) <- liftIO (renderInput [] input)
-
     let renderOutput Change | hasEffects = mempty
         renderOutput _                   = debouncedRender
 
-    result <- liftIO $ Maybe.runMaybeT (Reader.runReaderT reader RenderInput
-        { keyToMethods
-        , renderOutput
-        , counter
-        , status
-        , input = input_
-        , edit
-        })
+    let i = RenderInput
+            { keyToMethods
+            , renderOutput
+            , counter
+            , status
+            , input = input_
+            , edit
+            }
+
+    (_, reader) <- liftIO (Reader.runReaderT (renderInput [] input) i)
+
+    result <- liftIO (Maybe.runMaybeT (Reader.runReaderT reader i))
 
     case result of
         Nothing -> do
@@ -751,7 +758,7 @@ data Mode
 
 data RenderInput = RenderInput
     { keyToMethods :: Text -> Methods
-    , renderOutput :: Mode -> Value -> IO ()
+    , renderOutput :: Mode -> Maybe Value -> IO ()
     , counter :: IORef Natural
     , status :: Status
     , input :: Input
@@ -768,7 +775,7 @@ register input get = do
         let invoke mode = do
                 maybeValue <- Maybe.runMaybeT get
 
-                traverse_ (renderOutput mode) maybeValue
+                renderOutput mode maybeValue
 
         callback <- Callback.asyncCallback (invoke Change)
 
@@ -785,10 +792,10 @@ renderPath path type_ = (prefix <> " : " <> suffix)
 
     suffix = Pretty.toText type_
 
-fromStorage :: FromGrace a => Maybe Text -> IO (Maybe a)
+fromStorage :: (MonadIO io, FromGrace a) => Maybe Text -> io (Maybe a)
 fromStorage Nothing = do
     return Nothing
-fromStorage (Just text) = do
+fromStorage (Just text) = liftIO do
     load `catch` \(_ :: SomeException) -> return Nothing
   where
     load = do
@@ -801,7 +808,7 @@ toStorage a = Pretty.toText (Normalize.quote (encode a))
 renderInput
     :: [Text]
     -> Type Location
-    -> IO (Value, ReaderT RenderInput (MaybeT IO) (JSVal, Mode -> IO (), IO ()))
+    -> ReaderT RenderInput IO (Maybe Value, ReaderT RenderInput (MaybeT IO) (JSVal, Mode -> IO (), IO ()))
 renderInput path type_@Type.Scalar{ scalar = Monotype.Bool } = do
     maybeText <- getSessionStorage (renderPath path type_)
 
@@ -811,7 +818,9 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Bool } = do
             Just b -> b
             Nothing -> False
 
-    return $ (,) (Value.Scalar (Bool bool₀)) do
+    let maybeValue₀ = Just (Value.Scalar (Bool bool₀))
+
+    return $ (,) maybeValue₀ do
         input <- createElement "input"
         addClass input "grace-input-bool"
         setAttribute input "type" "checkbox"
@@ -838,7 +847,9 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Real } = do
             Just s -> s
             Nothing -> 0
 
-    return $ (,) (Value.Scalar (Real scientific₀)) do
+    let maybeValue₀ = Just (Value.Scalar (Real scientific₀))
+
+    return $ (,) maybeValue₀ do
         input <- createElement "input"
         addClass input "grace-input-json"
         setAttribute input "type"  "number"
@@ -867,7 +878,9 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Integer } = do
             Just i -> i
             Nothing -> 0
 
-    return $ (,) (Value.Scalar (Integer integer₀)) do
+    let maybeValue₀ = Just (Value.Scalar (Integer integer₀))
+
+    return $ (,) maybeValue₀ do
         input <- createElement "input"
         addClass input "grace-input-json"
         setAttribute input "type"  "number"
@@ -895,7 +908,9 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Natural } = do
             Just n -> n
             Nothing -> 0
 
-    return $ (,) (Value.Scalar (Natural natural₀)) do
+    let maybeValue₀ = Just (Value.Scalar (Natural natural₀))
+
+    return $ (,) maybeValue₀ do
         input <- createElement "input"
         addClass input "grace-input-json"
         setAttribute input "type"  "number"
@@ -924,7 +939,12 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.JSON } = do
             Just t -> t
             Nothing -> "null"
 
-    return $ (,) (Value.Text text₀) do
+    let maybeValue₀ = do
+            let lazyText = Text.Lazy.fromStrict text₀
+
+            Aeson.decode (Text.Encoding.encodeUtf8 lazyText)
+
+    return $ (,) maybeValue₀ do
         input <- createElement "input"
         addClass input "grace-input-json"
         addClass input "grace-input-json-valid"
@@ -966,7 +986,9 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Text } = do
             Just t -> t
             Nothing -> ""
 
-    return $ (,) (Value.Text text₀) do
+    let maybeValue₀ = Just (Value.Text text₀)
+
+    return $ (,) maybeValue₀ do
         input <- createElement "textarea"
         addClass input "grace-input-text"
         setAttribute input "rows" "1"
@@ -997,7 +1019,9 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Key } = do
             Just (Decode.Key k) -> k
             Nothing -> ""
 
-    return $ (,) (Value.Scalar (Key key₀)) do
+    let maybeValue₀ = Just (Value.Scalar (Key key₀))
+
+    return $ (,) maybeValue₀ do
         input <- createElement "input"
         addClass input "grace-input-json"
         setAttribute input "placeholder" "Enter key…"
@@ -1019,36 +1043,44 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Key } = do
 
 renderInput path Type.Record{ fields = Type.Fields keyTypes _ } = do
     let outer (key, type_) = do
-            (start, reader) <- renderInput (key : path) type_
+            (maybeStart, reader) <- renderInput (key : path) type_
 
-            return (key, start, reader)
+            return (key, (key, maybeStart), (key, reader))
 
-    triples <- traverse outer keyTypes
+    result <- traverse outer keyTypes
 
-    let hashMap = HashMap.fromList do
-            (key, start, _) <- triples
+    let (keys, keyMaybeStarts, keyReaders) = unzip3 result
 
-            return (key, start)
+    let hashMap = HashMap.fromList keyMaybeStarts
 
-    let keyReaders = do
-            (key, _, reader) <- triples
+    let maybeValue₀ = do
+            keyStarts <- sequence hashMap
 
-            return (key, reader)
+            Monad.guard (HashMap.keys keyStarts == keys)
 
-    return $ (,) (Value.Record hashMap) do
+            return (Value.Record keyStarts)
+
+    return $ (,) maybeValue₀ do
         ref <- liftIO (IORef.newIORef hashMap)
 
         let inner (key, reader) = do
                 let nest x = x{ renderOutput = newRenderOutput }
                       where
-                        newRenderOutput mode value = do
+                        newRenderOutput mode maybeValue = do
                             let update m = (m', m')
                                   where
-                                    m' = HashMap.insert key value m
+                                    m' = HashMap.insert key maybeValue m
 
-                            m <- liftIO (IORef.atomicModifyIORef' ref update)
+                            keyMaybeValues <- liftIO (IORef.atomicModifyIORef' ref update)
 
-                            renderOutput x mode (Value.Record m)
+                            let maybeRecord = do
+                                    keyValues <- sequence keyMaybeValues
+
+                                    Monad.guard (HashMap.keys keyValues == keys)
+
+                                    return (Value.Record keyValues)
+
+                            renderOutput x mode maybeRecord
 
                 (inputField, _, refreshField) <- Reader.withReaderT nest reader
 
@@ -1080,9 +1112,14 @@ renderInput path Type.Record{ fields = Type.Fields keyTypes _ } = do
         RenderInput{ renderOutput } <- Reader.ask
 
         let invoke mode = do
-                m <- IORef.readIORef ref
+                keyMaybeValues <- IORef.readIORef ref
 
-                renderOutput mode (Value.Record m)
+                let maybeRecord = do
+                        keyValues <- sequence keyMaybeValues
+
+                        return (Value.Record keyValues)
+
+                renderOutput mode maybeRecord
 
         let refreshOutput = sequence_ refreshOutputs
 
@@ -1100,9 +1137,14 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
             renderInputDefault path type_
 
         Just (key₀, type_₀) -> do
-            (start, _) <- renderInput (key₀ : path) type_₀
+            (maybeStart, _) <- renderInput (key₀ : path) type_₀
 
-            return $ (,) (Value.Alternative key₀ start) do
+            let maybeValue₀ = do
+                    start <- maybeStart
+
+                    return (Value.Alternative key₀ start)
+
+            return $ (,) maybeValue₀ do
                 RenderInput{ counter } <- Reader.ask
 
                 n <- liftIO (IORef.atomicModifyIORef' counter (\a -> (a + 1, a)))
@@ -1133,12 +1175,17 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
 
                         let nest x = x{ renderOutput = newRenderOutput }
                               where
-                                newRenderOutput mode value = do
+                                newRenderOutput mode maybeValue = do
                                     enabled <- getChecked input
 
-                                    Monad.when enabled (renderOutput x mode (Alternative key value))
+                                    let maybeResult = do
+                                            value <- maybeValue
 
-                        (_, reader) <- liftIO (renderInput (key : path) alternativeType)
+                                            return (Alternative key value)
+
+                                    Monad.when enabled (renderOutput x mode maybeResult)
+
+                        (_, reader) <- hoist lift (renderInput (key : path) alternativeType)
 
                         (nestedInput, nestedInvoke, nestedRefresh) <- Reader.withReaderT nest reader
 
@@ -1220,14 +1267,17 @@ renderInput path optionalType@Type.Optional{ type_ } = do
             Just b -> b
             Nothing -> False
 
-    (start, reader) <- renderInput ("?" : path) type_
+    (maybeStart, reader) <- renderInput ("?" : path) type_
 
-    let value₀ =
-            if enabled
-            then Application (Value.Builtin Syntax.Some) start
-            else Value.Scalar Null
+    let maybeValue₀ = if enabled
+            then do
+                start <- maybeStart
 
-    return $ (,) value₀ do
+                return (Application (Value.Builtin Syntax.Some) start)
+            else do
+                return (Value.Scalar Null)
+
+    return $ (,) maybeValue₀ do
         input <- createElement "input"
         addClass input "grace-input-bool"
         setAttribute input "type"  "checkbox"
@@ -1236,14 +1286,19 @@ renderInput path optionalType@Type.Optional{ type_ } = do
 
         let nest x = x{ renderOutput = newRenderOutput }
               where
-                newRenderOutput mode value = do
+                newRenderOutput mode maybeValue = do
                     checked <- getChecked input
 
                     if checked
                         then do
-                            renderOutput x mode (Application (Value.Builtin Syntax.Some) value)
+                            let maybeSomeValue = do
+                                    value <- maybeValue
+
+                                    return (Application (Value.Builtin Syntax.Some) value)
+
+                            renderOutput x mode maybeSomeValue
                         else do
-                            renderOutput x mode (Value.Scalar Null)
+                            renderOutput x mode (Just (Value.Scalar Null))
 
         (nestedInput, nestedInvoke, nestedRefresh) <- Reader.withReaderT nest reader
 
@@ -1296,11 +1351,14 @@ renderInput path listType@Type.List{ type_ } = do
 
     results <- traverse process [ 0 .. (fromIntegral length - 1) ]
 
-    let (starts, readers) = unzip results
+    let (maybeStarts, readers) = unzip results
 
-    let seq₀ = Seq.fromList starts
+    let maybeValue₀ = do
+            starts <- sequence maybeStarts
 
-    return $ (,) (Value.List seq₀) do
+            return (Value.List (Seq.fromList starts))
+
+    return $ (,) maybeValue₀ do
         childrenRef <- liftIO (IORef.newIORef Seq.empty)
 
         plus <- createElement "button"
@@ -1341,7 +1399,7 @@ renderInput path listType@Type.List{ type_ } = do
                     Just reader -> do
                         return reader
                     Nothing -> do
-                        (_, reader) <- process (fromIntegral index)
+                        (_, reader) <- Reader.runReaderT (process (fromIntegral index)) input
 
                         return reader
 
@@ -1351,20 +1409,20 @@ renderInput path listType@Type.List{ type_ } = do
 
                 let nest x = x{ renderOutput = newRenderOutput }
                       where
-                        newRenderOutput mode value = do
+                        newRenderOutput mode maybeValue = do
                             let adjust =
-                                    Seq.adjust (\c -> c{ value = Just value }) index
+                                    Seq.adjust (\c -> c{ value = maybeValue }) index
 
                             let adapt s = let s' = adjust s in (s', s')
 
                             children <- IORef.atomicModifyIORef' childrenRef adapt
 
-                            let values = do
-                                    Child{ value = Just v } <- toList children
+                            let maybeList = do
+                                    values <- traverse (\Child{ value } -> value) children
 
-                                    return v
+                                    return (Value.List values)
 
-                            renderOutput x mode (Value.List (Seq.fromList values))
+                            renderOutput x mode maybeList
 
                 result <- Maybe.runMaybeT (Reader.runReaderT reader (nest input))
 
@@ -1400,12 +1458,12 @@ renderInput path listType@Type.List{ type_ } = do
         let invoke mode = do
                 children <- IORef.readIORef childrenRef
 
-                let values = do
-                        Child{ value = Just v } <- toList children
+                let maybeList = do
+                        values <- traverse (\Child{ value } -> value) children
 
-                        return v
+                        return (Value.List values)
 
-                renderOutput mode (Value.List (Seq.fromList values))
+                renderOutput mode maybeList
 
         delete <- (liftIO . Callback.asyncCallback) do
             children <- IORef.readIORef childrenRef
@@ -1456,16 +1514,34 @@ _Child = Child
 renderInputDefault
     :: [Text]
     -> Type Location
-    -> IO (Value, ReaderT RenderInput (MaybeT IO) (JSVal, Mode -> IO (), IO ()))
+    -> ReaderT RenderInput IO (Maybe Value, ReaderT RenderInput (MaybeT IO) (JSVal, Mode -> IO (), IO ()))
 renderInputDefault path type_ = do
+    RenderInput{ keyToMethods, status = status₀, input = input₀ } <- Reader.ask
+
     maybeText <- getSessionStorage (renderPath path type_)
 
     let text₀ = case maybeText of
             Just t -> t
             Nothing -> ""
 
-    return $ (,) (Value.Text text₀) do
-        RenderInput{ keyToMethods, renderOutput, status, input } <- Reader.ask
+    let textToValue text = do
+            let newInput = input₀ <> Code "(input)" text
+
+            let interpretInput = do
+                    (_, value) <- Interpret.interpretWith keyToMethods [] (Just type_)
+
+                    return value
+
+            Grace.evalGrace newInput status₀ interpretInput
+
+    result₀ <- Exception.try (textToValue text₀)
+
+    let maybeValue₀ = case result₀ of
+            Left (_ :: SomeException) -> Nothing
+            Right v -> Just v
+
+    return $ (,) maybeValue₀ do
+        RenderInput{ renderOutput, status, input } <- Reader.ask
 
         textarea <- createElement "textarea"
         setAttribute textarea "placeholder" "Enter code…"
@@ -1523,7 +1599,7 @@ renderInputDefault path type_ = do
             let invoke mode = do
                     maybeValue <- Maybe.runMaybeT get
 
-                    traverse_ (renderOutput mode) maybeValue
+                    renderOutput mode maybeValue
 
             callback <- Callback.asyncCallback (invoke Change)
 
