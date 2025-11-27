@@ -1555,6 +1555,7 @@ renderInputDefault path type_ = do
 
         div <- createElement "div"
         addClass div "grace-pane"
+        addClass div "grace-stack"
 
         replaceChildren div (Array.fromList [ textarea, error ])
 
