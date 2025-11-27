@@ -1664,7 +1664,6 @@ createForm showTabs output = liftIO do
 
     tabsList <- createElement "div"
     addClass tabsList "grace-tabs"
-    addClass tabsList "grace-cluster-start"
 
     replaceChildren tabsList tabs
 
@@ -1955,7 +1954,6 @@ main = do
 
             navigationBar <- createElement "div"
             addClass navigationBar "grace-tabs"
-            addClass navigationBar "grace-cluster-start"
 
             replaceChildren navigationBar tabs
 
