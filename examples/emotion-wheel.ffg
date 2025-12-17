@@ -1,0 +1,64 @@
+# Ask ChatGPT how it feels using this emotion wheel:
+#
+# https://www.betterup.com/hs-fs/hubfs/Emotion-Wheel-I.jpg?width=900&height=915&name=Emotion-Wheel-I.jpg
+\{ "OpenAI API key" } ->
+
+let key = .'OpenAI API key'
+
+in  fold
+      { "Uncomfortable emotions" { }: fold
+          { "Sad" { }: fold
+              { "Lonely" { }: "Lonely"
+              , "Hurt" { }: "Hurt"
+              , "Disappointed" { }: "Disappointed"
+              }
+              (prompt{ key, text: "How do you feel?" })
+          , "Scared" { }: fold
+              { "Anxious" { }: "Anxious"
+              , "Powerless" { }: "Powerless"
+              , "Overwhelmed" { }: "Overwhelmed"
+              }
+              (prompt{ key, text: "How do you feel?" })
+          , "Angry" { }: fold
+              { "Bored" { }: "Bored"
+              , "Jealous" { }: "Jealous"
+              , "Annoyed" { }: "Annoyed"
+              }
+              (prompt{ key, text: "How do you feel?" })
+          , "Embarrassed" { }: fold
+              { "Ashamed" { }: "Ashamed"
+              , "Excluded" { }: "Excluded"
+              , "Guilty" { }: "Guilty"
+              }
+              (prompt{ key, text: "How do you feel?" })
+          }
+          (prompt{ key, text: "How do you feel?" })
+      , "Comfortable emotions" { }: fold
+          { "Happy" { }: fold
+              { "Caring" { }: "Caring"
+              , "Grateful" { }: "Grateful"
+              , "Excited" { }: "Excited"
+              }
+              (prompt{ key, text: "How do you feel?" })
+          , "Loved" { }: fold
+              { "Respected" { }: "Respected"
+              , "Valued" { }: "Valued"
+              , "Accepted" { }: "Accepted"
+              }
+              (prompt{ key, text: "How do you feel?" })
+          , "Confident" { }: fold
+              { "Brave" { }: "Brave"
+              , "Hopeful" { }: "Hopeful"
+              , "Powerful" { }: "Powerful"
+              }
+              (prompt{ key, text: "How do you feel?" })
+          , "Playful" { }: fold
+              { "Creative" { }: "Creative"
+              , "Curious" { }: "Curious"
+              , "Affectionate" { }: "Affectionate"
+              }
+              (prompt{ key, text: "How do you feel?" })
+          }
+          (prompt{ key, text: "How do you feel?" })
+      }
+      (prompt{ key, text: "How do you feel?" })
