@@ -666,24 +666,6 @@
         displaying just the form without the title bar or the code editor.
         "
     }
-, "lists":
-    { "somePrimes":
-        [ 2, 3, 5, 7, 11 ]
-    , "two":
-        some 2
-    , "three":
-        some 3
-    , "eleven":
-        some 11
-    , "seven":
-        some 7
-    , "middleThreeElements":
-        some [ 3, 5, 7 ]
-    , "firstThreeElements":
-        some [ 2, 3, 5 ]
-    , "lastThreeElements":
-        some [ 5, 7, 11 ]
-    }
 , "coding":
     \arguments ->
       let key = arguments."OpenAI API key"
