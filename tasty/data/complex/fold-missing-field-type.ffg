@@ -5,15 +5,11 @@ forall (d : Type) .
   { "Example 0":
       Bool -> Optional Natural
   , "Example 1":
-      Bool -> Optional Natural
-  , "Example 2":
       Natural -> Optional d
-  , "Example 3":
-      < 'succ': Natural > -> Natural
-  , "Example 4":
+  , "Example 2":
       Optional (Optional c) -> Optional c
-  , "Example 5":
+  , "Example 3":
       Optional Natural -> Optional Natural
-  , "Example 6":
+  , "Example 4":
       List b -> Optional a
   }

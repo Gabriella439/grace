@@ -114,24 +114,6 @@ forall (p : Fields) .
       , "Short link":
           Text
       }
-  , lists:
-      { somePrimes:
-          List Natural
-      , two:
-          Optional Natural
-      , three:
-          Optional Natural
-      , eleven:
-          Optional Natural
-      , seven:
-          Optional Natural
-      , middleThreeElements:
-          Optional (List Natural)
-      , firstThreeElements:
-          Optional (List Natural)
-      , lastThreeElements:
-          Optional (List Natural)
-      }
   , coding:
       { "OpenAI API key": Key, k } ->
       { "Job Description": Text } ->

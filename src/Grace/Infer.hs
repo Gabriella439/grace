@@ -68,6 +68,7 @@ import qualified Data.HashMap.Strict.InsOrd as Map
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Scientific as Scientific
 import qualified Data.Sequence as Seq
+import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
 import qualified Grace.Compat as Compat
@@ -2069,24 +2070,50 @@ infer e₀ = do
 
                     return (type_, newFold)
 
-            context <- get
+            case handlers of
+                -- Fast path if the handlers argument is a concrete record
+                Syntax.Record{ fieldValues } -> do
+                    let fields = Set.fromList do
+                            Definition{ name } <- fieldValues
 
-            listFold `Exception.catch` \(_ :: TypeInferenceError) -> do
-                set context
+                            return name
 
-                optionalFold `Exception.catch` \(_ :: TypeInferenceError) -> do
-                    set context
+                    if  | Set.null fields -> do
+                            fold
+                        | Set.isSubsetOf fields [ "nil", "cons" ] -> do
+                            listFold
+                        | Set.isSubsetOf fields [ "null", "some" ] -> do
+                            optionalFold
+                        | Set.isSubsetOf fields [ "false", "true" ] -> do
+                            boolFold
+                        | Set.isSubsetOf fields [ "zero", "succ" ] -> do
+                            naturalFold
+                        | Set.isSubsetOf fields [ "array", "bool", "integer", "natural", "null", "object", "real", "string" ] -> do
+                            jsonFold
+                        | otherwise -> do
+                            fold
 
-                    boolFold `Exception.catch` \(_ :: TypeInferenceError) -> do
+                -- Slow path: guess and check
+                _ -> do
+                    context <- get
+
+                    listFold `Exception.catch` \(_ :: TypeInferenceError) -> do
                         set context
 
-                        naturalFold `Exception.catch` \(_ :: TypeInferenceError) -> do
+                        optionalFold `Exception.catch` \(_ :: TypeInferenceError) -> do
                             set context
 
-                            jsonFold `Exception.catch` \(_ :: TypeInferenceError) -> do
+                            boolFold `Exception.catch` \(_ :: TypeInferenceError) -> do
                                 set context
 
-                                fold
+                                naturalFold `Exception.catch` \(_ :: TypeInferenceError) -> do
+                                    set context
+
+                                    jsonFold `Exception.catch` \(_ :: TypeInferenceError) -> do
+                                        set context
+
+                                        fold
+
 
         Syntax.Project{ location, larger, smaller } -> do
             let processField Syntax.Field{ fieldLocation, field } = do

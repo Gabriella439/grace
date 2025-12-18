@@ -1,0 +1,4 @@
+# If at least one field is recognized as belonging to a reserved `fold` (e.g. 
+# the `false` field belongs to the reserved `fold` for `Bool`s) then other
+# unexpected fields (e.g. a typo) will be rejected by the type checker.
+fold{ false: 0, tru: 1 }

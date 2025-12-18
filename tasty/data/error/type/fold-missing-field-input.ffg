@@ -18,7 +18,4 @@
 # `null` is not a function).  However, it also doesn't work if you fall back to
 # treating it as a fold for a union, because a fold for a union requires all
 # handlers to be functions (and `0` is not a function).
-#
-# The error message that you get if neither `fold` succeeds is the error message
-# for unions.
 fold{ zero: 0 }
