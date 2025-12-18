@@ -1,5 +1,7 @@
 # Grace
 
+[![built with garnix](https://img.shields.io/endpoint.svg?url=https%3A%2F%2Fgarnix.io%2Fapi%2Fbadges%2FGabriella439%2Fgrace)](https://garnix.io/repo/Gabriella439/grace)
+
 Grace (short for [Fall-from-Grace](#name)) is a domain-specific programming
 language for prompting models.  In particular, Grace is well-suited for building
 and auto-generating elaborate prompt chains
