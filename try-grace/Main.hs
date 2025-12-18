@@ -11,7 +11,7 @@
 
 module Main where
 
-import Control.Applicative (empty, liftA2)
+import Control.Applicative (empty, liftA2, (<|>))
 import Control.Concurrent.Async (Async, Concurrently(..))
 import Control.Exception.Safe (catch, Exception(..), SomeException)
 import Control.Monad.IO.Class (MonadIO(..))
@@ -22,6 +22,7 @@ import Control.Monad.Trans.Reader (ReaderT)
 import Control.Monad.Trans.State (StateT)
 import Data.Foldable (toList, traverse_)
 import Data.IORef (IORef)
+import Data.Maybe (isJust)
 import Data.JSString (JSString)
 import Data.Sequence (ViewR(..), (|>))
 import Data.Text (Text)
@@ -377,6 +378,12 @@ getSessionStorage a = liftIO do
     if GHCJS.Types.isNull jsVal
         then return Nothing
         else return (Just (JSString.Text.textFromJSVal jsVal))
+
+foreign import javascript unsafe "sessionStorage.removeItem($1)"
+    removeSessionStorage_ :: JSString -> IO ()
+
+removeSessionStorage :: MonadIO io => Text -> io ()
+removeSessionStorage a = liftIO (removeSessionStorage_ (fromText a))
 
 foreign import javascript unsafe "localStorage.setItem($1, $2)"
     setLocalStorage_ :: JSString -> JSString -> IO ()
@@ -1777,7 +1784,20 @@ main = do
 
     hasTutorial <- hasParam params "tutorial"
 
-    hasExpression <- hasParam params "expression"
+    maybeExpression₀ <- do
+        hasExpression <- hasParam params "expression"
+
+        if hasExpression
+            then do
+                expression <- getParam params "expression"
+
+                return (Just expression)
+            else do
+                return Nothing
+
+    maybeExpression₁ <- getSessionStorage "expression"
+
+    let maybeExpression = maybeExpression₀ <|> maybeExpression₁
 
     hasEdit <- hasParam params "edit"
 
@@ -1791,7 +1811,7 @@ main = do
                 then do
                     return True
                 else do
-                    if hasExpression || hasGitHub
+                    if isJust maybeExpression || hasGitHub
                         then do
                             return False
                         else do
@@ -1820,8 +1840,8 @@ main = do
             text <- getValue codeInput
 
             if text == "" || hasGitHub
-                then deleteParam params "expression"
-                else setParam params "expression" (URI.Encode.encodeText text)
+                then removeSessionStorage "expression"
+                else setSessionStorage "expression" (URI.Encode.encodeText text)
 
             tutorial <- hasParam params "tutorial"
 
@@ -2190,9 +2210,10 @@ main = do
             _ -> do
                 return ()
 
-    Monad.when hasExpression do
-        expression <- getParam params "expression"
-
-        setCodeValue codeInput (URI.Encode.decodeText expression)
+    case maybeExpression of
+        Just expression -> do
+            setCodeValue codeInput (URI.Encode.decodeText expression)
+        Nothing -> do
+            return ()
 
     debouncedInterpret ()
