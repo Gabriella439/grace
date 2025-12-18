@@ -1,0 +1,9 @@
+# Grace supports "eval", meaning that you can import code from strings (even
+# dynamic strings which depend on values in scope) and yet everything is still
+# type-checked correctly and the compiler infers that the expression's type is:
+#
+#     Natural -> Natural
+
+let one = 1
+
+in  import read "\\x -> x + ${show one}"
