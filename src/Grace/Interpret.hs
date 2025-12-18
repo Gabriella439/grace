@@ -1,5 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 -- | This module implements the main interpretation function
 module Grace.Interpret
     ( -- * Interpret
@@ -12,6 +14,7 @@ module Grace.Interpret
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Text (Text)
 import Grace.Decode (FromGrace(..))
+import Grace.Encode (ToGrace(..))
 import Grace.HTTP (Methods)
 import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
@@ -28,7 +31,9 @@ import qualified Grace.Import as Import
 import qualified Grace.Infer as Infer
 import qualified Grace.Monad as Grace
 import qualified Grace.Normalize as Normalize
+import qualified Grace.Pretty as Pretty
 import qualified Grace.Syntax as Syntax
+import qualified Grace.Type as Type
 import qualified Grace.Value as Value
 
 {-| Interpret Grace source code, return the inferred type and the evaluated
@@ -102,3 +107,28 @@ load input = do
     case decode value of
         Left exception -> liftIO (Exception.throwIO exception)
         Right a -> return a
+
+instance (FromGrace a, ToGrace a, FromGrace b) => FromGrace (a -> IO b) where
+    decode function = do
+        return \a -> do
+            keyToMethods <- liftIO HTTP.getMethods
+
+            let inputValue = encode a
+
+            let initialStatus = Status{ count = 0, context = [] }
+
+            let code = Pretty.toText (Normalize.quote inputValue)
+
+            let input = Code "(decode)" code
+
+            outputValue <- Grace.evalGrace input initialStatus (Normalize.apply keyToMethods function inputValue)
+
+            case decode outputValue of
+                Left  e -> Exception.throwIO e
+                Right b -> return b
+
+    expected = Type.Function
+        { location = ()
+        , input = expected @a
+        , output = expected @b
+        }
