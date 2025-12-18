@@ -1945,7 +1945,7 @@ main = do
                     , ("Functions"    , "functions.ffg" )
                     , ("Imports"      , "imports.ffg"   )
                     , ("Coding"       , "coding.ffg"    )
-                    , ("Prelude"      , "prelude.ffg"   )
+                    , ("Conclusion"   , "conclusion.ffg")
                     ]
 
             results <- Async.runConcurrently (State.evalState (foldMap createExample examples) (0 :: Int))

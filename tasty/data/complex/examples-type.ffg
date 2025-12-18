@@ -1,19 +1,10 @@
-forall (a : Type) .
-forall (b : Type) .
-forall (c : Type) .
-forall (d : Type) .
-forall (e : Type) .
-forall (f : Type) .
-forall (g : Type) .
-forall (h : Type) .
-forall (i : Type) .
-forall (j : Type) .
 forall (k : Fields) .
 forall (l : Fields) .
 forall (m : Fields) .
 forall (n : Fields) .
-forall (o : Type) .
-forall (p : Fields) .
+forall (o : Fields) .
+forall (p : Type) .
+forall (q : Fields) .
   { hello:
       Text
   , html:
@@ -54,9 +45,9 @@ forall (p : Fields) .
             }
       }
   , prompting:
-      { "OpenAI API key": Key, p } ->
+      { "OpenAI API key": Key, q } ->
         { names:
-            o
+            p
         , structuredNames:
             List Text
         , fullNames:
@@ -70,7 +61,7 @@ forall (p : Fields) .
       Natural
   , functions:
       { greet:
-          { name: Text, n } -> Text
+          { name: Text, o } -> Text
       , greeting:
           Text
       , makeUser:
@@ -92,7 +83,7 @@ forall (p : Fields) .
               >
           , "Taxable income":
               Real
-          , m
+          , n
           } ->
             { "Tax": Real }
       , "GitHub import":
@@ -108,72 +99,20 @@ forall (p : Fields) .
               >
           , "Taxable income":
               Real
-          , l
+          , m
           } ->
             { "Tax": Real }
       , "Short link":
           Text
+      , "Import Prelude function":
+          Bool -> Bool
+      , "Import entire Prelude":
+          Bool -> Bool
       }
   , coding:
-      { "OpenAI API key": Key, k } ->
+      { "OpenAI API key": Key, l } ->
       { "Job Description": Text } ->
         { "Is Finance?": Bool, "Rationale": Text }
-  , prelude:
-      { not:
-          Bool -> Bool
-      , clamp:
-          Integer -> Natural
-      , "The entire Prelude":
-          { integer:
-              { clamp:
-                  Integer -> Natural
-              , product:
-                  List Integer -> Integer
-              , sum:
-                  List Integer -> Integer
-              , toNatural:
-                  Integer -> Optional Natural
-              }
-          , bool:
-              { and:
-                  List Bool -> Bool
-              , not:
-                  Bool -> Bool
-              , or:
-                  List Bool -> Bool
-              }
-          , real:
-              { product: List Real -> Real, sum: List Real -> Real }
-          , list:
-              { all:
-                  (j -> Bool) -> List j -> Bool
-              , any:
-                  (i -> Bool) -> List i -> Bool
-              , concat:
-                  List (List h) -> List h
-              , generate:
-                  Natural -> (Natural -> g) -> List g
-              , null:
-                  List f -> Bool
-              , reject:
-                  (e -> Bool) -> List e -> List e
-              , replicate:
-                  Natural -> d -> List d
-              , select:
-                  (c -> Bool) -> List c -> List c
-              }
-          , natural:
-              { product: List Natural -> Natural, sum: List Natural -> Natural }
-          , text:
-              { concat:
-                  List Text -> Text
-              , concatMap:
-                  (b -> Text) -> List b -> Text
-              , concatMapSep:
-                  Text -> (a -> Text) -> List a -> Text
-              , concatSep:
-                  Text -> List Text -> Text
-              }
-          }
-      }
+  , conclusion:
+      { "Want to get involved?": Bool, k } -> Text
   }
