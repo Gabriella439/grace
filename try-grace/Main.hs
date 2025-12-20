@@ -436,7 +436,7 @@ showElement display element = do
     setDisplay element display
     removeClass element "grace-ignore"
 
-data RenderValue = RenderValue
+data Config = Config
     { keyToMethods :: Text -> Methods
     , counter :: IORef Natural
     , status :: Status
@@ -448,7 +448,7 @@ renderValue
     :: JSVal
     -> Type Location
     -> Value
-    -> ReaderT RenderValue IO (IO ())
+    -> ReaderT Config IO (IO ())
 renderValue parent Type.Optional{ type_ } value =
     renderValue parent type_ value
 
@@ -630,7 +630,7 @@ renderValue parent outer (Value.Alternative alternative value) = do
     renderValue parent recordType recordValue
 
 renderValue parent Type.Function{ input, output } function = do
-    r@RenderValue{ counter, keyToMethods, status, input = input_, edit } <- Reader.ask
+    r@Config{ keyToMethods, status, input = input_ } <- Reader.ask
 
     outputVal <- createElement "div"
     addClass outputVal "grace-result"
@@ -658,7 +658,7 @@ renderValue parent Type.Function{ input, output } function = do
                     let solvedType = Context.solveType context output
 
                     refreshOutput <- liftIO $ setSuccess completedType newValue \htmlWrapper -> do
-                        Reader.runReaderT (renderValue htmlWrapper solvedType newValue) (r :: RenderValue){ status = status_ }
+                        Reader.runReaderT (renderValue htmlWrapper solvedType newValue) (r :: Config){ status = status_ }
 
                     liftIO refreshOutput
 
@@ -676,18 +676,11 @@ renderValue parent Type.Function{ input, output } function = do
     let renderOutput Change | hasEffects = mempty
         renderOutput _                   = debouncedRender
 
-    let i = RenderInput
-            { keyToMethods
-            , renderOutput
-            , counter
-            , status
-            , input = input_
-            , edit
-            }
+    (_, reader) <- renderInput [] input
 
-    (_, reader) <- liftIO (Reader.runReaderT (renderInput [] input) i)
+    i <- Reader.ask
 
-    result <- liftIO (Maybe.runMaybeT (Reader.runReaderT reader i))
+    result <- liftIO (Maybe.runMaybeT (Reader.runReaderT (reader renderOutput) i))
 
     case result of
         Nothing -> do
@@ -763,32 +756,23 @@ data Mode
     | Submit
     -- ^ The function is being run in response to form submission
 
-data RenderInput = RenderInput
-    { keyToMethods :: Text -> Methods
-    , renderOutput :: Mode -> Maybe Value -> IO ()
-    , counter :: IORef Natural
-    , status :: Status
-    , input :: Input
-    , edit :: Bool
-    }
-
 register
     :: MonadIO m
-    => JSVal -> MaybeT IO Value -> ReaderT RenderInput m (Mode -> IO ())
-register input get = do
-    RenderInput{ renderOutput } <- Reader.ask
+    => JSVal
+    -> MaybeT IO Value
+    -> (Mode -> Maybe Value -> IO ())
+    -> ReaderT Config m (Mode -> IO ())
+register input get renderOutput = liftIO do
+    let invoke mode = do
+            maybeValue <- Maybe.runMaybeT get
 
-    liftIO do
-        let invoke mode = do
-                maybeValue <- Maybe.runMaybeT get
+            renderOutput mode maybeValue
 
-                renderOutput mode maybeValue
+    callback <- Callback.asyncCallback (invoke Change)
 
-        callback <- Callback.asyncCallback (invoke Change)
+    addEventListener input "input" callback
 
-        addEventListener input "input" callback
-
-        return invoke
+    return invoke
 
 renderPath :: [Text] -> Type Location -> Text
 renderPath path type_ = (prefix <> " : " <> suffix)
@@ -815,7 +799,11 @@ toStorage a = Pretty.toText (Normalize.quote (encode a))
 renderInput
     :: [Text]
     -> Type Location
-    -> ReaderT RenderInput IO (Maybe Value, ReaderT RenderInput (MaybeT IO) (JSVal, Mode -> IO (), IO ()))
+    -> ReaderT Config IO
+          ( Maybe Value
+          ,     (Mode -> Maybe Value -> IO ())
+            ->  ReaderT Config (MaybeT IO) (JSVal, Mode -> IO (), IO ())
+          )
 renderInput path type_@Type.Scalar{ scalar = Monotype.Bool } = do
     maybeText <- getSessionStorage (renderPath path type_)
 
@@ -827,7 +815,7 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Bool } = do
 
     let maybeValue₀ = Just (Value.Scalar (Bool bool₀))
 
-    return $ (,) maybeValue₀ do
+    return $ (,) maybeValue₀ \renderOutput -> do
         input <- createElement "input"
         addClass input "grace-input-bool"
         setAttribute input "type" "checkbox"
@@ -841,7 +829,7 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Bool } = do
 
                 return (Value.Scalar (Bool bool))
 
-        invoke <- register input get
+        invoke <- register input get renderOutput
 
         return (input, invoke, mempty)
 
@@ -856,7 +844,7 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Real } = do
 
     let maybeValue₀ = Just (Value.Scalar (Real scientific₀))
 
-    return $ (,) maybeValue₀ do
+    return $ (,) maybeValue₀ \renderOutput -> do
         input <- createElement "input"
         addClass input "grace-input-json"
         setAttribute input "type"  "number"
@@ -872,7 +860,7 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Real } = do
 
                 return (Value.Scalar (Real (Scientific.fromFloatDigits double)))
 
-        invoke <- register input get
+        invoke <- register input get renderOutput
 
         return (input, invoke, mempty)
 
@@ -887,7 +875,7 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Integer } = do
 
     let maybeValue₀ = Just (Value.Scalar (Integer integer₀))
 
-    return $ (,) maybeValue₀ do
+    return $ (,) maybeValue₀ \renderOutput -> do
         input <- createElement "input"
         addClass input "grace-input-json"
         setAttribute input "type"  "number"
@@ -902,7 +890,7 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Integer } = do
 
                 return (Value.Scalar (Integer integer))
 
-        invoke <- register input get
+        invoke <- register input get renderOutput
 
         return (input, invoke, mempty)
 
@@ -917,7 +905,7 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Natural } = do
 
     let maybeValue₀ = Just (Value.Scalar (Natural natural₀))
 
-    return $ (,) maybeValue₀ do
+    return $ (,) maybeValue₀ \renderOutput -> do
         input <- createElement "input"
         addClass input "grace-input-json"
         setAttribute input "type"  "number"
@@ -933,7 +921,7 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Natural } = do
 
                 return (Value.Scalar (Natural natural))
 
-        invoke <- register input get
+        invoke <- register input get renderOutput
 
         return (input, invoke, mempty)
 
@@ -951,7 +939,7 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.JSON } = do
 
             Aeson.decode (Text.Encoding.encodeUtf8 lazyText)
 
-    return $ (,) maybeValue₀ do
+    return $ (,) maybeValue₀ \renderOutput -> do
         input <- createElement "input"
         addClass input "grace-input-json"
         addClass input "grace-input-json-valid"
@@ -980,7 +968,7 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.JSON } = do
 
                         return value
 
-        invoke <- register input get
+        invoke <- register input get renderOutput
 
         return (input, invoke, mempty)
 
@@ -995,7 +983,7 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Text } = do
 
     let maybeValue₀ = Just (Value.Text text₀)
 
-    return $ (,) maybeValue₀ do
+    return $ (,) maybeValue₀ \renderOutput -> do
         input <- createElement "textarea"
         addClass input "grace-input-text"
         setAttribute input "rows" "1"
@@ -1013,7 +1001,7 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Text } = do
 
                 return (Value.Text text)
 
-        invoke <- register input get
+        invoke <- register input get renderOutput
 
         return (input, invoke, mempty)
 
@@ -1028,7 +1016,7 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Key } = do
 
     let maybeValue₀ = Just (Value.Scalar (Key key₀))
 
-    return $ (,) maybeValue₀ do
+    return $ (,) maybeValue₀ \renderOutput -> do
         input <- createElement "input"
         addClass input "grace-input-json"
         setAttribute input "placeholder" "Enter key…"
@@ -1044,7 +1032,7 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Key } = do
 
                 return (Value.Scalar (Key key))
 
-        invoke <- register input get
+        invoke <- register input get renderOutput
 
         return (input, invoke, mempty)
 
@@ -1067,29 +1055,27 @@ renderInput path Type.Record{ fields = Type.Fields keyTypes _ } = do
 
             return (Value.Record keyStarts)
 
-    return $ (,) maybeValue₀ do
+    return $ (,) maybeValue₀ \renderOutput -> do
         ref <- liftIO (IORef.newIORef hashMap)
 
         let inner (key, reader) = do
-                let nest x = x{ renderOutput = newRenderOutput }
-                      where
-                        newRenderOutput mode maybeValue = do
-                            let update m = (m', m')
-                                  where
-                                    m' = HashMap.insert key maybeValue m
+                let newRenderOutput mode maybeValue = do
+                        let update m = (m', m')
+                              where
+                                m' = HashMap.insert key maybeValue m
 
-                            keyMaybeValues <- liftIO (IORef.atomicModifyIORef' ref update)
+                        keyMaybeValues <- liftIO (IORef.atomicModifyIORef' ref update)
 
-                            let maybeRecord = do
-                                    keyValues <- sequence keyMaybeValues
+                        let maybeRecord = do
+                                keyValues <- sequence keyMaybeValues
 
-                                    Monad.guard (HashMap.keys keyValues == keys)
+                                Monad.guard (HashMap.keys keyValues == keys)
 
-                                    return (Value.Record keyValues)
+                                return (Value.Record keyValues)
 
-                            renderOutput x mode maybeRecord
+                        renderOutput mode maybeRecord
 
-                (inputField, _, refreshField) <- Reader.withReaderT nest reader
+                (inputField, _, refreshField) <- reader newRenderOutput
 
                 dt <- createElement "dt"
                 addClass dt "grace-input-field-name"
@@ -1115,8 +1101,6 @@ renderInput path Type.Record{ fields = Type.Fields keyTypes _ } = do
         addClass dl "grace-stack"
 
         replaceChildren dl definitions
-
-        RenderInput{ renderOutput } <- Reader.ask
 
         let invoke mode = do
                 keyMaybeValues <- IORef.readIORef ref
@@ -1151,8 +1135,8 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
 
                     return (Value.Alternative key₀ start)
 
-            return $ (,) maybeValue₀ do
-                RenderInput{ counter } <- Reader.ask
+            return $ (,) maybeValue₀ \renderOutput -> do
+                Config{ counter } <- Reader.ask
 
                 n <- liftIO (IORef.atomicModifyIORef' counter (\a -> (a + 1, a)))
 
@@ -1180,21 +1164,19 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
                         addClass inputStack "grace-stack"
                         replaceChild inputStack box
 
-                        let nest x = x{ renderOutput = newRenderOutput }
-                              where
-                                newRenderOutput mode maybeValue = do
-                                    enabled <- getChecked input
+                        let newRenderOutput mode maybeValue = do
+                                enabled <- getChecked input
 
-                                    let maybeResult = do
-                                            value <- maybeValue
+                                let maybeResult = do
+                                        value <- maybeValue
 
-                                            return (Alternative key value)
+                                        return (Alternative key value)
 
-                                    Monad.when enabled (renderOutput x mode maybeResult)
+                                Monad.when enabled (renderOutput mode maybeResult)
 
                         (_, reader) <- hoist lift (renderInput (key : path) alternativeType)
 
-                        (nestedInput, nestedInvoke, nestedRefresh) <- Reader.withReaderT nest reader
+                        (nestedInput, nestedInvoke, nestedRefresh) <- reader newRenderOutput
 
                         label <- createElement "label"
                         addClass label "grace-input-alternative-label"
@@ -1284,30 +1266,28 @@ renderInput path optionalType@Type.Optional{ type_ } = do
             else do
                 return (Value.Scalar Null)
 
-    return $ (,) maybeValue₀ do
+    return $ (,) maybeValue₀ \renderOutput -> do
         input <- createElement "input"
         addClass input "grace-input-bool"
         setAttribute input "type"  "checkbox"
 
         setChecked input enabled
 
-        let nest x = x{ renderOutput = newRenderOutput }
-              where
-                newRenderOutput mode maybeValue = do
-                    checked <- getChecked input
+        let newRenderOutput mode maybeValue = do
+                checked <- getChecked input
 
-                    if checked
-                        then do
-                            let maybeSomeValue = do
-                                    value <- maybeValue
+                if checked
+                    then do
+                        let maybeSomeValue = do
+                                value <- maybeValue
 
-                                    return (Application (Value.Builtin Syntax.Some) value)
+                                return (Application (Value.Builtin Syntax.Some) value)
 
-                            renderOutput x mode maybeSomeValue
-                        else do
-                            renderOutput x mode (Just (Value.Scalar Null))
+                        renderOutput mode maybeSomeValue
+                    else do
+                        renderOutput mode (Just (Value.Scalar Null))
 
-        (nestedInput, nestedInvoke, nestedRefresh) <- Reader.withReaderT nest reader
+        (nestedInput, nestedInvoke, nestedRefresh) <- reader newRenderOutput
 
         box <- createElement "div"
         addClass box "grace-input-bool-box"
@@ -1365,7 +1345,7 @@ renderInput path listType@Type.List{ type_ } = do
 
             return (Value.List (Seq.fromList starts))
 
-    return $ (,) maybeValue₀ do
+    return $ (,) maybeValue₀ \renderOutput -> do
         childrenRef <- liftIO (IORef.newIORef Seq.empty)
 
         plus <- createElement "button"
@@ -1414,24 +1394,22 @@ renderInput path listType@Type.List{ type_ } = do
 
                 setSessionStorage (renderPath path listType) (toStorage (fromIntegral index + 1 :: Natural))
 
-                let nest x = x{ renderOutput = newRenderOutput }
-                      where
-                        newRenderOutput mode maybeValue = do
-                            let adjust =
-                                    Seq.adjust (\c -> c{ value = maybeValue }) index
+                let newRenderOutput mode maybeValue = do
+                        let adjust =
+                                Seq.adjust (\c -> c{ value = maybeValue }) index
 
-                            let adapt s = let s' = adjust s in (s', s')
+                        let adapt s = let s' = adjust s in (s', s')
 
-                            children <- IORef.atomicModifyIORef' childrenRef adapt
+                        children <- IORef.atomicModifyIORef' childrenRef adapt
 
-                            let maybeList = do
-                                    values <- traverse (\Child{ value } -> value) children
+                        let maybeList = do
+                                values <- traverse (\Child{ value } -> value) children
 
-                                    return (Value.List values)
+                                return (Value.List values)
 
-                            renderOutput x mode maybeList
+                        renderOutput mode maybeList
 
-                result <- Maybe.runMaybeT (Reader.runReaderT reader (nest input))
+                result <- Maybe.runMaybeT (Reader.runReaderT (reader newRenderOutput) input)
 
                 li <- createElement "li"
                 addClass li "grace-input-list-element"
@@ -1459,8 +1437,6 @@ renderInput path listType@Type.List{ type_ } = do
         insertCallback <- (liftIO . Callback.asyncCallback) (insert Nothing)
 
         addEventListener plus "click" insertCallback
-
-        RenderInput{ renderOutput } <- Reader.ask
 
         let invoke mode = do
                 children <- IORef.readIORef childrenRef
@@ -1521,9 +1497,13 @@ _Child = Child
 renderInputDefault
     :: [Text]
     -> Type Location
-    -> ReaderT RenderInput IO (Maybe Value, ReaderT RenderInput (MaybeT IO) (JSVal, Mode -> IO (), IO ()))
+    -> ReaderT Config IO
+          ( Maybe Value
+          ,   (Mode -> Maybe Value -> IO ())
+          ->  ReaderT Config (MaybeT IO) (JSVal, Mode -> IO (), IO ())
+          )
 renderInputDefault path type_ = do
-    RenderInput{ keyToMethods, status = status₀, input = input₀ } <- Reader.ask
+    Config{ keyToMethods, status = status₀, input = input₀ } <- Reader.ask
 
     maybeText <- getSessionStorage (renderPath path type_)
 
@@ -1547,8 +1527,8 @@ renderInputDefault path type_ = do
             Left (_ :: SomeException) -> Nothing
             Right v -> Just v
 
-    return $ (,) maybeValue₀ do
-        RenderInput{ renderOutput, status, input } <- Reader.ask
+    return $ (,) maybeValue₀ \renderOutput -> do
+        Config{ status, input } <- Reader.ask
 
         textarea <- createElement "textarea"
         setAttribute textarea "placeholder" "Enter code…"
@@ -1882,7 +1862,15 @@ main = do
                             let solvedType = Context.solveType context inferred
 
                             refreshOutput <- liftIO $ setSuccess completedType value \htmlWrapper -> do
-                                Reader.runReaderT (renderValue htmlWrapper solvedType value) RenderValue{ keyToMethods, counter, status, input = input_, edit }
+                                let config = Config
+                                        { keyToMethods
+                                        , counter
+                                        , status
+                                        , input = input_
+                                        , edit
+                                        }
+
+                                Reader.runReaderT (renderValue htmlWrapper solvedType value) config
 
                             liftIO refreshOutput
 
