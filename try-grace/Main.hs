@@ -436,7 +436,7 @@ showElement display element = do
     setDisplay element display
     removeClass element "grace-ignore"
 
-data RenderValue = RenderValue
+data Config = Config
     { keyToMethods :: Text -> Methods
     , counter :: IORef Natural
     , status :: Status
@@ -448,7 +448,7 @@ renderValue
     :: JSVal
     -> Type Location
     -> Value
-    -> ReaderT RenderValue IO (IO ())
+    -> ReaderT Config IO (IO ())
 renderValue parent Type.Optional{ type_ } value =
     renderValue parent type_ value
 
@@ -630,7 +630,7 @@ renderValue parent outer (Value.Alternative alternative value) = do
     renderValue parent recordType recordValue
 
 renderValue parent Type.Function{ input, output } function = do
-    r@RenderValue{ counter, keyToMethods, status, input = input_, edit } <- Reader.ask
+    r@Config{ keyToMethods, status, input = input_ } <- Reader.ask
 
     outputVal <- createElement "div"
     addClass outputVal "grace-result"
@@ -658,7 +658,7 @@ renderValue parent Type.Function{ input, output } function = do
                     let solvedType = Context.solveType context output
 
                     refreshOutput <- liftIO $ setSuccess completedType newValue \htmlWrapper -> do
-                        Reader.runReaderT (renderValue htmlWrapper solvedType newValue) (r :: RenderValue){ status = status_ }
+                        Reader.runReaderT (renderValue htmlWrapper solvedType newValue) (r :: Config){ status = status_ }
 
                     liftIO refreshOutput
 
@@ -676,15 +676,9 @@ renderValue parent Type.Function{ input, output } function = do
     let renderOutput Change | hasEffects = mempty
         renderOutput _                   = debouncedRender
 
-    let i = RenderInput
-            { keyToMethods
-            , counter
-            , status
-            , input = input_
-            , edit
-            }
+    (_, reader) <- renderInput [] input
 
-    (_, reader) <- liftIO (Reader.runReaderT (renderInput [] input) i)
+    i <- Reader.ask
 
     result <- liftIO (Maybe.runMaybeT (Reader.runReaderT (reader renderOutput) i))
 
@@ -762,20 +756,12 @@ data Mode
     | Submit
     -- ^ The function is being run in response to form submission
 
-data RenderInput = RenderInput
-    { keyToMethods :: Text -> Methods
-    , counter :: IORef Natural
-    , status :: Status
-    , input :: Input
-    , edit :: Bool
-    }
-
 register
     :: MonadIO m
     => JSVal
     -> MaybeT IO Value
     -> (Mode -> Maybe Value -> IO ())
-    -> ReaderT RenderInput m (Mode -> IO ())
+    -> ReaderT Config m (Mode -> IO ())
 register input get renderOutput = liftIO do
     let invoke mode = do
             maybeValue <- Maybe.runMaybeT get
@@ -813,10 +799,10 @@ toStorage a = Pretty.toText (Normalize.quote (encode a))
 renderInput
     :: [Text]
     -> Type Location
-    -> ReaderT RenderInput IO
+    -> ReaderT Config IO
           ( Maybe Value
           ,     (Mode -> Maybe Value -> IO ())
-            ->  ReaderT RenderInput (MaybeT IO) (JSVal, Mode -> IO (), IO ())
+            ->  ReaderT Config (MaybeT IO) (JSVal, Mode -> IO (), IO ())
           )
 renderInput path type_@Type.Scalar{ scalar = Monotype.Bool } = do
     maybeText <- getSessionStorage (renderPath path type_)
@@ -1150,7 +1136,7 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
                     return (Value.Alternative key₀ start)
 
             return $ (,) maybeValue₀ \renderOutput -> do
-                RenderInput{ counter } <- Reader.ask
+                Config{ counter } <- Reader.ask
 
                 n <- liftIO (IORef.atomicModifyIORef' counter (\a -> (a + 1, a)))
 
@@ -1511,13 +1497,13 @@ _Child = Child
 renderInputDefault
     :: [Text]
     -> Type Location
-    -> ReaderT RenderInput IO
+    -> ReaderT Config IO
           ( Maybe Value
           ,   (Mode -> Maybe Value -> IO ())
-          ->  ReaderT RenderInput (MaybeT IO) (JSVal, Mode -> IO (), IO ())
+          ->  ReaderT Config (MaybeT IO) (JSVal, Mode -> IO (), IO ())
           )
 renderInputDefault path type_ = do
-    RenderInput{ keyToMethods, status = status₀, input = input₀ } <- Reader.ask
+    Config{ keyToMethods, status = status₀, input = input₀ } <- Reader.ask
 
     maybeText <- getSessionStorage (renderPath path type_)
 
@@ -1542,7 +1528,7 @@ renderInputDefault path type_ = do
             Right v -> Just v
 
     return $ (,) maybeValue₀ \renderOutput -> do
-        RenderInput{ status, input } <- Reader.ask
+        Config{ status, input } <- Reader.ask
 
         textarea <- createElement "textarea"
         setAttribute textarea "placeholder" "Enter code…"
@@ -1876,7 +1862,15 @@ main = do
                             let solvedType = Context.solveType context inferred
 
                             refreshOutput <- liftIO $ setSuccess completedType value \htmlWrapper -> do
-                                Reader.runReaderT (renderValue htmlWrapper solvedType value) RenderValue{ keyToMethods, counter, status, input = input_, edit }
+                                let config = Config
+                                        { keyToMethods
+                                        , counter
+                                        , status
+                                        , input = input_
+                                        , edit
+                                        }
+
+                                Reader.runReaderT (renderValue htmlWrapper solvedType value) config
 
                             liftIO refreshOutput
 
