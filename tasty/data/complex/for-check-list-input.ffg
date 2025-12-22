@@ -1,5 +1,2 @@
-# This is mainly a regression test for an issue where the type checker used to
-# fail the following expression because it would check the expression against
-# the `List` monad and then fail to fall back to checking the expression
-# against the `Optional` monad.
-(for x of some 1 in x) : Optional Natural
+# Exercise the check judgment on Optional comprehensions
+(if let x = some 1 in x) : Optional Natural

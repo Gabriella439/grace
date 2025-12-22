@@ -1351,7 +1351,7 @@ grammar form = mdo
 
                 return \assignmentLocation -> Syntax.Bind
                     { assignmentLocation
-                    , monad = Nothing
+                    , monad = IdentityMonad
                     , binding
                     , assignment
                     }
@@ -1363,7 +1363,7 @@ grammar form = mdo
         return (f assignmentLocation)
 
     parseAssignment <- rule do
-        let parseForAssignment = do
+        let parseListAssignment = do
                 assignmentLocation <- locatedToken Grace.Parser.For
 
                 binding <- parseBinding
@@ -1374,12 +1374,30 @@ grammar form = mdo
 
                 return Syntax.Bind
                     { assignmentLocation
-                    , monad = Just UnknownMonad
+                    , monad = ListMonad
                     , binding
                     , assignment
                     }
 
-        parseLetAssignment <|> parseForAssignment
+        let parseOptionalAssignment = do
+                assignmentLocation <- locatedToken Grace.Parser.If
+
+                parseToken Grace.Parser.Let
+
+                binding <- parseBinding
+
+                parseToken Grace.Parser.Equals
+
+                assignment <- expression
+
+                return Syntax.Bind
+                    { assignmentLocation
+                    , monad = OptionalMonad
+                    , binding
+                    , assignment
+                    }
+
+        parseLetAssignment <|> parseListAssignment <|> parseOptionalAssignment
 
     recordLabel <- rule (reservedLabel <|> label <|> alternative <|> text)
 

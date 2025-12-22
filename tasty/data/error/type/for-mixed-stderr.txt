@@ -2,18 +2,18 @@ Not a subtype
 
 The following type:
 
-  List Natural
+  Optional Natural
 
-tasty/data/error/type/for-mixed-input.ffg:1:10: 
+tasty/data/error/type/for-mixed-input.ffg:3:10: 
   │
-1 │ for x of [ 1, 2, 3 ]
+3 │ for y of some 4
   │          ↑
 
 … cannot be a subtype of:
 
-  Optional Natural
+  List Natural
 
-tasty/data/error/type/for-mixed-input.ffg:1:1: 
+tasty/data/error/type/for-mixed-input.ffg:3:1: 
   │
-1 │ for x of [ 1, 2, 3 ]
+3 │ for y of some 4
   │ ↑

@@ -47,7 +47,6 @@ import qualified Data.Aeson.Yaml as YAML
 import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.HashMap.Strict.InsOrd as HashMap
 import qualified Data.List as List
-import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Ord as Ord
 import qualified Data.Scientific as Scientific
 import qualified Data.Sequence as Seq
@@ -195,6 +194,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                                                     return v₁
                                                 v₁ -> do
                                                     return v₁
+
                                     action ((name, v₁) : environment)
 
                                 Syntax.RecordBinding{ fieldNames } -> do
@@ -239,13 +239,10 @@ evaluate keyToMethods env₀ syntax₀ = do
                                             error "Grace.Normalize.evaluate: non-records can't be destructured as records"
 
                         case monad of
-                            Nothing ->
+                            IdentityMonad ->
                                 once value₀
 
-                            Just UnknownMonad ->
-                                error "Grace.Normalize.evaluate: unknown monad"
-
-                            Just OptionalMonad ->
+                            OptionalMonad ->
                                 case value₀ of
                                     Value.Scalar Null -> do
                                         return (Value.Scalar Null)
@@ -254,7 +251,7 @@ evaluate keyToMethods env₀ syntax₀ = do
                                     value₁ ->
                                         once value₁
 
-                            Just ListMonad ->
+                            ListMonad ->
                                 case value₀ of
                                     Value.List elements -> do
                                         values <- traverse once elements
@@ -269,21 +266,20 @@ evaluate keyToMethods env₀ syntax₀ = do
                                     _ ->
                                         error "Grace.Normalize.evaluate: cannot bind a non-Listin the List monad"
 
-                let monad =
-                        NonEmpty.last
-                            (Nothing :| [ m | Syntax.Bind{ monad = m } <- toList assignments ])
+                let monad = (maximum . (IdentityMonad :)) do
+                        Syntax.Bind{ monad = m } <- toList assignments
+
+                        return m
 
                 let nil environment = do
                         value <- loop environment body₀
 
                         return case monad of
-                            Nothing ->
+                            IdentityMonad ->
                                 value
-                            Just UnknownMonad ->
-                                error "Grace.Normalize.evaluate: unknown monad"
-                            Just ListMonad ->
+                            ListMonad ->
                                 Value.List [ value ]
-                            Just OptionalMonad ->
+                            OptionalMonad ->
                                 Value.Application (Value.Builtin Some) value
 
                 foldr cons nil assignments env
