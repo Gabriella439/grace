@@ -1835,11 +1835,11 @@ instance Bifunctor Definition where
     second = fmap
 
 -- | The monad that a `Bind` takes place in
-data BindMonad = UnknownMonad | OptionalMonad | ListMonad
-    deriving stock (Eq, Generic, Lift, Show)
+data BindMonad = IdentityMonad | OptionalMonad | ListMonad
+    deriving stock (Eq, Generic, Lift, Ord, Show)
 
 instance Pretty BindMonad where
-    pretty UnknownMonad  = "unknown"
+    pretty IdentityMonad = Pretty.builtin "Identity"
     pretty OptionalMonad = Pretty.builtin "Optional"
     pretty ListMonad     = Pretty.builtin "List"
 
@@ -1859,7 +1859,7 @@ data Assignment s a
         }
     | Bind
         { assignmentLocation :: s
-        , monad :: Maybe BindMonad
+        , monad :: BindMonad
         , binding :: Binding s a
         , assignment :: Syntax s a
         }
@@ -1939,7 +1939,7 @@ instance Pretty a => Pretty (Assignment s a) where
             <>  punctuation "="
             <>  " "
             <>  pretty assignment
-    pretty Bind{ monad = Nothing, binding, assignment } =
+    pretty Bind{ monad = IdentityMonad, binding, assignment } =
         Pretty.group (Pretty.flatAlt long short)
       where
         long =  keyword "let"
@@ -1958,7 +1958,7 @@ instance Pretty a => Pretty (Assignment s a) where
             <>  punctuation "="
             <>  " "
             <>  pretty assignment
-    pretty Bind{ monad = Just _, binding, assignment } =
+    pretty Bind{ monad = ListMonad, binding, assignment } =
         Pretty.group (Pretty.flatAlt long short)
       where
         long =  keyword "for"
@@ -1971,6 +1971,29 @@ instance Pretty a => Pretty (Assignment s a) where
             <>  Pretty.nest 8 (pretty assignment)
 
         short = keyword "for"
+            <>  " "
+            <>  pretty binding
+            <>  " "
+            <>  punctuation "of"
+            <>  " "
+            <>  pretty assignment
+    pretty Bind{ monad = OptionalMonad, binding, assignment } =
+        Pretty.group (Pretty.flatAlt long short)
+      where
+        long =  keyword "if"
+            <>  " "
+            <>  keyword "let"
+            <>  " "
+            <>  pretty binding
+            <>  Pretty.hardline
+            <>  "      "
+            <>  punctuation "="
+            <>  " "
+            <>  Pretty.nest 8 (pretty assignment)
+
+        short = keyword "if"
+            <>  " "
+            <>  keyword "let"
             <>  " "
             <>  pretty binding
             <>  " "
