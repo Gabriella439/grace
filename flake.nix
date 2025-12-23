@@ -350,7 +350,7 @@
                     hostName = "trygrace";
                   };
 
-                  nix.settings.extra-trusted-users = [
+                  nix.settings.trusted-users = [
                     "gabriella"
                   ];
 
