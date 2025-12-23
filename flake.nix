@@ -350,6 +350,10 @@
                     hostName = "trygrace";
                   };
 
+                  nix.settings.extra-trusted-users = [
+                    "gabriella"
+                  ];
+
                   nixpkgs = {
                     config.allowBroken = true;
 
