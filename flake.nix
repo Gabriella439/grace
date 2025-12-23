@@ -412,7 +412,7 @@
 
                       openssh.authorizedKeys.keys = [
                         "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMuH6HDuoMlK7b2Ovm5VKt9P3aRrJ2HeUPptKG+21kjL gabriella@Gabriellas-MacBook-Pro.local"
-                        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPy4Sk/dOZJDGgLShhs6QDYEAFKHLuoyUKfHY/MU2EZp gabriella@Gabriellas-MacBook-Pro.local"
+                        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC/nXKUEQsKukm+eIKmwzWoybKzwQTiYzGZqrWmHYwYe gabriella@lucina.local"
                       ];
                     };
                   };
