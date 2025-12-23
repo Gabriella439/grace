@@ -1,1 +1,14 @@
+# A `fold` with an abstract record of handlers will default to treating the
+# record as `List` handlers, meaning that the inferred type of this expression
+# will be:
+#
+#       forall (a : Type) (b : Type)
+#     . { nil: a, cons: b -> a -> a } -> List b -> a
+#
+# There are other possible choices, but we default to assuming `List` handlers
+# since the `fold` keyword historically is most closely associated with lists,
+# even though all supported Grace `fold`s are folds in the more general sense of
+# the term:
+#
+# https://www.haskellforall.com/2021/02/folds-are-constructor-substitution.html
 \x -> fold x
