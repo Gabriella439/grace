@@ -67,47 +67,17 @@
 
                   ghcjsOverrides =
                     self.lib.fold self.lib.composeExtensions (_: _: { }) [
-                      (mass hlib.dontCheck [
-                        "asn1-encoding"
-                        "bsb-http-chunked"
-                        "conduit"
-                        "cryptonite"
-                        "foldl"
-                        "generic-lens"
-                        "ghcjs-fetch"
-                        "hedgehog"
-                        "http-date"
-                        "hourglass"
-                        "insert-ordered-containers"
-                        "iproute"
-                        "memory"
-                        "mono-traversable"
-                        "network-byte-order"
-                        "prettyprinter-ansi-terminal"
-                        "servant-client"
-                        "streaming-commons"
-                        "text-short"
-                        "tls"
-                        "unix-time"
-                        "vector"
-                        "x509"
-                        "x509-store"
-                        "x509-validation"
-                        "yaml"
-                        "zlib"
-                      ])
-
-                      (mass hlib.dontHaddock [
-                        "grace"
-                        "openai"
-                      ])
-
                       (mass hlib.doJailbreak [
                         "ghcjs-fetch"
                         "openai"
                       ])
 
                       (hself: hsuper: {
+                        mkDerivation = args: hsuper.mkDerivation (args // {
+                          doCheck = false;
+                          doHaddock = false;
+                        });
+
                         aeson = hself.aeson_1_5_6_0;
 
                         entropy =
