@@ -2,7 +2,7 @@
   inputs = {
     garnix-lib.url = "github:garnix-io/garnix-lib";
 
-    nixpkgs.url = github:NixOS/nixpkgs/22.05;
+    nixpkgs.url = github:NixOS/nixpkgs/23.05;
 
     utils.url = github:numtide/flake-utils;
   };
@@ -73,6 +73,7 @@
                         "conduit"
                         "cryptonite"
                         "foldl"
+                        "generic-lens"
                         "ghcjs-fetch"
                         "hedgehog"
                         "http-date"
@@ -86,10 +87,12 @@
                         "servant-client"
                         "streaming-commons"
                         "text-short"
+                        "tls"
                         "unix-time"
                         "vector"
                         "x509"
                         "x509-store"
+                        "x509-validation"
                         "yaml"
                         "zlib"
                       ])
@@ -140,6 +143,7 @@
                     ];
 
                   sourceOverrides = hlib.packageSourceOverrides {
+                    modern-uri = "0.3.4.4";
                   };
 
                   directoryOverrides = hlib.packagesFromDirectory {
@@ -164,7 +168,7 @@
           super.haskell-language-server.override (old: {
             haskellPackages = super.haskell.packages."${compiler}";
 
-            supportedGhcVersions = [ "902" ];
+            supportedGhcVersions = [ "92" ];
           });
 
         docker-stream =
@@ -290,7 +294,7 @@
                 inherit (pkgs) docker-image docker-stream website;
               };
 
-          ghc = withCompiler "ghc902";
+          ghc = withCompiler "ghc92";
 
           ghcjs = withCompiler "ghcjs";
 
@@ -325,7 +329,7 @@
               ghcjs = ghcjs.grace.env;
             };
           }) // {
-            overlays = nixpkgs.lib.genAttrs [ "ghc902" "ghcjs" ] overlay;
+            overlays = nixpkgs.lib.genAttrs [ "ghc92" "ghcjs" ] overlay;
 
             nixosConfigurations.default = nixpkgs.lib.nixosSystem {
               system = "x86_64-linux";
