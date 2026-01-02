@@ -316,24 +316,10 @@
           }) // {
             overlays = nixpkgs.lib.genAttrs [ "ghc96" "ghcjs" ] overlay;
 
-            nixosConfigurations.default = nixpkgs.lib.nixosSystem {
-              system = "x86_64-linux";
-
-              modules = [
-                garnix-lib.nixosModules.garnix
-
-                ({ pkgs, ... }: {
+            nixosConfigurations =
+              let
+                defaultModule = { pkgs, ... }: {
                   documentation.nixos.enable = false;
-
-                  garnix.server = {
-                    enable = true;
-
-                    persistence = {
-                      enable = true;
-
-                      name = "main";
-                    };
-                  };
 
                   networking = {
                     firewall.allowedTCPPorts = [ 80 443 ];
@@ -411,17 +397,53 @@
                       ];
                     };
                   };
+                };
 
-                  virtualisation.host.pkgs = import nixpkgs {
+                qemuModule = { modulesPath, ... }: {
+                  imports = [
+                    "${modulesPath}/virtualisation/qemu-vm.nix"
+                  ];
+
+                  config.virtualisation.host.pkgs = import nixpkgs {
                     system = "aarch64-darwin";
 
                     config.allowBroken = true;
 
                     overlays = [ self.overlays.ghcjs ];
                   };
-                })
-              ];
-            };
+                };
+
+                garnixModule = {
+                  imports = [ garnix-lib.nixosModules.garnix ];
+
+                  config.garnix.server = {
+                    enable = true;
+
+                    persistence = {
+                      enable = true;
+
+                      name = "main";
+                    };
+                  };
+                };
+
+                garnix = nixpkgs.lib.nixosSystem {
+                  system = "x86_64-linux";
+
+                  modules = [ defaultModule garnixModule ];
+                };
+
+                qemu = nixpkgs.lib.nixosSystem {
+                  system = "x86_64-linux";
+
+                  modules = [ defaultModule qemuModule ];
+                };
+
+            in
+              { default = garnix;
+
+                inherit garnix qemu;
+              };
           };
 
   nixConfig = {
