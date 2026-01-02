@@ -2,7 +2,7 @@
   inputs = {
     garnix-lib.url = "github:garnix-io/garnix-lib";
 
-    nixpkgs.url = github:NixOS/nixpkgs/22.05;
+    nixpkgs.url = github:NixOS/nixpkgs/24.05;
 
     utils.url = github:numtide/flake-utils;
   };
@@ -31,6 +31,79 @@
                           })
                       )
                       (_: _: { });
+
+                  oldOverrides = old.overrides or (_: _: {});
+
+                  directoryOverrides = hlib.packagesFromDirectory {
+                    directory = ./dependencies;
+                  };
+
+                  ghcjsManualOverrides =
+                    self.lib.fold self.lib.composeExtensions (_: _: { }) [
+                      (mass hlib.doJailbreak [
+                        "aeson_1_5_6_0"
+                        "ghcjs-base"
+                        "ghcjs-fetch"
+                        "openai"
+                      ])
+
+                      (hself: hsuper: {
+                        mkDerivation = args: hsuper.mkDerivation (args // {
+                          doCheck = false;
+                          doHaddock = false;
+                        });
+
+                        aeson = hself.aeson_1_5_6_0;
+
+                        entropy =
+                          hlib.addBuildDepends
+                            hsuper.entropy
+                            [ hself.ghcjs-dom
+                              hself.jsaddle
+                            ];
+
+                        exceptions = hself.exceptions_0_10_8;
+
+                        grace = hself.grace-ghcjs;
+
+                        ghcjs-fetch =
+                          hlib.addBuildDepends
+                            hsuper.ghcjs-fetch
+                            [ hself.ghcjs-base ];
+
+                        # haskeline = hself.haskeline_0_8_2;
+
+                        network = hsuper.network.overrideAttrs (old: {
+                          dontUpdateAutotoolsGnuConfigScripts = true;
+                        });
+
+                        servant-multipart-client =
+                          hlib.overrideCabal
+                            (hsuper.servant-multipart-client.override (old: {
+                              servant-multipart = null;
+
+                              servant-server = null;
+
+                              warp = null;
+                            }))
+                            (old: {
+                              buildDepends = (old.buildDepends or []) ++ [
+                                hself.servant
+                                hself.servant-client
+                              ];
+                              postPatch = (old.postPatch or "") +
+                                ''
+                                sed -i -e 's/servant .*<0.19/servant/' -e 's/servant-client-core .*<0.19/servant-client-core/' servant-multipart-client.cabal
+                                '';
+                            });
+                      })
+                    ];
+
+                  ghcjsSourceOverrides = hlib.packageSourceOverrides {
+                    modern-uri = "0.3.4.4";
+
+                    unordered-containers = "0.2.18.0";
+                  };
 
                   manualOverrides = hself: hsuper: {
                     grace =
@@ -65,95 +138,11 @@
                         }));
                   };
 
-                  ghcjsOverrides =
-                    self.lib.fold self.lib.composeExtensions (_: _: { }) [
-                      (mass hlib.dontCheck [
-                        "asn1-encoding"
-                        "bsb-http-chunked"
-                        "conduit"
-                        "cryptonite"
-                        "foldl"
-                        "ghcjs-fetch"
-                        "hedgehog"
-                        "http-date"
-                        "hourglass"
-                        "insert-ordered-containers"
-                        "iproute"
-                        "memory"
-                        "mono-traversable"
-                        "network-byte-order"
-                        "prettyprinter-ansi-terminal"
-                        "servant-client"
-                        "streaming-commons"
-                        "text-short"
-                        "unix-time"
-                        "vector"
-                        "x509"
-                        "x509-store"
-                        "yaml"
-                        "zlib"
-                      ])
-
-                      (mass hlib.dontHaddock [
-                        "grace"
-                        "openai"
-                      ])
-
-                      (mass hlib.doJailbreak [
-                        "ghcjs-fetch"
-                        "openai"
-                      ])
-
-                      (hself: hsuper: {
-                        aeson = hself.aeson_1_5_6_0;
-
-                        entropy =
-                          hlib.addBuildDepends
-                            hsuper.entropy
-                            [ hself.ghcjs-dom
-                              hself.jsaddle
-                            ];
-
-                        grace = hself.grace-ghcjs;
-
-                        ghcjs-fetch =
-                          hlib.addBuildDepends
-                            hsuper.ghcjs-fetch
-                            [ hself.ghcjs-base ];
-
-                        haskeline = hself.haskeline_0_8_2;
-
-                        network = hsuper.network.overrideAttrs (old: {
-                          dontUpdateAutotoolsGnuConfigScripts = true;
-                        });
-
-                        servant-multipart-client =
-                          hsuper.servant-multipart-client.override (old: {
-                            servant-multipart = null;
-
-                            servant-server = null;
-
-                            warp = null;
-                          });
-
-                      })
-                    ];
-
-                  sourceOverrides = hlib.packageSourceOverrides {
-                  };
-
-                  directoryOverrides = hlib.packagesFromDirectory {
-                    directory = ./dependencies;
-                  };
-
-                  oldOverrides = old.overrides or (_: _: {});
-
                 in
                   self.lib.fold self.lib.composeExtensions oldOverrides
-                    (   [ sourceOverrides
-                          directoryOverrides
-                        ]
-                    ++  self.lib.optional (compiler == "ghcjs") ghcjsOverrides
+                    (   [ directoryOverrides ]
+                    ++  self.lib.optional (compiler == "ghcjs") ghcjsSourceOverrides
+                    ++  self.lib.optional (compiler == "ghcjs") ghcjsManualOverrides
                     ++  [ manualOverrides ]
                     );
             });
@@ -164,7 +153,7 @@
           super.haskell-language-server.override (old: {
             haskellPackages = super.haskell.packages."${compiler}";
 
-            supportedGhcVersions = [ "902" ];
+            supportedGhcVersions = [ "96" ];
           });
 
         docker-stream =
@@ -290,7 +279,7 @@
                 inherit (pkgs) docker-image docker-stream website;
               };
 
-          ghc = withCompiler "ghc902";
+          ghc = withCompiler "ghc96";
 
           ghcjs = withCompiler "ghcjs";
 
@@ -325,24 +314,12 @@
               ghcjs = ghcjs.grace.env;
             };
           }) // {
-            overlays = nixpkgs.lib.genAttrs [ "ghc902" "ghcjs" ] overlay;
+            overlays = nixpkgs.lib.genAttrs [ "ghc96" "ghcjs" ] overlay;
 
-            nixosConfigurations.default = nixpkgs.lib.nixosSystem {
-              system = "x86_64-linux";
-
-              modules = [
-                garnix-lib.nixosModules.garnix
-
-                ({ pkgs, ... }: {
-                  garnix.server = {
-                    enable = true;
-
-                    persistence = {
-                      enable = true;
-
-                      name = "main";
-                    };
-                  };
+            nixosConfigurations =
+              let
+                defaultModule = { pkgs, ... }: {
+                  documentation.nixos.enable = false;
 
                   networking = {
                     firewall.allowedTCPPorts = [ 80 443 ];
@@ -420,9 +397,53 @@
                       ];
                     };
                   };
-                })
-              ];
-            };
+                };
+
+                qemuModule = { modulesPath, ... }: {
+                  imports = [
+                    "${modulesPath}/virtualisation/qemu-vm.nix"
+                  ];
+
+                  config.virtualisation.host.pkgs = import nixpkgs {
+                    system = "aarch64-darwin";
+
+                    config.allowBroken = true;
+
+                    overlays = [ self.overlays.ghcjs ];
+                  };
+                };
+
+                garnixModule = {
+                  imports = [ garnix-lib.nixosModules.garnix ];
+
+                  config.garnix.server = {
+                    enable = true;
+
+                    persistence = {
+                      enable = true;
+
+                      name = "main";
+                    };
+                  };
+                };
+
+                garnix = nixpkgs.lib.nixosSystem {
+                  system = "x86_64-linux";
+
+                  modules = [ defaultModule garnixModule ];
+                };
+
+                qemu = nixpkgs.lib.nixosSystem {
+                  system = "x86_64-linux";
+
+                  modules = [ defaultModule qemuModule ];
+                };
+
+            in
+              { default = garnix;
+
+                inherit garnix qemu;
+              };
           };
 
   nixConfig = {
