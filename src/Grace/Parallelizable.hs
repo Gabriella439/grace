@@ -5,7 +5,6 @@ module Grace.Parallelizable
     , serialize
     ) where
 
-import Control.Applicative (liftA2)
 import Control.Concurrent.Async (Concurrently(..))
 import Control.Exception.Safe (MonadCatch)
 import Control.Monad.Catch (MonadCatch(..), MonadThrow(..))
