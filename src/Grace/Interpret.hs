@@ -15,7 +15,6 @@ import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Text (Text)
 import Grace.Decode (FromGrace(..))
 import Grace.Encode (ToGrace(..))
-import Grace.HTTP (Methods)
 import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
 import Grace.Monad (Grace, Status(..))
@@ -26,7 +25,6 @@ import qualified Control.Exception.Safe as Exception
 import qualified Control.Monad.Reader as Reader
 import qualified Control.Monad.State as State
 import qualified Grace.Context as Context
-import qualified Grace.HTTP as HTTP
 import qualified Grace.Import as Import
 import qualified Grace.Infer as Infer
 import qualified Grace.Monad as Grace
@@ -41,26 +39,23 @@ import qualified Grace.Value as Value
 
     This is the top-level function for the Grace interpreter
 -}
-interpret
-    :: MonadIO io => (Text -> Methods) -> Input -> io (Type Location, Value)
-interpret keyToMethods input = do
+interpret :: MonadIO io => Input -> io (Type Location, Value)
+interpret input = do
     let initialStatus = Status{ count = 0, context = [] }
 
     ((inferred, value), Status{ context }) <- do
-        Grace.runGrace input initialStatus (interpretWith keyToMethods [] Nothing)
+        Grace.runGrace input initialStatus (interpretWith [] Nothing)
 
     return (Context.complete context inferred, Value.complete context value)
 
 -- | Like `interpret`, but accepts a custom list of bindings
 interpretWith
-    :: (Text -> Methods)
-    -- ^ OpenAI methods
-    -> [(Text, Type Location, Value)]
+    :: [(Text, Type Location, Value)]
     -- ^ @(name, type, value)@ for each custom binding
     -> Maybe (Type Location)
     -- ^ Optional expected type for the input
     -> Grace (Type Location, Value)
-interpretWith keyToMethods bindings maybeAnnotation = do
+interpretWith bindings maybeAnnotation = do
     input <- Reader.ask
 
     expression <- liftIO (Import.resolve AsCode input)
@@ -89,20 +84,18 @@ interpretWith keyToMethods bindings maybeAnnotation = do
 
             return (variable, value)
 
-    value <- Normalize.evaluate keyToMethods evaluationContext elaboratedExpression
+    value <- Normalize.evaluate evaluationContext elaboratedExpression
 
     return (inferred, value)
 
 -- | Load a Grace expression
 load :: forall m a . (FromGrace a, MonadIO m) => Input -> m a
 load input = do
-    keyToMethods <- liftIO HTTP.getMethods
-
     let type_ = fmap (\_ -> Unknown) (expected @a)
 
     let initialStatus = Status{ count = 0, context = [] }
 
-    (_, value) <- Grace.evalGrace input initialStatus (interpretWith keyToMethods [] (Just type_) )
+    (_, value) <- Grace.evalGrace input initialStatus (interpretWith [] (Just type_) )
 
     case decode value of
         Left exception -> liftIO (Exception.throwIO exception)
@@ -111,8 +104,6 @@ load input = do
 instance (FromGrace a, ToGrace a, FromGrace b) => FromGrace (a -> IO b) where
     decode function = do
         return \a -> do
-            keyToMethods <- liftIO HTTP.getMethods
-
             let inputValue = encode a
 
             let initialStatus = Status{ count = 0, context = [] }
@@ -121,7 +112,7 @@ instance (FromGrace a, ToGrace a, FromGrace b) => FromGrace (a -> IO b) where
 
             let input = Code "(decode)" code
 
-            outputValue <- Grace.evalGrace input initialStatus (Normalize.apply keyToMethods function inputValue)
+            outputValue <- Grace.evalGrace input initialStatus (Normalize.apply function inputValue)
 
             case decode outputValue of
                 Left  e -> Exception.throwIO e

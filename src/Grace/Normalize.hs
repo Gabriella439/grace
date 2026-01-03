@@ -27,7 +27,7 @@ import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Aeson (JSONDecodingFailed(..))
 import Grace.Decode (FromGrace(..))
-import Grace.HTTP (HTTP(..), Methods)
+import Grace.HTTP (HTTP(..))
 import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
 import Grace.Monad (Grace, Status(..))
@@ -97,15 +97,13 @@ sorted = List.sortBy (Ord.comparing fst) . HashMap.toList
     sub-expression multiple times.
 -}
 evaluate
-    :: (Text -> Methods)
-    -- ^ OpenAI methods
-    -> [(Text, Value)]
+    :: [(Text, Value)]
     -- ^ Evaluation environment (starting at @[]@ for a top-level expression)
     -> Syntax Location Void
     -- ^ Surface syntax
     -> Grace Value
     -- ^ Result, free of reducible sub-expressions
-evaluate keyToMethods env₀ syntax₀ = do
+evaluate env₀ syntax₀ = do
     loop env₀ syntax₀
   where
     generateContext env location = do
@@ -130,7 +128,7 @@ evaluate keyToMethods env₀ syntax₀ = do
             Syntax.Application{ function, argument } -> Monad.join do
                 function' <- loop env function
                 argument' <- loop env argument
-                pure (apply keyToMethods function' argument')
+                pure (apply function' argument')
 
             Syntax.Lambda{ binding = Syntax.PlainBinding{ plain = Syntax.NameBinding{ name, assignment } }, body } -> do
                 newAssignment <- traverse (loop env) assignment
@@ -439,7 +437,7 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                             Import.referentiallySane parent child
 
-                            (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema)
+                            (_, value) <- Interpret.interpretWith bindings (Just schema)
 
                             return value
 
@@ -477,7 +475,7 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                             Import.referentiallySane parent child
 
-                            (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema)
+                            (_, value) <- Interpret.interpretWith bindings (Just schema)
 
                             return value
 
@@ -514,7 +512,7 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                             Import.referentiallySane parent child
 
-                            (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema)
+                            (_, value) <- Interpret.interpretWith bindings (Just schema)
 
                             return value
 
@@ -771,23 +769,21 @@ evaluate keyToMethods env₀ syntax₀ = do
     evaluating anonymous functions and evaluating all built-in functions.
 -}
 apply
-    :: (Text -> Methods)
-    -- ^ OpenAI methods
-    -> Value
+    :: Value
     -- ^ Function
     -> Value
     -- ^ Argument
     -> Grace Value
-apply keyToMethods function₀ argument₀ = loop function₀ argument₀
+apply function₀ argument₀ = loop function₀ argument₀
   where
     loop (Value.Lambda capturedEnv (Value.Name name Nothing) body) argument =
-        evaluate keyToMethods ((name, argument) : capturedEnv) body
+        evaluate ((name, argument) : capturedEnv) body
     loop (Value.Lambda capturedEnv (Value.Name name (Just assignment)) body) (Value.Scalar Null) =
-        evaluate keyToMethods ((name, assignment) : capturedEnv) body
+        evaluate ((name, assignment) : capturedEnv) body
     loop (Value.Lambda capturedEnv (Value.Name name (Just _)) body) (Value.Application (Value.Builtin Some) argument) =
-        evaluate keyToMethods ((name, argument) : capturedEnv) body
+        evaluate ((name, argument) : capturedEnv) body
     loop (Value.Lambda capturedEnv (Value.FieldNames fieldNames) body) (Value.Record keyValues) =
-        evaluate keyToMethods (extraEnv <> capturedEnv) body
+        evaluate (extraEnv <> capturedEnv) body
       where
         extraEnv = do
             (fieldName, assignment) <- fieldNames

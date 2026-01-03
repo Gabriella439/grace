@@ -34,7 +34,6 @@ import GHCJS.Foreign.Callback (Callback)
 import GHCJS.Types (JSVal)
 import Grace.Decode (FromGrace)
 import Grace.Encode (ToGrace(..))
-import Grace.HTTP (Methods)
 import Grace.Input (Input(..))
 import Grace.Location (Location)
 import Grace.Monotype (RemainingFields(..))
@@ -71,7 +70,6 @@ import qualified GHCJS.Types
 import qualified Grace.Context as Context
 import qualified Grace.DataFile as DataFile
 import qualified Grace.Decode as Decode
-import qualified Grace.HTTP as HTTP
 import qualified Grace.Import as Import
 import qualified Grace.Infer as Infer
 import qualified Grace.Input as Input
@@ -437,8 +435,7 @@ showElement display element = do
     removeClass element "grace-ignore"
 
 data Config = Config
-    { keyToMethods :: Text -> Methods
-    , counter :: IORef Natural
+    { counter :: IORef Natural
     , status :: Status
     , input :: Input
     , edit :: Bool
@@ -630,7 +627,7 @@ renderValue parent outer (Value.Alternative alternative value) = do
     renderValue parent recordType recordValue
 
 renderValue parent Type.Function{ input, output } function = do
-    r@Config{ keyToMethods, status, input = input_ } <- Reader.ask
+    r@Config{ status, input = input_ } <- Reader.ask
 
     outputVal <- createElement "div"
     addClass outputVal "grace-result"
@@ -649,7 +646,7 @@ renderValue parent Type.Function{ input, output } function = do
             setBusy
 
             let interpretOutput = do
-                    newValue <- Normalize.apply keyToMethods function value
+                    newValue <- Normalize.apply function value
 
                     status_@Status{ context } <- State.get
 
@@ -1503,7 +1500,7 @@ renderInputDefault
           ->  ReaderT Config (MaybeT IO) (JSVal, Mode -> IO (), IO ())
           )
 renderInputDefault path type_ = do
-    Config{ keyToMethods, status = status₀, input = input₀ } <- Reader.ask
+    Config{ status = status₀, input = input₀ } <- Reader.ask
 
     maybeText <- getSessionStorage (renderPath path type_)
 
@@ -1515,7 +1512,7 @@ renderInputDefault path type_ = do
             let newInput = input₀ <> Code "(input)" text
 
             let interpretInput = do
-                    (_, value) <- Interpret.interpretWith keyToMethods [] (Just type_)
+                    (_, value) <- Interpret.interpretWith [] (Just type_)
 
                     return value
 
@@ -1558,7 +1555,7 @@ renderInputDefault path type_ = do
                 let newInput = input <> Code "(input)" text
 
                 let interpretInput = do
-                        (_, value) <- Interpret.interpretWith keyToMethods [] (Just type_)
+                        (_, value) <- Interpret.interpretWith [] (Just type_)
 
                         return value
 
@@ -1809,8 +1806,6 @@ main = do
         else do
             hideElement (getWrapperElement codeInput)
 
-    keyToMethods <- HTTP.getMethods
-
     output <- getElementById "output"
     addClass output "grace-result"
 
@@ -1852,7 +1847,7 @@ main = do
 
                             (inferred, elaboratedExpression) <- Infer.infer expression
 
-                            value <- Normalize.evaluate keyToMethods [] elaboratedExpression
+                            value <- Normalize.evaluate [] elaboratedExpression
 
                             status@Status{ context } <- State.get
 
@@ -1863,8 +1858,7 @@ main = do
 
                             refreshOutput <- liftIO $ setSuccess completedType value \htmlWrapper -> do
                                 let config = Config
-                                        { keyToMethods
-                                        , counter
+                                        { counter
                                         , status
                                         , input = input_
                                         , edit

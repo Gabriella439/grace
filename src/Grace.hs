@@ -24,7 +24,6 @@ import qualified Control.Exception.Safe as Exception
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text.IO
 import qualified GHC.IO.Encoding
-import qualified Grace.HTTP as HTTP
 import qualified Grace.Infer as Infer
 import qualified Grace.Interpret as Interpret
 import qualified Grace.Monad as Grace
@@ -180,15 +179,13 @@ main = Exception.handle handler do
 
     case options of
         Interpret{ annotate, highlight, file } -> do
-            keyToMethods <- HTTP.getMethods
-
             input <- case file of
                 "-" -> do
                     Code "(input)" <$> Text.IO.getContents
                 _ -> do
                     return (Path file AsCode)
 
-            (inferred, value) <- Interpret.interpret keyToMethods input
+            (inferred, value) <- Interpret.interpret input
 
             let syntax = Normalize.strip (Normalize.quote value)
 
@@ -206,8 +203,6 @@ main = Exception.handle handler do
             render (Grace.Pretty.pretty annotatedExpression <> Pretty.hardline)
 
         Grace.Text{ file } -> do
-            keyToMethods <- HTTP.getMethods
-
             input <- case file of
                 "-" -> do
                     Code "(input)" <$> Text.IO.getContents
@@ -224,7 +219,7 @@ main = Exception.handle handler do
 
             let initialStatus = Status{ count = 0, context = [] }
 
-            (_, value) <- Grace.evalGrace input initialStatus (Interpret.interpretWith keyToMethods [] (Just expected))
+            (_, value) <- Grace.evalGrace input initialStatus (Interpret.interpretWith [] (Just expected))
 
             case value of
                 Value.Text text -> Text.IO.putStr text
@@ -303,9 +298,7 @@ main = Exception.handle handler do
                     traverse_ (\b -> Text.IO.putStrLn "" >> displayBuiltin b) bs
 
         REPL{ } -> do
-            keyToMethods <- HTTP.getMethods
-
-            REPL.repl keyToMethods
+            REPL.repl
   where
     handler :: SomeException -> IO a
     handler e = do
