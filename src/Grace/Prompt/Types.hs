@@ -7,7 +7,7 @@ module Grace.Prompt.Types
 
 import Data.Text (Text)
 import GHC.Generics (Generic)
-import Grace.Decode (FromGrace, Key(..))
+import Grace.Decode (FromGrace, Key(..), ToGraceType)
 
 -- | Arguments to the @prompt@ keyword
 data Prompt = Prompt
@@ -17,9 +17,9 @@ data Prompt = Prompt
     , search :: Maybe Bool
     , effort :: Maybe Effort
     } deriving stock (Generic)
-      deriving anyclass (FromGrace)
+      deriving anyclass (FromGrace, ToGraceType)
 
 -- | The amount of effort a reasoning model puts into reasoning
 data Effort = Low | Medium | High
     deriving stock (Generic)
-    deriving anyclass (FromGrace)
+    deriving anyclass (FromGrace, ToGraceType)

@@ -1,6 +1,3 @@
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE FlexibleInstances #-}
-
 {-| Use this module to encode Haskell expressions as Grace expressions
 
     Example usage:
@@ -12,6 +9,8 @@ module Grace.Encode
     ( -- * Classes
       ToGrace(..)
     , GenericToGrace(..)
+    , ToGraceType(..)
+    , GenericToGraceType(..)
 
       -- * Types
     , Key(..)
@@ -26,7 +25,7 @@ import Data.Text (Text)
 import Data.Vector (Vector)
 import Data.Void (Void)
 import Data.Word (Word8, Word16, Word32, Word64)
-import Grace.Marshal (Key(..))
+import Grace.Marshal (GenericToGraceType(..), Key(..), ToGraceType(..))
 import Grace.Value (Value(..))
 import Numeric.Natural (Natural)
 
@@ -59,7 +58,7 @@ import qualified Grace.Syntax as Syntax
 import qualified Grace.Value as Value
 
 -- | Convert a Haskell expression to a Grace expression
-class ToGrace a where
+class ToGraceType a => ToGrace a where
     encode :: a -> Value
 
     default encode :: (Generic a, GenericToGrace (Rep a)) => a -> Value

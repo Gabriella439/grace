@@ -21,7 +21,7 @@ import Data.Foldable (toList)
 import Data.Text (Text)
 import Data.Typeable (Typeable)
 import Data.Vector (Vector)
-import Grace.Decode (FromGrace(..), Key(..))
+import Grace.Decode (FromGrace(..), Key(..), ToGraceType(..))
 import Grace.Input (Input(..))
 import Grace.Location (Location(..))
 import Grace.Monad (Grace)
@@ -67,6 +67,7 @@ import qualified Prettyprinter as Pretty
 import qualified System.IO.Unsafe as Unsafe
 
 deriving anyclass instance FromGrace ReasoningEffort
+deriving anyclass instance ToGraceType ReasoningEffort
 
 -- | Context used to teach the LLM to code in Grace
 staticAssets :: Text

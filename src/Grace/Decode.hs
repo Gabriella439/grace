@@ -1,6 +1,4 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE OverloadedLists     #-}
 
 {-| Use this module to decode Grace expressions into Haskell expressions
@@ -13,7 +11,9 @@
 module Grace.Decode
     ( -- * Classes
       FromGrace(..)
+    , ToGraceType(..)
     , GenericFromGrace(..)
+    , GenericToGraceType(..)
 
       -- * Types
     , Key(..)
@@ -31,8 +31,6 @@ import Data.Text (Text)
 import Data.Vector (Vector)
 import Data.Void (Void)
 import Data.Word (Word8, Word16, Word32, Word64)
-import Grace.Marshal (Key(..), selector)
-import Grace.Type (Type(..))
 import Grace.Value (Value(..))
 import Numeric.Natural (Natural)
 
@@ -53,6 +51,8 @@ import GHC.Generics
     , (:+:)(..)
     , (:*:)(..)
     )
+import Grace.Marshal
+    (Key(..), GenericToGraceType(..), ToGraceType(..), selector)
 
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Monad.State as State
@@ -63,9 +63,7 @@ import qualified Data.Scientific as Scientific
 import qualified Data.Text.Lazy as Text.Lazy
 import qualified Data.Vector as Vector
 import qualified GHC.Generics as Generics
-import qualified Grace.Monotype as Monotype
 import qualified Grace.Syntax as Syntax
-import qualified Grace.Type as Type
 import qualified Grace.Value as Value
 
 -- | Result of decoding
@@ -83,17 +81,12 @@ instance Exception DecodingError where
         "Failed to decode value because the decoded result was out of bounds"
 
 -- | Convert a Grace expression to a Haskell expression
-class FromGrace a where
+class ToGraceType a => FromGrace a where
     decode :: Value -> Either DecodingError a
-
     default decode
         :: (Generic a, GenericFromGrace (Rep a))
         => Value -> Either DecodingError a
     decode = fmap (fmap to) (State.evalState genericDecode 0)
-
-    expected :: Type ()
-    default expected :: (Generic a, GenericFromGrace (Rep a)) => Type ()
-    expected = State.evalState (genericExpected @(Rep a)) 0
 
     -- | This is used for decoding record fields, which might not be present
     decodeMaybe :: Maybe Value -> Either DecodingError a
@@ -109,15 +102,11 @@ instance FromGrace Bool where
     decode (Value.Scalar (Syntax.Bool bool)) = return bool
     decode _ = Left TypeError
 
-    expected = Type.Scalar{ location = (), scalar = Monotype.Bool }
-
 instance FromGrace Natural where
     decode (Value.Scalar (Syntax.Natural natural)) =
         return natural
     decode _ =
         Left TypeError
-
-    expected = Type.Scalar{ location = (), scalar = Monotype.Natural }
 
 decodeIntegral
     ::  forall a b
@@ -134,27 +123,17 @@ decodeIntegral value = do
 instance FromGrace Word where
     decode = decodeIntegral @Natural @Word
 
-    expected = expected @Natural
-
 instance FromGrace Word8 where
     decode = decodeIntegral @Natural @Word8
-
-    expected = expected @Natural
 
 instance FromGrace Word16 where
     decode = decodeIntegral @Natural @Word16
 
-    expected = expected @Natural
-
 instance FromGrace Word32 where
     decode = decodeIntegral @Natural @Word32
 
-    expected = expected @Natural
-
 instance FromGrace Word64 where
     decode = decodeIntegral @Natural @Word64
-
-    expected = expected @Natural
 
 instance FromGrace Integer where
     decode (Value.Scalar (Syntax.Natural natural)) =
@@ -164,32 +143,20 @@ instance FromGrace Integer where
     decode _ =
         Left TypeError
 
-    expected = Type.Scalar{ location = (), scalar = Monotype.Integer }
-
 instance FromGrace Int where
     decode = decodeIntegral @Integer @Int
-
-    expected = expected @Integer
 
 instance FromGrace Int8 where
     decode = decodeIntegral @Integer @Int8
 
-    expected = expected @Integer
-
 instance FromGrace Int16 where
     decode = decodeIntegral @Integer @Int16
-
-    expected = expected @Integer
 
 instance FromGrace Int32 where
     decode = decodeIntegral @Integer @Int32
 
-    expected = expected @Integer
-
 instance FromGrace Int64 where
     decode = decodeIntegral @Integer @Int64
-
-    expected = expected @Integer
 
 instance FromGrace Scientific where
     decode (Value.Scalar (Syntax.Natural natural)) =
@@ -200,8 +167,6 @@ instance FromGrace Scientific where
         return scientific
     decode _ =
         Left TypeError
-
-    expected = Type.Scalar{ location = (), scalar = Monotype.Real }
 
 decodeRealFloat :: RealFloat a => Value -> Either DecodingError a
 decodeRealFloat value = do
@@ -214,57 +179,37 @@ decodeRealFloat value = do
 instance FromGrace Double where
     decode = decodeRealFloat
 
-    expected = expected @Scientific
-
 instance FromGrace Float where
     decode = decodeRealFloat
-
-    expected = expected @Scientific
 
 instance FromGrace Text where
     decode (Value.Text text) = return text
     decode _ = Left TypeError
 
-    expected = Type.Scalar{ location = (), scalar = Monotype.Text }
-
 instance FromGrace Text.Lazy.Text where
     decode = fmap (fmap Text.Lazy.fromStrict) decode
-
-    expected = expected @Text
 
 instance {-# OVERLAPPING #-} FromGrace [Char] where
     decode = fmap (fmap Text.unpack) decode
 
-    expected = expected @Text
-
 instance FromGrace Key where
     decode (Value.Scalar (Syntax.Key text)) = return Key{ text }
     decode _ = Left TypeError
-
-    expected = Type.Scalar{ location = (), scalar = Monotype.Key }
 
 instance FromGrace Aeson.Value where
     decode value = case Value.toJSON value of
         Nothing   -> Left TypeError
         Just json -> return json
 
-    expected = Type.Scalar{ location = (), scalar = Monotype.JSON }
-
 instance FromGrace a => FromGrace (Seq a) where
     decode (Value.List seq_) = traverse decode seq_
     decode _ = Left TypeError
 
-    expected = Type.List{ location = (), type_ = expected @a }
-
 instance FromGrace a => FromGrace [a] where
     decode = fmap (fmap Foldable.toList) (decode @(Seq a))
 
-    expected = expected @(Seq a)
-
 instance FromGrace a => FromGrace (Vector a) where
     decode = fmap (fmap Vector.fromList) decode
-
-    expected = expected @[a]
 
 instance FromGrace a => FromGrace (Maybe a) where
     decode (Value.Scalar Syntax.Null) = do
@@ -274,8 +219,6 @@ instance FromGrace a => FromGrace (Maybe a) where
         return (Just a)
     decode _ = do
         Left TypeError
-
-    expected = Type.Optional{ location = (), type_ = expected @a }
 
     decodeMaybe Nothing = do
         return Nothing
@@ -288,19 +231,11 @@ instance FromGrace a => FromGrace (Maybe a) where
 class GenericFromGrace f where
     genericDecode :: State Int (Value -> Either DecodingError (f a))
 
-    genericExpected :: State Int (Type ())
-
 instance GenericFromGrace V1 where
     genericDecode = do
         let decode_ _ = Left TypeError
 
         return decode_
-
-    genericExpected = do
-        return Type.Union
-            { location = ()
-            , alternatives = Type.Alternatives [] Monotype.EmptyAlternatives
-            }
 
 instance GenericFromGrace U1 where
     genericDecode = do
@@ -309,21 +244,11 @@ instance GenericFromGrace U1 where
 
         return decode_
 
-    genericExpected = do
-        return Type.Record
-            { location = ()
-            , fields = Type.Fields [] Monotype.EmptyFields
-            }
-
 instance GenericFromGrace f => GenericFromGrace (M1 D d f) where
     genericDecode = fmap (fmap (fmap M1)) genericDecode
 
-    genericExpected = genericExpected @f
-
 instance GenericFromGrace f => GenericFromGrace (M1 C d f) where
     genericDecode = fmap (fmap (fmap M1)) genericDecode
-
-    genericExpected = genericExpected @f
 
 instance (Selector s, FromGrace a) => GenericFromGrace (M1 S s (K1 i a)) where
     genericDecode = do
@@ -343,22 +268,6 @@ instance (Selector s, FromGrace a) => GenericFromGrace (M1 S s (K1 i a)) where
 
         return decode_
 
-    genericExpected = do
-        let m1 :: M1 S s (K1 i a) r
-            m1 = undefined
-
-        name <- selector m1
-
-        if Generics.selName m1 == ""
-            then do
-                return (expected @a)
-            else do
-                return Type.Record
-                    { location = ()
-                    , fields =
-                        Type.Fields [ (name, expected @a) ] Monotype.EmptyFields
-                    }
-
 instance (Selector s₀, Selector s₁, FromGrace a₀, FromGrace a₁) => GenericFromGrace (M1 S s₀ (K1 i₀ a₀) :*: M1 S s₁ (K1 i₁ a₁)) where
     genericDecode = do
         name₀ <- selector (undefined :: M1 S s₀ (K1 i₀ a₀) r)
@@ -372,19 +281,6 @@ instance (Selector s₀, Selector s₁, FromGrace a₀, FromGrace a₁) => Gener
             decode_ _ = Left TypeError
 
         return decode_
-
-    genericExpected = do
-        name₀ <- selector (undefined :: M1 S s₀ (K1 i₀ a₀) r)
-        name₁ <- selector (undefined :: M1 S s₁ (K1 i₁ a₁) r)
-
-        return Type.Record
-            { location = ()
-            , fields = Type.Fields
-                [ (name₀, expected @a₀)
-                , (name₁, expected @a₁)
-                ]
-                Monotype.EmptyFields
-            }
 
 instance (Selector s, GenericFromGrace (f₀ :*: f₁), FromGrace a) => GenericFromGrace ((f₀ :*: f₁) :*: M1 S s (K1 i a)) where
     genericDecode = do
@@ -402,18 +298,6 @@ instance (Selector s, GenericFromGrace (f₀ :*: f₁), FromGrace a) => GenericF
 
         return decode_
 
-    genericExpected = do
-        expected₀ <- genericExpected @(f₀ :*: f₁)
-
-        name <- selector (undefined :: M1 S s (K1 i a) r)
-
-        return Type.Record
-            { location = ()
-            , fields = Type.Fields
-                ((name, expected @a) : unsafeExpectRecordType expected₀)
-                Monotype.EmptyFields
-            }
-
 instance (Selector s, FromGrace a, GenericFromGrace (f₀ :*: f₁)) => GenericFromGrace (M1 S s (K1 i a) :*: (f₀ :*: f₁)) where
     genericDecode = do
         name <- selector (undefined :: M1 S s (K1 i a) r)
@@ -430,18 +314,6 @@ instance (Selector s, FromGrace a, GenericFromGrace (f₀ :*: f₁)) => GenericF
 
         return decode_
 
-    genericExpected = do
-        name <- selector (undefined :: M1 S s (K1 i a) r)
-
-        expected₁ <- genericExpected @(f₀ :*: f₁)
-
-        return Type.Record
-            { location = ()
-            , fields = Type.Fields
-                ((name, expected @a) : unsafeExpectRecordType expected₁)
-                Monotype.EmptyFields
-            }
-
 instance (GenericFromGrace (f₀ :*: f₁), GenericFromGrace (f₂ :*: f₃)) => GenericFromGrace ((f₀ :*: f₁) :*: (f₂ :*: f₃)) where
     genericDecode = do
         decode₀ <- genericDecode
@@ -454,19 +326,6 @@ instance (GenericFromGrace (f₀ :*: f₁), GenericFromGrace (f₂ :*: f₃)) =>
                 return (expression₀ :*: expression₁)
 
         return decode_
-
-    genericExpected = do
-        expected₀ <- genericExpected @(f₀ :*: f₁)
-        expected₁ <- genericExpected @(f₂ :*: f₃)
-
-        return Type.Record
-            { location = ()
-            , fields = Type.Fields
-                (   unsafeExpectRecordType expected₀
-                <>  unsafeExpectRecordType expected₁
-                )
-                Monotype.EmptyFields
-            }
 
 instance (Constructor c₀, Constructor c₁, GenericFromGrace f₀, GenericFromGrace f₁) => GenericFromGrace (M1 C c₀ f₀ :+: M1 C c₁ f₁) where
     genericDecode = do
@@ -484,20 +343,6 @@ instance (Constructor c₀, Constructor c₁, GenericFromGrace f₀, GenericFrom
 
         return decode_
 
-    genericExpected = do
-        let name₀ = Text.pack (Generics.conName (undefined :: M1 C c₀ f₀ r))
-        let name₁ = Text.pack (Generics.conName (undefined :: M1 C c₁ f₁ r))
-
-        let expected₀ = State.evalState (genericExpected @f₀) 0
-        let expected₁ = State.evalState (genericExpected @f₁) 0
-
-        return Type.Union
-            { location = ()
-            , alternatives = Type.Alternatives
-                [ (name₀, expected₀), (name₁, expected₁) ]
-                Monotype.EmptyAlternatives
-            }
-
 instance (Constructor c, GenericFromGrace f₀, GenericFromGrace (f₁ :+: f₂)) => GenericFromGrace (M1 C c f₀ :+: (f₁ :+: f₂)) where
     genericDecode = do
         let name₀ = Text.pack (Generics.conName (undefined :: M1 C c f r))
@@ -510,19 +355,6 @@ instance (Constructor c, GenericFromGrace f₀, GenericFromGrace (f₁ :+: f₂)
             decode_ value₁ = fmap R1 (decode₁ value₁)
 
         return decode_
-
-    genericExpected = do
-        let name₀ = Text.pack (Generics.conName (undefined :: M1 C c f r))
-
-        let expected₀ = State.evalState (genericExpected @f₀         ) 0
-        let expected₁ = State.evalState (genericExpected @(f₁ :+: f₂)) 0
-
-        return Type.Union
-            { location = ()
-            , alternatives = Type.Alternatives
-                ((name₀, expected₀) : unsafeExpectUnionType expected₁)
-                Monotype.EmptyAlternatives
-            }
 
 instance (Constructor c, GenericFromGrace (f₀ :+: f₁), GenericFromGrace f₂) => GenericFromGrace ((f₀ :+: f₁) :+: M1 C c f₂) where
     genericDecode = do
@@ -537,19 +369,6 @@ instance (Constructor c, GenericFromGrace (f₀ :+: f₁), GenericFromGrace f₂
 
         return decode_
 
-    genericExpected = do
-        let name₁ = Text.pack (Generics.conName (undefined :: M1 C c f r))
-
-        let expected₀ = State.evalState (genericExpected @(f₀ :+: f₁)) 0
-        let expected₁ = State.evalState (genericExpected @f₂) 0
-
-        return Type.Union
-            { location = ()
-            , alternatives = Type.Alternatives
-                (unsafeExpectUnionType expected₀ <> [ (name₁, expected₁) ])
-                Monotype.EmptyAlternatives
-            }
-
 instance (GenericFromGrace (f₀ :+: f₁), GenericFromGrace (f₂ :+: f₃)) => GenericFromGrace ((f₀ :+: f₁) :+: (f₂ :+: f₃)) where
     genericDecode = do
         let decode₀ = State.evalState genericDecode 0
@@ -563,26 +382,3 @@ instance (GenericFromGrace (f₀ :+: f₁), GenericFromGrace (f₂ :+: f₃)) =>
         let decode_ value = fmap L1 (decode₀ value) <|> fmap R1 (decode₁ value)
 
         return decode_
-
-    genericExpected = do
-        let expected₀ = State.evalState (genericExpected @(f₀ :+: f₁)) 0
-        let expected₁ = State.evalState (genericExpected @(f₂ :+: f₃)) 0
-
-        return Type.Union
-            { location = ()
-            , alternatives = Type.Alternatives
-                (unsafeExpectUnionType expected₀ <> unsafeExpectUnionType expected₁)
-                Monotype.EmptyAlternatives
-            }
-
-unsafeExpectRecordType :: Type s -> [(Text, Type s)]
-unsafeExpectRecordType Type.Record{ fields = Type.Fields fieldTypes _ } =
-    fieldTypes
-unsafeExpectRecordType _ =
-    error "Grace.Decode.unsafeExpectRecordType: not a record"
-
-unsafeExpectUnionType :: Type s -> [(Text, Type s)]
-unsafeExpectUnionType Type.Union{ alternatives = Type.Alternatives alternativeTypes _ } =
-    alternativeTypes
-unsafeExpectUnionType _ =
-    error "Grace.Decode.unsafeExpectUnionType: not a union"

@@ -4,7 +4,7 @@ module Grace.HTTP.Type where
 import Data.Aeson (Value)
 import Data.Text (Text)
 import GHC.Generics (Generic)
-import Grace.Decode (FromGrace)
+import Grace.Decode (FromGrace, ToGraceType)
 
 import qualified Control.Exception.Safe as Exception
 import qualified Data.Binary.Builder as Builder
@@ -18,12 +18,12 @@ import qualified Network.HTTP.Types as HTTP.Types
 -- | An HTTP header
 data Header = Header{ header :: Text, value :: Text }
     deriving stock (Generic)
-    deriving anyclass (FromGrace)
+    deriving anyclass (FromGrace, ToGraceType)
 
 -- | A query parameter
 data Parameter = Parameter{ parameter :: Text, value :: Maybe Text }
     deriving stock (Generic)
-    deriving anyclass (FromGrace)
+    deriving anyclass (FromGrace, ToGraceType)
 
 -- | An HTTP request
 data HTTP
@@ -38,7 +38,7 @@ data HTTP
         , request :: Maybe Value
         }
     deriving stock (Generic)
-    deriving anyclass (FromGrace)
+    deriving anyclass (FromGrace, ToGraceType)
 
 completeHeaders :: Bool -> Bool -> Maybe [Header] -> [HTTP.Types.Header]
 completeHeaders import_ body headers = do
