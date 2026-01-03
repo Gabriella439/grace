@@ -14,6 +14,7 @@ import Control.Monad.Morph (MFunctor(..))
 import Control.Monad.Reader (MonadReader(..))
 import Control.Monad.State (MonadState(..))
 import Control.Monad.Trans (MonadTrans(..))
+import Prelude hiding (liftA2)
 
 -- | The `Concurrent` segment (if any) of a `Parallelizable` computation
 data Concurrent io a = Concurrent (Concurrently (Parallelizable io a)) | Pure a
