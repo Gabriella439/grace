@@ -1,4 +1,6 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleContexts          #-}
+{-# LANGUAGE TypeApplications          #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -7,8 +9,12 @@ module Grace.Interpret
     ( -- * Interpret
       Input(..)
     , interpret
+    , (<~)
     , interpretWith
+
+      -- * Load
     , load
+    , loadWith
     ) where
 
 import Control.Monad.IO.Class (MonadIO, liftIO)
@@ -47,6 +53,13 @@ interpret input = do
         Grace.runGrace input initialStatus (interpretWith [] Nothing)
 
     return (Context.complete context inferred, Value.complete context value)
+
+{-| Convenient operator for creating a binding from a Haskell value rather than
+    a Grace type and value
+-}
+(<~) :: forall a . ToGrace a => Text -> a -> (Text, Type Location, Value)
+name <~ haskellValue =
+    (name, fmap (\_ -> Unknown) (expected @a), encode haskellValue)
 
 -- | Like `interpret`, but accepts a custom list of bindings
 interpretWith
@@ -96,6 +109,21 @@ load input = do
     let initialStatus = Status{ count = 0, context = [] }
 
     (_, value) <- Grace.evalGrace input initialStatus (interpretWith [] (Just type_) )
+
+    case decode value of
+        Left exception -> liftIO (Exception.throwIO exception)
+        Right a -> return a
+
+-- | Like `load`, but accepts a custom list of bindings
+loadWith
+    :: forall m a . (FromGrace a, MonadIO m)
+    => [(Text, Type Location, Value)] -> Input -> m a
+loadWith bindings input = do
+    let type_ = fmap (\_ -> Unknown) (expected @a)
+
+    let initialStatus = Status{ count = 0, context = [] }
+
+    (_, value) <- Grace.evalGrace input initialStatus (interpretWith bindings (Just type_) )
 
     case decode value of
         Left exception -> liftIO (Exception.throwIO exception)

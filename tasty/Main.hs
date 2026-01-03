@@ -17,7 +17,7 @@ import Data.Sequence (Seq)
 import Data.Text (Text)
 import Data.Word (Word8, Word16, Word32, Word64)
 import GHC.Generics (Generic)
-import Grace.Decode (DecodingError(..), FromGrace, Key)
+import Grace.Decode (DecodingError(..), FromGrace, Key, ToGraceType)
 import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
 import Grace.Pretty (Pretty(..))
@@ -33,7 +33,6 @@ import qualified Data.Text as Text
 import qualified Data.Text.Lazy as Text.Lazy
 import qualified Data.Vector as Vector
 import qualified Grace.Decode as Decode
-import qualified Grace.HTTP as HTTP
 import qualified Grace.Interpret as Interpret
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Normalize as Normalize
@@ -56,10 +55,7 @@ pretty_ x =
         (pretty x <> Pretty.hardline)
 
 interpret :: Input -> IO (Either SomeException (Type Location, Value.Value))
-interpret input = do
-    keyToMethods <- HTTP.getMethods
-
-    Exception.try (Interpret.interpret keyToMethods input)
+interpret input = Exception.try (Interpret.interpret input)
 
 throws :: Exception e => IO (Either e a) -> IO a
 throws io = do
@@ -154,11 +150,11 @@ data T0
     | C3{ a :: Maybe Int, b :: Maybe Int, c :: Maybe Int }
     | C4{ a :: Maybe Int, b :: Maybe Int, c :: Maybe Int, d :: Maybe Int }
     deriving stock (Eq, Generic, Show)
-    deriving anyclass (FromGrace)
+    deriving anyclass (FromGrace, ToGraceType)
 
 data T1
     deriving stock (Generic)
-    deriving anyclass (FromGrace)
+    deriving anyclass (FromGrace, ToGraceType)
 
 main :: IO ()
 main = do
