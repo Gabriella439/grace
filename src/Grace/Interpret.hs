@@ -14,7 +14,7 @@ module Grace.Interpret
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Text (Text)
 import Grace.Decode (FromGrace(..))
-import Grace.Encode (ToGrace(..))
+import Grace.Encode (ToGrace(..), ToGraceType(..))
 import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
 import Grace.Monad (Grace, Status(..))
@@ -101,7 +101,7 @@ load input = do
         Left exception -> liftIO (Exception.throwIO exception)
         Right a -> return a
 
-instance (FromGrace a, ToGrace a, FromGrace b) => FromGrace (a -> IO b) where
+instance (ToGrace a, FromGrace b) => FromGrace (a -> IO b) where
     decode function = do
         return \a -> do
             let inputValue = encode a
@@ -118,6 +118,7 @@ instance (FromGrace a, ToGrace a, FromGrace b) => FromGrace (a -> IO b) where
                 Left  e -> Exception.throwIO e
                 Right b -> return b
 
+instance (ToGraceType a, ToGraceType b) => ToGraceType (a -> IO b) where
     expected = Type.Function
         { location = ()
         , input = expected @a

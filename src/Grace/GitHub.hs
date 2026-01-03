@@ -8,7 +8,7 @@ module Grace.GitHub
 import Data.Aeson (FromJSON)
 import Data.Text (Text)
 import GHC.Generics (Generic)
-import Grace.Decode (FromGrace(..), Key(..))
+import Grace.Decode (FromGrace(..), Key(..), ToGraceType)
 import Grace.Encode (ToGrace)
 import Grace.HTTP.Type (Header(..), HTTP(..), Parameter(..))
 
@@ -24,7 +24,7 @@ data GitHub = GitHub
     , repository :: Text
     , path :: Text
     } deriving stock (Generic)
-      deriving anyclass (FromGrace, ToGrace)
+      deriving anyclass (FromGrace, ToGrace, ToGraceType)
 
 -- | Response from GitHub @\/repos/${owner}\/${repo}\/contents\/${path}@ API
 data Contents = Contents{ download_url :: Text }
