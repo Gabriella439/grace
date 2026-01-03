@@ -13,8 +13,6 @@ import Control.Monad.State (MonadState(..))
 import Data.Bifunctor (first)
 import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
-import Data.Text (Text)
-import Grace.HTTP (Methods)
 import Grace.Interpret (Input(..))
 import Grace.Location (Location(..))
 import Grace.Monad (Status(..))
@@ -46,8 +44,8 @@ import qualified System.Console.Repline as Repline
 import qualified System.IO as IO
 
 -- | Entrypoint for the @grace repl@ subcommand
-repl :: (Text -> Methods) -> IO ()
-repl keyToMethods = do
+repl :: IO ()
+repl = do
     let err :: (Exception e, MonadIO io) => e -> io ()
         err e =
             liftIO (Text.IO.hPutStrLn IO.stderr (Text.pack (displayException e)))
@@ -83,7 +81,7 @@ repl keyToMethods = do
                     let action = do
                             (inferred, elaborated) <- Infer.infer syntax₁
 
-                            value <- Normalize.evaluate keyToMethods [] elaborated
+                            value <- Normalize.evaluate [] elaborated
 
                             return (inferred, value)
 

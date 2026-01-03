@@ -26,7 +26,6 @@ import Language.Haskell.TH.Syntax (Code(examineCode), Lift, Q, TExp(..))
 import Prelude hiding (exp)
 
 import qualified Data.Text as Text
-import qualified Grace.HTTP as HTTP
 import qualified Grace.Interpret as Interpret
 import qualified Grace.Normalize as Normalize
 import qualified Language.Haskell.TH as TH
@@ -97,9 +96,7 @@ helperFunction
     :: Lift result
     => ((Type (), Syntax () Void) -> result) -> Input -> Code Q result
 helperFunction f input = TH.Code do
-    keyToMethods <- liftIO (HTTP.getMethods)
-
-    (inferred, value) <- liftIO (Interpret.interpret keyToMethods input)
+    (inferred, value) <- liftIO (Interpret.interpret input)
 
     let type_ = void inferred
 

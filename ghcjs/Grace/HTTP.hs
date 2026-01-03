@@ -36,7 +36,6 @@ import GHCJS.Fetch
 
 import qualified Control.Exception.Safe as Exception
 import qualified Data.Aeson as Aeson
-import qualified Data.Binary.Builder as Builder
 import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.JSString as JSString
 import qualified Data.Text as Text

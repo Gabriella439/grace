@@ -355,7 +355,7 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
 
                             Import.referentiallySane parent child
 
-                            Interpret.interpretWith keyToMethods bindings schema
+                            Interpret.interpretWith bindings schema
                                 `Exception.catch` \(interpretError :: SomeException) -> do
                                     retry ((output, interpretError) : errors)
 
