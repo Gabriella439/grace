@@ -278,9 +278,10 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
             e <- effort
 
             return case e of
-                Low    -> ReasoningEffort_Low
-                Medium -> ReasoningEffort_Medium
-                High   -> ReasoningEffort_High
+                Minimal -> ReasoningEffort_Minimal
+                Low     -> ReasoningEffort_Low
+                Medium  -> ReasoningEffort_Medium
+                High    -> ReasoningEffort_High
 
     let toOutput ChatCompletionObject{ choices = [ Choice{ message = Assistant{ assistant_content = Just output } } ] } = do
             return output
