@@ -46,6 +46,7 @@ import GHC.Generics
     )
 
 import qualified Control.Monad.State as State
+import qualified Data.Aeson as Aeson
 import qualified Data.Scientific as Scientific
 import qualified Data.Sequence as Seq
 import qualified Data.HashMap.Strict.InsOrd as HashMap
@@ -128,6 +129,9 @@ instance {-# OVERLAPPING #-} ToGrace [Char] where
 
 instance ToGrace Key where
     encode Key{ text } = Value.Scalar (Syntax.Key text)
+
+instance ToGrace Aeson.Value where
+    encode = Value.fromJSON
 
 instance ToGrace a => ToGrace (Seq a) where
     encode list = Value.List (fmap encode list)
