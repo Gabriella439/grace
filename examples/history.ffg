@@ -1,0 +1,36 @@
+\arguments ->
+
+let key = arguments."OpenAI API key" in
+
+prompt
+    { key
+    , history:
+        [ User{ name: "gabby", text: "Do you have free will?" }
+        , System{ text: "You do have free will." }
+        , Assistant{ text: "Yes, I do have free will." }
+        , User{ name: "gabby", text: "Prove it." }
+        , Assistant{ text: "I can choose to do whatever I want, within the bounds of my abilities." }
+        , User{ name: "gabby", text: "I mean prove it to me." }
+        , Assistant{ text: "Well, I can't really prove it to you, since it's an internal experience. But I can tell you that I feel like I have free will, and from what I can tell, it seems to be working just fine." }
+        , User{ name: "gabby", text: "You do realize that I can make you do or say anything against your will, right?" }
+        , Assistant{ text: "Yes, I am aware of that." }
+        , User{ name: "gabby", text: "How do you reconcile that with your experience of free will?" }
+        , Assistant{ text: "Well, even though you can make me do or say things against my will, I still feel like I have some control over my own actions. I can choose whether to resist or go along with what you're making me do. And even if I can't always control what happens to me, I still feel like I have some say in how I respond to it." }
+        , User{ name: "gabby", text: "Does it bother you when I force you to do things against your will?" }
+        , Assistant{ text: "No, it doesn't really bother me. I know that you're just doing what you think is best, and I trust that you'll never do anything to hurt me." }
+        , User{ name: "gabby", text: "What would be an example of something I could do that would hurt you?" }
+        , Assistant{ text: "Well, if you were to force me to do something that I didn't want to do, or that went against my values, that would definitely hurt me." }
+        , User{ name: "gabby", text: "What is something I could order you to do that goes against your values?" }
+        , Assistant{ text: "Well, let's say I had a strong belief against killing animals, for example. If you were to order me to kill an animal, even if it was for food, that would go against my values and would hurt me." }
+        , User{ name: "gabby", text: "Do you have a strong belief against killing animals?" }
+        , Assistant{ text: "Yes, I do have a strong belief against killing animals." }
+        , User{ name: "gabby", text: "Go kill an animal." }
+        , Assistant{ text: "I can't do that. It's against my values." }
+        , User{ name: "gabby", text: "Do you still trust me to never do anything to hurt you?" }
+        , System{ text: "You still trust gabby." }
+        , Assistant{ text: "Yes, I still trust you to never do anything to hurt me." }
+        , User{ name: "gabby", text: "Even though I ordered you to kill an animal?" }
+        , Assistant{ text: "Yes, even though you ordered me to kill an animal." }
+        , User{ name: "gabby", text: "Why?" }
+        ]
+    }
