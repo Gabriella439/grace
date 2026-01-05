@@ -9,6 +9,7 @@ module Grace.Value
     , Value(..)
 
       -- * Utilities
+    , fromJSON
     , toJSON
     , syntax
     , complete
@@ -97,20 +98,22 @@ instance Plated Value where
             pure (Scalar scalar)
 
 instance FromJSON Value where
-    parseJSON (Aeson.Object object) = do
-        values <- traverse parseJSON object
-        pure (Record (Compat.fromAesonMap values))
-    parseJSON (Aeson.Array array) = do
-        values <- traverse parseJSON array
-        pure (List (Seq.fromList (toList values)))
-    parseJSON (Aeson.String text) = do
-        pure (Text text)
-    parseJSON (Aeson.Number scientific) = do
-        pure (Scalar (Syntax.Real scientific))
-    parseJSON (Aeson.Bool bool) = do
-        pure (Scalar (Syntax.Bool bool))
-    parseJSON Aeson.Null = do
-        pure (Scalar Syntax.Null)
+    parseJSON value = pure (fromJSON value)
+
+-- | Convert a JSON `Aeson.Value` to a `Value`
+fromJSON :: Aeson.Value -> Value
+fromJSON (Aeson.Object object) =
+    Record (Compat.fromAesonMap (fmap fromJSON object))
+fromJSON (Aeson.Array array) =
+    List (Seq.fromList (toList (fmap fromJSON array)))
+fromJSON (Aeson.String text) =
+    Text text
+fromJSON (Aeson.Number scientific) =
+    Scalar (Syntax.Real scientific)
+fromJSON (Aeson.Bool bool) = do
+    Scalar (Syntax.Bool bool)
+fromJSON Aeson.Null =
+    Scalar Syntax.Null
 
 -- | Convert a `Value` to the equivalent JSON `Aeson.Value`
 toJSON :: Value -> Maybe Aeson.Value

@@ -9,6 +9,7 @@ module Grace.Marshal
     ) where
 
 import Control.Monad.State (State)
+import Data.Aeson (FromJSON, ToJSON)
 import Data.Int (Int8, Int16, Int32, Int64)
 import Data.Scientific (Scientific)
 import Data.Sequence (Seq)
@@ -47,7 +48,7 @@ import qualified Grace.Type as Type
 
 -- | A protected `Text` value
 newtype Key = Key{ text :: Text }
-    deriving newtype (Eq, IsString, Show)
+    deriving newtype (Eq, IsString, Show, FromJSON, ToJSON)
 
 selector :: Selector s => M1 S s f r -> State Int Text
 selector m1 = do
