@@ -136,6 +136,8 @@
                                         );
                               };
                         }));
+
+                    openai = hlib.dontCheck hsuper.openai;
                   };
 
                 in

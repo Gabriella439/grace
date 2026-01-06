@@ -32,6 +32,6 @@ data Message
     deriving anyclass (FromGrace, FromJSON, ToGrace, ToGraceType, ToJSON)
 
 -- | The amount of effort a reasoning model puts into reasoning
-data Effort = Low | Medium | High
+data Effort = Minimal | Low | Medium | High
     deriving stock (Generic)
     deriving anyclass (FromGrace, FromJSON, ToGrace, ToGraceType, ToJSON)
