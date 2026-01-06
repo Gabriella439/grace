@@ -95,7 +95,7 @@ repl = do
                             let annotation = Context.complete context inferred
 
                             let annotated =
-                                    Normalize.quote (Value.complete context value)
+                                    Value.quote (Value.complete context value)
 
                             return (Right (annotation, annotated))
 

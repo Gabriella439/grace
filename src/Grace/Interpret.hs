@@ -136,7 +136,7 @@ instance (ToGrace a, FromGrace b) => FromGrace (a -> IO b) where
 
             let initialStatus = Status{ count = 0, context = [] }
 
-            let code = Pretty.toText (Normalize.quote inputValue)
+            let code = Pretty.toText inputValue
 
             let input = Code "(decode)" code
 

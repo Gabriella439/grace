@@ -27,7 +27,7 @@ import Prelude hiding (exp)
 
 import qualified Data.Text as Text
 import qualified Grace.Interpret as Interpret
-import qualified Grace.Normalize as Normalize
+import qualified Grace.Value as Value
 import qualified Language.Haskell.TH as TH
 import qualified Language.Haskell.TH.Syntax as TH
 
@@ -100,7 +100,7 @@ helperFunction f input = TH.Code do
 
     let type_ = void inferred
 
-    let syntax = Normalize.quote value
+    let syntax = Value.quote value
 
     exp <- TH.lift (f (type_, syntax))
 
