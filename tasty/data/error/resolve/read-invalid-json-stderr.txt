@@ -8,4 +8,4 @@ The following text:
 
 Decoding error message:
 
-Error in $: not enough input
+Unexpected end-of-input, expecting record key literal or }
