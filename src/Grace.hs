@@ -187,7 +187,7 @@ main = Exception.handle handler do
 
             (inferred, value) <- Interpret.interpret input
 
-            let syntax = Normalize.strip (Normalize.quote value)
+            let syntax = Normalize.strip (Value.quote value)
 
             let annotatedExpression
                     | annotate = Annotation

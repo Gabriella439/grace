@@ -6,7 +6,7 @@ module Grace.Normalize
     ( -- * Normalization
       evaluate
     , apply
-    , quote
+    , Value.quote
     , strip
 
       -- * Errors related to normalization
@@ -21,7 +21,6 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Data.Bifunctor (first)
 import Data.Foldable (toList)
 import Data.HashMap.Strict.InsOrd (InsOrdHashMap)
-import Data.List.NonEmpty (NonEmpty(..))
 import Data.Sequence (ViewL(..))
 import Data.Text (Text)
 import Data.Void (Void)
@@ -109,7 +108,7 @@ evaluate env₀ syntax₀ = do
     generateContext env location = do
         let infer (name, assignment) = do
                 let expression :: Syntax Location Input
-                    expression = first (\_ -> location) (fmap Void.absurd (quote assignment))
+                    expression = first (\_ -> location) (fmap Void.absurd (Value.quote assignment))
 
                 let input = Code "(intermediate value)" (Pretty.toSmart expression)
 
@@ -557,7 +556,7 @@ evaluate env₀ syntax₀ = do
             Syntax.Show{ export = True, arguments = v } -> do
                 v' <- loop env v
 
-                return (Value.Text (Pretty.toSmart (quote v')))
+                return (Value.Text (Pretty.toSmart (Value.quote v')))
 
             Syntax.Scalar{ scalar } ->
                 pure (Value.Scalar scalar)
@@ -962,109 +961,6 @@ apply function₀ argument₀ = loop function₀ argument₀
         pure (Value.Text text)
     loop function argument =
         pure (Value.Application function argument)
-
--- | Convert a `Value` back into the surface `Syntax`
-quote :: Value -> Syntax () Void
-quote value = case value of
-    Value.Lambda env names_ body₀ ->
-        foldl snoc newLambda env
-      where
-        binding = case names_ of
-            Value.Name name assignment ->
-                Syntax.PlainBinding
-                    { plain = Syntax.NameBinding
-                        { nameLocation = location
-                        , name
-                        , annotation = Nothing
-                        , assignment = fmap quote assignment
-                        }
-                    }
-
-            Value.FieldNames fieldNames ->
-                Syntax.RecordBinding
-                    { fieldNamesLocation = location
-                    , fieldNames = do
-                        (name, assignment) <- fieldNames
-                        return Syntax.NameBinding
-                            { nameLocation = location
-                            , name
-                            , annotation = Nothing
-                            , assignment = fmap quote assignment
-                            }
-                    }
-
-        newLambda = Syntax.Lambda
-            { location
-            , binding
-            , body = first (\_ -> location) body₀
-            }
-
-        toBinding n v = Syntax.Define
-            { assignmentLocation = location
-            , definition = Syntax.Definition
-                { name = n
-                , nameLocation = location
-                , bindings = []
-                , annotation = Nothing
-                , assignment = quote v
-                }
-            }
-
-        snoc e@Syntax.Let{ assignments = a :| as, body = body₁ } (n, v)
-            | Syntax.usedIn n e = Syntax.Let
-                { location
-                , assignments = toBinding n v :| (a : as)
-                , body = body₁
-                }
-            | otherwise = e
-        snoc e (n, v)
-            | Syntax.usedIn n e = Syntax.Let
-                { location
-                , assignments = toBinding n v :| []
-                , body = e
-                }
-            | otherwise = e
-
-    Value.Application function argument ->
-        Syntax.Application
-            { location
-            , function = quote function
-            , argument = quote argument
-            }
-
-    Value.List elements ->
-        Syntax.List{ location, elements = fmap quote elements }
-
-    Value.Record fieldValues ->
-        Syntax.Record
-            { location
-            , fieldValues = map adapt (HashMap.toList fieldValues)
-            }
-      where
-        adapt (field, value_) = Syntax.Definition
-            { nameLocation = location
-            , name = field
-            , bindings = []
-            , annotation = Nothing
-            , assignment = quote value_
-            }
-
-    Value.Alternative name argument ->
-        Syntax.Alternative{ location, name, argument  = quote argument }
-
-    Value.Fold handlers ->
-        Syntax.Fold{ location, handlers = quote handlers }
-
-    Value.Text text ->
-        Syntax.Text{ location, chunks = Syntax.Chunks text [] }
-
-    Value.Scalar scalar ->
-        Syntax.Scalar{ location, scalar }
-
-    Value.Builtin builtin ->
-        Syntax.Builtin{ location, builtin }
-  where
-    location = ()
 
 -- | Strip all `Some`s from a `Syntax` tree
 strip :: Syntax s a -> Syntax s a

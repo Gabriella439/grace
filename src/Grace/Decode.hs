@@ -31,6 +31,7 @@ import Data.Text (Text)
 import Data.Vector (Vector)
 import Data.Void (Void)
 import Data.Word (Word8, Word16, Word32, Word64)
+import Grace.Type (Type)
 import Grace.Value (Value(..))
 import Numeric.Natural (Natural)
 
@@ -63,22 +64,10 @@ import qualified Data.Scientific as Scientific
 import qualified Data.Text.Lazy as Text.Lazy
 import qualified Data.Vector as Vector
 import qualified GHC.Generics as Generics
+import qualified Grace.Pretty as Grace.Pretty
 import qualified Grace.Syntax as Syntax
 import qualified Grace.Value as Value
-
--- | Result of decoding
-data DecodingError
-    = TypeError
-    -- ^ The input Grace expression has the wrong type
-    | RangeError
-    -- ^ The input Grace expression is out of bounds for the target Haskell type
-    deriving stock (Eq, Show)
-
-instance Exception DecodingError where
-    displayException TypeError =
-        "Failed to decode value because the type did not match"
-    displayException RangeError =
-        "Failed to decode value because the decoded result was out of bounds"
+import qualified Prettyprinter as Pretty
 
 -- | Convert a Grace expression to a Haskell expression
 class ToGraceType a => FromGrace a where
@@ -92,6 +81,9 @@ class ToGraceType a => FromGrace a where
     decodeMaybe :: Maybe Value -> Either DecodingError a
     decodeMaybe (Just value) = decode value
     decodeMaybe Nothing = Left TypeError
+        { expectedType = expected @(Maybe a)
+        , value = Value.Scalar Syntax.Null
+        }
 
 instance FromGrace Void
 instance FromGrace ()
@@ -100,13 +92,13 @@ instance (FromGrace a, FromGrace b) => FromGrace (Either a b)
 
 instance FromGrace Bool where
     decode (Value.Scalar (Syntax.Bool bool)) = return bool
-    decode _ = Left TypeError
+    decode value = Left TypeError{ expectedType = expected @Bool, value }
 
 instance FromGrace Natural where
     decode (Value.Scalar (Syntax.Natural natural)) =
         return natural
-    decode _ =
-        Left TypeError
+    decode value =
+        Left TypeError{ expectedType = expected @Natural, value }
 
 decodeIntegral
     ::  forall a b
@@ -140,8 +132,10 @@ instance FromGrace Integer where
         return (fromIntegral natural)
     decode (Value.Scalar (Syntax.Integer integer)) =
         return integer
-    decode _ =
-        Left TypeError
+    decode value = Left TypeError
+        { expectedType = expected @Integer
+        , value = value
+        }
 
 instance FromGrace Int where
     decode = decodeIntegral @Integer @Int
@@ -165,8 +159,8 @@ instance FromGrace Scientific where
         return (fromInteger integer)
     decode (Value.Scalar (Syntax.Real scientific)) =
         return scientific
-    decode _ =
-        Left TypeError
+    decode value =
+        Left TypeError{ expectedType = expected @Scientific, value }
 
 decodeRealFloat :: RealFloat a => Value -> Either DecodingError a
 decodeRealFloat value = do
@@ -184,7 +178,7 @@ instance FromGrace Float where
 
 instance FromGrace Text where
     decode (Value.Text text) = return text
-    decode _ = Left TypeError
+    decode value = Left TypeError{ expectedType = expected @Text, value }
 
 instance FromGrace Text.Lazy.Text where
     decode = fmap (fmap Text.Lazy.fromStrict) decode
@@ -194,16 +188,18 @@ instance {-# OVERLAPPING #-} FromGrace [Char] where
 
 instance FromGrace Key where
     decode (Value.Scalar (Syntax.Key text)) = return Key{ text }
-    decode _ = Left TypeError
+    decode value = Left TypeError{ expectedType = expected @Key, value }
 
 instance FromGrace Aeson.Value where
     decode value = case Value.toJSON value of
-        Nothing   -> Left TypeError
-        Just json -> return json
+        Nothing ->
+            Left TypeError{ expectedType = expected @Aeson.Value, value }
+        Just json ->
+            return json
 
 instance FromGrace a => FromGrace (Seq a) where
     decode (Value.List seq_) = traverse decode seq_
-    decode _ = Left TypeError
+    decode value = Left TypeError{ expectedType = expected @(Seq a), value }
 
 instance FromGrace a => FromGrace [a] where
     decode = fmap (fmap Foldable.toList) (decode @(Seq a))
@@ -217,8 +213,8 @@ instance FromGrace a => FromGrace (Maybe a) where
     decode (Value.Application (Value.Builtin Syntax.Some) value) = do
         a <- decode value
         return (Just a)
-    decode _ = do
-        Left TypeError
+    decode value = do
+        Left TypeError{ expectedType = expected @(Maybe a), value }
 
     decodeMaybe Nothing = do
         return Nothing
@@ -228,19 +224,23 @@ instance FromGrace a => FromGrace (Maybe a) where
 {-| This is the underlying class that powers the `FromGrace` class's support for
     automatically deriving a `Generic` implementation
 -}
-class GenericFromGrace f where
+class GenericToGraceType f => GenericFromGrace f where
     genericDecode :: State Int (Value -> Either DecodingError (f a))
 
 instance GenericFromGrace V1 where
     genericDecode = do
-        let decode_ _ = Left TypeError
+        let expectedType = State.evalState (genericExpected @V1) 0
+
+        let decode_ value = Left TypeError{ expectedType, value }
 
         return decode_
 
 instance GenericFromGrace U1 where
     genericDecode = do
+        let expectedType = State.evalState (genericExpected @U1) 0
+
         let decode_ (Value.Record []) = return U1
-            decode_ _ = Left TypeError
+            decode_ value = Left TypeError{ expectedType, value }
 
         return decode_
 
@@ -263,8 +263,11 @@ instance (Selector s, FromGrace a) => GenericFromGrace (M1 S s (K1 i a)) where
                 | otherwise = case value of
                     Value.Record fieldValues ->
                         fmap (M1 . K1) (decodeMaybe (HashMap.lookup name fieldValues))
-                    _ ->
-                        Left TypeError
+                    _ -> do
+                        let expectedType =
+                                State.evalState (genericExpected @(M1 S s (K1 i a))) 0
+
+                        Left TypeError{ expectedType, value }
 
         return decode_
 
@@ -278,7 +281,11 @@ instance (Selector s₀, Selector s₁, FromGrace a₀, FromGrace a₁) => Gener
                 expression₁ <- decodeMaybe (HashMap.lookup name₁ fieldValues)
 
                 return (M1 (K1 expression₀) :*: M1 (K1 expression₁))
-            decode_ _ = Left TypeError
+            decode_ value = do
+                let expectedType =
+                        State.evalState (genericExpected @(M1 S s₀ (K1 i₀ a₀) :*: M1 S s₁ (K1 i₁ a₁))) 0
+
+                Left TypeError{ expectedType, value }
 
         return decode_
 
@@ -294,7 +301,11 @@ instance (Selector s, GenericFromGrace (f₀ :*: f₁), FromGrace a) => GenericF
 
                 return (expression₀ :*: M1 (K1 expression₁))
 
-            decode_ _ = Left TypeError
+            decode_ value = do
+                let expectedType =
+                        State.evalState (genericExpected @((f₀ :*: f₁) :*: M1 S s (K1 i a))) 0
+
+                Left TypeError{ expectedType, value }
 
         return decode_
 
@@ -310,7 +321,11 @@ instance (Selector s, FromGrace a, GenericFromGrace (f₀ :*: f₁)) => GenericF
 
                 return (M1 (K1 expression₀) :*: expression₁)
 
-            decode_ _ = Left TypeError
+            decode_ value = do
+                let expectedType =
+                        State.evalState (genericExpected @(M1 S s (K1 i a) :*: (f₀ :*: f₁))) 0
+
+                Left TypeError{ expectedType, value }
 
         return decode_
 
@@ -335,11 +350,19 @@ instance (Constructor c₀, Constructor c₁, GenericFromGrace f₀, GenericFrom
         let decode₀ = State.evalState genericDecode 0
         let decode₁ = State.evalState genericDecode 0
 
-        let decode_ (Value.Alternative name value)
+        let decode_ v@(Value.Alternative name value)
                 | name == name₀ = fmap (L1 . M1) (decode₀ value)
                 | name == name₁ = fmap (R1 . M1) (decode₁ value)
-                | otherwise = Left TypeError
-            decode_ _ = Left TypeError
+                | otherwise = do
+                    let expectedType =
+                            State.evalState (genericExpected @(M1 C c₀ f₀ :+: M1 C c₁ f₁)) 0
+
+                    Left TypeError{ expectedType, value = v }
+            decode_ v = do
+                let expectedType =
+                            State.evalState (genericExpected @(M1 C c₀ f₀ :+: M1 C c₁ f₁)) 0
+
+                Left TypeError{ expectedType, value = v }
 
         return decode_
 
@@ -374,11 +397,41 @@ instance (GenericFromGrace (f₀ :+: f₁), GenericFromGrace (f₂ :+: f₃)) =>
         let decode₀ = State.evalState genericDecode 0
         let decode₁ = State.evalState genericDecode 0
 
-        let Right a <|> _ = Right a
-            _ <|> Right a = Right a
-            Left TypeError <|> Left TypeError = Left TypeError
-            _ <|> _ = Left RangeError
+        let decode_ value = do
+                let Right a <|> _ = Right a
 
-        let decode_ value = fmap L1 (decode₀ value) <|> fmap R1 (decode₁ value)
+                    _ <|> Right a = Right a
+
+                    Left TypeError{ } <|> Left TypeError{ } = do
+                        let expectedType =
+                                State.evalState (genericExpected @((f₀ :+: f₁) :+: (f₂ :+: f₃))) 0
+
+                        Left TypeError{ expectedType, value }
+
+                    _ <|> _ = Left RangeError
+
+                fmap L1 (decode₀ value) <|> fmap R1 (decode₁ value)
 
         return decode_
+
+-- | Result of decoding
+data DecodingError
+    = TypeError{ expectedType :: Type (), value :: Value }
+    -- ^ The input Grace expression has the wrong type
+    | RangeError
+    -- ^ The input Grace expression is out of bounds for the target Haskell type
+    deriving stock (Eq, Show)
+
+instance Exception DecodingError where
+    displayException TypeError{ expectedType, value } =
+        "Failed to decode Grace value into Haskell because of a type mismatch\n\
+        \\n\
+        \The following value:\n\
+        \\n\
+        \" <> Text.unpack (Grace.Pretty.toSmart ("  " <> Pretty.align (Grace.Pretty.pretty value))) <> "\n\
+        \\n\
+        \… could not be decoded into Haskell because it does not match this type:\n\
+        \\n\
+        \" <> Text.unpack (Grace.Pretty.toSmart ("  " <> Pretty.align (Grace.Pretty.pretty expectedType)))
+    displayException RangeError =
+        "Failed to decode value because the decoded result was out of bounds"

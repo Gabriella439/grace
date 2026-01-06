@@ -9,6 +9,7 @@ module Grace.Value
     , Value(..)
 
       -- * Utilities
+    , quote
     , fromJSON
     , toJSON
     , syntax
@@ -19,10 +20,12 @@ module Grace.Value
 import Control.Applicative (empty)
 import Control.Lens (Getting, Plated(..), Traversal')
 import Data.Aeson (FromJSON(..))
+import Data.Bifunctor (first)
 import Data.Foldable (toList)
 import Data.Generics.Sum (_As)
 import Data.Generics.Product (the)
 import Data.HashMap.Strict.InsOrd (InsOrdHashMap)
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Monoid (Any)
 import Data.Sequence (Seq)
 import Data.Text (Text)
@@ -30,10 +33,12 @@ import Data.Void (Void)
 import GHC.Generics (Generic)
 import Grace.Context (Context)
 import Grace.Location (Location)
+import Grace.Pretty (Pretty(..))
 import Grace.Syntax (Builtin, Scalar, Syntax)
 
 import qualified Control.Lens as Lens
 import qualified Data.Aeson as Aeson
+import qualified Data.HashMap.Strict.InsOrd as HashMap
 import qualified Data.Sequence as Seq
 import qualified Grace.Compat as Compat
 import qualified Grace.Syntax as Syntax
@@ -99,6 +104,112 @@ instance Plated Value where
 
 instance FromJSON Value where
     parseJSON value = pure (fromJSON value)
+
+instance Pretty Value where
+    pretty value = pretty (quote value)
+
+-- | Convert a `Value` back into the surface `Syntax`
+quote :: Value -> Syntax () Void
+quote value = case value of
+    Lambda env names_ body₀ ->
+        foldl snoc newLambda env
+      where
+        binding = case names_ of
+            Name name assignment ->
+                Syntax.PlainBinding
+                    { plain = Syntax.NameBinding
+                        { nameLocation = location
+                        , name
+                        , annotation = Nothing
+                        , assignment = fmap quote assignment
+                        }
+                    }
+
+            FieldNames fieldNames ->
+                Syntax.RecordBinding
+                    { fieldNamesLocation = location
+                    , fieldNames = do
+                        (name, assignment) <- fieldNames
+                        return Syntax.NameBinding
+                            { nameLocation = location
+                            , name
+                            , annotation = Nothing
+                            , assignment = fmap quote assignment
+                            }
+                    }
+
+        newLambda = Syntax.Lambda
+            { location
+            , binding
+            , body = first (\_ -> location) body₀
+            }
+
+        toBinding n v = Syntax.Define
+            { assignmentLocation = location
+            , definition = Syntax.Definition
+                { name = n
+                , nameLocation = location
+                , bindings = []
+                , annotation = Nothing
+                , assignment = quote v
+                }
+            }
+
+        snoc e@Syntax.Let{ assignments = a :| as, body = body₁ } (n, v)
+            | Syntax.usedIn n e = Syntax.Let
+                { location
+                , assignments = toBinding n v :| (a : as)
+                , body = body₁
+                }
+            | otherwise = e
+        snoc e (n, v)
+            | Syntax.usedIn n e = Syntax.Let
+                { location
+                , assignments = toBinding n v :| []
+                , body = e
+                }
+            | otherwise = e
+
+    Application function argument ->
+        Syntax.Application
+            { location
+            , function = quote function
+            , argument = quote argument
+            }
+
+    List elements ->
+        Syntax.List{ location, elements = fmap quote elements }
+
+    Record fieldValues ->
+        Syntax.Record
+            { location
+            , fieldValues = map adapt (HashMap.toList fieldValues)
+            }
+      where
+        adapt (field, value_) = Syntax.Definition
+            { nameLocation = location
+            , name = field
+            , bindings = []
+            , annotation = Nothing
+            , assignment = quote value_
+            }
+
+    Alternative name argument ->
+        Syntax.Alternative{ location, name, argument  = quote argument }
+
+    Fold handlers ->
+        Syntax.Fold{ location, handlers = quote handlers }
+
+    Text text ->
+        Syntax.Text{ location, chunks = Syntax.Chunks text [] }
+
+    Scalar scalar ->
+        Syntax.Scalar{ location, scalar }
+
+    Builtin builtin ->
+        Syntax.Builtin{ location, builtin }
+  where
+    location = ()
 
 -- | Convert a JSON `Aeson.Value` to a `Value`
 fromJSON :: Aeson.Value -> Value
