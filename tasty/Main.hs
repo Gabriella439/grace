@@ -90,8 +90,7 @@ fileToTestTree prefix = do
         Right (inferred, value) -> do
             let generateTypeFile = return (pretty_ inferred)
 
-            let generateOutputFile =
-                    return (pretty_ (Normalize.quote value))
+            let generateOutputFile = return (pretty_ value)
 
             return
                 (Tasty.testGroup name

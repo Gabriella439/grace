@@ -422,7 +422,7 @@ typeToText :: Type s -> Text
 typeToText = Pretty.renderStrict False 80
 
 valueToText :: Value -> Text
-valueToText = Pretty.renderStrict False 80 . Normalize.quote
+valueToText = Pretty.renderStrict False 80
 
 hideElement :: MonadIO io => JSVal -> io ()
 hideElement element = do
@@ -791,7 +791,7 @@ fromStorage (Just text) = liftIO do
         return (Just a)
 
 toStorage :: ToGrace a => a -> Text
-toStorage a = Pretty.toText (Normalize.quote (encode a))
+toStorage a = Pretty.toText (encode a)
 
 renderInput
     :: [Text]
