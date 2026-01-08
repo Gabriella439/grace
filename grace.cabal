@@ -46,7 +46,6 @@ library
                      , prettyprinter-ansi-terminal
                      , safe-exceptions
                      , scientific
-                     , string-interpolate
                      , template-haskell
                      , text >= 1.2.4.0
                      , time
