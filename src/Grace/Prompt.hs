@@ -148,8 +148,7 @@ toJSONSchema original = loop original
 
         return
             ( Aeson.object
-                [ ("type", "object")
-                , ("anyOf", Aeson.toJSON ([ present, absent ] :: [ Aeson.Value ]))
+                [ ("anyOf", Aeson.toJSON ([ present, absent ] :: [ Aeson.Value ]))
                 ]
             )
 
@@ -165,6 +164,8 @@ toJSONSchema original = loop original
 
         properties <- traverse toProperty fieldTypes
 
+        let required = fmap fst fieldTypes
+
         return
             ( Aeson.object
                 [ ("type", "object")
@@ -173,13 +174,6 @@ toJSONSchema original = loop original
                 , ("required", Aeson.toJSON required)
                 ]
             )
-      where
-        required = do
-            (field, type_) <- fieldTypes
-
-            case type_ of
-                Type.Optional{ } -> empty
-                _ -> return field
     loop Type.Union{ alternatives = Type.Alternatives alternativeTypes _ } = do
         let toAnyOf (alternative, type_) = do
                 contents <- loop type_
