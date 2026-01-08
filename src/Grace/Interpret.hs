@@ -103,16 +103,7 @@ interpretWith bindings maybeAnnotation = do
 
 -- | Load a Grace expression
 load :: forall m a . (FromGrace a, MonadIO m) => Input -> m a
-load input = do
-    let type_ = fmap (\_ -> Unknown) (expected @a)
-
-    let initialStatus = Status{ count = 0, context = [] }
-
-    (_, value) <- Grace.evalGrace input initialStatus (interpretWith [] (Just type_) )
-
-    case decode value of
-        Left exception -> liftIO (Exception.throwIO exception)
-        Right a -> return a
+load = loadWith []
 
 -- | Like `load`, but accepts a custom list of bindings
 loadWith
