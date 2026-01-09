@@ -11,7 +11,7 @@ tasty/data/error/type/fold-typo-field-input.ffg:4:14:
 
 … cannot be a subtype of:
 
-  g? -> f?
+  b? -> a?
 
 tasty/data/error/type/fold-typo-field-input.ffg:4:1: 
   │

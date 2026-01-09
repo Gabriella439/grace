@@ -234,11 +234,10 @@ wellFormed _ Type.Scalar{} = do
 
 -- A field is required if and only if it is a subtype of @Optional T@ for some
 -- type @T@
---
--- The reason we don't just check if @superType₁@ is @Optional { }@ is because
--- it might be an unsolved variable.  Checking if it is a subtype of
--- @Optional a?@ is the most robust way to check.
 isFieldRequired :: Type Location -> Grace Bool
+-- Fast path
+isFieldRequired Type.Optional{ } = return False
+-- Slow path
 isFieldRequired fieldType = do
     context <- get
 
@@ -561,8 +560,10 @@ subtype subType₀ superType₀ = do
             let subAlternativeTypes   = Map.fromList subAlternativeTypesList
             let superAlternativeTypes = Map.fromList superAlternativesTypesList
 
-            let subExtraAlternativeTypes   = Map.difference subAlternativeTypes superAlternativeTypes
-            let superExtraAlternativeTypes = Map.difference superAlternativeTypes subAlternativeTypes
+            let subExtraAlternativeTypes =
+                    Map.difference subAlternativeTypes superAlternativeTypes
+            let superExtraAlternativeTypes =
+                    Map.difference superAlternativeTypes subAlternativeTypes
 
             let subtypeAlternative subtype₁ supertype₁ = do
                     context <- get
@@ -574,7 +575,7 @@ subtype subType₀ superType₀ = do
             sequence_ (Map.intersectionWith subtypeAlternative subAlternativeTypes superAlternativeTypes)
 
             case (subRemainingAlternatives, superRemainingAlternatives) of
-                _   | subRemainingAlternatives == superRemainingAlternatives && Map.null subExtraAlternativeTypes -> do
+                _ | subRemainingAlternatives == superRemainingAlternatives && Map.null subExtraAlternativeTypes -> do
                         return ()
 
                 (Monotype.UnsolvedAlternatives p₀, Monotype.UnsolvedAlternatives p₁) -> do
@@ -616,8 +617,8 @@ subtype subType₀ superType₀ = do
                         Nothing -> do
                             Exception.throwIO (MissingOneOfAlternatives [Type.location subType₀, Type.location superType₀] p₀ p₁ context₁)
 
-                        Just setContext -> do
-                            setContext
+                        Just command -> do
+                            command
 
                     context₂ <- get
 
@@ -1943,28 +1944,38 @@ infer e₀ = do
 
                     return (type_, newFold)
 
-            let fold = do
-                    context₀ <- get
+            let fold maybeKeys = do
+                    keys <- case maybeKeys of
+                        Just keys -> do
+                            return keys
 
-                    existential₀ <- fresh
+                        Nothing -> do
+                            context₀ <- get
 
-                    push (Context.UnsolvedFields existential₀)
+                            existential₀ <- fresh
 
-                    let unsolvedRecord = Type.Fields
-                            []
-                            (Monotype.UnsolvedFields existential₀)
+                            push (Context.UnsolvedFields existential₀)
 
-                    _ <- check handlers Type.Record
-                        { location
-                        , fields = unsolvedRecord
-                        }
+                            let unsolvedRecord = Type.Fields
+                                    []
+                                    (Monotype.UnsolvedFields existential₀)
 
-                    context₁ <- get
+                            _ <- check handlers Type.Record
+                                { location
+                                , fields = unsolvedRecord
+                                }
 
-                    let Type.Fields keyTypes _ =
-                            Context.solveRecord context₁ unsolvedRecord
+                            context₁ <- get
 
-                    set context₀
+                            let Type.Fields keyTypes _ =
+                                    Context.solveRecord context₁ unsolvedRecord
+
+                            set context₀
+
+                            return do
+                                (key, _) <- keyTypes
+
+                                return key
 
                     existential₁ <- fresh
 
@@ -1975,7 +1986,7 @@ infer e₀ = do
                             , existential = existential₁
                             }
 
-                    let process (key, _) = do
+                    let process key  = do
                             existential <- fresh
 
                             push (Context.UnsolvedType existential)
@@ -1993,7 +2004,7 @@ infer e₀ = do
 
                             return ((key, handlerType), (key, alternativeType))
 
-                    results <- traverse process keyTypes
+                    results <- traverse process keys
 
                     let (fieldTypes, alternativeTypes) = unzip results
 
@@ -2031,7 +2042,7 @@ infer e₀ = do
                             return name
 
                     if  | Set.null fields -> do
-                            fold
+                            fold (Just (toList fields))
                         | Set.isSubsetOf fields [ "nil", "cons" ] -> do
                             listFold
                         | Set.isSubsetOf fields [ "null", "some" ] -> do
@@ -2043,7 +2054,7 @@ infer e₀ = do
                         | Set.isSubsetOf fields [ "array", "bool", "integer", "natural", "null", "object", "real", "string" ] -> do
                             jsonFold
                         | otherwise -> do
-                            fold
+                            fold (Just (toList fields))
 
                 -- Slow path: guess and check
                 _ -> do
@@ -2064,7 +2075,7 @@ infer e₀ = do
                                     jsonFold `Exception.catch` \(_ :: TypeInferenceError) -> do
                                         set context
 
-                                        fold
+                                        fold Nothing
 
 
         Syntax.Project{ location, larger, smaller } -> do
@@ -3650,7 +3661,7 @@ check Syntax.List{..} Type.List{ location = _, .. } = do
 
     return Syntax.List{ elements = newElements, .. }
 
-check e@Syntax.Record{ fieldValues = fieldValues₀ } _B@Type.Record{ fields = Type.Fields fieldTypes fields }
+check Syntax.Record{ location, fieldValues = fieldValues₀ } annotation@Type.Record{ fields = Type.Fields fieldTypes fields }
     | let mapValues = Map.fromList fieldValues₁
     , let mapTypes  = Map.fromList fieldTypes
     , let both = Map.intersectionWith (,) mapValues mapTypes
@@ -3671,9 +3682,9 @@ check e@Syntax.Record{ fieldValues = fieldValues₀ } _B@Type.Record{ fields = T
                 Map.difference extraTypes (Map.filter id isRequiredTypes)
 
         let process (field, (value, type_)) = do
-                _Γ <- get
+                context <- get
 
-                newValue <- check value (Context.solveType _Γ type_)
+                newValue <- check value (Context.solveType context type_)
 
                 return (field, newValue)
 
@@ -3687,23 +3698,19 @@ check e@Syntax.Record{ fieldValues = fieldValues₀ } _B@Type.Record{ fields = T
                 , assignment
                 }
 
-        let e' = Syntax.Record
-                { fieldValues = map convert (Map.toList extraValues)
-                , location = Syntax.location e
+        let extraRecordValue = Syntax.Record
+                { location
+                , fieldValues = map convert (Map.toList extraValues)
                 }
 
-        let _B' = Type.Record
-                { location = Type.location _B
+        let extraRecordType = Type.Record
+                { location = Type.location annotation
                 , fields = Type.Fields (Map.toList extraRequiredTypes) fields
                 }
 
-        _Γ <- get
+        context <- get
 
-        -- Generate a type error if either `e'` or `_B'` is not empty
-        --
-        -- `result` should always be an empty record, but we pass it through the
-        -- returned fields out of an abundance of caution.
-        result <- check e' (Context.solveType _Γ _B')
+        result <- check extraRecordValue (Context.solveType context extraRecordType)
 
         let optionalValues = do
                 (field, type_) <- Map.toList extraOptionalTypes
@@ -3711,7 +3718,7 @@ check e@Syntax.Record{ fieldValues = fieldValues₀ } _B@Type.Record{ fields = T
                 return (field, Syntax.Scalar{ location = Type.location type_, scalar = Syntax.Null })
 
         case result of
-            Syntax.Record{ location, fieldValues = nonOverlappingValues } ->
+            Syntax.Record{ fieldValues = nonOverlappingValues } ->
                 return Syntax.Record
                     { location
                     , fieldValues = map convert (overlappingValues <> optionalValues) <> nonOverlappingValues
