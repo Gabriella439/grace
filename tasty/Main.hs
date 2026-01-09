@@ -17,7 +17,7 @@ import Data.Sequence (Seq)
 import Data.Text (Text)
 import Data.Word (Word8, Word16, Word32, Word64)
 import GHC.Generics (Generic)
-import Grace.Decode (DecodingError(..), FromGrace, Key, ToGraceType)
+import Grace.Decode (FromGrace, Key, ToGraceType)
 import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
 import Grace.Pretty (Pretty(..))
@@ -35,7 +35,6 @@ import qualified Data.Vector as Vector
 import qualified Grace.Decode as Decode
 import qualified Grace.Interpret as Interpret
 import qualified Grace.Monotype as Monotype
-import qualified Grace.Normalize as Normalize
 import qualified Grace.Pretty
 import qualified Grace.Syntax as Syntax
 import qualified Grace.Type as Type
@@ -277,7 +276,7 @@ interpretCodeWithFileURI = Tasty.HUnit.testCase "interpret code with file:// imp
 loadSuccessfully :: TestTree
 loadSuccessfully = Tasty.HUnit.testCase "load code" do
     let actual :: Either DecodingError Natural
-        actual = Decode.decode (Value.Scalar (Syntax.Natural 2))
+        actual = decode (Value.Scalar (Syntax.Natural 2))
 
     Tasty.HUnit.assertEqual "" (Right 2) actual
 
@@ -287,56 +286,64 @@ load name code expected = Tasty.HUnit.testCase ("load " <> name) do
 
     Tasty.HUnit.assertEqual "" expected actual
 
+data DecodingError = TypeError | RangeError deriving stock (Eq, Show)
+
+decode :: FromGrace a => Value.Value -> Either DecodingError a
+decode value = case Decode.decode value of
+    Left  Decode.TypeError{ }  -> Left TypeError
+    Left  Decode.RangeError{ } -> Left RangeError
+    Right a                    -> Right a
+
 decodeWithTypeError :: TestTree
 decodeWithTypeError = Tasty.HUnit.testCase "load code with type error" do
     let actual₀ :: Either DecodingError Bool
-        actual₀ = Decode.decode (Value.Scalar (Syntax.Natural 2))
+        actual₀ = decode (Value.Scalar (Syntax.Natural 2))
 
     Tasty.HUnit.assertEqual "" (Left TypeError) actual₀
 
     let actual₁ :: Either DecodingError T0
-        actual₁ = Decode.decode (Value.Alternative "C1" (Value.Record mempty))
+        actual₁ = decode (Value.Alternative "C1" (Value.Record mempty))
 
     Tasty.HUnit.assertEqual "" (Left TypeError) actual₁
 
     let actual₂ :: Either DecodingError Natural
-        actual₂ = Decode.decode (Value.Scalar (Syntax.Bool False))
+        actual₂ = decode (Value.Scalar (Syntax.Bool False))
 
     Tasty.HUnit.assertEqual "" (Left TypeError) actual₂
 
     let actual₃ :: Either DecodingError Integer
-        actual₃ = Decode.decode (Value.Scalar (Syntax.Bool False))
+        actual₃ = decode (Value.Scalar (Syntax.Bool False))
 
     Tasty.HUnit.assertEqual "" (Left TypeError) actual₃
 
     let actual₄ :: Either DecodingError Text
-        actual₄ = Decode.decode (Value.Scalar (Syntax.Bool False))
+        actual₄ = decode (Value.Scalar (Syntax.Bool False))
 
     Tasty.HUnit.assertEqual "" (Left TypeError) actual₄
 
     let actual₅ :: Either DecodingError Key
-        actual₅ = Decode.decode (Value.Scalar (Syntax.Bool False))
+        actual₅ = decode (Value.Scalar (Syntax.Bool False))
 
     Tasty.HUnit.assertEqual "" (Left TypeError) actual₅
 
     let actual₆ :: Either DecodingError Value
-        actual₆ = Decode.decode (Value.Lambda [] (Value.Name "x" Nothing) Syntax.Variable{ location = Unknown, name = "x" })
+        actual₆ = decode (Value.Lambda [] (Value.Name "x" Nothing) Syntax.Variable{ location = Unknown, name = "x" })
 
     Tasty.HUnit.assertEqual "" (Left TypeError) actual₆
 
     let actual₇ :: Either DecodingError (Seq Bool)
-        actual₇ = Decode.decode (Value.Scalar (Syntax.Bool False))
+        actual₇ = decode (Value.Scalar (Syntax.Bool False))
 
     Tasty.HUnit.assertEqual "" (Left TypeError) actual₇
 
     let actual₈ :: Either DecodingError Scientific
-        actual₈ = Decode.decode (Value.Scalar (Syntax.Bool False))
+        actual₈ = decode (Value.Scalar (Syntax.Bool False))
 
     Tasty.HUnit.assertEqual "" (Left TypeError) actual₈
 
 decodeWithRangeError :: TestTree
 decodeWithRangeError = Tasty.HUnit.testCase "load code with range error" do
     let actual₀ :: Either DecodingError Word8
-        actual₀ = Decode.decode (Value.Scalar (Syntax.Natural 256))
+        actual₀ = decode (Value.Scalar (Syntax.Natural 256))
 
     Tasty.HUnit.assertEqual "" (Left RangeError) actual₀

@@ -72,13 +72,13 @@ forall (q : Fields) .
   , imports:
       { "URL import":
           { "Filing status":
-              < 'Single filers':
+              < 'Head of household':
                   { }
               | 'Married, filing jointly':
                   { }
               | 'Married, filing separately':
                   { }
-              | 'Head of household':
+              | 'Single filers':
                   { }
               >
           , "Taxable income":
@@ -88,13 +88,13 @@ forall (q : Fields) .
             { "Tax": Real }
       , "GitHub import":
           { "Filing status":
-              < 'Single filers':
+              < 'Head of household':
                   { }
               | 'Married, filing jointly':
                   { }
               | 'Married, filing separately':
                   { }
-              | 'Head of household':
+              | 'Single filers':
                   { }
               >
           , "Taxable income":
