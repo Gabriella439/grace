@@ -1,0 +1,4 @@
+# Grace's support for "eval" is type-safe, so the following example will fail
+let not x = import read "x == false"
+
+in  not 4
