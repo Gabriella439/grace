@@ -1,0 +1,19 @@
+Not a subtype
+
+The following type:
+
+  Natural
+
+tasty/data/error/type/read-fail-input.ffg:2:20: 
+  │
+2 │ let not x = import read "x == false"
+  │                    ↑
+
+… cannot be a subtype of:
+
+  Bool
+
+(read):1:6: 
+  │
+1 │ x == false
+  │      ↑
