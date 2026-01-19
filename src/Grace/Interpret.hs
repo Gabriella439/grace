@@ -45,7 +45,7 @@ import qualified Grace.Value as Value
 
     This is the top-level function for the Grace interpreter
 -}
-interpret :: MonadIO io => Input -> io (Type Location, Value)
+interpret :: MonadIO io => Input -> io (Type Location, Value Location)
 interpret input = do
     let initialStatus = Status{ count = 0, context = [] }
 
@@ -57,17 +57,22 @@ interpret input = do
 {-| Convenient operator for creating a binding from a Haskell value rather than
     a Grace type and value
 -}
-(<~) :: forall a . ToGrace a => Text -> a -> (Text, Type Location, Value)
+(<~)
+    :: forall a . ToGrace a
+    => Text -> a -> (Text, Type Location, Value Location)
 name <~ haskellValue =
-    (name, fmap (\_ -> Unknown) (expected @a), encode haskellValue)
+    ( name
+    , fmap (\_ -> Unknown) (expected @a)
+    , fmap (\_ -> Unknown) (encode haskellValue)
+    )
 
 -- | Like `interpret`, but accepts a custom list of bindings
 interpretWith
-    :: [(Text, Type Location, Value)]
+    :: [(Text, Type Location, Value Location)]
     -- ^ @(name, type, value)@ for each custom binding
     -> Maybe (Type Location)
     -- ^ Optional expected type for the input
-    -> Grace (Type Location, Value)
+    -> Grace (Type Location, Value Location)
 interpretWith bindings maybeAnnotation = do
     input <- Reader.ask
 
@@ -108,7 +113,7 @@ load = loadWith []
 -- | Like `load`, but accepts a custom list of bindings
 loadWith
     :: forall m a . (FromGrace a, MonadIO m)
-    => [(Text, Type Location, Value)] -> Input -> m a
+    => [(Text, Type Location, Value Location)] -> Input -> m a
 loadWith bindings input = do
     let type_ = fmap (\_ -> Unknown) (expected @a)
 
@@ -123,7 +128,7 @@ loadWith bindings input = do
 instance (ToGrace a, FromGrace b) => FromGrace (a -> IO b) where
     decode function = do
         return \a -> do
-            let inputValue = encode a
+            let inputValue = fmap (\_ -> Unknown) (encode a)
 
             let initialStatus = Status{ count = 0, context = [] }
 
@@ -131,7 +136,7 @@ instance (ToGrace a, FromGrace b) => FromGrace (a -> IO b) where
 
             let input = Code "(decode)" code
 
-            outputValue <- Grace.evalGrace input initialStatus (Normalize.apply function inputValue)
+            outputValue <- Grace.evalGrace input initialStatus (Normalize.apply Unknown function inputValue)
 
             case decode outputValue of
                 Left  e -> Exception.throwIO e

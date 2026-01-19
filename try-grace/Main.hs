@@ -35,7 +35,7 @@ import GHCJS.Types (JSVal)
 import Grace.Decode (FromGrace)
 import Grace.Encode (ToGrace(..))
 import Grace.Input (Input(..))
-import Grace.Location (Location)
+import Grace.Location (Location(..))
 import Grace.Monotype (RemainingFields(..))
 import Grace.Syntax (Binding(..), NameBinding(..), Scalar(..), Syntax)
 import Grace.Value (Value(..))
@@ -421,7 +421,7 @@ fromText = JSString.pack . Text.unpack
 typeToText :: Type s -> Text
 typeToText = Pretty.renderStrict False 80
 
-valueToText :: Value -> Text
+valueToText :: Value location -> Text
 valueToText = Pretty.renderStrict False 80
 
 hideElement :: MonadIO io => JSVal -> io ()
@@ -444,12 +444,12 @@ data Config = Config
 renderValue
     :: JSVal
     -> Type Location
-    -> Value
+    -> Value Location
     -> ReaderT Config IO (IO ())
 renderValue parent Type.Optional{ type_ } value =
     renderValue parent type_ value
 
-renderValue parent _ (Value.Text text) = do
+renderValue parent _ (Value.Text _ text) = do
     printable <- createElement "div"
     addClass printable "grace-printable"
 
@@ -497,7 +497,7 @@ renderValue parent _ (Value.Text text) = do
 
     mempty
 
-renderValue parent _ (Value.Scalar (Bool bool)) = do
+renderValue parent _ (Value.Scalar _ (Bool bool)) = do
     input <- createElement "input"
     addClass input "grace-output-bool"
     setAttribute input "type" "checkbox"
@@ -509,7 +509,7 @@ renderValue parent _ (Value.Scalar (Bool bool)) = do
 
     mempty
 
-renderValue parent _ (Value.Scalar Null) = do
+renderValue parent _ (Value.Scalar _ Null) = do
     span <- createElement "span"
     addClass span "grace-output-json"
     setTextContent span "∅"
@@ -527,7 +527,7 @@ renderValue parent _ value@Value.Scalar{} = do
 
     mempty
 
-renderValue parent outer (Value.List values) = do
+renderValue parent outer (Value.List _ values) = do
     inner <- case outer of
             Type.List{ type_ } -> do
                 return type_
@@ -558,7 +558,7 @@ renderValue parent outer (Value.List values) = do
 
     return (sequence_ refreshOutputs)
 
-renderValue parent outer (Value.Record keyValues) = do
+renderValue parent outer (Value.Record _ keyValues) = do
     let lookupKey = case outer of
             Type.Record{ fields = Type.Fields keyTypes _ } ->
                 \key -> lookup key keyTypes
@@ -569,7 +569,7 @@ renderValue parent outer (Value.Record keyValues) = do
             _ ->
                 \_ -> empty
 
-    let process key value = do
+    let process key (_, value) = do
             type_ <- case lookupKey key of
                 Nothing    -> fail "renderValue: Missing field type"
                 Just type_ -> return type_
@@ -603,10 +603,10 @@ renderValue parent outer (Value.Record keyValues) = do
 
     return (sequence_ refreshOutputs)
 
-renderValue parent outer (Application (Value.Builtin Syntax.Some) value) = do
+renderValue parent outer (Value.Application _ (Value.Builtin _ Syntax.Some) value) = do
     renderValue parent outer value
 
-renderValue parent outer (Value.Alternative alternative value) = do
+renderValue parent outer (Value.Alternative location alternative value) = do
     inner <- case outer of
             Type.Union{ alternatives = Type.Alternatives keyTypes _ } ->
                 case lookup alternative keyTypes of
@@ -618,15 +618,16 @@ renderValue parent outer (Value.Alternative alternative value) = do
 
     -- Render unions the same as a record with one field
     let recordType = Type.Record
-            { location = location outer
+            { location = Type.location outer
             , fields = Type.Fields [(alternative, inner)] EmptyFields
             }
 
-    let recordValue = Value.Record (HashMap.singleton alternative value)
+    let recordValue =
+            Value.Record location (HashMap.singleton alternative (location, value))
 
     renderValue parent recordType recordValue
 
-renderValue parent Type.Function{ input, output } function = do
+renderValue parent Type.Function{ location, input, output } function = do
     r@Config{ status, input = input_ } <- Reader.ask
 
     outputVal <- createElement "div"
@@ -646,7 +647,7 @@ renderValue parent Type.Function{ input, output } function = do
             setBusy
 
             let interpretOutput = do
-                    newValue <- Normalize.apply function value
+                    newValue <- Normalize.apply location function value
 
                     status_@Status{ context } <- State.get
 
@@ -736,7 +737,7 @@ renderValue parent Type.Function{ input, output } function = do
 renderValue parent _ value = do
     renderDefault parent value
 
-renderDefault :: MonadIO io => JSVal -> Value -> io (IO ())
+renderDefault :: MonadIO io => JSVal -> Value Location -> io (IO ())
 renderDefault parent value = liftIO do
     code <- createElement "code"
     addClass code "grace-output-default"
@@ -756,8 +757,8 @@ data Mode
 register
     :: MonadIO m
     => JSVal
-    -> MaybeT IO Value
-    -> (Mode -> Maybe Value -> IO ())
+    -> MaybeT IO (Value Location)
+    -> (Mode -> Maybe (Value Location) -> IO ())
     -> ReaderT Config m (Mode -> IO ())
 register input get renderOutput = liftIO do
     let invoke mode = do
@@ -797,11 +798,11 @@ renderInput
     :: [Text]
     -> Type Location
     -> ReaderT Config IO
-          ( Maybe Value
-          ,     (Mode -> Maybe Value -> IO ())
+          ( Maybe (Value Location)
+          ,     (Mode -> Maybe (Value Location) -> IO ())
             ->  ReaderT Config (MaybeT IO) (JSVal, Mode -> IO (), IO ())
           )
-renderInput path type_@Type.Scalar{ scalar = Monotype.Bool } = do
+renderInput path type_@Type.Scalar{ location, scalar = Monotype.Bool } = do
     maybeText <- getSessionStorage (renderPath path type_)
 
     maybeBool <- fromStorage maybeText
@@ -810,7 +811,7 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Bool } = do
             Just b -> b
             Nothing -> False
 
-    let maybeValue₀ = Just (Value.Scalar (Bool bool₀))
+    let maybeValue₀ = Just (Value.Scalar location (Bool bool₀))
 
     return $ (,) maybeValue₀ \renderOutput -> do
         input <- createElement "input"
@@ -824,13 +825,13 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Bool } = do
 
                 setSessionStorage (renderPath path type_) (toStorage bool)
 
-                return (Value.Scalar (Bool bool))
+                return (Value.Scalar location (Bool bool))
 
         invoke <- register input get renderOutput
 
         return (input, invoke, mempty)
 
-renderInput path type_@Type.Scalar{ scalar = Monotype.Real } = do
+renderInput path type_@Type.Scalar{ location, scalar = Monotype.Real } = do
     maybeText <- getSessionStorage (renderPath path type_)
 
     maybeScientific <- fromStorage maybeText
@@ -839,7 +840,7 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Real } = do
             Just s -> s
             Nothing -> 0
 
-    let maybeValue₀ = Just (Value.Scalar (Real scientific₀))
+    let maybeValue₀ = Just (Value.Scalar location (Real scientific₀))
 
     return $ (,) maybeValue₀ \renderOutput -> do
         input <- createElement "input"
@@ -855,13 +856,13 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Real } = do
 
                 setSessionStorage (renderPath path type_) (toStorage double)
 
-                return (Value.Scalar (Real (Scientific.fromFloatDigits double)))
+                return (Value.Scalar location (Real (Scientific.fromFloatDigits double)))
 
         invoke <- register input get renderOutput
 
         return (input, invoke, mempty)
 
-renderInput path type_@Type.Scalar{ scalar = Monotype.Integer } = do
+renderInput path type_@Type.Scalar{ location, scalar = Monotype.Integer } = do
     maybeText <- getSessionStorage (renderPath path type_)
 
     maybeInteger <- fromStorage maybeText
@@ -870,7 +871,7 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Integer } = do
             Just i -> i
             Nothing -> 0
 
-    let maybeValue₀ = Just (Value.Scalar (Integer integer₀))
+    let maybeValue₀ = Just (Value.Scalar location (Integer integer₀))
 
     return $ (,) maybeValue₀ \renderOutput -> do
         input <- createElement "input"
@@ -885,13 +886,13 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Integer } = do
 
                 setSessionStorage (renderPath path type_) (toStorage integer)
 
-                return (Value.Scalar (Integer integer))
+                return (Value.Scalar location (Integer integer))
 
         invoke <- register input get renderOutput
 
         return (input, invoke, mempty)
 
-renderInput path type_@Type.Scalar{ scalar = Monotype.Natural } = do
+renderInput path type_@Type.Scalar{ location, scalar = Monotype.Natural } = do
     maybeText <- getSessionStorage (renderPath path type_)
 
     maybeNatural <- fromStorage maybeText
@@ -900,7 +901,7 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Natural } = do
             Just n -> n
             Nothing -> 0
 
-    let maybeValue₀ = Just (Value.Scalar (Natural natural₀))
+    let maybeValue₀ = Just (Value.Scalar location (Natural natural₀))
 
     return $ (,) maybeValue₀ \renderOutput -> do
         input <- createElement "input"
@@ -916,7 +917,7 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Natural } = do
 
                 setSessionStorage (renderPath path type_) (toStorage natural)
 
-                return (Value.Scalar (Natural natural))
+                return (Value.Scalar location (Natural natural))
 
         invoke <- register input get renderOutput
 
@@ -934,7 +935,9 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.JSON } = do
     let maybeValue₀ = do
             let lazyText = Text.Lazy.fromStrict text₀
 
-            Aeson.decode (Text.Encoding.encodeUtf8 lazyText)
+            value :: Value () <- Aeson.decode (Text.Encoding.encodeUtf8 lazyText)
+
+            return (fmap (\_ -> Unknown) value)
 
     return $ (,) maybeValue₀ \renderOutput -> do
         input <- createElement "input"
@@ -963,13 +966,13 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.JSON } = do
                         removeClass input "grace-input-json-invalid"
                         addClass input "grace-input-json-valid"
 
-                        return value
+                        return (fmap (\_ -> Unknown) (value :: Value ()))
 
         invoke <- register input get renderOutput
 
         return (input, invoke, mempty)
 
-renderInput path type_@Type.Scalar{ scalar = Monotype.Text } = do
+renderInput path type_@Type.Scalar{ location, scalar = Monotype.Text } = do
     maybeText <- getSessionStorage (renderPath path type_)
 
     maybeTextValue <- fromStorage maybeText
@@ -978,7 +981,7 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Text } = do
             Just t -> t
             Nothing -> ""
 
-    let maybeValue₀ = Just (Value.Text text₀)
+    let maybeValue₀ = Just (Value.Text location text₀)
 
     return $ (,) maybeValue₀ \renderOutput -> do
         input <- createElement "textarea"
@@ -996,13 +999,13 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Text } = do
 
                 setSessionStorage (renderPath path type_) (toStorage text)
 
-                return (Value.Text text)
+                return (Value.Text location text)
 
         invoke <- register input get renderOutput
 
         return (input, invoke, mempty)
 
-renderInput path type_@Type.Scalar{ scalar = Monotype.Key } = do
+renderInput path type_@Type.Scalar{ location, scalar = Monotype.Key } = do
     maybeText <- getLocalStorage (renderPath path type_)
 
     maybeKey <- fromStorage maybeText
@@ -1011,7 +1014,7 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Key } = do
             Just (Decode.Key k) -> k
             Nothing -> ""
 
-    let maybeValue₀ = Just (Value.Scalar (Key key₀))
+    let maybeValue₀ = Just (Value.Scalar location (Key key₀))
 
     return $ (,) maybeValue₀ \renderOutput -> do
         input <- createElement "input"
@@ -1027,17 +1030,17 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Key } = do
 
                 setLocalStorage (renderPath path type_) (toStorage key)
 
-                return (Value.Scalar (Key key))
+                return (Value.Scalar location (Key key))
 
         invoke <- register input get renderOutput
 
         return (input, invoke, mempty)
 
-renderInput path Type.Record{ fields = Type.Fields keyTypes _ } = do
+renderInput path Type.Record{ location, fields = Type.Fields keyTypes _ } = do
     let outer (key, type_) = do
             (maybeStart, reader) <- renderInput (key : path) type_
 
-            return (key, (key, maybeStart), (key, reader))
+            return (key, (key, fmap ((,) location) maybeStart), (key, reader))
 
     result <- traverse outer keyTypes
 
@@ -1050,7 +1053,7 @@ renderInput path Type.Record{ fields = Type.Fields keyTypes _ } = do
 
             Monad.guard (HashMap.keys keyStarts == keys)
 
-            return (Value.Record keyStarts)
+            return (Value.Record location keyStarts)
 
     return $ (,) maybeValue₀ \renderOutput -> do
         ref <- liftIO (IORef.newIORef hashMap)
@@ -1059,7 +1062,7 @@ renderInput path Type.Record{ fields = Type.Fields keyTypes _ } = do
                 let newRenderOutput mode maybeValue = do
                         let update m = (m', m')
                               where
-                                m' = HashMap.insert key maybeValue m
+                                m' = HashMap.insert key (fmap ((,) location) maybeValue) m
 
                         keyMaybeValues <- liftIO (IORef.atomicModifyIORef' ref update)
 
@@ -1068,7 +1071,7 @@ renderInput path Type.Record{ fields = Type.Fields keyTypes _ } = do
 
                                 Monad.guard (HashMap.keys keyValues == keys)
 
-                                return (Value.Record keyValues)
+                                return (Value.Record location keyValues)
 
                         renderOutput mode maybeRecord
 
@@ -1105,7 +1108,7 @@ renderInput path Type.Record{ fields = Type.Fields keyTypes _ } = do
                 let maybeRecord = do
                         keyValues <- sequence keyMaybeValues
 
-                        return (Value.Record keyValues)
+                        return (Value.Record location keyValues)
 
                 renderOutput mode maybeRecord
 
@@ -1113,7 +1116,7 @@ renderInput path Type.Record{ fields = Type.Fields keyTypes _ } = do
 
         return (dl, invoke, refreshOutput)
 
-renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ } = do
+renderInput path type_@Type.Union{ location, alternatives = Type.Alternatives keyTypes _ } = do
     maybeAlternative <- getSessionStorage (renderPath path type_)
 
     let predicate = case maybeAlternative of
@@ -1130,7 +1133,7 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
             let maybeValue₀ = do
                     start <- maybeStart
 
-                    return (Value.Alternative key₀ start)
+                    return (Value.Alternative location key₀ start)
 
             return $ (,) maybeValue₀ \renderOutput -> do
                 Config{ counter } <- Reader.ask
@@ -1167,7 +1170,7 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
                                 let maybeResult = do
                                         value <- maybeValue
 
-                                        return (Alternative key value)
+                                        return (Alternative location key value)
 
                                 Monad.when enabled (renderOutput mode maybeResult)
 
@@ -1244,7 +1247,7 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
 
                 return (div, invoke, refreshOutput)
 
-renderInput path optionalType@Type.Optional{ type_ } = do
+renderInput path optionalType@Type.Optional{ location, type_ } = do
     maybeText <- getSessionStorage (renderPath path optionalType)
 
     maybeEnabled <- fromStorage maybeText
@@ -1259,9 +1262,9 @@ renderInput path optionalType@Type.Optional{ type_ } = do
             then do
                 start <- maybeStart
 
-                return (Application (Value.Builtin Syntax.Some) start)
+                return (Application location (Value.Builtin location Syntax.Some) start)
             else do
-                return (Value.Scalar Null)
+                return (Value.Scalar location Null)
 
     return $ (,) maybeValue₀ \renderOutput -> do
         input <- createElement "input"
@@ -1278,11 +1281,11 @@ renderInput path optionalType@Type.Optional{ type_ } = do
                         let maybeSomeValue = do
                                 value <- maybeValue
 
-                                return (Application (Value.Builtin Syntax.Some) value)
+                                return (Application location (Value.Builtin location Syntax.Some) value)
 
                         renderOutput mode maybeSomeValue
                     else do
-                        renderOutput mode (Just (Value.Scalar Null))
+                        renderOutput mode (Just (Value.Scalar location Null))
 
         (nestedInput, nestedInvoke, nestedRefresh) <- reader newRenderOutput
 
@@ -1321,7 +1324,7 @@ renderInput path optionalType@Type.Optional{ type_ } = do
 
         return (div, nestedInvoke, nestedRefresh)
 
-renderInput path listType@Type.List{ type_ } = do
+renderInput path listType@Type.List{ location, type_ } = do
     maybeText <- getSessionStorage (renderPath path listType)
 
     maybeIndex <- fromStorage maybeText
@@ -1340,7 +1343,7 @@ renderInput path listType@Type.List{ type_ } = do
     let maybeValue₀ = do
             starts <- sequence maybeStarts
 
-            return (Value.List (Seq.fromList starts))
+            return (Value.List location (Seq.fromList starts))
 
     return $ (,) maybeValue₀ \renderOutput -> do
         childrenRef <- liftIO (IORef.newIORef Seq.empty)
@@ -1402,7 +1405,7 @@ renderInput path listType@Type.List{ type_ } = do
                         let maybeList = do
                                 values <- traverse (\Child{ value } -> value) children
 
-                                return (Value.List values)
+                                return (Value.List location values)
 
                         renderOutput mode maybeList
 
@@ -1441,7 +1444,7 @@ renderInput path listType@Type.List{ type_ } = do
                 let maybeList = do
                         values <- traverse (\Child{ value } -> value) children
 
-                        return (Value.List values)
+                        return (Value.List location values)
 
                 renderOutput mode maybeList
 
@@ -1479,7 +1482,7 @@ renderInput path type_ = do
     renderInputDefault path type_
 
 data Child = Child
-    { value :: Maybe Value
+    { value :: Maybe (Value Location)
     , refreshOutput :: IO ()
     , li :: Maybe JSVal
     }
@@ -1495,8 +1498,8 @@ renderInputDefault
     :: [Text]
     -> Type Location
     -> ReaderT Config IO
-          ( Maybe Value
-          ,   (Mode -> Maybe Value -> IO ())
+          ( Maybe (Value Location)
+          ,   (Mode -> Maybe (Value Location) -> IO ())
           ->  ReaderT Config (MaybeT IO) (JSVal, Mode -> IO (), IO ())
           )
 renderInputDefault path type_ = do
@@ -1628,7 +1631,7 @@ createForm
     -> JSVal
     -> io
         ( IO ()
-        , Type Location -> Value -> (JSVal -> IO (IO ())) -> IO (IO ())
+        , Type Location -> Value Location -> (JSVal -> IO (IO ())) -> IO (IO ())
         , Text -> IO ()
         )
 createForm showTabs output = liftIO do

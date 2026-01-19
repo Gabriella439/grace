@@ -100,7 +100,7 @@ helperFunction f input = TH.Code do
 
     let type_ = void inferred
 
-    let syntax = Value.quote value
+    let syntax = Value.quote (void value)
 
     exp <- TH.lift (f (type_, syntax))
 

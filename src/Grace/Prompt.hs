@@ -14,7 +14,6 @@ module Grace.Prompt
     , UnsupportedModelOutput(..)
     ) where
 
-import Control.Applicative (empty)
 import Control.Exception.Safe (Exception(..), SomeException(..))
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.Foldable (fold, toList)
@@ -241,12 +240,12 @@ toResponseFormat (Just type_) = do
 
 -- | Implementation of the @prompt@ keyword
 prompt
-    :: IO [(Text, Type Location, Value)]
+    :: IO [(Text, Type Location, Value Location)]
     -> Bool
     -> Location
     -> Prompt
     -> Maybe (Type Location)
-    -> Grace Value
+    -> Grace (Value Location)
 prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = key }, text, history, model, search, effort } schema = do
     keyToMethods <- liftIO HTTP.getMethods
 
@@ -567,7 +566,7 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
 
             let extractText = do
                     let extract text_ = do
-                            return (Value.Text text_)
+                            return (Value.Text Unknown text_)
 
                     return
                         ( [ ]
@@ -583,11 +582,13 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
                     let extract text_ = do
                             v <- decode_ text_
 
-                            case defaultedSchema of
+                            value <- case defaultedSchema of
                                 Nothing -> do
                                     return (Infer.inferJSON v)
                                 Just s -> do
                                     Infer.checkJSON s v
+
+                            return (fmap (\_ -> Unknown) value)
 
                     return
                         ( instructions₁
@@ -614,8 +615,8 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
                                 Just s -> do
                                     Infer.checkJSON s v
 
-                            case expression of
-                                Value.Record [("response", response)] -> do
+                            case fmap (\_ -> Unknown) expression of
+                                Value.Record _ [("response", (_, response))] -> do
                                     return response
                                 other -> do
                                     return other

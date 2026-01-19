@@ -10,8 +10,8 @@ import Grace.Value (Value)
 
 -- | Like `interpret`, but accepts a custom list of bindings
 interpretWith
-    :: [(Text, Type Location, Value)]
+    :: [(Text, Type Location, Value Location )]
     -- ^ @(name, type, value)@ for each custom binding
     -> Maybe (Type Location)
     -- ^ Optional expected type for the input
-    -> Grace (Type Location, Value)
+    -> Grace (Type Location, Value Location)
