@@ -31,6 +31,7 @@ import Data.Text (Text)
 import Data.Vector (Vector)
 import Data.Void (Void)
 import Data.Word (Word8, Word16, Word32, Word64)
+import Grace.Location (Location(..))
 import Grace.Type (Type)
 import Grace.Value (Value(..))
 import Numeric.Natural (Natural)
@@ -71,18 +72,18 @@ import qualified Prettyprinter as Pretty
 
 -- | Convert a Grace expression to a Haskell expression
 class ToGraceType a => FromGrace a where
-    decode :: Value -> Either DecodingError a
+    decode :: Value Location -> Either DecodingError a
     default decode
         :: (Generic a, GenericFromGrace (Rep a))
-        => Value -> Either DecodingError a
+        => Value Location -> Either DecodingError a
     decode = fmap (fmap to) (State.evalState genericDecode 0)
 
     -- | This is used for decoding record fields, which might not be present
-    decodeMaybe :: Maybe Value -> Either DecodingError a
+    decodeMaybe :: Maybe (Value Location) -> Either DecodingError a
     decodeMaybe (Just value) = decode value
     decodeMaybe Nothing = Left TypeError
         { expectedType = expected @(Maybe a)
-        , value = Value.Scalar Syntax.Null
+        , value = Value.Scalar Unknown Syntax.Null
         }
 
 instance FromGrace Void
@@ -91,11 +92,11 @@ instance (FromGrace a, FromGrace b) => FromGrace (a, b)
 instance (FromGrace a, FromGrace b) => FromGrace (Either a b)
 
 instance FromGrace Bool where
-    decode (Value.Scalar (Syntax.Bool bool)) = return bool
+    decode (Value.Scalar _ (Syntax.Bool bool)) = return bool
     decode value = Left TypeError{ expectedType = expected @Bool, value }
 
 instance FromGrace Natural where
-    decode (Value.Scalar (Syntax.Natural natural)) =
+    decode (Value.Scalar _ (Syntax.Natural natural)) =
         return natural
     decode value =
         Left TypeError{ expectedType = expected @Natural, value }
@@ -103,7 +104,7 @@ instance FromGrace Natural where
 decodeIntegral
     ::  forall a b
     .   (FromGrace a, Integral a, Integral b, Bounded b)
-    =>  Value -> Either DecodingError b
+    =>  Value Location -> Either DecodingError b
 decodeIntegral value = do
     integral <- decode @a value
 
@@ -128,9 +129,9 @@ instance FromGrace Word64 where
     decode = decodeIntegral @Natural @Word64
 
 instance FromGrace Integer where
-    decode (Value.Scalar (Syntax.Natural natural)) =
+    decode (Value.Scalar _ (Syntax.Natural natural)) =
         return (fromIntegral natural)
-    decode (Value.Scalar (Syntax.Integer integer)) =
+    decode (Value.Scalar _ (Syntax.Integer integer)) =
         return integer
     decode value = Left TypeError
         { expectedType = expected @Integer
@@ -153,16 +154,16 @@ instance FromGrace Int64 where
     decode = decodeIntegral @Integer @Int64
 
 instance FromGrace Scientific where
-    decode (Value.Scalar (Syntax.Natural natural)) =
+    decode (Value.Scalar _ (Syntax.Natural natural)) =
         return (fromIntegral natural)
-    decode (Value.Scalar (Syntax.Integer integer)) =
+    decode (Value.Scalar _ (Syntax.Integer integer)) =
         return (fromInteger integer)
-    decode (Value.Scalar (Syntax.Real scientific)) =
+    decode (Value.Scalar _ (Syntax.Real scientific)) =
         return scientific
     decode value =
         Left TypeError{ expectedType = expected @Scientific, value }
 
-decodeRealFloat :: RealFloat a => Value -> Either DecodingError a
+decodeRealFloat :: RealFloat a => Value Location -> Either DecodingError a
 decodeRealFloat value = do
     scientific <- decode value
 
@@ -177,7 +178,7 @@ instance FromGrace Float where
     decode = decodeRealFloat
 
 instance FromGrace Text where
-    decode (Value.Text text) = return text
+    decode (Value.Text _ text) = return text
     decode value = Left TypeError{ expectedType = expected @Text, value }
 
 instance FromGrace Text.Lazy.Text where
@@ -187,7 +188,7 @@ instance {-# OVERLAPPING #-} FromGrace [Char] where
     decode = fmap (fmap Text.unpack) decode
 
 instance FromGrace Key where
-    decode (Value.Scalar (Syntax.Key text)) = return Key{ text }
+    decode (Value.Scalar _ (Syntax.Key text)) = return Key{ text }
     decode value = Left TypeError{ expectedType = expected @Key, value }
 
 instance FromGrace Aeson.Value where
@@ -198,7 +199,7 @@ instance FromGrace Aeson.Value where
             return json
 
 instance FromGrace a => FromGrace (Seq a) where
-    decode (Value.List seq_) = traverse decode seq_
+    decode (Value.List _ seq_) = traverse decode seq_
     decode value = Left TypeError{ expectedType = expected @(Seq a), value }
 
 instance FromGrace a => FromGrace [a] where
@@ -208,9 +209,9 @@ instance FromGrace a => FromGrace (Vector a) where
     decode = fmap (fmap Vector.fromList) decode
 
 instance FromGrace a => FromGrace (Maybe a) where
-    decode (Value.Scalar Syntax.Null) = do
+    decode (Value.Scalar _ Syntax.Null) = do
         return Nothing
-    decode (Value.Application (Value.Builtin Syntax.Some) value) = do
+    decode (Value.Application _ (Value.Builtin _ Syntax.Some) value) = do
         a <- decode value
         return (Just a)
     decode value = do
@@ -225,7 +226,7 @@ instance FromGrace a => FromGrace (Maybe a) where
     automatically deriving a `Generic` implementation
 -}
 class GenericToGraceType f => GenericFromGrace f where
-    genericDecode :: State Int (Value -> Either DecodingError (f a))
+    genericDecode :: State Int (Value Location -> Either DecodingError (f a))
 
 instance GenericFromGrace V1 where
     genericDecode = do
@@ -239,7 +240,7 @@ instance GenericFromGrace U1 where
     genericDecode = do
         let expectedType = State.evalState (genericExpected @U1) 0
 
-        let decode_ (Value.Record []) = return U1
+        let decode_ (Value.Record _ []) = return U1
             decode_ value = Left TypeError{ expectedType, value }
 
         return decode_
@@ -261,8 +262,8 @@ instance (Selector s, FromGrace a) => GenericFromGrace (M1 S s (K1 i a)) where
                 | Generics.selName m1 == "" =
                     fmap (M1 . K1) (decode value)
                 | otherwise = case value of
-                    Value.Record fieldValues ->
-                        fmap (M1 . K1) (decodeMaybe (HashMap.lookup name fieldValues))
+                    Value.Record _ fieldValues ->
+                        fmap (M1 . K1) (decodeMaybe (fmap snd (HashMap.lookup name fieldValues)))
                     _ -> do
                         let expectedType =
                                 State.evalState (genericExpected @(M1 S s (K1 i a))) 0
@@ -276,9 +277,9 @@ instance (Selector s₀, Selector s₁, FromGrace a₀, FromGrace a₁) => Gener
         name₀ <- selector (undefined :: M1 S s₀ (K1 i₀ a₀) r)
         name₁ <- selector (undefined :: M1 S s₁ (K1 i₁ a₁) r)
 
-        let decode_ (Value.Record fieldValues) = do
-                expression₀ <- decodeMaybe (HashMap.lookup name₀ fieldValues)
-                expression₁ <- decodeMaybe (HashMap.lookup name₁ fieldValues)
+        let decode_ (Value.Record _ fieldValues) = do
+                expression₀ <- decodeMaybe (fmap snd (HashMap.lookup name₀ fieldValues))
+                expression₁ <- decodeMaybe (fmap snd (HashMap.lookup name₁ fieldValues))
 
                 return (M1 (K1 expression₀) :*: M1 (K1 expression₁))
             decode_ value = do
@@ -295,9 +296,9 @@ instance (Selector s, GenericFromGrace (f₀ :*: f₁), FromGrace a) => GenericF
 
         name <- selector (undefined :: M1 S s (K1 i a) r)
 
-        let decode_ value₀@(Value.Record fieldValues) = do
+        let decode_ value₀@(Value.Record _ fieldValues) = do
                 expression₀ <- decode₀ value₀
-                expression₁ <- decodeMaybe (HashMap.lookup name fieldValues)
+                expression₁ <- decodeMaybe (fmap snd (HashMap.lookup name fieldValues))
 
                 return (expression₀ :*: M1 (K1 expression₁))
 
@@ -315,8 +316,8 @@ instance (Selector s, FromGrace a, GenericFromGrace (f₀ :*: f₁)) => GenericF
 
         decode₁ <- genericDecode
 
-        let decode_ value₁@(Value.Record fieldValues) = do
-                expression₀ <- decodeMaybe (HashMap.lookup name fieldValues)
+        let decode_ value₁@(Value.Record _ fieldValues) = do
+                expression₀ <- decodeMaybe (fmap snd (HashMap.lookup name fieldValues))
                 expression₁ <- decode₁ value₁
 
                 return (M1 (K1 expression₀) :*: expression₁)
@@ -350,7 +351,7 @@ instance (Constructor c₀, Constructor c₁, GenericFromGrace f₀, GenericFrom
         let decode₀ = State.evalState genericDecode 0
         let decode₁ = State.evalState genericDecode 0
 
-        let decode_ v@(Value.Alternative name value)
+        let decode_ v@(Value.Alternative _ name value)
                 | name == name₀ = fmap (L1 . M1) (decode₀ value)
                 | name == name₁ = fmap (R1 . M1) (decode₁ value)
                 | otherwise = do
@@ -373,7 +374,7 @@ instance (Constructor c, GenericFromGrace f₀, GenericFromGrace (f₁ :+: f₂)
         let decode₀ = State.evalState genericDecode 0
         let decode₁ = State.evalState genericDecode 0
 
-        let decode_ (Value.Alternative name value₀)
+        let decode_ (Value.Alternative _ name value₀)
                 | name == name₀ = fmap (L1 . M1) (decode₀ value₀)
             decode_ value₁ = fmap R1 (decode₁ value₁)
 
@@ -386,7 +387,7 @@ instance (Constructor c, GenericFromGrace (f₀ :+: f₁), GenericFromGrace f₂
         let decode₀ = State.evalState genericDecode 0
         let decode₁ = State.evalState genericDecode 0
 
-        let decode_ (Value.Alternative name value₁)
+        let decode_ (Value.Alternative _ name value₁)
                 | name == name₁ = fmap (R1 . M1) (decode₁ value₁)
             decode_ value₀ = fmap L1 (decode₀ value₀)
 
@@ -416,7 +417,7 @@ instance (GenericFromGrace (f₀ :+: f₁), GenericFromGrace (f₂ :+: f₃)) =>
 
 -- | Result of decoding
 data DecodingError
-    = TypeError{ expectedType :: Type (), value :: Value }
+    = TypeError{ expectedType :: Type (), value :: Value Location }
     -- ^ The input Grace expression has the wrong type
     | RangeError
     -- ^ The input Grace expression is out of bounds for the target Haskell type

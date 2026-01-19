@@ -4044,43 +4044,44 @@ solveSyntax :: Context s -> Syntax s a -> Syntax s a
 solveSyntax _Γ = Lens.transform (Lens.over Syntax.types (Context.solveType _Γ))
 
 -- | Convert from JSON, inferring the value purely from the JSON data
-inferJSON :: Aeson.Value -> Value
+inferJSON :: Aeson.Value -> Value ()
 inferJSON (Aeson.Object [("contents", contents), ("tag", Aeson.String tag)]) =
-    Value.Alternative tag value
+    Value.Alternative () tag value
   where
     value = inferJSON contents
-inferJSON (Aeson.Object object) = Value.Record (Map.fromList textValues)
+inferJSON (Aeson.Object object) = Value.Record () (Map.fromList keyValues)
   where
-    properties = Map.toList (Compat.fromAesonMap object)
+    keyValues = do
+        (key, value) <- Map.toList (Compat.fromAesonMap object)
 
-    textValues = fmap (fmap inferJSON) properties
-inferJSON (Aeson.Array vector) = Value.List (Seq.fromList (toList elements))
+        return (key, ((), inferJSON value))
+inferJSON (Aeson.Array vector) = Value.List () (Seq.fromList (toList elements))
   where
     elements = fmap inferJSON vector
-inferJSON (Aeson.String text) = Value.Text text
+inferJSON (Aeson.String text) = Value.Text () text
 inferJSON (Aeson.Number scientific) =
     case Scientific.floatingOrInteger scientific of
         Left (_ :: Double) ->
-            Value.Scalar (Syntax.Real scientific)
+            Value.Scalar () (Syntax.Real scientific)
         Right (integer :: Integer)
             | 0 <= integer -> do
-                Value.Scalar (Syntax.Natural (fromInteger integer))
+                Value.Scalar () (Syntax.Natural (fromInteger integer))
             | otherwise -> do
-                Value.Scalar (Syntax.Integer integer)
+                Value.Scalar () (Syntax.Integer integer)
 inferJSON (Aeson.Bool bool) =
-    Value.Scalar (Syntax.Bool bool)
+    Value.Scalar () (Syntax.Bool bool)
 inferJSON Aeson.Null =
-    Value.Scalar Syntax.Null
+    Value.Scalar () Syntax.Null
 
 -- | Check an `Aeson.Value` against an expected `Type`
-checkJSON :: Type Location -> Aeson.Value -> Grace Value
+checkJSON :: Type Location -> Aeson.Value -> Grace (Value ())
 checkJSON = loop []
   where
     loop path Type.Union{ Type.alternatives = Type.Alternatives alternativeTypes _ } (Aeson.Object [("contents", contents), ("tag", Aeson.String tag)])
         | Just alternativeType <- Prelude.lookup tag alternativeTypes = do
             value <- loop ("contents" : path) alternativeType contents
 
-            pure (Value.Alternative tag value)
+            pure (Value.Alternative () tag value)
     loop path Type.Record{ Type.fields = Type.Fields fieldTypes _ } (Aeson.Object object) = do
         let properties = Compat.fromAesonMap object
 
@@ -4091,70 +4092,70 @@ checkJSON = loop []
 
                 expression <- loop (field : path) type_ property
 
-                return (field, expression)
+                return (field, ((), expression))
 
         fieldValues <- traverse process fieldTypes
 
-        pure (Value.Record (Map.fromList fieldValues))
+        pure (Value.Record () (Map.fromList fieldValues))
     loop path type_@Type.Scalar{ scalar = Monotype.JSON } (Aeson.Object object) = do
         let properties = Map.toList (Compat.fromAesonMap object)
 
         let process (key, property) = do
                 expression <- loop (key : path) type_ property
 
-                return (key, expression)
+                return (key, ((), expression))
 
         textValues <- traverse process properties
 
-        pure (Value.Record (Map.fromList textValues))
+        pure (Value.Record () (Map.fromList textValues))
     loop path Type.List{ Type.type_ } (Aeson.Array vector) = do
         elements <- traverse (loop ("*" : path) type_) vector
 
-        pure (Value.List (Seq.fromList (toList elements)))
+        pure (Value.List () (Seq.fromList (toList elements)))
     loop path type_@Type.Scalar{ scalar = Monotype.JSON } (Aeson.Array vector) = do
         elements <- traverse (loop ("*" : path) type_) vector
 
-        pure (Value.List (Seq.fromList (toList elements)))
+        pure (Value.List () (Seq.fromList (toList elements)))
     loop _ Type.Scalar{ scalar = Monotype.Text } (Aeson.String text) = do
-        pure (Value.Text text)
+        pure (Value.Text () text)
     loop _ Type.Scalar{ scalar = Monotype.JSON } (Aeson.String text) = do
-        pure (Value.Text text)
+        pure (Value.Text () text)
     loop _ Type.Scalar{ scalar = Monotype.Real } (Aeson.Number scientific) = do
-        pure (Value.Scalar (Syntax.Real scientific))
+        pure (Value.Scalar () (Syntax.Real scientific))
     loop path type_@Type.Scalar{ scalar = Monotype.Integer } value@(Aeson.Number scientific) = do
         case Scientific.floatingOrInteger @Double @Integer scientific of
             Right integer -> do
-                pure (Value.Scalar (Syntax.Integer integer))
+                pure (Value.Scalar () (Syntax.Integer integer))
             _ -> do
                 Exception.throwIO InvalidJSON{ path, value, type_ }
     loop path type_@Type.Scalar{ scalar = Monotype.Natural } value@(Aeson.Number scientific) =
         case Scientific.floatingOrInteger @Double @Integer scientific of
             Right integer
                 | 0 <= integer -> do
-                    pure (Value.Scalar (Syntax.Natural (fromInteger integer)))
+                    pure (Value.Scalar () (Syntax.Natural (fromInteger integer)))
             _ -> do
                 Exception.throwIO InvalidJSON{ path, value, type_ }
     loop _ Type.Scalar{ scalar = Monotype.JSON } (Aeson.Number scientific) =
         case Scientific.floatingOrInteger scientific of
             Left (_ :: Double) -> do
-                pure (Value.Scalar (Syntax.Real scientific))
+                pure (Value.Scalar () (Syntax.Real scientific))
             Right (integer :: Integer)
                 | 0 <= integer -> do
-                    pure (Value.Scalar (Syntax.Natural (fromInteger integer)))
+                    pure (Value.Scalar () (Syntax.Natural (fromInteger integer)))
                 | otherwise -> do
-                    pure (Value.Scalar (Syntax.Integer integer))
+                    pure (Value.Scalar () (Syntax.Integer integer))
     loop _ Type.Scalar{ Type.scalar = Monotype.Bool } (Aeson.Bool bool) =
-        pure (Value.Scalar (Syntax.Bool bool))
+        pure (Value.Scalar () (Syntax.Bool bool))
     loop _ Type.Scalar{ Type.scalar = Monotype.JSON } (Aeson.Bool bool) =
-        pure (Value.Scalar (Syntax.Bool bool))
+        pure (Value.Scalar () (Syntax.Bool bool))
     loop _ Type.Optional{ } Aeson.Null =
-        pure (Value.Scalar Syntax.Null)
+        pure (Value.Scalar () Syntax.Null)
     loop path Type.Optional{ type_ } value = do
         result <- loop path type_ value
 
-        pure (Value.Application (Value.Builtin Syntax.Some) result)
+        pure (Value.Application () (Value.Builtin () Syntax.Some) result)
     loop _ Type.Scalar{ scalar = Monotype.JSON } Aeson.Null =
-        pure (Value.Scalar Syntax.Null)
+        pure (Value.Scalar () Syntax.Null)
     loop _ type₀ value = do
         let bytes = Aeson.Pretty.encodePretty value
 

@@ -9,7 +9,6 @@ module Grace
 import Control.Applicative (many, (<|>))
 import Control.Exception.Safe (Exception(..), SomeException)
 import Data.Foldable (traverse_)
-import Data.Functor (void)
 import Data.Void (Void)
 import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
@@ -192,8 +191,8 @@ main = Exception.handle handler do
             let annotatedExpression
                     | annotate = Annotation
                         { annotated = syntax
-                        , annotation = void inferred
-                        , location = ()
+                        , annotation = inferred
+                        , location = Syntax.location syntax
                         }
                     | otherwise =
                         syntax
@@ -222,7 +221,7 @@ main = Exception.handle handler do
             (_, value) <- Grace.evalGrace input initialStatus (Interpret.interpretWith [] (Just expected))
 
             case value of
-                Value.Text text -> Text.IO.putStr text
+                Value.Text _ text -> Text.IO.putStr text
                 _ -> do
                     Text.IO.hPutStrLn IO.stderr
                         "Internal error: Not a plain Text literal\n\
