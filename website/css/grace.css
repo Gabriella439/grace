@@ -196,7 +196,7 @@ li > span {
 }
 
 .grace-pane.grace-tabbed > * {
-  border-radius: 0 var(--s-2) var(--s-2) var(--s-2);
+  border-radius: var(--s-2);
 }
 
 .grace-form {
@@ -422,10 +422,11 @@ ul {
 
 .grace-tabs > * {
   flex: 0 0 auto;
+  margin-block-end: var(--s-3);
 }
 
 .grace-tabs > * + * {
-  margin-inline-start: var(--s-6);
+  margin-inline-start: var(--s-2);
 }
 
 .grace-tabs.overflowing {
@@ -438,17 +439,23 @@ ul {
 
 .grace-tab {
   border-radius: var(--s-2) var(--s-2) 0 0;
-  padding-inline: var(--s-1);
+  padding-inline: var(--s-2);
   padding-block: var(--s-2);
-  background-color: var(--crust);
+  background-color: transparent;
+  border-style: solid;
+  border-width: 0 0 var(--s-4) 0;
+  border-color: transparent;
 }
 
 .grace-tab:hover {
-  background-color: color-mix(in oklch, var(--overlay2) 30%, transparent);
+  color: var(--sky);
+  border-color: transparent transparent var(--sky) transparent;
+  background-color: transparent;
 }
 
 .grace-tab-selected {
-  background-color: var(--mantle);
+  color: var(--lavender);
+  border-color: transparent transparent var(--lavender) transparent;
 }
 
 .grace-spinner {

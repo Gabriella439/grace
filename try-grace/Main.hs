@@ -628,15 +628,14 @@ renderValue parent outer (Value.Alternative location alternative value) = do
     renderValue parent recordType recordValue
 
 renderValue parent Type.Function{ location, input, output } function = do
-    r@Config{ status, input = input_ } <- Reader.ask
+    r@Config{ edit, status, input = input_ } <- Reader.ask
 
     outputVal <- createElement "div"
     addClass outputVal "grace-result"
 
     let hasEffects = Lens.has Value.effects function
 
-    -- TODO: Restore interior tabs with appropriate styling
-    let tabbed = False -- edit && hasEffects
+    let tabbed = edit && hasEffects
 
     (setBusy, setSuccess, setError) <- createForm tabbed outputVal
 
