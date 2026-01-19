@@ -18,7 +18,6 @@ module Grace.Normalize
 
 import Control.Exception.Safe (Exception(..))
 import Control.Monad.IO.Class (MonadIO(..))
-import Data.Bifunctor (first)
 import Data.Foldable (toList)
 import Data.Functor (void)
 import Data.HashMap.Strict.InsOrd (InsOrdHashMap)
@@ -106,10 +105,10 @@ evaluate
 evaluate env₀ syntax₀ = do
     loop env₀ syntax₀
   where
-    generateContext env location = do
+    generateContext env = do
         let infer (name, assignment) = do
                 let expression :: Syntax Location Input
-                    expression = first (\_ -> location) (fmap Void.absurd (Value.quote assignment))
+                    expression = fmap Void.absurd (Value.quote assignment)
 
                 let input = Code "(intermediate value)" (Pretty.toSmart expression)
 
@@ -413,11 +412,11 @@ evaluate env₀ syntax₀ = do
 
                 let solvedSchema = fmap (Context.solveType context) schema
 
-                Prompt.prompt (generateContext env location) import_ location prompt solvedSchema
+                Prompt.prompt (generateContext env) import_ location prompt solvedSchema
 
             Syntax.HTTP{ schema = Nothing } -> do
                 Exception.throwIO MissingSchema
-            Syntax.HTTP{ location, import_, arguments, schema = Just schema } -> do
+            Syntax.HTTP{ import_, arguments, schema = Just schema } -> do
                 newArguments <- loop env arguments
 
                 http <- case decode newArguments of
@@ -428,7 +427,7 @@ evaluate env₀ syntax₀ = do
 
                 if import_
                     then do
-                        bindings <- liftIO (generateContext env location)
+                        bindings <- liftIO (generateContext env)
 
                         uri <- liftIO (URI.mkURI (HTTP.url http))
 
@@ -449,8 +448,8 @@ evaluate env₀ syntax₀ = do
                         let solvedSchema = Context.solveType context schema
 
                         case solvedSchema of
-                            Type.Scalar{ location = scalarLocation, scalar = Monotype.Text } ->
-                                return (Value.Text scalarLocation responseBody)
+                            Type.Scalar{ location, scalar = Monotype.Text } ->
+                                return (Value.Text location responseBody)
 
                             _ -> do
                                 responseValue <- liftIO (Grace.Aeson.decode responseBody)
@@ -460,7 +459,7 @@ evaluate env₀ syntax₀ = do
 
             Syntax.Read{ schema = Nothing } -> do
                 Exception.throwIO MissingSchema
-            Syntax.Read{ location, import_, arguments, schema = Just schema } -> do
+            Syntax.Read{ import_, arguments, schema = Just schema } -> do
                 newArguments <- loop env arguments
 
                 text <- case decode newArguments of
@@ -469,7 +468,7 @@ evaluate env₀ syntax₀ = do
 
                 if import_
                     then do
-                        bindings <- generateContext env location
+                        bindings <- generateContext env
 
                         parent <- Reader.ask
 
@@ -495,7 +494,7 @@ evaluate env₀ syntax₀ = do
 
             Syntax.GitHub{ schema = Nothing } -> do
                 Exception.throwIO MissingSchema
-            Syntax.GitHub{ location, import_, arguments, schema = Just schema } -> do
+            Syntax.GitHub{ import_, arguments, schema = Just schema } -> do
                 newArguments <- loop env arguments
 
                 github <- case decode newArguments of
@@ -506,7 +505,7 @@ evaluate env₀ syntax₀ = do
 
                 if import_
                     then do
-                        bindings <- generateContext env location
+                        bindings <- generateContext env
 
                         uri <- liftIO (URI.mkURI url)
 
@@ -533,8 +532,8 @@ evaluate env₀ syntax₀ = do
                         let solvedSchema = Context.solveType context schema
 
                         case solvedSchema of
-                            Type.Scalar{ location = scalarLocation, scalar = Monotype.Text } ->
-                                return (Value.Text scalarLocation responseBody)
+                            Type.Scalar{ location, scalar = Monotype.Text } ->
+                                return (Value.Text location responseBody)
 
                             _ -> do
                                 aesonValue <- liftIO (Grace.Aeson.decode responseBody)

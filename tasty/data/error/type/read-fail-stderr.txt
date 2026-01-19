@@ -4,10 +4,10 @@ The following type:
 
   Natural
 
-tasty/data/error/type/read-fail-input.ffg:2:20: 
+tasty/data/error/type/read-fail-input.ffg:4:9: 
   │
-2 │ let not x = import read "x == false"
-  │                    ↑
+4 │ in  not 4
+  │         ↑
 
 … cannot be a subtype of:
 
