@@ -1,1 +1,3 @@
-forall (a : Fields) . { x: Natural, y: Natural, a } -> Natural
+forall (a : Fields) .
+  { a: Natural, b: Natural, c: Optional Natural, d: Optional Natural, a } ->
+    Natural

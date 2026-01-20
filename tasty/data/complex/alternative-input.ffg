@@ -1,3 +1,18 @@
-# The purpose of this test is to verify that alternatives behind to their
-# arguments more tightly than function application
+# The purpose of this test is to verify that alternatives bind to their
+# arguments more tightly than function application.  This should be parsed as:
+#
+#     \f -> f (Point{x: 1, y: 2 })
+#
+# … and not:
+#
+#     (\f -> f Point){x: 1, y: 2 }
+#
+# This precedence is intentional to reduce the number of parentheses required
+# when functions have union-valued arguments.  One particularly notable example
+# of this is the `http` builtin, where you can write:
+#
+#     http GET{ url: "https://httpbin.org" }
+#
+# … without parentheses, thanks to the tighter precedence of alternative
+# application.
 \f -> f Point{ x: 1, y: 2 }
