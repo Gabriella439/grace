@@ -5,7 +5,7 @@
 , megaparsec, modern-uri, mtl, openai, optparse-applicative
 , parser-combinators, prettyprinter, prettyprinter-ansi-terminal
 , repline, retry, safe-exceptions, scientific, servant-client
-, servant-client-core, string-interpolate, tasty, tasty-hunit
+, servant-client-core, tasty, tasty-hunit
 , tasty-silver, template-haskell, terminal-size, text
 , unordered-containers, vector
 }:
@@ -22,7 +22,7 @@ mkDerivation {
     lens megaparsec modern-uri mtl openai optparse-applicative
     parser-combinators prettyprinter prettyprinter-ansi-terminal
     repline retry safe-exceptions scientific servant-client
-    servant-client-core string-interpolate template-haskell
+    servant-client-core template-haskell
     terminal-size text unordered-containers vector
   ];
   executableHaskellDepends = [ base ];

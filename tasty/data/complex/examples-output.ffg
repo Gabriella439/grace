@@ -1,0 +1,713 @@
+{ "hello":
+    "Hello, world!"
+, "html":
+    [ true, false, true ]
+, "data":
+    { "An example string":
+        "Mercury"
+    , "An example string with a type annotation":
+        "cosmic"
+    , "A boolean value":
+        true
+    , "Annotated boolean value":
+        false
+    , "A natural number":
+        42
+    , "An integer":
+        -12
+    , "A real number":
+        3.14159265359
+    , "A list of natural numbers":
+        [ 1, 1, 2, 3, 5, 8, 13 ]
+    , "Annotated list of natural numbers":
+        [ 1, 1, 2, 3, 5, 8, 13 ]
+    , "Annotated record":
+        { "x": 0, "y": 0 }
+    , "A list of records (using JSON syntax with quoted field names)":
+        [ { "isActive":
+              true
+          , "age":
+              36
+          , "name":
+              "Dunlap Hubbard"
+          , "email":
+              "dunlaphubbard@example.com"
+          , "phone":
+              "+1 (555) 543-2508"
+          }
+        , { "isActive":
+              true
+          , "age":
+              24
+          , "name":
+              "Kirsten Sellers"
+          , "email":
+              "kirstensellers@example.com"
+          , "phone":
+              "+1 (555) 564-2190"
+          }
+        ]
+    }
+, "prompting":
+    \arguments ->
+      let key = arguments."OpenAI API key"
+
+      in  { "names":
+              prompt
+                { "key":
+                    key
+                , "text":
+                    some "Give me a list of names"
+                , "history":
+                    null
+                , "model":
+                    null
+                , "search":
+                    null
+                , "effort":
+                    null
+                }
+                : forall (p : Type) . p
+          , "structuredNames":
+              prompt
+                { "key":
+                    key
+                , "text":
+                    some "Give me a list of names"
+                , "history":
+                    null
+                , "model":
+                    null
+                , "search":
+                    null
+                , "effort":
+                    null
+                }
+                : List Text
+          , "fullNames":
+              prompt
+                { "key":
+                    key
+                , "text":
+                    some "Give me a list of names"
+                , "history":
+                    null
+                , "model":
+                    null
+                , "search":
+                    null
+                , "effort":
+                    null
+                }
+                : List { firstName: Text, lastName: Text }
+          , "tacitFullNames":
+              prompt
+                { "key":
+                    key
+                , "text":
+                    null
+                , "history":
+                    null
+                , "model":
+                    null
+                , "search":
+                    null
+                , "effort":
+                    null
+                }
+                : List { firstName: Text, lastName: Text }
+          , "differentModel":
+              prompt
+                { "key":
+                    key
+                , "model":
+                    some "gpt-5-nano"
+                , "text":
+                    null
+                , "history":
+                    null
+                , "search":
+                    null
+                , "effort":
+                    null
+                }
+                : List { firstName: Text, lastName: Text }
+          }
+, "variables":
+    216
+, "functions":
+    { "greet":
+        \{ name } -> "Hello, ${name}!"
+    , "greeting":
+        "Hello, world!"
+    , "makeUser":
+        let greeting = "Hello, world!"
+
+        let greet = \{ name } -> "Hello, ${name}!"
+
+        in  \{ user } ->
+              let home = "/home/${user}"
+
+              let privateKey = "${home}/.ssh/id_ed25519"
+
+              let publicKey = "${privateKey}.pub"
+
+              in  { "home":
+                      home
+                  , "privateKey":
+                      privateKey
+                  , "publicKey":
+                      publicKey
+                  }
+    , "users":
+        [ { "home":
+              "/home/bill"
+          , "privateKey":
+              "/home/bill/.ssh/id_ed25519"
+          , "publicKey":
+              "/home/bill/.ssh/id_ed25519.pub"
+          }
+        , { "home":
+              "/home/jane"
+          , "privateKey":
+              "/home/jane/.ssh/id_ed25519"
+          , "publicKey":
+              "/home/jane/.ssh/id_ed25519.pub"
+          }
+        ]
+    }
+, "imports":
+    { "URL import":
+        \{ "Filing status", "Taxable income" } ->
+          let toBracket
+                brackets
+                (_ : { })
+                income
+                = fold
+                    { "cons":
+                        \bracket ->
+                        \result ->
+                          if  income > bracket."Lower bound"
+                          then
+                                bracket."Minimum tax"
+                            +       bracket."Tax rate"
+                              *   (income - bracket."Lower bound")
+                          else
+                            result
+                    , "nil":
+                        0.0 : Real
+                    }
+                    brackets
+
+          let tax
+                = fold
+                    { "Single filers":
+                        toBracket
+                          [ { "Tax rate":
+                                0.37
+                            , "Lower bound":
+                                539900.0
+                            , "Minimum tax":
+                                162718.0
+                            }
+                          , { "Tax rate":
+                                0.35
+                            , "Lower bound":
+                                215950.0
+                            , "Minimum tax":
+                                49335.5
+                            }
+                          , { "Tax rate":
+                                0.32
+                            , "Lower bound":
+                                170050.0
+                            , "Minimum tax":
+                                34647.5
+                            }
+                          , { "Tax rate":
+                                0.24
+                            , "Lower bound":
+                                89075.0
+                            , "Minimum tax":
+                                15213.5
+                            }
+                          , { "Tax rate":
+                                0.22
+                            , "Lower bound":
+                                41775.0
+                            , "Minimum tax":
+                                4807.5
+                            }
+                          , { "Tax rate":
+                                0.12
+                            , "Lower bound":
+                                10275.0
+                            , "Minimum tax":
+                                1027.5
+                            }
+                          , { "Tax rate":
+                                0.1
+                            , "Lower bound":
+                                0.0
+                            , "Minimum tax":
+                                0.0
+                            }
+                          ]
+                    , "Married, filing jointly":
+                        toBracket
+                          [ { "Tax rate":
+                                0.37
+                            , "Lower bound":
+                                647850.0
+                            , "Minimum tax":
+                                174253.5
+                            }
+                          , { "Tax rate":
+                                0.35
+                            , "Lower bound":
+                                431900.0
+                            , "Minimum tax":
+                                98671.0
+                            }
+                          , { "Tax rate":
+                                0.32
+                            , "Lower bound":
+                                340100.0
+                            , "Minimum tax":
+                                69295.0
+                            }
+                          , { "Tax rate":
+                                0.24
+                            , "Lower bound":
+                                178150.0
+                            , "Minimum tax":
+                                30427.0
+                            }
+                          , { "Tax rate":
+                                0.22
+                            , "Lower bound":
+                                93550.0
+                            , "Minimum tax":
+                                9615.0
+                            }
+                          , { "Tax rate":
+                                0.12
+                            , "Lower bound":
+                                20550.0
+                            , "Minimum tax":
+                                2055.0
+                            }
+                          , { "Tax rate":
+                                0.1
+                            , "Lower bound":
+                                0.0
+                            , "Minimum tax":
+                                0.0
+                            }
+                          ]
+                    , "Married, filing separately":
+                        toBracket
+                          [ { "Tax rate":
+                                0.37
+                            , "Lower bound":
+                                539900.0
+                            , "Minimum tax":
+                                162718.0
+                            }
+                          , { "Tax rate":
+                                0.35
+                            , "Lower bound":
+                                215950.0
+                            , "Minimum tax":
+                                49335.5
+                            }
+                          , { "Tax rate":
+                                0.32
+                            , "Lower bound":
+                                170050.0
+                            , "Minimum tax":
+                                34647.5
+                            }
+                          , { "Tax rate":
+                                0.24
+                            , "Lower bound":
+                                89075.0
+                            , "Minimum tax":
+                                15213.5
+                            }
+                          , { "Tax rate":
+                                0.22
+                            , "Lower bound":
+                                41775.0
+                            , "Minimum tax":
+                                4807.5
+                            }
+                          , { "Tax rate":
+                                0.12
+                            , "Lower bound":
+                                10275.0
+                            , "Minimum tax":
+                                1027.5
+                            }
+                          , { "Tax rate":
+                                0.1
+                            , "Lower bound":
+                                0.0
+                            , "Minimum tax":
+                                0.0
+                            }
+                          ]
+                    , "Head of household":
+                        toBracket
+                          [ { "Tax rate":
+                                0.37
+                            , "Lower bound":
+                                539900.0
+                            , "Minimum tax":
+                                161218.5
+                            }
+                          , { "Tax rate":
+                                0.35
+                            , "Lower bound":
+                                215950.0
+                            , "Minimum tax":
+                                47836.0
+                            }
+                          , { "Tax rate":
+                                0.32
+                            , "Lower bound":
+                                170050.0
+                            , "Minimum tax":
+                                33148.0
+                            }
+                          , { "Tax rate":
+                                0.24
+                            , "Lower bound":
+                                89050.0
+                            , "Minimum tax":
+                                13708.0
+                            }
+                          , { "Tax rate":
+                                0.22
+                            , "Lower bound":
+                                55900.0
+                            , "Minimum tax":
+                                6415.0
+                            }
+                          , { "Tax rate":
+                                0.12
+                            , "Lower bound":
+                                14650.0
+                            , "Minimum tax":
+                                1465.0
+                            }
+                          , { "Tax rate":
+                                0.1
+                            , "Lower bound":
+                                0.0
+                            , "Minimum tax":
+                                0.0
+                            }
+                          ]
+                    }
+                    .'Filing status'
+                    .'Taxable income'
+
+          in  { "Tax": tax }
+    , "GitHub import":
+        \{ "Filing status", "Taxable income" } ->
+          let toBracket
+                brackets
+                (_ : { })
+                income
+                = fold
+                    { "cons":
+                        \bracket ->
+                        \result ->
+                          if  income > bracket."Lower bound"
+                          then
+                                bracket."Minimum tax"
+                            +       bracket."Tax rate"
+                              *   (income - bracket."Lower bound")
+                          else
+                            result
+                    , "nil":
+                        0.0 : Real
+                    }
+                    brackets
+
+          let tax
+                = fold
+                    { "Single filers":
+                        toBracket
+                          [ { "Tax rate":
+                                0.37
+                            , "Lower bound":
+                                539900.0
+                            , "Minimum tax":
+                                162718.0
+                            }
+                          , { "Tax rate":
+                                0.35
+                            , "Lower bound":
+                                215950.0
+                            , "Minimum tax":
+                                49335.5
+                            }
+                          , { "Tax rate":
+                                0.32
+                            , "Lower bound":
+                                170050.0
+                            , "Minimum tax":
+                                34647.5
+                            }
+                          , { "Tax rate":
+                                0.24
+                            , "Lower bound":
+                                89075.0
+                            , "Minimum tax":
+                                15213.5
+                            }
+                          , { "Tax rate":
+                                0.22
+                            , "Lower bound":
+                                41775.0
+                            , "Minimum tax":
+                                4807.5
+                            }
+                          , { "Tax rate":
+                                0.12
+                            , "Lower bound":
+                                10275.0
+                            , "Minimum tax":
+                                1027.5
+                            }
+                          , { "Tax rate":
+                                0.1
+                            , "Lower bound":
+                                0.0
+                            , "Minimum tax":
+                                0.0
+                            }
+                          ]
+                    , "Married, filing jointly":
+                        toBracket
+                          [ { "Tax rate":
+                                0.37
+                            , "Lower bound":
+                                647850.0
+                            , "Minimum tax":
+                                174253.5
+                            }
+                          , { "Tax rate":
+                                0.35
+                            , "Lower bound":
+                                431900.0
+                            , "Minimum tax":
+                                98671.0
+                            }
+                          , { "Tax rate":
+                                0.32
+                            , "Lower bound":
+                                340100.0
+                            , "Minimum tax":
+                                69295.0
+                            }
+                          , { "Tax rate":
+                                0.24
+                            , "Lower bound":
+                                178150.0
+                            , "Minimum tax":
+                                30427.0
+                            }
+                          , { "Tax rate":
+                                0.22
+                            , "Lower bound":
+                                93550.0
+                            , "Minimum tax":
+                                9615.0
+                            }
+                          , { "Tax rate":
+                                0.12
+                            , "Lower bound":
+                                20550.0
+                            , "Minimum tax":
+                                2055.0
+                            }
+                          , { "Tax rate":
+                                0.1
+                            , "Lower bound":
+                                0.0
+                            , "Minimum tax":
+                                0.0
+                            }
+                          ]
+                    , "Married, filing separately":
+                        toBracket
+                          [ { "Tax rate":
+                                0.37
+                            , "Lower bound":
+                                539900.0
+                            , "Minimum tax":
+                                162718.0
+                            }
+                          , { "Tax rate":
+                                0.35
+                            , "Lower bound":
+                                215950.0
+                            , "Minimum tax":
+                                49335.5
+                            }
+                          , { "Tax rate":
+                                0.32
+                            , "Lower bound":
+                                170050.0
+                            , "Minimum tax":
+                                34647.5
+                            }
+                          , { "Tax rate":
+                                0.24
+                            , "Lower bound":
+                                89075.0
+                            , "Minimum tax":
+                                15213.5
+                            }
+                          , { "Tax rate":
+                                0.22
+                            , "Lower bound":
+                                41775.0
+                            , "Minimum tax":
+                                4807.5
+                            }
+                          , { "Tax rate":
+                                0.12
+                            , "Lower bound":
+                                10275.0
+                            , "Minimum tax":
+                                1027.5
+                            }
+                          , { "Tax rate":
+                                0.1
+                            , "Lower bound":
+                                0.0
+                            , "Minimum tax":
+                                0.0
+                            }
+                          ]
+                    , "Head of household":
+                        toBracket
+                          [ { "Tax rate":
+                                0.37
+                            , "Lower bound":
+                                539900.0
+                            , "Minimum tax":
+                                161218.5
+                            }
+                          , { "Tax rate":
+                                0.35
+                            , "Lower bound":
+                                215950.0
+                            , "Minimum tax":
+                                47836.0
+                            }
+                          , { "Tax rate":
+                                0.32
+                            , "Lower bound":
+                                170050.0
+                            , "Minimum tax":
+                                33148.0
+                            }
+                          , { "Tax rate":
+                                0.24
+                            , "Lower bound":
+                                89050.0
+                            , "Minimum tax":
+                                13708.0
+                            }
+                          , { "Tax rate":
+                                0.22
+                            , "Lower bound":
+                                55900.0
+                            , "Minimum tax":
+                                6415.0
+                            }
+                          , { "Tax rate":
+                                0.12
+                            , "Lower bound":
+                                14650.0
+                            , "Minimum tax":
+                                1465.0
+                            }
+                          , { "Tax rate":
+                                0.1
+                            , "Lower bound":
+                                0.0
+                            , "Minimum tax":
+                                0.0
+                            }
+                          ]
+                    }
+                    .'Filing status'
+                    .'Taxable income'
+
+          in  { "Tax": tax }
+    , "Short link":
+        "
+        The Grace browser also supports short links for code hosted on GitHub.  For
+        example, the short link for the above federal income tax form is:
+
+        [https://trygrace.dev?github=Gabriella439/grace/examples/taxes.ffg](https://trygrace.dev?github=Gabriella439/grace/examples/taxes.ffg)
+
+        More generally, the format of GitHub short links is:
+
+        ```
+        https://trygrace.dev?github=${owner}/${repository}/${path}[&reference=${reference}][&private=true]
+        ```
+
+        - `&reference=${reference}` pins the short link to a specific git reference
+
+          … and defaults to the trunk branch of the repository.
+
+        - `&private=true` will prompt you for a GitHub personal access token
+
+          … so that you can import from a private GitHub repository.
+
+        GitHub code imported in this way is displayed as a \"white-label\" form
+        displaying just the form without the title bar or the code editor.
+        "
+    , "Import Prelude function":
+        \b -> b == false
+    , "Import entire Prelude":
+        \b -> b == false
+    }
+, "coding":
+    \arguments ->
+      let key = arguments."OpenAI API key"
+
+      in  import prompt
+            { "key":
+                key
+            , "text":
+                null
+            , "history":
+                null
+            , "model":
+                null
+            , "search":
+                null
+            , "effort":
+                null
+            }
+            : { "Job Description": Text } ->
+                { "Is Finance?": Bool, "Rationale": Text }
+, "conclusion":
+    \{ "Want to get involved?" } ->
+      if  .'Want to get involved?'
+      then
+        "
+        Visit Grace's [GitHub repository](https://github.com/Gabriella439/grace)
+        or follow her [Bluesky profile](https://bsky.app/profile/trygrace.dev).
+        "
+      else
+        "Have fun using the Grace browser!"
+}

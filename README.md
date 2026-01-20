@@ -1,5 +1,8 @@
 # Grace
 
+[![built with garnix](https://img.shields.io/endpoint.svg?url=https%3A%2F%2Fgarnix.io%2Fapi%2Fbadges%2FGabriella439%2Fgrace)](https://garnix.io/repo/Gabriella439/grace)
+[![BlueSky | @trygrace.dev](https://img.shields.io/badge/Bluesky-@trygrace.dev-blue)](https://bsky.app/profile/trygrace.dev)
+
 Grace (short for [Fall-from-Grace](#name)) is a domain-specific programming
 language for prompting models.  In particular, Grace is well-suited for building
 and auto-generating elaborate prompt chains
@@ -80,9 +83,9 @@ Grace.
   type checker reasons backwards from how the output is used to infer the
   correct JSON schem, like this:
 
-  - type checker infers that the `name` variable must be `Text`
+  - the type checker infers that the `name` variable must be `Text`
 
-    … because the `name` variable is interpolated into "Hello, ${name}!"
+    … because the `name` variable is interpolated into `"Hello, ${name}!"`
 
   - the type checker infers that the `prompt` function must generate a `List`
 

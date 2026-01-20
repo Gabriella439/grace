@@ -4,7 +4,7 @@
 , ghcjs-prim, http-types, insert-ordered-containers, lens, lib
 , megaparsec, modern-uri, mtl, openai, parser-combinators
 , prettyprinter, prettyprinter-ansi-terminal, safe-exceptions
-, scientific, stm, string-interpolate, tasty, tasty-hunit
+, scientific, stm, tasty, tasty-hunit
 , tasty-silver, template-haskell, text, transformers
 , unordered-containers, uri-encode, vector
 }:
@@ -20,8 +20,7 @@ mkDerivation {
     ghcjs-fetch ghcjs-prim http-types insert-ordered-containers lens
     megaparsec modern-uri mtl openai parser-combinators prettyprinter
     prettyprinter-ansi-terminal safe-exceptions scientific
-    string-interpolate template-haskell text unordered-containers
-    vector
+    template-haskell text unordered-containers vector
   ];
   executableHaskellDepends = [
     aeson async base containers filepath ghcjs-base

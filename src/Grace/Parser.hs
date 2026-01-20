@@ -125,7 +125,6 @@ lexToken =
             , Grace.Parser.Map            <$ symbol "map"
             , Grace.Parser.Null           <$ symbol "null"
             , Grace.Parser.Reveal         <$ symbol "reveal"
-            , Grace.Parser.Show           <$ symbol "show"
             , Grace.Parser.Some           <$ symbol "some"
             , Grace.Parser.True_          <$ symbol "true"
             , Grace.Parser.YAML           <$ symbol "yaml"
@@ -133,6 +132,7 @@ lexToken =
 
         , Combinators.choice
             [ Grace.Parser.Else         <$ symbol "else"
+            , Grace.Parser.Export       <$ symbol "export"
             , Grace.Parser.Forall       <$ symbol "forall"
             , Grace.Parser.Fold         <$ symbol "fold"
             , Grace.Parser.For          <$ symbol "for"
@@ -145,6 +145,7 @@ lexToken =
             , Grace.Parser.Let          <$ symbol "let"
             , Grace.Parser.Of           <$ symbol "of"
             , Grace.Parser.Prompt       <$ symbol "prompt"
+            , Grace.Parser.Show         <$ symbol "show"
             , Grace.Parser.Then         <$ symbol "then"
             , Grace.Parser.Alternatives <$ symbol "Alternatives"
             , Grace.Parser.Fields       <$ symbol "Fields"
@@ -537,6 +538,7 @@ data Token
     | DoubleEquals
     | Else
     | Equals
+    | Export
     | False_
     | Fields
     | File FilePath
@@ -752,6 +754,7 @@ render t = case t of
     Grace.Parser.DoubleEquals       -> "=="
     Grace.Parser.Else               -> "else"
     Grace.Parser.Equals             -> "="
+    Grace.Parser.Export             -> "export"
     Grace.Parser.False_             -> "False"
     Grace.Parser.Fields             -> "Fields"
     Grace.Parser.File _             -> "a file"
@@ -1077,6 +1080,30 @@ grammar form = mdo
 
                       pure (f i)
 
+              <|> do  i <- (True <$ locatedToken Grace.Parser.Export) <|> pure False
+                      f <-  (   do  location <- locatedToken Grace.Parser.Show
+
+                                    arguments <- projectExpression
+
+                                    return \export -> Syntax.Show{ location, export, arguments, schema = Nothing }
+
+                            <|> do  location <- locatedToken Grace.Parser.Show
+
+                                    parseToken Grace.Parser.OpenParenthesis
+
+                                    arguments <- operatorExpression
+
+                                    parseToken Grace.Parser.Colon
+
+                                    schema <- quantifiedType
+
+                                    parseToken Grace.Parser.CloseParenthesis
+
+                                    return \export -> Syntax.Show{ location, export, arguments, schema = Just schema }
+                            )
+
+                      pure (f i)
+
               <|> do  location <- locatedToken Grace.Parser.Fold
 
                       handlers <- projectExpression
@@ -1231,10 +1258,6 @@ grammar form = mdo
 
                 return Syntax.Builtin{ location, builtin = Syntax.Some }
 
-        <|> do  location <- locatedToken Grace.Parser.Show
-
-                return Syntax.Builtin{ location, builtin = Syntax.Show }
-
         <|> do  location <- locatedToken Grace.Parser.YAML
 
                 return Syntax.Builtin{ location, builtin = Syntax.YAML }
@@ -1328,7 +1351,7 @@ grammar form = mdo
 
                 return \assignmentLocation -> Syntax.Bind
                     { assignmentLocation
-                    , monad = Nothing
+                    , monad = IdentityMonad
                     , binding
                     , assignment
                     }
@@ -1340,7 +1363,7 @@ grammar form = mdo
         return (f assignmentLocation)
 
     parseAssignment <- rule do
-        let parseForAssignment = do
+        let parseListAssignment = do
                 assignmentLocation <- locatedToken Grace.Parser.For
 
                 binding <- parseBinding
@@ -1351,12 +1374,30 @@ grammar form = mdo
 
                 return Syntax.Bind
                     { assignmentLocation
-                    , monad = Just UnknownMonad
+                    , monad = ListMonad
                     , binding
                     , assignment
                     }
 
-        parseLetAssignment <|> parseForAssignment
+        let parseOptionalAssignment = do
+                assignmentLocation <- locatedToken Grace.Parser.If
+
+                parseToken Grace.Parser.Let
+
+                binding <- parseBinding
+
+                parseToken Grace.Parser.Equals
+
+                assignment <- expression
+
+                return Syntax.Bind
+                    { assignmentLocation
+                    , monad = OptionalMonad
+                    , binding
+                    , assignment
+                    }
+
+        parseLetAssignment <|> parseListAssignment <|> parseOptionalAssignment
 
     recordLabel <- rule (reservedLabel <|> label <|> alternative <|> text)
 

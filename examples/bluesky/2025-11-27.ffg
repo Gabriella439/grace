@@ -1,0 +1,7 @@
+{ "How are you feeling?": fold
+    { "Hungry" { }: 'How hungry are you?'
+        (fold{ succ text: "😋" + text, zero: "" })
+    , "Full" { }: 'Go get some rest'
+        { }
+    }
+}

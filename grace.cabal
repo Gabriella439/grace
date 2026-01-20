@@ -5,9 +5,16 @@ license-file:        LICENSE
 author:              Gabriella Gonzalez
 maintainer:          Gabriel439@gmail.com
 build-type:          Simple
-extra-source-files:  examples/**.ffg
-                   , prompts/**.md
-                   , prelude/**.ffg
+extra-source-files:  examples/*.ffg
+                     examples/tutorial/*.ffg
+                     prompts/*.md
+                     prelude/bool/*.ffg
+                     prelude/integer/*.ffg
+                     prelude/list/*.ffg
+                     prelude/natural/*.ffg
+                     prelude/package.ffg
+                     prelude/real/*.ffg
+                     prelude/text/*.ffg
 
 library
   hs-source-dirs:      src
@@ -23,6 +30,7 @@ library
                      , containers
                      , case-insensitive
                      , directory
+                     , exceptions
                      , filepath
                      , generic-lens
                      , http-types
@@ -30,6 +38,7 @@ library
                      , lens
                      , megaparsec
                      , modern-uri
+                     , mmorph
                      , mtl
                      , openai
                      , parser-combinators
@@ -37,7 +46,6 @@ library
                      , prettyprinter-ansi-terminal
                      , safe-exceptions
                      , scientific
-                     , string-interpolate
                      , template-haskell
                      , text >= 1.2.4.0
                      , time
@@ -59,8 +67,10 @@ library
                      , Grace.Interpret
                      , Grace.Label
                      , Grace.Location
+                     , Grace.Monad
                      , Grace.Monotype
                      , Grace.Normalize
+                     , Grace.Parallelizable
                      , Grace.Parser
                      , Grace.Pretty
                      , Grace.Prompt
@@ -89,7 +99,10 @@ library
                      , DerivingStrategies
                      , DuplicateRecordFields
                      , FlexibleContexts
+                     , FlexibleInstances
                      , GeneralizedNewtypeDeriving
+                     , KindSignatures
+                     , MultiParamTypeClasses
                      , MultiWayIf
                      , NamedFieldPuns
                      , OverloadedStrings
@@ -97,6 +110,7 @@ library
                      , StandaloneDeriving
                      , TypeApplications
                      , TypeOperators
+                     , UndecidableInstances
                      , ViewPatterns
 
   default-language:    Haskell2010
@@ -151,6 +165,7 @@ executable try-grace
                      , grace
                      , insert-ordered-containers
                      , lens
+                     , mmorph
                      , mtl
                      , safe-exceptions
                      , scientific

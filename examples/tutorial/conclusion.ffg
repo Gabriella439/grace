@@ -1,0 +1,15 @@
+# Function arguments and variables can have spaces and punctuation if you quote
+# them like this (with a leading `.` followed by single quotes):
+let conclusion{ .'Want to get involved?' } =
+      if .'Want to get involved?'
+      then
+        # Grace supports multiline strings because newline characters are
+        # allowed inside of string literals:
+        "
+        Visit Grace's [GitHub repository](https://github.com/Gabriella439/grace)
+        or follow her [Bluesky profile](https://bsky.app/profile/trygrace.dev).
+        "
+      else
+        "Have fun using the Grace browser!"
+
+in  conclusion

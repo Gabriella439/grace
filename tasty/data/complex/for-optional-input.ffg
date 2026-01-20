@@ -1,13 +1,13 @@
 let a = some 1
 
-for x of a
+if let x = a
 
 let b = some x
 
-for y of b
+if let y = b
 
 let c = null
 
-for z of c
+if let z = c
 
 in  { x, y, z }

@@ -1,0 +1,19 @@
+Not a subtype
+
+The following type:
+
+  Natural
+
+tasty/data/error/for-naked-input.ffg:1:10: 
+  │
+1 │ for x of 1 in x
+  │          ↑
+
+… cannot be a subtype of:
+
+  List a?
+
+tasty/data/error/for-naked-input.ffg:1:1: 
+  │
+1 │ for x of 1 in x
+  │ ↑

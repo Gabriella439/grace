@@ -1,0 +1,19 @@
+Not a subtype
+
+The following type:
+
+  Natural
+
+tasty/data/error/type/fold-typo-field-input.ffg:4:14: 
+  │
+4 │ fold{ false: 0, tru: 1 }
+  │              ↑
+
+… cannot be a subtype of:
+
+  b? -> a?
+
+tasty/data/error/type/fold-typo-field-input.ffg:4:1: 
+  │
+4 │ fold{ false: 0, tru: 1 }
+  │ ↑

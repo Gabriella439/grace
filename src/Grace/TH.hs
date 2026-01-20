@@ -23,11 +23,11 @@ import Grace.Syntax (Syntax)
 import Grace.Type (Type)
 import Language.Haskell.TH.Quote (QuasiQuoter(..))
 import Language.Haskell.TH.Syntax (Code(examineCode), Lift, Q, TExp(..))
+import Prelude hiding (exp)
 
 import qualified Data.Text as Text
-import qualified Grace.HTTP as HTTP
 import qualified Grace.Interpret as Interpret
-import qualified Grace.Normalize as Normalize
+import qualified Grace.Value as Value
 import qualified Language.Haskell.TH as TH
 import qualified Language.Haskell.TH.Syntax as TH
 
@@ -62,7 +62,7 @@ grace = QuasiQuoter
      Text {location = (), chunks = Chunks "hello" []}
 -}
 expressionFromCode :: Text -> Code Q (Syntax () Void)
-expressionFromCode = expressionFromInput . Code "(input)"
+expressionFromCode code = expressionFromInput (Code "(quasiquote)" code)
 
 -- | Like `expressionFromCode`, but takes path of a source file as input.
 expressionFromFile :: FilePath -> Code Q (Syntax () Void)
@@ -91,16 +91,17 @@ typeOfFile path = typeOfInput (Path path AsCode)
 typeOfInput :: Input -> Code Q (Type ())
 typeOfInput = helperFunction fst
 
--- Internal functions
-
+-- | Underlying code for all TemplateHaskell utilities
 helperFunction
-    :: Lift r => ((Type (), Syntax () Void) -> r) -> Input -> Code Q r
+    :: Lift result
+    => ((Type (), Syntax () Void) -> result) -> Input -> Code Q result
 helperFunction f input = TH.Code do
-    keyToMethods <- liftIO (HTTP.getMethods)
-
-    (inferred, value) <- liftIO (Interpret.interpret keyToMethods input)
+    (inferred, value) <- liftIO (Interpret.interpret input)
 
     let type_ = void inferred
-        syntax = Normalize.quote value
 
-    TExp <$> TH.lift (f (type_, syntax))
+    let syntax = Value.quote (void value)
+
+    exp <- TH.lift (f (type_, syntax))
+
+    return (TExp exp)

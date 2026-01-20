@@ -13,11 +13,9 @@ import Control.Monad.State (MonadState(..))
 import Data.Bifunctor (first)
 import Data.Foldable (toList)
 import Data.List.NonEmpty (NonEmpty(..))
-import Data.Text (Text)
-import Grace.HTTP (Methods)
-import Grace.Infer (Status(..))
 import Grace.Interpret (Input(..))
 import Grace.Location (Location(..))
+import Grace.Monad (Status(..))
 import Grace.Parser (REPLCommand(..))
 import System.Console.Haskeline (Interrupt(..))
 import System.Console.Repline (CompleterStyle(..), MultiLine(..), ReplOpts(..))
@@ -33,6 +31,7 @@ import qualified Data.Text.IO as Text.IO
 import qualified Grace.Context as Context
 import qualified Grace.Infer as Infer
 import qualified Grace.Label as Label
+import qualified Grace.Monad as Grace
 import qualified Grace.Normalize as Normalize
 import qualified Grace.Parser as Parser
 import qualified Grace.Pretty as Pretty
@@ -45,8 +44,8 @@ import qualified System.Console.Repline as Repline
 import qualified System.IO as IO
 
 -- | Entrypoint for the @grace repl@ subcommand
-repl :: (Text -> Methods) -> IO ()
-repl keyToMethods = do
+repl :: IO ()
+repl = do
     let err :: (Exception e, MonadIO io) => e -> io ()
         err e =
             liftIO (Text.IO.hPutStrLn IO.stderr (Text.pack (displayException e)))
@@ -72,20 +71,21 @@ repl keyToMethods = do
                               , body = first locate syntax₀
                               }
 
+                    let input = Code "(input)" text
+
                     let status = Status
                             { count = 0
-                            , input = Code "(input)" text
                             , context = []
                             }
 
                     let action = do
                             (inferred, elaborated) <- Infer.infer syntax₁
 
-                            value <- Normalize.evaluate keyToMethods [] elaborated
+                            value <- Normalize.evaluate [] elaborated
 
                             return (inferred, value)
 
-                    result <- liftIO (Exception.try (State.runStateT action status))
+                    result <- liftIO (Exception.try (Grace.runGrace input status action))
 
                     case result of
                         Left (e :: SomeException) -> do
@@ -95,7 +95,7 @@ repl keyToMethods = do
                             let annotation = Context.complete context inferred
 
                             let annotated =
-                                    Normalize.quote (Value.complete context value)
+                                    Value.quote (Value.complete context value)
 
                             return (Right (annotation, annotated))
 
@@ -172,7 +172,17 @@ repl keyToMethods = do
                     [ completeReserved
                     , completeIdentifiers
                     , completeFields
+                    , completeFile
                     ]
+
+            completeFile =
+                Repline.runMatcher
+                    [ ("/"  , Repline.fileCompleter)
+                    , ("./" , Repline.fileCompleter)
+                    , ("../", Repline.fileCompleter)
+                    , ("~/" , Repline.fileCompleter)
+                    ]
+                    Completion.noCompletion
 
             completeReserved =
                 Repline.listCompleter (fmap Text.unpack (toList Label.reservedLabels))

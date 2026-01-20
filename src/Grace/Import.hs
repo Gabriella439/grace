@@ -9,7 +9,7 @@ module Grace.Import
     , ImportError(..)
     ) where
 
-import Control.Exception.Safe (Exception(..), MonadCatch)
+import Control.Exception.Safe (Exception(..))
 import Data.Bifunctor (first)
 import Data.Foldable (foldl')
 import Data.HashMap.Strict (HashMap)
@@ -20,6 +20,7 @@ import Data.Text (Text)
 import Grace.HTTP (HttpException)
 import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
+import Grace.Monad (Grace)
 import Grace.Syntax (Syntax)
 import System.FilePath ((</>))
 import Text.URI (Authority, RText, RTextLabel(..))
@@ -202,7 +203,7 @@ remote _ = False
 
 -- | Fail if the child import tries to access something that the parent import
 -- should not have access to
-referentiallySane :: MonadCatch m => Input -> Input -> m ()
+referentiallySane :: Input -> Input -> Grace ()
 referentiallySane parent child
     | remote parent && not (remote child) = do
         Exception.throwIO (ImportError parent (ReferentiallyInsane child))

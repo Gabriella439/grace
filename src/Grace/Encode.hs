@@ -1,6 +1,3 @@
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE FlexibleInstances #-}
-
 {-| Use this module to encode Haskell expressions as Grace expressions
 
     Example usage:
@@ -12,6 +9,8 @@ module Grace.Encode
     ( -- * Classes
       ToGrace(..)
     , GenericToGrace(..)
+    , ToGraceType(..)
+    , GenericToGraceType(..)
 
       -- * Types
     , Key(..)
@@ -26,7 +25,7 @@ import Data.Text (Text)
 import Data.Vector (Vector)
 import Data.Void (Void)
 import Data.Word (Word8, Word16, Word32, Word64)
-import Grace.Marshal (Key(..))
+import Grace.Marshal (GenericToGraceType(..), Key(..), ToGraceType(..))
 import Grace.Value (Value(..))
 import Numeric.Natural (Natural)
 
@@ -47,6 +46,7 @@ import GHC.Generics
     )
 
 import qualified Control.Monad.State as State
+import qualified Data.Aeson as Aeson
 import qualified Data.Scientific as Scientific
 import qualified Data.Sequence as Seq
 import qualified Data.HashMap.Strict.InsOrd as HashMap
@@ -59,10 +59,10 @@ import qualified Grace.Syntax as Syntax
 import qualified Grace.Value as Value
 
 -- | Convert a Haskell expression to a Grace expression
-class ToGrace a where
-    encode :: a -> Value
+class ToGraceType a => ToGrace a where
+    encode :: a -> Value ()
 
-    default encode :: (Generic a, GenericToGrace (Rep a)) => a -> Value
+    default encode :: (Generic a, GenericToGrace (Rep a)) => a -> Value ()
     encode = State.evalState genericEncode 0 . from
 
 instance ToGrace Void
@@ -71,10 +71,10 @@ instance (ToGrace a, ToGrace b) => ToGrace (a, b)
 instance (ToGrace a, ToGrace b) => ToGrace (Either a b)
 
 instance ToGrace Bool where
-    encode bool = Value.Scalar (Syntax.Bool bool)
+    encode bool = Value.Scalar () (Syntax.Bool bool)
 
 instance ToGrace Natural where
-    encode natural = Value.Scalar (Syntax.Natural natural)
+    encode natural = Value.Scalar () (Syntax.Natural natural)
 
 instance ToGrace Word where
     encode = encode @Natural . fromIntegral
@@ -92,7 +92,7 @@ instance ToGrace Word64 where
     encode = encode @Natural . fromIntegral
 
 instance ToGrace Integer where
-    encode integer = Value.Scalar (Syntax.Integer integer)
+    encode integer = Value.Scalar () (Syntax.Integer integer)
 
 instance ToGrace Int where
     encode = encode @Integer . fromIntegral
@@ -110,7 +110,7 @@ instance ToGrace Int64 where
     encode = encode @Integer . fromIntegral
 
 instance ToGrace Scientific where
-    encode scientific = Value.Scalar (Syntax.Real scientific)
+    encode scientific = Value.Scalar () (Syntax.Real scientific)
 
 instance ToGrace Float where
     encode = encode @Scientific . Scientific.fromFloatDigits
@@ -119,7 +119,7 @@ instance ToGrace Double where
     encode = encode @Scientific . Scientific.fromFloatDigits
 
 instance ToGrace Text where
-    encode text = Value.Text text
+    encode text = Value.Text () text
 
 instance ToGrace Text.Lazy.Text where
     encode = encode . Text.Lazy.toStrict
@@ -128,10 +128,13 @@ instance {-# OVERLAPPING #-} ToGrace [Char] where
     encode = encode . Text.pack
 
 instance ToGrace Key where
-    encode Key{ text } = Value.Scalar (Syntax.Key text)
+    encode Key{ text } = Value.Scalar () (Syntax.Key text)
+
+instance ToGrace Aeson.Value where
+    encode = Value.fromJSON
 
 instance ToGrace a => ToGrace (Seq a) where
-    encode list = Value.List (fmap encode list)
+    encode list = Value.List () (fmap encode list)
 
 instance ToGrace a => ToGrace [a] where
     encode = encode . Seq.fromList
@@ -140,14 +143,15 @@ instance ToGrace a => ToGrace (Vector a) where
     encode = encode . Vector.toList
 
 instance ToGrace a => ToGrace (Maybe a) where
-    encode (Just a) = Value.Application (Value.Builtin Syntax.Some) (encode a)
-    encode Nothing = Value.Scalar Syntax.Null
+    encode (Just a) =
+        Value.Application () (Value.Builtin () Syntax.Some) (encode a)
+    encode Nothing = Value.Scalar () Syntax.Null
 
 {-| This is the underlying class that powers the `ToGrace` class's support for
     automatically deriving a `Generic` implementation
 -}
 class GenericToGrace f where
-    genericEncode :: State Int (f a -> Value)
+    genericEncode :: State Int (f a -> Value ())
 
 instance GenericToGrace V1 where
     genericEncode = do
@@ -159,7 +163,7 @@ instance GenericToGrace V1 where
 
 instance GenericToGrace U1 where
     genericEncode = do
-        let encode_ U1 = Value.Record mempty
+        let encode_ U1 = Value.Record () mempty
 
         return encode_
 
@@ -179,7 +183,8 @@ instance (Selector s, ToGrace a) => GenericToGrace (M1 S s (K1 i a)) where
         let encode_ (M1 (K1 a))
                 | Generics.selName m1 == "" =
                     encode a
-                | otherwise = Value.Record (HashMap.singleton name (encode a))
+                | otherwise =
+                    Value.Record () (HashMap.singleton name ((), encode a))
 
         return encode_
 
@@ -190,8 +195,9 @@ instance (Selector s₀, Selector s₁, ToGrace a₀, ToGrace a₁) => GenericTo
 
         let encode_ (M1 (K1 a₀) :*: M1 (K1 a₁)) =
                 Value.Record
+                    ()
                     (HashMap.fromList
-                        [ (name₀, encode a₀), (name₁, encode a₁) ]
+                        [ (name₀, ((), encode a₀)), (name₁, ((), encode a₁)) ]
                     )
 
         return encode_
@@ -203,7 +209,8 @@ instance (Selector s, GenericToGrace (f₀ :*: f₁), ToGrace a) => GenericToGra
         name <- Marshal.selector (undefined :: M1 S s (K1 i a) r)
 
         let encode_ (f :*: M1 (K1 a)) = Value.Record
-                ( HashMap.insert name (encode a)
+                ()
+                ( HashMap.insert name ((), encode a)
                     (unsafeExpectRecordLiteral (encode₀ f))
                 )
 
@@ -216,7 +223,8 @@ instance (Selector s, ToGrace a, GenericToGrace (f₀ :*: f₁)) => GenericToGra
         encode₁ <- genericEncode
 
         let encode_ (M1 (K1 a) :*: f) = Value.Record
-                (HashMap.insert name (encode a)
+                ()
+                (HashMap.insert name ((), encode a)
                   (unsafeExpectRecordLiteral (encode₁ f))
                 )
 
@@ -228,6 +236,7 @@ instance (GenericToGrace (f₀ :*: f₁), GenericToGrace (f₂ :*: f₃)) => Gen
         encode₁ <- genericEncode
 
         let encode_ (f₀ :*: f₁) = Value.Record
+                ()
                 (   unsafeExpectRecordLiteral (encode₀ f₀)
                 <>  unsafeExpectRecordLiteral (encode₁ f₁)
                 )
@@ -242,8 +251,8 @@ instance (Constructor c₀, Constructor c₁, GenericToGrace f₀, GenericToGrac
         let encode₀ = State.evalState genericEncode 0
         let encode₁ = State.evalState genericEncode 0
 
-        let encode_ (L1 (M1 f)) = Value.Alternative name₀ (encode₀ f)
-            encode_ (R1 (M1 f)) = Value.Alternative name₁ (encode₁ f)
+        let encode_ (L1 (M1 f)) = Value.Alternative () name₀ (encode₀ f)
+            encode_ (R1 (M1 f)) = Value.Alternative () name₁ (encode₁ f)
 
         return encode_
 
@@ -254,7 +263,7 @@ instance (Constructor c, GenericToGrace f₀, GenericToGrace (f₁ :+: f₂)) =>
         let encode₀ = State.evalState genericEncode 0
         let encode₁ = State.evalState genericEncode 0
 
-        let encode_ (L1 (M1 f)) = Value.Alternative name (encode₀ f)
+        let encode_ (L1 (M1 f)) = Value.Alternative () name (encode₀ f)
             encode_ (R1     f ) = encode₁ f
 
         return encode_
@@ -267,7 +276,7 @@ instance (Constructor c, GenericToGrace (f₀ :+: f₁), GenericToGrace f₂) =>
         let encode₁ = State.evalState genericEncode 0
 
         let encode_ (L1     f ) = encode₀ f
-            encode_ (R1 (M1 f)) = Value.Alternative name (encode₁ f)
+            encode_ (R1 (M1 f)) = Value.Alternative () name (encode₁ f)
 
         return encode_
 
@@ -281,8 +290,9 @@ instance (GenericToGrace (f₀ :+: f₁), GenericToGrace (f₂ :+: f₃)) => Gen
 
         return encode_
 
-unsafeExpectRecordLiteral :: Value -> InsOrdHashMap Text Value
-unsafeExpectRecordLiteral (Value.Record fieldValues) =
+unsafeExpectRecordLiteral
+    :: Value location -> InsOrdHashMap Text (location, Value location)
+unsafeExpectRecordLiteral (Value.Record _ fieldValues) =
     fieldValues
 unsafeExpectRecordLiteral _ =
     error "Grace.Encode.unsafeExpectRecordLiteral: not a record"

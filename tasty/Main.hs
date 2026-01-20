@@ -17,7 +17,7 @@ import Data.Sequence (Seq)
 import Data.Text (Text)
 import Data.Word (Word8, Word16, Word32, Word64)
 import GHC.Generics (Generic)
-import Grace.Decode (DecodingError(..), FromGrace, Key)
+import Grace.Decode (FromGrace, Key, ToGraceType)
 import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
 import Grace.Pretty (Pretty(..))
@@ -33,10 +33,8 @@ import qualified Data.Text as Text
 import qualified Data.Text.Lazy as Text.Lazy
 import qualified Data.Vector as Vector
 import qualified Grace.Decode as Decode
-import qualified Grace.HTTP as HTTP
 import qualified Grace.Interpret as Interpret
 import qualified Grace.Monotype as Monotype
-import qualified Grace.Normalize as Normalize
 import qualified Grace.Pretty
 import qualified Grace.Syntax as Syntax
 import qualified Grace.Type as Type
@@ -55,11 +53,9 @@ pretty_ x =
     Grace.Pretty.renderStrict False Width.defaultWidth
         (pretty x <> Pretty.hardline)
 
-interpret :: Input -> IO (Either SomeException (Type Location, Value.Value))
-interpret input = do
-    keyToMethods <- HTTP.getMethods
-
-    Exception.try (Interpret.interpret keyToMethods input)
+interpret :: Input -> IO (Either SomeException (Type Location, Value.Value ()))
+interpret input =
+    fmap (fmap (fmap (fmap (\_ -> ())))) (Exception.try (Interpret.interpret input))
 
 throws :: Exception e => IO (Either e a) -> IO a
 throws io = do
@@ -94,8 +90,7 @@ fileToTestTree prefix = do
         Right (inferred, value) -> do
             let generateTypeFile = return (pretty_ inferred)
 
-            let generateOutputFile =
-                    return (pretty_ (Normalize.quote value))
+            let generateOutputFile = return (pretty_ value)
 
             return
                 (Tasty.testGroup name
@@ -154,11 +149,11 @@ data T0
     | C3{ a :: Maybe Int, b :: Maybe Int, c :: Maybe Int }
     | C4{ a :: Maybe Int, b :: Maybe Int, c :: Maybe Int, d :: Maybe Int }
     deriving stock (Eq, Generic, Show)
-    deriving anyclass (FromGrace)
+    deriving anyclass (FromGrace, ToGraceType)
 
 data T1
     deriving stock (Generic)
-    deriving anyclass (FromGrace)
+    deriving anyclass (FromGrace, ToGraceType)
 
 main :: IO ()
 main = do
@@ -221,7 +216,7 @@ interpretCode = Tasty.HUnit.testCase "interpret code" do
     actualValue <- throws (interpret (Code "(input)" "2 + 2"))
 
     let expectedValue =
-            (Type.Scalar{ location, scalar = Monotype.Natural }, Value.Scalar (Syntax.Natural 4))
+            (Type.Scalar{ location, scalar = Monotype.Natural }, Value.Scalar () (Syntax.Natural 4))
           where
             location = Location{ name = "(input)", code = "2 + 2", offset = 2 }
 
@@ -232,7 +227,7 @@ interpretCodeWithImport = Tasty.HUnit.testCase "interpret code with import from 
     actualValue <- throws (interpret (Code "(input)" "./tasty/data/unit/plus-input.ffg"))
 
     let expectedValue =
-            (Type.Scalar{ location, scalar = Monotype.Natural }, Value.Scalar (Syntax.Natural 5))
+            (Type.Scalar{ location, scalar = Monotype.Natural }, Value.Scalar () (Syntax.Natural 5))
           where
             location = Location{ name = "./tasty/data/unit/plus-input.ffg", code = "2 + 3\n", offset = 2 }
 
@@ -258,7 +253,7 @@ interpretCodeWithEnvURI = Tasty.HUnit.testCase "interpret code with env: import"
         throws (interpret (Code "(input)" (Text.pack name)))
 
     let expectedValue =
-            (Type.Scalar{ location, scalar = Monotype.Bool }, Value.Scalar (Syntax.Bool True))
+            (Type.Scalar{ location, scalar = Monotype.Bool }, Value.Scalar () (Syntax.Bool True))
           where
             location = Location{ name, code = "true", offset = 0 }
 
@@ -273,7 +268,7 @@ interpretCodeWithFileURI = Tasty.HUnit.testCase "interpret code with file:// imp
     actualValue <- throws (interpret (Code "(input)" (Text.pack uri)))
 
     let expectedValue =
-            (Type.Scalar{ location, scalar = Monotype.Bool }, Value.Scalar (Syntax.Bool True))
+            (Type.Scalar{ location, scalar = Monotype.Bool }, Value.Scalar () (Syntax.Bool True))
           where
             location = Location{ name = absolute, code = "true\n", offset = 0 }
 
@@ -282,7 +277,7 @@ interpretCodeWithFileURI = Tasty.HUnit.testCase "interpret code with file:// imp
 loadSuccessfully :: TestTree
 loadSuccessfully = Tasty.HUnit.testCase "load code" do
     let actual :: Either DecodingError Natural
-        actual = Decode.decode (Value.Scalar (Syntax.Natural 2))
+        actual = decode (Value.Scalar () (Syntax.Natural 2))
 
     Tasty.HUnit.assertEqual "" (Right 2) actual
 
@@ -292,56 +287,64 @@ load name code expected = Tasty.HUnit.testCase ("load " <> name) do
 
     Tasty.HUnit.assertEqual "" expected actual
 
+data DecodingError = TypeError | RangeError deriving stock (Eq, Show)
+
+decode :: FromGrace a => Value.Value () -> Either DecodingError a
+decode value = case Decode.decode (fmap (\_ -> Unknown) value) of
+    Left  Decode.TypeError{ }  -> Left TypeError
+    Left  Decode.RangeError{ } -> Left RangeError
+    Right a                    -> Right a
+
 decodeWithTypeError :: TestTree
 decodeWithTypeError = Tasty.HUnit.testCase "load code with type error" do
     let actual₀ :: Either DecodingError Bool
-        actual₀ = Decode.decode (Value.Scalar (Syntax.Natural 2))
+        actual₀ = decode (Value.Scalar () (Syntax.Natural 2))
 
     Tasty.HUnit.assertEqual "" (Left TypeError) actual₀
 
     let actual₁ :: Either DecodingError T0
-        actual₁ = Decode.decode (Value.Alternative "C1" (Value.Record mempty))
+        actual₁ = decode (Value.Alternative () "C1" (Value.Record () mempty))
 
     Tasty.HUnit.assertEqual "" (Left TypeError) actual₁
 
     let actual₂ :: Either DecodingError Natural
-        actual₂ = Decode.decode (Value.Scalar (Syntax.Bool False))
+        actual₂ = decode (Value.Scalar () (Syntax.Bool False))
 
     Tasty.HUnit.assertEqual "" (Left TypeError) actual₂
 
     let actual₃ :: Either DecodingError Integer
-        actual₃ = Decode.decode (Value.Scalar (Syntax.Bool False))
+        actual₃ = decode (Value.Scalar () (Syntax.Bool False))
 
     Tasty.HUnit.assertEqual "" (Left TypeError) actual₃
 
     let actual₄ :: Either DecodingError Text
-        actual₄ = Decode.decode (Value.Scalar (Syntax.Bool False))
+        actual₄ = decode (Value.Scalar () (Syntax.Bool False))
 
     Tasty.HUnit.assertEqual "" (Left TypeError) actual₄
 
     let actual₅ :: Either DecodingError Key
-        actual₅ = Decode.decode (Value.Scalar (Syntax.Bool False))
+        actual₅ = decode (Value.Scalar () (Syntax.Bool False))
 
     Tasty.HUnit.assertEqual "" (Left TypeError) actual₅
 
     let actual₆ :: Either DecodingError Value
-        actual₆ = Decode.decode (Value.Lambda [] (Value.Name "x" Nothing) Syntax.Variable{ location = Unknown, name = "x" })
+        actual₆ = decode (Value.Lambda () [] (Value.Name () "x" Nothing) Syntax.Variable{ location = (), name = "x" })
 
     Tasty.HUnit.assertEqual "" (Left TypeError) actual₆
 
     let actual₇ :: Either DecodingError (Seq Bool)
-        actual₇ = Decode.decode (Value.Scalar (Syntax.Bool False))
+        actual₇ = decode (Value.Scalar () (Syntax.Bool False))
 
     Tasty.HUnit.assertEqual "" (Left TypeError) actual₇
 
     let actual₈ :: Either DecodingError Scientific
-        actual₈ = Decode.decode (Value.Scalar (Syntax.Bool False))
+        actual₈ = decode (Value.Scalar () (Syntax.Bool False))
 
     Tasty.HUnit.assertEqual "" (Left TypeError) actual₈
 
 decodeWithRangeError :: TestTree
 decodeWithRangeError = Tasty.HUnit.testCase "load code with range error" do
     let actual₀ :: Either DecodingError Word8
-        actual₀ = Decode.decode (Value.Scalar (Syntax.Natural 256))
+        actual₀ = decode (Value.Scalar () (Syntax.Natural 256))
 
     Tasty.HUnit.assertEqual "" (Left RangeError) actual₀

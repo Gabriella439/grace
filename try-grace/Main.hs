@@ -11,28 +11,31 @@
 
 module Main where
 
-import Control.Applicative (empty, liftA2)
-import Control.Concurrent.Async (Async)
+import Control.Applicative (empty, liftA2, (<|>))
+import Control.Concurrent.Async (Async, Concurrently(..))
 import Control.Exception.Safe (catch, Exception(..), SomeException)
 import Control.Monad.IO.Class (MonadIO(..))
+import Control.Monad.Morph (hoist)
+import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Maybe (MaybeT)
 import Control.Monad.Trans.Reader (ReaderT)
+import Control.Monad.Trans.State (StateT)
 import Data.Foldable (toList, traverse_)
 import Data.IORef (IORef)
+import Data.Maybe (isJust)
 import Data.JSString (JSString)
 import Data.Sequence (ViewR(..), (|>))
 import Data.Text (Text)
 import Data.Traversable (forM)
 import Data.Void (Void)
-import Grace.Infer (Status(..))
+import Grace.Monad (Status(..))
 import Grace.Type (Type(..))
 import GHCJS.Foreign.Callback (Callback)
 import GHCJS.Types (JSVal)
 import Grace.Decode (FromGrace)
 import Grace.Encode (ToGrace(..))
-import Grace.HTTP (Methods)
 import Grace.Input (Input(..))
-import Grace.Location (Location)
+import Grace.Location (Location(..))
 import Grace.Monotype (RemainingFields(..))
 import Grace.Syntax (Binding(..), NameBinding(..), Scalar(..), Syntax)
 import Grace.Value (Value(..))
@@ -42,6 +45,7 @@ import Prelude hiding (div, error, id, length, span, subtract)
 import System.FilePath ((</>))
 
 import qualified Control.Concurrent.Async as Async
+import qualified Control.Concurrent.MVar as MVar
 import qualified Control.Concurrent.STM as STM
 import qualified Control.Concurrent.STM.TVar as TVar
 import qualified Control.Exception.Safe as Exception
@@ -66,11 +70,11 @@ import qualified GHCJS.Types
 import qualified Grace.Context as Context
 import qualified Grace.DataFile as DataFile
 import qualified Grace.Decode as Decode
-import qualified Grace.HTTP as HTTP
 import qualified Grace.Import as Import
 import qualified Grace.Infer as Infer
 import qualified Grace.Input as Input
 import qualified Grace.Interpret as Interpret
+import qualified Grace.Monad as Grace
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Normalize as Normalize
 import qualified Grace.Pretty as Pretty
@@ -84,6 +88,12 @@ instance (Applicative m, Semigroup a) => Semigroup (ReaderT r m a) where
     (<>) = liftA2 (<>)
 
 instance (Applicative m, Monoid a) => Monoid (ReaderT r m a) where
+    mempty = pure mempty
+
+instance (Monad m, Semigroup a) => Semigroup (StateT r m a) where
+    (<>) = liftA2 (<>)
+
+instance (Monad m, Monoid a) => Monoid (StateT r m a) where
     mempty = pure mempty
 
 foreign import javascript unsafe "document.getElementById($1)"
@@ -265,8 +275,8 @@ saveSearchParams a = liftIO (saveSearchParams_ a)
 foreign import javascript unsafe "replaceChildrenWorkaround($1, $2)"
     replaceChildren_ :: JSVal -> JSArray -> IO ()
 
-replaceChildren :: MonadIO io => JSVal -> JSArray -> io ()
-replaceChildren a b = liftIO (replaceChildren_ a b)
+replaceChildren :: MonadIO io => JSVal -> [JSVal] -> io ()
+replaceChildren a b = liftIO (replaceChildren_ a (Array.fromList b))
 
 foreign import javascript unsafe "$1.before($2)"
     before_ :: JSVal -> JSVal -> IO ()
@@ -286,7 +296,7 @@ foreign import javascript unsafe "$1.remove()"
 remove :: MonadIO io => JSVal -> io ()
 remove a = liftIO (remove_ a)
 
-foreign import javascript unsafe "CodeMirror.fromTextArea($1, { mode: 'python', lineNumbers: true, viewportMargin: Infinity, extraKeys: { Tab: false } })"
+foreign import javascript unsafe "CodeMirror.fromTextArea($1, { mode: 'python', lineNumbers: true, viewportMargin: Infinity, extraKeys: { 'Shift-Tab': false, 'Tab': false } })"
     setupCodemirrorInput_ :: JSVal -> IO JSVal
 
 setupCodemirrorInput :: MonadIO io => JSVal -> io JSVal
@@ -367,6 +377,12 @@ getSessionStorage a = liftIO do
         then return Nothing
         else return (Just (JSString.Text.textFromJSVal jsVal))
 
+foreign import javascript unsafe "sessionStorage.removeItem($1)"
+    removeSessionStorage_ :: JSString -> IO ()
+
+removeSessionStorage :: MonadIO io => Text -> io ()
+removeSessionStorage a = liftIO (removeSessionStorage_ (fromText a))
+
 foreign import javascript unsafe "localStorage.setItem($1, $2)"
     setLocalStorage_ :: JSString -> JSString -> IO ()
 
@@ -405,69 +421,86 @@ fromText = JSString.pack . Text.unpack
 typeToText :: Type s -> Text
 typeToText = Pretty.renderStrict False 80
 
-valueToText :: Value -> Text
-valueToText = Pretty.renderStrict False 80 . Normalize.quote
+valueToText :: Value location -> Text
+valueToText = Pretty.renderStrict False 80
 
-data RenderValue = RenderValue
-    { keyToMethods :: Text -> Methods
-    , counter :: IORef Natural
+hideElement :: MonadIO io => JSVal -> io ()
+hideElement element = do
+    setDisplay element "none"
+    addClass element "grace-ignore"
+
+showElement :: MonadIO io => Text -> JSVal -> io ()
+showElement display element = do
+    setDisplay element display
+    removeClass element "grace-ignore"
+
+data Config = Config
+    { counter :: IORef Natural
     , status :: Status
+    , input :: Input
     , edit :: Bool
     }
 
 renderValue
     :: JSVal
     -> Type Location
-    -> Value
-    -> ReaderT RenderValue IO (IO ())
+    -> Value Location
+    -> ReaderT Config IO (IO ())
 renderValue parent Type.Optional{ type_ } value =
     renderValue parent type_ value
 
-renderValue parent _ (Value.Text text) = do
-    setAttribute parent "style" "position: relative;"
+renderValue parent _ (Value.Text _ text) = do
+    printable <- createElement "div"
+    addClass printable "grace-printable"
 
     markdown <- createElement "div"
-    setAttribute markdown "class" "printable"
-    setInnerHTML markdown (markdownToHTML text)
+    addClass markdown "grace-output-text"
+
+    let innerHTML = if text == "" then "<p>\x200B</p>" else markdownToHTML text
+    setInnerHTML markdown innerHTML
+
+    sidebar <- createElement "div"
+    addClass sidebar "grace-printable-buttons"
 
     printButton <- createElement "button"
-    setAttribute printButton "class" "print-button btn btn-light"
+    addClass printButton "grace-print"
     setAttribute printButton "type" "button"
     setInnerText printButton "Print"
-    setDisplay printButton "none"
+    hideElement printButton
 
     printCallback <- liftIO (Callback.asyncCallback (printElement markdown))
     addEventListener printButton "click" printCallback
 
     copyButton <- createElement "button"
-    setAttribute copyButton "class" "copy-button btn btn-light"
+    addClass copyButton "grace-copy"
     setAttribute copyButton "type" "button"
     setInnerText copyButton "Copy"
-    setDisplay copyButton "none"
+    hideElement copyButton
 
     copyCallback <- liftIO (Callback.asyncCallback (writeClipboard text))
     addEventListener copyButton "click" copyCallback
 
     showCallback <- (liftIO . Callback.asyncCallback) do
-        setDisplay printButton "block"
-        setDisplay copyButton  "block"
+        showElement "inline-block" printButton
+        showElement "inline-block" copyButton
 
     hideCallback <- (liftIO . Callback.asyncCallback) do
-        setDisplay printButton "none"
-        setDisplay copyButton  "none"
+        hideElement printButton
+        hideElement copyButton
 
     addEventListener parent "mouseenter" showCallback
     addEventListener parent "mouseleave" hideCallback
 
-    replaceChildren parent (Array.fromList [ printButton, copyButton, markdown ])
+    replaceChildren sidebar [ printButton, copyButton ]
+    replaceChildren printable [ markdown, sidebar ]
+    replaceChild parent printable
 
     mempty
 
-renderValue parent _ (Value.Scalar (Bool bool)) = do
+renderValue parent _ (Value.Scalar _ (Bool bool)) = do
     input <- createElement "input"
-
-    setAttribute input "type"     "checkbox"
-    setAttribute input "class"    "form-check-input"
+    addClass input "grace-output-bool"
+    setAttribute input "type" "checkbox"
     setDisabled input True
 
     Monad.when bool (setAttribute input "checked" "")
@@ -476,11 +509,9 @@ renderValue parent _ (Value.Scalar (Bool bool)) = do
 
     mempty
 
-renderValue parent _ (Value.Scalar Null) = do
+renderValue parent _ (Value.Scalar _ Null) = do
     span <- createElement "span"
-
-    setAttribute span "class" "fira"
-
+    addClass span "grace-output-json"
     setTextContent span "∅"
 
     replaceChild parent span
@@ -489,17 +520,14 @@ renderValue parent _ (Value.Scalar Null) = do
 
 renderValue parent _ value@Value.Scalar{} = do
     span <- createElement "span"
-
+    addClass span "grace-output-json"
     setTextContent span (valueToText value)
-
-    setAttribute span "class" "fira"
-    setAttribute span "style" "whitespace: pre"
 
     replaceChild parent span
 
     mempty
 
-renderValue parent outer (Value.List values) = do
+renderValue parent outer (Value.List _ values) = do
     inner <- case outer of
             Type.List{ type_ } -> do
                 return type_
@@ -512,6 +540,7 @@ renderValue parent outer (Value.List values) = do
 
     results <- forM values \value -> do
         li <- createElement "li"
+        addClass li "grace-output-element"
 
         refreshOutput <- renderValue li inner value
 
@@ -520,14 +549,16 @@ renderValue parent outer (Value.List values) = do
     let (lis, refreshOutputs) = unzip (toList results)
 
     ul <- createElement "ul"
+    addClass ul "grace-output-list"
+    addClass ul "grace-stack"
 
-    replaceChildren ul (Array.fromList lis)
+    replaceChildren ul lis
 
     replaceChild parent ul
 
     return (sequence_ refreshOutputs)
 
-renderValue parent outer (Value.Record keyValues) = do
+renderValue parent outer (Value.Record _ keyValues) = do
     let lookupKey = case outer of
             Type.Record{ fields = Type.Fields keyTypes _ } ->
                 \key -> lookup key keyTypes
@@ -538,49 +569,44 @@ renderValue parent outer (Value.Record keyValues) = do
             _ ->
                 \_ -> empty
 
-    let process key value = do
+    let process key (_, value) = do
             type_ <- case lookupKey key of
                 Nothing    -> fail "renderValue: Missing field type"
                 Just type_ -> return type_
 
             dt <- createElement "dt"
+            addClass dt "grace-output-field-name"
 
-            setAttribute dt "class" "col-auto"
-
-            case value of
-                Value.Record kvs | HashMap.null kvs -> do
-                    setTextContent dt key
-                Value.List xs | Seq.null xs -> do
-                    setTextContent dt key
-                _ -> do
-                    setTextContent dt (key <> ":")
+            setTextContent dt key
 
             dd <- createElement "dd"
-
-            setAttribute dd "class" "col"
+            addClass dt "grace-output-field-value"
 
             refreshOutput <- renderValue dd type_ value
 
-            dl <- createElement "dl"
+            definition <- createElement "div"
+            replaceChildren definition [ dt, dd ]
 
-            setAttribute dl "class" "row"
-
-            replaceChildren dl (Array.fromList [ dt, dd ])
-
-            return (dl, refreshOutput)
+            return (definition, refreshOutput)
 
     result <- HashMap.traverseWithKey process keyValues
 
-    let (dls, refreshOutputs) = unzip (HashMap.elems result)
+    let (definitions, refreshOutputs) = unzip (HashMap.elems result)
 
-    replaceChildren parent (Array.fromList dls)
+    dl <- createElement "dl"
+    addClass dl "grace-output-record"
+    addClass dl "grace-stack"
+
+    replaceChildren dl definitions
+
+    replaceChild parent dl
 
     return (sequence_ refreshOutputs)
 
-renderValue parent outer (Application (Value.Builtin Syntax.Some) value) = do
+renderValue parent outer (Value.Application _ (Value.Builtin _ Syntax.Some) value) = do
     renderValue parent outer value
 
-renderValue parent outer (Value.Alternative alternative value) = do
+renderValue parent outer (Value.Alternative location alternative value) = do
     inner <- case outer of
             Type.Union{ alternatives = Type.Alternatives keyTypes _ } ->
                 case lookup alternative keyTypes of
@@ -592,28 +618,35 @@ renderValue parent outer (Value.Alternative alternative value) = do
 
     -- Render unions the same as a record with one field
     let recordType = Type.Record
-            { location = location outer
+            { location = Type.location outer
             , fields = Type.Fields [(alternative, inner)] EmptyFields
             }
 
-    let recordValue = Value.Record (HashMap.singleton alternative value)
+    let recordValue =
+            Value.Record location (HashMap.singleton alternative (location, value))
 
     renderValue parent recordType recordValue
 
-renderValue parent Type.Function{ input, output } function = do
-    r@RenderValue{ counter, keyToMethods, status, edit } <- Reader.ask
+renderValue parent Type.Function{ location, input, output } function = do
+    r@Config{ edit, status, input = input_ } <- Reader.ask
 
     outputVal <- createElement "div"
+    addClass outputVal "grace-result"
 
     let hasEffects = Lens.has Value.effects function
 
-    (setBusy, setSuccess, setError) <- createForm (edit && hasEffects) outputVal
+    let tabbed = edit && hasEffects
 
-    let render value = do
+    (setBusy, setSuccess, setError) <- createForm tabbed outputVal
+
+    let render Nothing = do
+            replaceChildren outputVal []
+
+        render (Just value) = do
             setBusy
 
             let interpretOutput = do
-                    newValue <- Normalize.apply keyToMethods function value
+                    newValue <- Normalize.apply location function value
 
                     status_@Status{ context } <- State.get
 
@@ -622,11 +655,11 @@ renderValue parent Type.Function{ input, output } function = do
                     let solvedType = Context.solveType context output
 
                     refreshOutput <- liftIO $ setSuccess completedType newValue \htmlWrapper -> do
-                        Reader.runReaderT (renderValue htmlWrapper solvedType newValue) (r :: RenderValue){ status = status_ }
+                        Reader.runReaderT (renderValue htmlWrapper solvedType newValue) (r :: Config){ status = status_ }
 
                     liftIO refreshOutput
 
-            eitherResult <- liftIO (Exception.try (State.evalStateT interpretOutput status))
+            eitherResult <- liftIO (Exception.try (Grace.evalGrace input_ status interpretOutput))
 
             case eitherResult of
                 Left exception -> do
@@ -637,22 +670,18 @@ renderValue parent Type.Function{ input, output } function = do
 
     debouncedRender <- debounce render
 
-    (_, reader) <- liftIO (renderInput [] input)
-
     let renderOutput Change | hasEffects = mempty
         renderOutput _                   = debouncedRender
 
-    result <- liftIO $ Maybe.runMaybeT (Reader.runReaderT reader RenderInput
-        { keyToMethods
-        , renderOutput
-        , counter
-        , status
-        , edit
-        })
+    (_, reader) <- renderInput [] input
+
+    i <- Reader.ask
+
+    result <- liftIO (Maybe.runMaybeT (Reader.runReaderT (reader renderOutput) i))
 
     case result of
         Nothing -> do
-            replaceChildren parent (Array.fromList [ ])
+            replaceChildren parent [ ]
 
             mempty
 
@@ -660,26 +689,44 @@ renderValue parent Type.Function{ input, output } function = do
             if hasEffects
                 then do
                     button <- createElement "button"
-
-                    setAttribute button "type"  "button"
-                    setAttribute button "class" "btn btn-primary"
-
+                    addClass button "grace-submit"
+                    setAttribute button "type" "button"
                     setTextContent button "Submit"
 
-                    hr <- createElement "hr"
+                    buttons <- createElement "div"
+                    addClass buttons "grace-cluster"
+                    replaceChild buttons button
 
-                    callback <- liftIO (Callback.asyncCallback (invoke Submit))
+                    hr <- createElement "hr"
+                    addClass hr "grace-horizontal-rule"
+
+                    stack <- createElement "div"
+                    addClass stack "grace-stack-large"
+
+                    callback <- (liftIO . Callback.asyncCallback) do
+                        replaceChildren stack [ inputVal, buttons, hr, outputVal ]
+
+                        invoke Submit
 
                     addEventListener button "click" callback
 
-                    replaceChildren parent (Array.fromList [ inputVal, button, hr, outputVal ])
+                    replaceChildren stack [ inputVal, buttons ]
+
+                    replaceChild parent stack
 
                 else do
                     liftIO (invoke Submit)
 
                     hr <- createElement "hr"
+                    addClass hr "grace-horizontal-rule"
 
-                    replaceChildren parent (Array.fromList [ inputVal, hr, outputVal ])
+                    stack <- createElement "div"
+                    addClass stack "grace-stack-large"
+
+                    replaceChildren stack [ inputVal, hr, outputVal ]
+
+                    replaceChild parent stack
+
             return refreshOutput
 
 -- At the time of this writing this case should (in theory) never be hit,
@@ -689,9 +736,10 @@ renderValue parent Type.Function{ input, output } function = do
 renderValue parent _ value = do
     renderDefault parent value
 
-renderDefault :: MonadIO io => JSVal -> Value -> io (IO ())
+renderDefault :: MonadIO io => JSVal -> Value Location -> io (IO ())
 renderDefault parent value = liftIO do
     code <- createElement "code"
+    addClass code "grace-output-default"
 
     setTextContent code (valueToText value)
 
@@ -705,31 +753,23 @@ data Mode
     | Submit
     -- ^ The function is being run in response to form submission
 
-data RenderInput = RenderInput
-    { keyToMethods :: Text -> Methods
-    , renderOutput :: Mode -> Value -> IO ()
-    , counter :: IORef Natural
-    , status :: Status
-    , edit :: Bool
-    }
-
 register
     :: MonadIO m
-    => JSVal -> MaybeT IO Value -> ReaderT RenderInput m (Mode -> IO ())
-register input get = do
-    RenderInput{ renderOutput } <- Reader.ask
+    => JSVal
+    -> MaybeT IO (Value Location)
+    -> (Mode -> Maybe (Value Location) -> IO ())
+    -> ReaderT Config m (Mode -> IO ())
+register input get renderOutput = liftIO do
+    let invoke mode = do
+            maybeValue <- Maybe.runMaybeT get
 
-    liftIO do
-        let invoke mode = do
-                maybeValue <- Maybe.runMaybeT get
+            renderOutput mode maybeValue
 
-                traverse_ (renderOutput mode) maybeValue
+    callback <- Callback.asyncCallback (invoke Change)
 
-        callback <- Callback.asyncCallback (invoke Change)
+    addEventListener input "input" callback
 
-        addEventListener input "input" callback
-
-        return invoke
+    return invoke
 
 renderPath :: [Text] -> Type Location -> Text
 renderPath path type_ = (prefix <> " : " <> suffix)
@@ -740,10 +780,10 @@ renderPath path type_ = (prefix <> " : " <> suffix)
 
     suffix = Pretty.toText type_
 
-fromStorage :: FromGrace a => Maybe Text -> IO (Maybe a)
+fromStorage :: (MonadIO io, FromGrace a) => Maybe Text -> io (Maybe a)
 fromStorage Nothing = do
     return Nothing
-fromStorage (Just text) = do
+fromStorage (Just text) = liftIO do
     load `catch` \(_ :: SomeException) -> return Nothing
   where
     load = do
@@ -751,13 +791,17 @@ fromStorage (Just text) = do
         return (Just a)
 
 toStorage :: ToGrace a => a -> Text
-toStorage a = Pretty.toText (Normalize.quote (encode a))
+toStorage a = Pretty.toText (encode a)
 
 renderInput
     :: [Text]
     -> Type Location
-    -> IO (Value, ReaderT RenderInput (MaybeT IO) (JSVal, Mode -> IO (), IO ()))
-renderInput path type_@Type.Scalar{ scalar = Monotype.Bool } = do
+    -> ReaderT Config IO
+          ( Maybe (Value Location)
+          ,     (Mode -> Maybe (Value Location) -> IO ())
+            ->  ReaderT Config (MaybeT IO) (JSVal, Mode -> IO (), IO ())
+          )
+renderInput path type_@Type.Scalar{ location, scalar = Monotype.Bool } = do
     maybeText <- getSessionStorage (renderPath path type_)
 
     maybeBool <- fromStorage maybeText
@@ -766,33 +810,27 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Bool } = do
             Just b -> b
             Nothing -> False
 
-    return $ (,) (Value.Scalar (Bool bool₀)) do
-        input <- createElement "input"
+    let maybeValue₀ = Just (Value.Scalar location (Bool bool₀))
 
-        setAttribute input "type"  "checkbox"
-        setAttribute input "class" "form-check-input"
+    return $ (,) maybeValue₀ \renderOutput -> do
+        input <- createElement "input"
+        addClass input "grace-input-bool"
+        setAttribute input "type" "checkbox"
 
         setChecked input bool₀
-
-        span <- createElement "span"
-
-        setAttribute span "class" "form-check"
-        setAttribute span "style" "display: inline-block !important;"
-
-        replaceChild span input
 
         let get = do
                 bool <- getChecked input
 
                 setSessionStorage (renderPath path type_) (toStorage bool)
 
-                return (Value.Scalar (Bool bool))
+                return (Value.Scalar location (Bool bool))
 
-        invoke <- register input get
+        invoke <- register input get renderOutput
 
-        return (span, invoke, mempty)
+        return (input, invoke, mempty)
 
-renderInput path type_@Type.Scalar{ scalar = Monotype.Real } = do
+renderInput path type_@Type.Scalar{ location, scalar = Monotype.Real } = do
     maybeText <- getSessionStorage (renderPath path type_)
 
     maybeScientific <- fromStorage maybeText
@@ -801,10 +839,11 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Real } = do
             Just s -> s
             Nothing -> 0
 
-    return $ (,) (Value.Scalar (Real scientific₀)) do
-        input <- createElement "input"
+    let maybeValue₀ = Just (Value.Scalar location (Real scientific₀))
 
-        setAttribute input "class" "form-control"
+    return $ (,) maybeValue₀ \renderOutput -> do
+        input <- createElement "input"
+        addClass input "grace-input-json"
         setAttribute input "type"  "number"
         setAttribute input "step"  "any"
         setAttribute input "value" "0"
@@ -816,13 +855,13 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Real } = do
 
                 setSessionStorage (renderPath path type_) (toStorage double)
 
-                return (Value.Scalar (Real (Scientific.fromFloatDigits double)))
+                return (Value.Scalar location (Real (Scientific.fromFloatDigits double)))
 
-        invoke <- register input get
+        invoke <- register input get renderOutput
 
         return (input, invoke, mempty)
 
-renderInput path type_@Type.Scalar{ scalar = Monotype.Integer } = do
+renderInput path type_@Type.Scalar{ location, scalar = Monotype.Integer } = do
     maybeText <- getSessionStorage (renderPath path type_)
 
     maybeInteger <- fromStorage maybeText
@@ -831,10 +870,11 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Integer } = do
             Just i -> i
             Nothing -> 0
 
-    return $ (,) (Value.Scalar (Integer integer₀)) do
-        input <- createElement "input"
+    let maybeValue₀ = Just (Value.Scalar location (Integer integer₀))
 
-        setAttribute input "class" "form-control"
+    return $ (,) maybeValue₀ \renderOutput -> do
+        input <- createElement "input"
+        addClass input "grace-input-json"
         setAttribute input "type"  "number"
         setAttribute input "value" "0"
 
@@ -845,13 +885,13 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Integer } = do
 
                 setSessionStorage (renderPath path type_) (toStorage integer)
 
-                return (Value.Scalar (Integer integer))
+                return (Value.Scalar location (Integer integer))
 
-        invoke <- register input get
+        invoke <- register input get renderOutput
 
         return (input, invoke, mempty)
 
-renderInput path type_@Type.Scalar{ scalar = Monotype.Natural } = do
+renderInput path type_@Type.Scalar{ location, scalar = Monotype.Natural } = do
     maybeText <- getSessionStorage (renderPath path type_)
 
     maybeNatural <- fromStorage maybeText
@@ -860,10 +900,11 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Natural } = do
             Just n -> n
             Nothing -> 0
 
-    return $ (,) (Value.Scalar (Natural natural₀)) do
-        input <- createElement "input"
+    let maybeValue₀ = Just (Value.Scalar location (Natural natural₀))
 
-        setAttribute input "class" "form-control"
+    return $ (,) maybeValue₀ \renderOutput -> do
+        input <- createElement "input"
+        addClass input "grace-input-json"
         setAttribute input "type"  "number"
         setAttribute input "value" "0"
         setAttribute input "min"   "0"
@@ -875,9 +916,9 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Natural } = do
 
                 setSessionStorage (renderPath path type_) (toStorage natural)
 
-                return (Value.Scalar (Natural natural))
+                return (Value.Scalar location (Natural natural))
 
-        invoke <- register input get
+        invoke <- register input get renderOutput
 
         return (input, invoke, mempty)
 
@@ -890,10 +931,19 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.JSON } = do
             Just t -> t
             Nothing -> "null"
 
-    return $ (,) (Value.Text text₀) do
-        input <- createElement "input"
+    let maybeValue₀ = do
+            let lazyText = Text.Lazy.fromStrict text₀
 
-        setAttribute input "class" "form-control"
+            value :: Value () <- Aeson.decode (Text.Encoding.encodeUtf8 lazyText)
+
+            return (fmap (\_ -> Unknown) value)
+
+    return $ (,) maybeValue₀ \renderOutput -> do
+        input <- createElement "input"
+        addClass input "grace-input-json"
+        addClass input "grace-input-json-valid"
+        setAttribute input "placeholder" "Enter JSON…"
+        setAttribute input "data-1p-ignore" ""
 
         setValue input text₀
 
@@ -906,20 +956,22 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.JSON } = do
 
                 case Aeson.eitherDecode (Text.Encoding.encodeUtf8 lazyText) of
                     Left _ -> do
-                        setAttribute input "class" "form-control is-invalid"
+                        removeClass input "grace-input-json-valid"
+                        addClass input "grace-input-json-invalid"
 
                         empty
 
                     Right value -> do
-                        setAttribute input "class" "form-control is-valid"
+                        removeClass input "grace-input-json-invalid"
+                        addClass input "grace-input-json-valid"
 
-                        return value
+                        return (fmap (\_ -> Unknown) (value :: Value ()))
 
-        invoke <- register input get
+        invoke <- register input get renderOutput
 
         return (input, invoke, mempty)
 
-renderInput path type_@Type.Scalar{ scalar = Monotype.Text } = do
+renderInput path type_@Type.Scalar{ location, scalar = Monotype.Text } = do
     maybeText <- getSessionStorage (renderPath path type_)
 
     maybeTextValue <- fromStorage maybeText
@@ -928,11 +980,14 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Text } = do
             Just t -> t
             Nothing -> ""
 
-    return $ (,) (Value.Text text₀) do
-        input <- createElement "textarea"
+    let maybeValue₀ = Just (Value.Text location text₀)
 
-        setAttribute input "class" "form-control"
+    return $ (,) maybeValue₀ \renderOutput -> do
+        input <- createElement "textarea"
+        addClass input "grace-input-text"
         setAttribute input "rows" "1"
+        setAttribute input "placeholder" "Enter text…"
+        setAttribute input "data-1p-ignore" ""
 
         autoResize input
 
@@ -943,13 +998,13 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Text } = do
 
                 setSessionStorage (renderPath path type_) (toStorage text)
 
-                return (Value.Text text)
+                return (Value.Text location text)
 
-        invoke <- register input get
+        invoke <- register input get renderOutput
 
         return (input, invoke, mempty)
 
-renderInput path type_@Type.Scalar{ scalar = Monotype.Key } = do
+renderInput path type_@Type.Scalar{ location, scalar = Monotype.Key } = do
     maybeText <- getLocalStorage (renderPath path type_)
 
     maybeKey <- fromStorage maybeText
@@ -958,11 +1013,13 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Key } = do
             Just (Decode.Key k) -> k
             Nothing -> ""
 
-    return $ (,) (Value.Scalar (Key key₀)) do
-        input <- createElement "input"
+    let maybeValue₀ = Just (Value.Scalar location (Key key₀))
 
+    return $ (,) maybeValue₀ \renderOutput -> do
+        input <- createElement "input"
+        addClass input "grace-input-json"
+        setAttribute input "placeholder" "Enter key…"
         setAttribute input "type" "password"
-        setAttribute input "class" "form-control"
         setAttribute input "rows" "1"
 
         setValue input key₀
@@ -972,87 +1029,93 @@ renderInput path type_@Type.Scalar{ scalar = Monotype.Key } = do
 
                 setLocalStorage (renderPath path type_) (toStorage key)
 
-                return (Value.Scalar (Key key))
+                return (Value.Scalar location (Key key))
 
-        invoke <- register input get
+        invoke <- register input get renderOutput
 
         return (input, invoke, mempty)
 
-renderInput path Type.Record{ fields = Type.Fields keyTypes _ } = do
+renderInput path Type.Record{ location, fields = Type.Fields keyTypes _ } = do
     let outer (key, type_) = do
-            (start, reader) <- renderInput (key : path) type_
+            (maybeStart, reader) <- renderInput (key : path) type_
 
-            return (key, start, reader)
+            return (key, (key, fmap ((,) location) maybeStart), (key, reader))
 
-    triples <- traverse outer keyTypes
+    result <- traverse outer keyTypes
 
-    let hashMap = HashMap.fromList do
-            (key, start, _) <- triples
+    let (keys, keyMaybeStarts, keyReaders) = unzip3 result
 
-            return (key, start)
+    let hashMap = HashMap.fromList keyMaybeStarts
 
-    let keyReaders = do
-            (key, _, reader) <- triples
+    let maybeValue₀ = do
+            keyStarts <- sequence hashMap
 
-            return (key, reader)
+            Monad.guard (HashMap.keys keyStarts == keys)
 
-    return $ (,) (Value.Record hashMap) do
+            return (Value.Record location keyStarts)
+
+    return $ (,) maybeValue₀ \renderOutput -> do
         ref <- liftIO (IORef.newIORef hashMap)
 
         let inner (key, reader) = do
-                let nest x = x{ renderOutput = newRenderOutput }
-                      where
-                        newRenderOutput mode value = do
-                            let update m = (m', m')
-                                  where
-                                    m' = HashMap.insert key value m
+                let newRenderOutput mode maybeValue = do
+                        let update m = (m', m')
+                              where
+                                m' = HashMap.insert key (fmap ((,) location) maybeValue) m
 
-                            m <- liftIO (IORef.atomicModifyIORef' ref update)
+                        keyMaybeValues <- liftIO (IORef.atomicModifyIORef' ref update)
 
-                            renderOutput x mode (Value.Record m)
+                        let maybeRecord = do
+                                keyValues <- sequence keyMaybeValues
 
-                (inputField, _, refreshField) <- Reader.withReaderT nest reader
+                                Monad.guard (HashMap.keys keyValues == keys)
+
+                                return (Value.Record location keyValues)
+
+                        renderOutput mode maybeRecord
+
+                (inputField, _, refreshField) <- reader newRenderOutput
 
                 dt <- createElement "dt"
+                addClass dt "grace-input-field-name"
 
-                setAttribute dt "class" "col-auto"
-
-                setTextContent dt (key <> ":")
+                setTextContent dt key
 
                 dd <- createElement "dd"
-
-                setAttribute dd "class" "col"
+                addClass dt "grace-input-field-value"
 
                 replaceChild dd inputField
 
-                dl <- createElement "dl"
+                definition <- createElement "div"
+                replaceChildren definition [ dt, dd ]
 
-                setAttribute dl "class" "row"
-
-                replaceChildren dl (Array.fromList [ dt, dd ])
-
-                return (dl, refreshField)
+                return (definition, refreshField)
 
         results <- traverse inner keyReaders
 
-        let (children, refreshOutputs) = unzip results
+        let (definitions, refreshOutputs) = unzip results
 
-        div <- createElement "div"
+        dl <- createElement "dl"
+        addClass dl "grace-input-record"
+        addClass dl "grace-stack"
 
-        replaceChildren div (Array.fromList children)
-
-        RenderInput{ renderOutput } <- Reader.ask
+        replaceChildren dl definitions
 
         let invoke mode = do
-                m <- IORef.readIORef ref
+                keyMaybeValues <- IORef.readIORef ref
 
-                renderOutput mode (Value.Record m)
+                let maybeRecord = do
+                        keyValues <- sequence keyMaybeValues
+
+                        return (Value.Record location keyValues)
+
+                renderOutput mode maybeRecord
 
         let refreshOutput = sequence_ refreshOutputs
 
-        return (div, invoke, refreshOutput)
+        return (dl, invoke, refreshOutput)
 
-renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ } = do
+renderInput path type_@Type.Union{ location, alternatives = Type.Alternatives keyTypes _ } = do
     maybeAlternative <- getSessionStorage (renderPath path type_)
 
     let predicate = case maybeAlternative of
@@ -1064,10 +1127,15 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
             renderInputDefault path type_
 
         Just (key₀, type_₀) -> do
-            (start, _) <- renderInput (key₀ : path) type_₀
+            (maybeStart, _) <- renderInput (key₀ : path) type_₀
 
-            return $ (,) (Value.Alternative key₀ start) do
-                RenderInput{ counter } <- Reader.ask
+            let maybeValue₀ = do
+                    start <- maybeStart
+
+                    return (Value.Alternative location key₀ start)
+
+            return $ (,) maybeValue₀ \renderOutput -> do
+                Config{ counter } <- Reader.ask
 
                 n <- liftIO (IORef.atomicModifyIORef' counter (\a -> (a + 1, a)))
 
@@ -1076,55 +1144,65 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
                 let process (key, alternativeType) = do
                         let checked = key == key₀
 
-                        input <- createElement "input"
-
                         let name = "radio" <> Text.pack (show n)
 
                         let id = name <> "-" <> key
 
-                        setAttribute input "class" "form-check-input"
+                        input <- createElement "input"
+                        addClass input "grace-input-alternative-radio"
                         setAttribute input "type"  "radio"
                         setAttribute input "name"  name
                         setAttribute input "id"    id
-
                         Monad.when checked (setAttribute input "checked" "")
 
+                        box <- createElement "div"
+                        addClass box "grace-input-alternative-radio-box"
+                        replaceChild box input
+
+                        inputStack <- createElement "div"
+                        addClass inputStack "grace-stack"
+                        replaceChild inputStack box
+
+                        let newRenderOutput mode maybeValue = do
+                                enabled <- getChecked input
+
+                                let maybeResult = do
+                                        value <- maybeValue
+
+                                        return (Alternative location key value)
+
+                                Monad.when enabled (renderOutput mode maybeResult)
+
+                        (_, reader) <- hoist lift (renderInput (key : path) alternativeType)
+
+                        (nestedInput, nestedInvoke, nestedRefresh) <- reader newRenderOutput
+
                         label <- createElement "label"
-
-                        setAttribute label "class" "form-check-label"
+                        addClass label "grace-input-alternative-label"
                         setAttribute label "for"   id
-
-                        case alternativeType of
-                            Type.Record{ fields = Type.Fields kts _ } | null kts -> do
-                                setTextContent label key
-                            _ -> do
-                                setTextContent label (key <> ":")
-
+                        setTextContent label key
 
                         fieldset <- createElement "fieldset"
-
                         setDisabled fieldset (not checked)
-
-                        liftIO (Monad.when checked (IORef.writeIORef checkedValRef (Just fieldset)))
-
-                        let nest x = x{ renderOutput = newRenderOutput }
-                              where
-                                newRenderOutput mode value = do
-                                    enabled <- getChecked input
-
-                                    Monad.when enabled (renderOutput x mode (Alternative key value))
-
-                        (_, reader) <- liftIO (renderInput (key : path) alternativeType)
-
-                        (nestedInput, nestedInvoke, nestedRefresh) <- Reader.withReaderT nest reader
 
                         replaceChild fieldset nestedInput
 
-                        div <- createElement "div"
+                        alternativeStack <- createElement "div"
+                        addClass alternativeStack "grace-input-alternative"
+                        addClass alternativeStack "grace-stack"
 
-                        setAttribute div "class" "form-check"
+                        case alternativeType of
+                            Type.Record{ fields = Type.Fields kts _ } | null kts -> do
+                                replaceChild alternativeStack label
+                            _ -> do
+                                replaceChildren alternativeStack [ label, fieldset ]
 
-                        replaceChildren div (Array.fromList [ input, label, fieldset ])
+                        sidebar <- createElement "div"
+                        addClass sidebar "grace-input-alternative-selection"
+
+                        replaceChildren sidebar [ inputStack, alternativeStack]
+
+                        liftIO (Monad.when checked (IORef.writeIORef checkedValRef (Just fieldset)))
 
                         liftIO do
                             let update mode = do
@@ -1149,15 +1227,16 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
 
                                 Monad.when enabled (nestedInvoke mode)
 
-                        return (div, invoke, nestedRefresh)
+                        return (sidebar, invoke, nestedRefresh)
 
                 results <- traverse process keyTypes
 
                 let (children, invokes, refreshOutputs) = unzip3 results
 
                 div <- createElement "div"
+                addClass div "grace-input-union"
 
-                replaceChildren div (Array.fromList children)
+                replaceChildren div children
 
                 let invoke mode = sequence_ (map ($ mode) invokes)
 
@@ -1167,7 +1246,7 @@ renderInput path type_@Type.Union{ alternatives = Type.Alternatives keyTypes _ }
 
                 return (div, invoke, refreshOutput)
 
-renderInput path optionalType@Type.Optional{ type_ } = do
+renderInput path optionalType@Type.Optional{ location, type_ } = do
     maybeText <- getSessionStorage (renderPath path optionalType)
 
     maybeEnabled <- fromStorage maybeText
@@ -1176,41 +1255,55 @@ renderInput path optionalType@Type.Optional{ type_ } = do
             Just b -> b
             Nothing -> False
 
-    (start, reader) <- renderInput ("?" : path) type_
+    (maybeStart, reader) <- renderInput ("?" : path) type_
 
-    let value₀ =
-            if enabled
-            then Application (Value.Builtin Syntax.Some) start
-            else Value.Scalar Null
+    let maybeValue₀ = if enabled
+            then do
+                start <- maybeStart
 
-    return $ (,) value₀ do
+                return (Application location (Value.Builtin location Syntax.Some) start)
+            else do
+                return (Value.Scalar location Null)
+
+    return $ (,) maybeValue₀ \renderOutput -> do
         input <- createElement "input"
-
+        addClass input "grace-input-bool"
         setAttribute input "type"  "checkbox"
-        setAttribute input "class" "form-check-input"
 
         setChecked input enabled
 
-        let nest x = x{ renderOutput = newRenderOutput }
-              where
-                newRenderOutput mode value = do
-                    checked <- getChecked input
+        let newRenderOutput mode maybeValue = do
+                checked <- getChecked input
 
-                    if checked
-                        then do
-                            renderOutput x mode (Application (Value.Builtin Syntax.Some) value)
-                        else do
-                            renderOutput x mode (Value.Scalar Null)
+                if checked
+                    then do
+                        let maybeSomeValue = do
+                                value <- maybeValue
 
-        (nestedInput, nestedInvoke, nestedRefresh) <- Reader.withReaderT nest reader
+                                return (Application location (Value.Builtin location Syntax.Some) value)
+
+                        renderOutput mode maybeSomeValue
+                    else do
+                        renderOutput mode (Just (Value.Scalar location Null))
+
+        (nestedInput, nestedInvoke, nestedRefresh) <- reader newRenderOutput
+
+        box <- createElement "div"
+        addClass box "grace-input-bool-box"
+        replaceChild box input
+
+        sidebar <- createElement "div"
+        addClass sidebar "grace-stack"
+        replaceChild sidebar box
 
         div <- createElement "div"
+        addClass div "grace-input-optional"
 
         fieldset <- createElement "fieldset"
 
         replaceChild fieldset nestedInput
 
-        replaceChildren div (Array.fromList [input, fieldset])
+        replaceChildren div [sidebar, fieldset]
 
         liftIO do
             let update mode = do
@@ -1230,7 +1323,7 @@ renderInput path optionalType@Type.Optional{ type_ } = do
 
         return (div, nestedInvoke, nestedRefresh)
 
-renderInput path listType@Type.List{ type_ } = do
+renderInput path listType@Type.List{ location, type_ } = do
     maybeText <- getSessionStorage (renderPath path listType)
 
     maybeIndex <- fromStorage maybeText
@@ -1244,79 +1337,83 @@ renderInput path listType@Type.List{ type_ } = do
 
     results <- traverse process [ 0 .. (fromIntegral length - 1) ]
 
-    let (starts, readers) = unzip results
+    let (maybeStarts, readers) = unzip results
 
-    let seq₀ = Seq.fromList starts
+    let maybeValue₀ = do
+            starts <- sequence maybeStarts
 
-    return $ (,) (Value.List seq₀) do
+            return (Value.List location (Seq.fromList starts))
+
+    return $ (,) maybeValue₀ \renderOutput -> do
         childrenRef <- liftIO (IORef.newIORef Seq.empty)
 
         plus <- createElement "button"
-
-        setAttribute plus "type"  "button"
-        setAttribute plus "class" "btn btn-primary"
+        addClass plus "grace-input-list-plus"
+        setAttribute plus "type" "button"
 
         setTextContent plus "+"
 
         minus <- createElement "button"
-
-        setAttribute minus "type"    "button"
-        setAttribute minus "class"   "btn btn-danger"
-        setDisplay minus "none"
+        addClass minus "grace-input-list-minus"
+        setAttribute minus "type" "button"
+        hideElement minus
 
         setTextContent minus "-"
 
         buttons <- createElement "li"
+        addClass buttons "grace-input-list-element"
+        addClass buttons "grace-cluster-start"
 
-        replaceChildren buttons (Array.fromList [ plus, minus ])
+        replaceChildren buttons [ plus, minus ]
 
         ul <- createElement "ul"
-
-        setAttribute ul "class" "list-unstyled"
+        addClass ul "grace-input-list"
+        addClass ul "grace-stack"
 
         replaceChild ul buttons
 
         input <- Reader.ask
 
         let insert maybeReader = do
-                setDisplay minus "inline"
+                showElement "inline-block" minus
 
                 children₀ <- IORef.readIORef childrenRef
 
                 let index = Seq.length children₀
 
                 reader <-  case maybeReader of
-                        Just reader -> do
-                            return reader
-                        Nothing -> do
-                            (_, reader) <- process (fromIntegral index)
+                    Just reader -> do
+                        return reader
+                    Nothing -> do
+                        (_, reader) <- Reader.runReaderT (process (fromIntegral index)) input
 
-                            return reader
+                        return reader
 
                 IORef.atomicModifyIORef' childrenRef (\s -> (s |> _Child, ()))
 
                 setSessionStorage (renderPath path listType) (toStorage (fromIntegral index + 1 :: Natural))
 
-                let nest x = x{ renderOutput = newRenderOutput }
-                      where
-                        newRenderOutput mode value = do
-                            let adjust =
-                                    Seq.adjust (\c -> c{ value = Just value }) index
+                let newRenderOutput mode maybeValue = do
+                        let adjust =
+                                Seq.adjust (\c -> c{ value = maybeValue }) index
 
-                            let adapt s = let s' = adjust s in (s', s')
+                        let adapt s = let s' = adjust s in (s', s')
 
-                            children <- IORef.atomicModifyIORef' childrenRef adapt
+                        children <- IORef.atomicModifyIORef' childrenRef adapt
 
-                            let values = do
-                                    Child{ value = Just v } <- toList children
+                        let maybeList = do
+                                values <- traverse (\Child{ value } -> value) children
 
-                                    return v
+                                return (Value.List location values)
 
-                            renderOutput x mode (Value.List (Seq.fromList values))
+                        renderOutput mode maybeList
 
-                result <- Maybe.runMaybeT (Reader.runReaderT reader (nest input))
+                result <- Maybe.runMaybeT (Reader.runReaderT (reader newRenderOutput) input)
 
                 li <- createElement "li"
+                addClass li "grace-input-list-element"
+
+                before buttons li
 
                 case result of
                     Nothing -> do
@@ -1330,9 +1427,9 @@ renderInput path listType@Type.List{ type_ } = do
 
                         IORef.atomicModifyIORef' childrenRef (\m -> (adjust m, ()))
 
-                        nestedInvoke Change
+                        nestedRefresh
 
-                before buttons li
+                        nestedInvoke Change
 
         liftIO (traverse_ (insert . Just) readers)
 
@@ -1340,24 +1437,22 @@ renderInput path listType@Type.List{ type_ } = do
 
         addEventListener plus "click" insertCallback
 
-        RenderInput{ renderOutput } <- Reader.ask
-
         let invoke mode = do
                 children <- IORef.readIORef childrenRef
 
-                let values = do
-                        Child{ value = Just v } <- toList children
+                let maybeList = do
+                        values <- traverse (\Child{ value } -> value) children
 
-                        return v
+                        return (Value.List location values)
 
-                renderOutput mode (Value.List (Seq.fromList values))
+                renderOutput mode maybeList
 
         delete <- (liftIO . Callback.asyncCallback) do
             children <- IORef.readIORef childrenRef
 
             case Seq.viewr children of
                 prefix :> Child{ li } -> do
-                    Monad.when (Seq.null prefix) (setDisplay minus "none")
+                    Monad.when (Seq.null prefix) (hideElement minus)
 
                     setSessionStorage (renderPath path listType) (toStorage (fromIntegral (Seq.length prefix) :: Natural))
 
@@ -1386,7 +1481,7 @@ renderInput path type_ = do
     renderInputDefault path type_
 
 data Child = Child
-    { value :: Maybe Value
+    { value :: Maybe (Value Location)
     , refreshOutput :: IO ()
     , li :: Maybe JSVal
     }
@@ -1401,28 +1496,54 @@ _Child = Child
 renderInputDefault
     :: [Text]
     -> Type Location
-    -> IO (Value, ReaderT RenderInput (MaybeT IO) (JSVal, Mode -> IO (), IO ()))
+    -> ReaderT Config IO
+          ( Maybe (Value Location)
+          ,   (Mode -> Maybe (Value Location) -> IO ())
+          ->  ReaderT Config (MaybeT IO) (JSVal, Mode -> IO (), IO ())
+          )
 renderInputDefault path type_ = do
+    Config{ status = status₀, input = input₀ } <- Reader.ask
+
     maybeText <- getSessionStorage (renderPath path type_)
 
     let text₀ = case maybeText of
             Just t -> t
             Nothing -> ""
 
-    return $ (,) (Value.Scalar Null) do
-        RenderInput{ keyToMethods, renderOutput, status } <- Reader.ask
+    let textToValue text = do
+            let newInput = input₀ <> Code "(input)" text
+
+            let interpretInput = do
+                    (_, value) <- Interpret.interpretWith [] (Just type_)
+
+                    return value
+
+            Grace.evalGrace newInput status₀ interpretInput
+
+    result₀ <- Exception.try (textToValue text₀)
+
+    let maybeValue₀ = case result₀ of
+            Left (_ :: SomeException) -> Nothing
+            Right v -> Just v
+
+    return $ (,) maybeValue₀ \renderOutput -> do
+        Config{ status, input } <- Reader.ask
 
         textarea <- createElement "textarea"
+        setAttribute textarea "placeholder" "Enter code…"
 
-        setDisplay textarea "none"
+        hideElement textarea
 
         error <- createElement "pre"
+        addClass error "grace-error"
 
-        setDisplay error "none"
+        hideElement error
 
         div <- createElement "div"
+        addClass div "grace-pane"
+        addClass div "grace-stack"
 
-        replaceChildren div (Array.fromList [ textarea, error ])
+        replaceChildren div [ textarea, error ]
 
         codeInput <- setupCodemirrorInput textarea
 
@@ -1433,29 +1554,29 @@ renderInputDefault path type_ = do
 
                 setSessionStorage (renderPath path type_) text
 
-                let newStatus = status{ Infer.input = Infer.input status <> Code "(input)" text }
+                let newInput = input <> Code "(input)" text
 
                 let interpretInput = do
-                        (_, value) <- Interpret.interpretWith keyToMethods [] (Just type_)
+                        (_, value) <- Interpret.interpretWith [] (Just type_)
 
                         return value
 
-                result <- liftIO (Exception.try (State.evalStateT interpretInput newStatus))
+                result <- liftIO (Exception.try (Grace.evalGrace newInput status interpretInput))
 
                 case result of
                     Left exception -> do
                         if (text == "")
                             then do
-                                setDisplay error "none"
+                                hideElement error
                             else do
                                 setTextContent error (Text.pack (displayException (exception :: SomeException)))
 
-                                setDisplay error "block"
+                                showElement "block" error
 
                         empty
 
                     Right value -> do
-                        setDisplay error "none"
+                        hideElement error
 
                         setTextContent error ""
 
@@ -1465,7 +1586,7 @@ renderInputDefault path type_ = do
             let invoke mode = do
                     maybeValue <- Maybe.runMaybeT get
 
-                    traverse_ (renderOutput mode) maybeValue
+                    renderOutput mode maybeValue
 
             callback <- Callback.asyncCallback (invoke Change)
 
@@ -1509,101 +1630,100 @@ createForm
     -> JSVal
     -> io
         ( IO ()
-        , Type Location -> Value -> (JSVal -> IO (IO ())) -> IO (IO ())
+        , Type Location -> Value Location -> (JSVal -> IO (IO ())) -> IO (IO ())
         , Text -> IO ()
         )
 createForm showTabs output = liftIO do
     let toTab name = do
-            link <- createElement "a"
-            setAttribute link "class" "nav-link"
-            setAttribute link "href"  "#"
-            setTextContent link name
+            tab <- createElement "button"
+            addClass tab "grace-tab"
+            setAttribute tab "type" "button"
+            setTextContent tab name
 
-            item <- createElement "li"
-            setAttribute item "class" "nav-item"
+            return tab
 
-            replaceChild item link
-
-            return (item, link)
-
-    (formTab, formLink) <- toTab "Form"
-    (codeTab, codeLink) <- toTab "Code"
-    (typeTab, typeLink) <- toTab "Type"
+    formTab <- toTab "Form"
+    codeTab <- toTab "Code"
+    typeTab <- toTab "Type"
 
     let tabs = [ formTab, codeTab, typeTab ]
-    let links = [ formLink, codeLink, typeLink ]
 
-    tabsList <- createElement "ul"
-    setAttribute tabsList "class" "nav nav-tabs"
-    setAttribute tabsList "class" "nav nav-tabs"
+    tabsList <- createElement "div"
+    addClass tabsList "grace-tabs"
 
-    replaceChildren tabsList (Array.fromList tabs)
+    replaceChildren tabsList tabs
 
     pane <- createElement "div"
+    addClass pane "grace-pane"
+    Monad.when showTabs (addClass pane "grace-tabbed")
 
     success <- createElement "div"
+    addClass success "grace-success"
 
     let successChildren = if showTabs then [ tabsList, pane ] else [ pane ]
 
-    replaceChildren success (Array.fromList successChildren)
+    replaceChildren success successChildren
 
     codemirrorBuffer <- getElementById "codemirror-buffer"
 
     let createCodemirrorOutput = do
             textarea <- createElement "textarea"
+            setAttribute textarea "placeholder" "Enter code…"
 
             replaceChild codemirrorBuffer textarea
 
             codeMirror <- setupCodemirrorOutput textarea
 
-            replaceChildren codemirrorBuffer (Array.fromList [])
+            replaceChildren codemirrorBuffer []
 
             return (codeMirror, getWrapperElement codeMirror)
 
-    htmlWrapper <- createElement "div"
-    setAttribute htmlWrapper "class" "form"
+    htmlWrapper <- createElement "form"
+    addClass htmlWrapper "grace-form"
+    setAttribute htmlWrapper "autocomplete" "off"
 
     (codeOutput, codeWrapper) <- createCodemirrorOutput
     (typeOutput, typeWrapper) <- createCodemirrorOutput
 
-    let registerTabCallback selectedTab selectedLink action = do
+    let registerTabCallback selectedTab action = do
             callback <- Callback.asyncCallback do
-                let deselect link = removeClass link "active"
+                let deselect tab = removeClass tab "grace-tab-selected"
 
-                traverse_ deselect links
+                traverse_ deselect tabs
 
-                addClass selectedLink "active"
+                addClass selectedTab "grace-tab-selected"
 
                 action
 
             addEventListener selectedTab "click" callback
 
-    registerTabCallback formTab formLink do
+    registerTabCallback formTab do
         replaceChild pane htmlWrapper
 
-    registerTabCallback codeTab codeLink do
+    registerTabCallback codeTab do
         replaceChild pane codeWrapper
 
         refresh codeOutput
 
-    registerTabCallback typeTab typeLink do
+    registerTabCallback typeTab do
         replaceChild pane typeWrapper
 
         refresh typeOutput
 
-    addClass formLink "active"
+    addClass formTab "grace-tab-selected"
 
     replaceChild pane htmlWrapper
 
     spinner <- do
         spinner <- createElement "div"
-        setAttribute spinner "class"    "spinner-border text-primary"
+        addClass spinner "grace-spinner"
         setAttribute spinner "role"     "status"
         setAttribute spinner "overflow" "hidden"
 
         return spinner
 
     error <- createElement "pre"
+    addClass error "grace-error"
 
     let setBusy = do
             replaceChild output spinner
@@ -1643,7 +1763,20 @@ main = do
 
     hasTutorial <- hasParam params "tutorial"
 
-    hasExpression <- hasParam params "expression"
+    maybeExpression₀ <- do
+        hasExpression <- hasParam params "expression"
+
+        if hasExpression
+            then do
+                expression <- getParam params "expression"
+
+                return (Just expression)
+            else do
+                return Nothing
+
+    maybeExpression₁ <- getSessionStorage "expression"
+
+    let maybeExpression = maybeExpression₀ <|> maybeExpression₁
 
     hasEdit <- hasParam params "edit"
 
@@ -1657,7 +1790,7 @@ main = do
                 then do
                     return True
                 else do
-                    if hasExpression || hasGitHub
+                    if isJust maybeExpression || hasGitHub
                         then do
                             return False
                         else do
@@ -1669,17 +1802,14 @@ main = do
         then do
             title <- getElementById "title"
 
-            setDisplay title "block"
+            showElement "block" title
 
             focus codeInput
         else do
-            setDisplay (getWrapperElement codeInput) "none"
-
-    tutorialRef <- IORef.newIORef hasTutorial
-
-    keyToMethods <- HTTP.getMethods
+            hideElement (getWrapperElement codeInput)
 
     output <- getElementById "output"
+    addClass output "grace-result"
 
     (setBusy, setSuccess, setError) <- createForm edit output
 
@@ -1687,25 +1817,23 @@ main = do
             text <- getValue codeInput
 
             if text == "" || hasGitHub
-                then deleteParam params "expression"
-                else setParam params "expression" (URI.Encode.encodeText text)
+                then removeSessionStorage "expression"
+                else setSessionStorage "expression" (URI.Encode.encodeText text)
 
-            tutorial <- IORef.readIORef tutorialRef
-
-            if tutorial == False
-                then deleteParam params "tutorial"
-                else setParam params "tutorial" "true"
+            tutorial <- hasParam params "tutorial"
 
             saveSearchParams params
 
-            if  | Text.null text -> do
-                    Monad.unless tutorial do
-                        setDisplay startTutorial "inline-block"
+            if not tutorial && Text.null text
+                then showElement "inline-block" startTutorial
+                else hideElement startTutorial
 
-                    replaceChildren output (Array.fromList [])
+            if  | Text.null text -> do
+                    hideElement output
+                    replaceChildren output []
 
                 | otherwise -> do
-                    setDisplay startTutorial "none"
+                    hideElement startTutorial
 
                     setBusy
 
@@ -1713,7 +1841,6 @@ main = do
 
                     let initialStatus = Status
                             { count = 0
-                            , input = input_
                             , context = []
                             }
 
@@ -1722,7 +1849,7 @@ main = do
 
                             (inferred, elaboratedExpression) <- Infer.infer expression
 
-                            value <- Normalize.evaluate keyToMethods [] elaboratedExpression
+                            value <- Normalize.evaluate [] elaboratedExpression
 
                             status@Status{ context } <- State.get
 
@@ -1732,11 +1859,18 @@ main = do
                             let solvedType = Context.solveType context inferred
 
                             refreshOutput <- liftIO $ setSuccess completedType value \htmlWrapper -> do
-                                Reader.runReaderT (renderValue htmlWrapper solvedType value) RenderValue{ keyToMethods, counter, status, edit }
+                                let config = Config
+                                        { counter
+                                        , status
+                                        , input = input_
+                                        , edit
+                                        }
+
+                                Reader.runReaderT (renderValue htmlWrapper solvedType value) config
 
                             liftIO refreshOutput
 
-                    result <- Exception.try (State.evalStateT interpretOutput initialStatus)
+                    result <- Exception.try (Grace.evalGrace input_ initialStatus interpretOutput)
 
 
                     case result of
@@ -1745,120 +1879,107 @@ main = do
                         Right () -> do
                             return ()
 
+                    showElement "block" output
+
     debouncedInterpret <- debounce interpret
 
     inputCallback <- Callback.asyncCallback (debouncedInterpret ())
 
     onChange codeInput inputCallback
 
-    let enableTutorial = do
-            stopTutorial <- createElement "button"
+    enableTutorialMVar <- MVar.newMVar Nothing
 
-            setAttribute stopTutorial "type"  "button"
-            setAttribute stopTutorial "class" "btn btn-primary"
-            setAttribute stopTutorial "id"    "stop-tutorial"
+    let loadTutorial = do
+            stopTutorial <- createElement "button"
+            addClass stopTutorial "grace-tutorial-end"
+
+            setAttribute stopTutorial "type" "button"
+            setAttribute stopTutorial "id"   "stop-tutorial"
 
             setTextContent stopTutorial "Exit the tutorial"
 
-            let createExample active name file = do
-                    text <- liftIO (DataFile.readDataFile ("examples" </> "tutorial" </> file))
-                    let code = Text.strip text
+            hideElement stopTutorial
 
+            let createExample (name, file) = do
                     n <- State.get
 
                     State.put (n + 1)
 
-                    let id = "example-" <> Text.pack (show n)
+                    (return . Concurrently) do
+                        text <- DataFile.readDataFile ("examples" </> "tutorial" </> file)
 
-                    a <- createElement "a"
+                        let code = Text.strip text
 
-                    setAttribute a "id"           id
-                    setAttribute a "aria-current" "page"
-                    setAttribute a "href"         "#"
-                    setAttribute a "onclick"      "return false;"
+                        let id = "example-" <> Text.pack (show n)
 
-                    setAttribute a "class"
-                        (if active then "nav-link example-tab active" else "example-tab nav-link")
+                        tab <- createElement "button"
+                        addClass tab "example-tab"
+                        addClass tab "grace-tab"
 
-                    setTextContent a name
+                        setAttribute tab "id"           id
+                        setAttribute tab "aria-current" "page"
+                        setAttribute tab "type"         "button"
 
-                    li <- createElement "li"
+                        setTextContent tab name
 
-                    setAttribute li "class" "nav-item"
+                        let click = do
+                                setCodeValue codeInput code
 
-                    replaceChild li a
+                                elements <- getElementsByClassName "example-tab"
 
-                    callback <- (liftIO . Callback.asyncCallback) do
-                        setCodeValue codeInput code
+                                Monad.forM_ elements \element -> do
+                                    removeClass element "grace-tab-selected"
 
-                        elements <- getElementsByClassName "example-tab"
+                                element <- getElementById id
 
-                        Monad.forM_ elements \element -> do
-                            removeClass element "active"
+                                addClass element "grace-tab-selected"
 
-                        element <- getElementById id
+                        callback <- Callback.asyncCallback click
 
-                        addClass element "active"
+                        addEventListener tab "click" callback
 
-                    Monad.when active (setCodeValue codeInput code)
+                        return [(tab, click)]
 
-                    addEventListener a "click" callback
+            let examples =
+                    [ ("Hello, world!", "hello.ffg"     )
+                    , ("HTML"         , "html.ffg"      )
+                    , ("Data"         , "data.ffg"      )
+                    , ("Prompting"    , "prompting.ffg" )
+                    , ("Variables"    , "variables.ffg" )
+                    , ("Functions"    , "functions.ffg" )
+                    , ("Imports"      , "imports.ffg"   )
+                    , ("Coding"       , "coding.ffg"    )
+                    , ("Conclusion"   , "conclusion.ffg")
+                    ]
 
-                    return li
+            results <- Async.runConcurrently (State.evalState (foldMap createExample examples) (0 :: Int))
 
-            ul <- createElement "ul"
+            let (tabs, clickFirstExample : _) = unzip results
 
-            flip State.evalStateT (0 :: Int) do
-                helloWorld <- createExample True "Hello, world!" "hello.ffg"
+            navigationBar <- createElement "div"
+            addClass navigationBar "grace-tabs"
 
-                checkboxes <- createExample False "HTML" "checkboxes.ffg"
+            replaceChildren navigationBar tabs
 
-                data_ <- createExample False "Data" "data.ffg"
+            hideElement navigationBar
 
-                prompting <- createExample False "Prompting" "prompting.ffg"
-
-                variables <- createExample False "Variables" "variables.ffg"
-
-                functions <- createExample False "Functions" "functions.ffg"
-
-                imports <- createExample False "Imports" "imports.ffg"
-
-
-                lists <- createExample False "Lists" "lists.ffg"
-
-                coding <- createExample False "Coding" "coding.ffg"
-
-                prelude <- createExample False "Prelude" "prelude.ffg"
-
-                setAttribute ul "class" "nav nav-tabs"
-
-                replaceChildren ul
-                    (Array.fromList
-                        [ helloWorld
-                        , checkboxes
-                        , data_
-                        , prompting
-                        , variables
-                        , functions
-                        , imports
-                        , lists
-                        , coding
-                        , prelude
-                        ]
-                    )
-
-            before inputArea ul
+            before inputArea navigationBar
 
             stopTutorialCallback <- Callback.asyncCallback do
-                setDisplay stopTutorial  "none"
+                deleteParam params "tutorial"
 
-                IORef.writeIORef tutorialRef False
+                saveSearchParams params
 
-                debouncedInterpret ()
+                hideElement stopTutorial
+                hideElement navigationBar
 
-                remove stopTutorial
+                text <- getValue codeInput
 
-                remove ul
+                if Text.null text
+                    then do
+                        showElement "inline-block" startTutorial
+                    else do
+                        hideElement startTutorial
 
                 focus codeInput
 
@@ -1866,11 +1987,28 @@ main = do
 
             after startTutorial stopTutorial
 
-            IORef.writeIORef tutorialRef True
+            return do
+                setParam params "tutorial" "true"
 
-            setDisplay startTutorial "none"
+                saveSearchParams params
 
-            focus codeInput
+                clickFirstExample
+
+                hideElement startTutorial
+                showElement "flex" navigationBar
+                showElement "inline-block" stopTutorial
+
+                focus codeInput
+
+    let enableTutorial = do
+            enable <- MVar.modifyMVar enableTutorialMVar \maybeEnable -> do
+                enable <- case maybeEnable of
+                    Nothing     -> loadTutorial
+                    Just enable -> return enable
+
+                return (Just enable, enable)
+
+            enable
 
     startTutorialCallback <- Callback.asyncCallback enableTutorial
 
@@ -2056,9 +2194,10 @@ main = do
             _ -> do
                 return ()
 
-    Monad.when hasExpression do
-        expression <- getParam params "expression"
-
-        setCodeValue codeInput (URI.Encode.decodeText expression)
+    case maybeExpression of
+        Just expression -> do
+            setCodeValue codeInput (URI.Encode.decodeText expression)
+        Nothing -> do
+            return ()
 
     debouncedInterpret ()

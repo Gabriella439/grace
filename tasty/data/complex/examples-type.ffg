@@ -1,0 +1,118 @@
+forall (k : Fields) .
+forall (l : Fields) .
+forall (m : Fields) .
+forall (n : Fields) .
+forall (o : Fields) .
+forall (p : Type) .
+forall (q : Fields) .
+  { hello:
+      Text
+  , html:
+      List Bool
+  , data:
+      { "An example string":
+          Text
+      , "An example string with a type annotation":
+          Text
+      , "A boolean value":
+          Bool
+      , "Annotated boolean value":
+          Bool
+      , "A natural number":
+          Natural
+      , "An integer":
+          Integer
+      , "A real number":
+          Real
+      , "A list of natural numbers":
+          List Natural
+      , "Annotated list of natural numbers":
+          List Natural
+      , "Annotated record":
+          { x: Natural, y: Natural }
+      , "A list of records (using JSON syntax with quoted field names)":
+          List
+            { isActive:
+                Bool
+            , age:
+                Natural
+            , name:
+                Text
+            , email:
+                Text
+            , phone:
+                Text
+            }
+      }
+  , prompting:
+      { "OpenAI API key": Key, q } ->
+        { names:
+            p
+        , structuredNames:
+            List Text
+        , fullNames:
+            List { firstName: Text, lastName: Text }
+        , tacitFullNames:
+            List { firstName: Text, lastName: Text }
+        , differentModel:
+            List { firstName: Text, lastName: Text }
+        }
+  , variables:
+      Natural
+  , functions:
+      { greet:
+          { name: Text, o } -> Text
+      , greeting:
+          Text
+      , makeUser:
+          { user: Text } -> { home: Text, privateKey: Text, publicKey: Text }
+      , users:
+          List { home: Text, privateKey: Text, publicKey: Text }
+      }
+  , imports:
+      { "URL import":
+          { "Filing status":
+              < 'Head of household':
+                  { }
+              | 'Married, filing jointly':
+                  { }
+              | 'Married, filing separately':
+                  { }
+              | 'Single filers':
+                  { }
+              >
+          , "Taxable income":
+              Real
+          , n
+          } ->
+            { "Tax": Real }
+      , "GitHub import":
+          { "Filing status":
+              < 'Head of household':
+                  { }
+              | 'Married, filing jointly':
+                  { }
+              | 'Married, filing separately':
+                  { }
+              | 'Single filers':
+                  { }
+              >
+          , "Taxable income":
+              Real
+          , m
+          } ->
+            { "Tax": Real }
+      , "Short link":
+          Text
+      , "Import Prelude function":
+          Bool -> Bool
+      , "Import entire Prelude":
+          Bool -> Bool
+      }
+  , coding:
+      { "OpenAI API key": Key, l } ->
+      { "Job Description": Text } ->
+        { "Is Finance?": Bool, "Rationale": Text }
+  , conclusion:
+      { "Want to get involved?": Bool, k } -> Text
+  }

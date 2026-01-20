@@ -6,7 +6,7 @@ module Grace.Normalize
     ( -- * Normalization
       evaluate
     , apply
-    , quote
+    , Value.quote
     , strip
 
       -- * Errors related to normalization
@@ -16,22 +16,20 @@ module Grace.Normalize
     , MissingSchema(..)
     ) where
 
-import Control.Exception.Safe (Exception(..), MonadCatch)
+import Control.Exception.Safe (Exception(..))
 import Control.Monad.IO.Class (MonadIO(..))
-import Control.Monad.State (MonadState(..))
-import Data.Bifunctor (first)
 import Data.Foldable (toList)
+import Data.Functor (void)
 import Data.HashMap.Strict.InsOrd (InsOrdHashMap)
-import Data.List.NonEmpty (NonEmpty(..))
 import Data.Sequence (ViewL(..))
 import Data.Text (Text)
 import Data.Void (Void)
 import Grace.Aeson (JSONDecodingFailed(..))
 import Grace.Decode (FromGrace(..))
-import Grace.HTTP (HTTP(..), Methods)
-import Grace.Infer (Status(..))
+import Grace.HTTP (HTTP(..))
 import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
+import Grace.Monad (Grace, Status(..))
 import Grace.Syntax (BindMonad(..), Builtin(..), Scalar(..), Syntax)
 import Grace.Value (Value)
 import Prelude hiding (lookup, null, succ)
@@ -40,13 +38,14 @@ import {-# SOURCE #-} qualified Grace.Interpret as Interpret
 
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
+import qualified Control.Monad as Monad
+import qualified Control.Monad.Reader as Reader
 import qualified Control.Monad.State as State
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Yaml as YAML
 import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.HashMap.Strict.InsOrd as HashMap
 import qualified Data.List as List
-import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Ord as Ord
 import qualified Data.Scientific as Scientific
 import qualified Data.Sequence as Seq
@@ -57,6 +56,7 @@ import qualified Grace.Aeson
 import qualified Grace.Context as Context
 import qualified Grace.GitHub as GitHub
 import qualified Grace.HTTP as HTTP
+import qualified Grace.Import as Import
 import qualified Grace.Infer as Infer
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Pretty as Pretty
@@ -78,9 +78,9 @@ import qualified Prelude
 lookupVariable
     :: Text
     -- ^ Variable name
-    -> [(Text, Value)]
+    -> [(Text, Value Location)]
     -- ^ Evaluation environment
-    -> Value
+    -> Value Location
 lookupVariable name environment = case Prelude.lookup name environment of
     Just value -> value
     Nothing    -> error "Grace.Normalize.lookupVariable: unbound variable"
@@ -96,22 +96,19 @@ sorted = List.sortBy (Ord.comparing fst) . HashMap.toList
     sub-expression multiple times.
 -}
 evaluate
-    :: (MonadCatch m, MonadState Status m, MonadIO m)
-    => (Text -> Methods)
-    -- ^ OpenAI methods
-    -> [(Text, Value)]
+    :: [(Text, Value Location)]
     -- ^ Evaluation environment (starting at @[]@ for a top-level expression)
     -> Syntax Location Void
     -- ^ Surface syntax
-    -> m Value
+    -> Grace (Value Location)
     -- ^ Result, free of reducible sub-expressions
-evaluate keyToMethods env₀ syntax₀ = do
+evaluate env₀ syntax₀ = do
     loop env₀ syntax₀
   where
-    generateContext env location = do
+    generateContext env = do
         let infer (name, assignment) = do
                 let expression :: Syntax Location Input
-                    expression = first (\_ -> location) (fmap Void.absurd (quote assignment))
+                    expression = fmap Void.absurd (Value.quote assignment)
 
                 let input = Code "(intermediate value)" (Pretty.toSmart expression)
 
@@ -122,45 +119,46 @@ evaluate keyToMethods env₀ syntax₀ = do
         traverse infer env
 
     loop
-        :: (MonadIO m, MonadState Status m, MonadCatch m)
-        => [(Text, Value)] -> Syntax Location Void -> m Value
+        :: [(Text, Value Location)]
+        -> Syntax Location Void
+        -> Grace (Value Location)
     loop env syntax =
         case syntax of
             Syntax.Variable{ name } -> do
                 pure (lookupVariable name env)
 
-            Syntax.Application{ function, argument } -> do
+            Syntax.Application{ location, function, argument } -> Monad.join do
                 function' <- loop env function
                 argument' <- loop env argument
-                apply keyToMethods function' argument'
+                pure (apply location function' argument')
 
-            Syntax.Lambda{ binding = Syntax.PlainBinding{ plain = Syntax.NameBinding{ name, assignment } }, body } -> do
+            Syntax.Lambda{ location, binding = Syntax.PlainBinding{ plain = Syntax.NameBinding{ nameLocation, name, assignment } }, body } -> do
                 newAssignment <- traverse (loop env) assignment
 
-                pure (Value.Lambda env (Value.Name name newAssignment) body)
+                pure (Value.Lambda location env (Value.Name nameLocation name newAssignment) body)
 
-            Syntax.Lambda{ binding = Syntax.RecordBinding{ fieldNames }, body } -> do
-                let process Syntax.NameBinding{ name, assignment } = do
+            Syntax.Lambda{ location, binding = Syntax.RecordBinding{ fieldNamesLocation, fieldNames }, body } -> do
+                let process Syntax.NameBinding{ nameLocation, name, assignment } = do
                         newAssignment <- traverse (loop env) assignment
 
-                        return (name, newAssignment)
+                        pure (nameLocation, name, newAssignment)
 
                 newFieldNames <- traverse process fieldNames
 
-                pure (Value.Lambda env (Value.FieldNames newFieldNames) body)
+                pure (Value.Lambda location env (Value.FieldNames fieldNamesLocation newFieldNames) body)
 
             Syntax.Annotation{ annotated, annotation  } -> do
                 newAnnotated <- loop env annotated
 
-                return do
-                    let promote (Value.Scalar (Natural n)) Type.Scalar{ scalar = Monotype.Real } =
-                            Value.Scalar (Real (fromIntegral n))
-                        promote (Value.Scalar (Integer n)) Type.Scalar{ scalar = Monotype.Real } =
-                            Value.Scalar (Real (fromInteger n))
-                        promote (Value.Scalar (Natural n)) Type.Scalar{ scalar = Monotype.Integer } =
-                            Value.Scalar (Integer (fromIntegral n))
-                        promote (Value.Text t) Type.Scalar{ scalar = Monotype.Key } =
-                            Value.Scalar (Key t)
+                pure do
+                    let promote (Value.Scalar location (Natural n)) Type.Scalar{ scalar = Monotype.Real } =
+                            Value.Scalar location (Real (fromIntegral n))
+                        promote (Value.Scalar location (Integer n)) Type.Scalar{ scalar = Monotype.Real } =
+                            Value.Scalar location (Real (fromInteger n))
+                        promote (Value.Scalar location (Natural n)) Type.Scalar{ scalar = Monotype.Integer } =
+                            Value.Scalar location (Integer (fromIntegral n))
+                        promote (Value.Text location t) Type.Scalar{ scalar = Monotype.Key } =
+                            Value.Scalar location (Key t)
                         promote _ _ =
                             newAnnotated
 
@@ -190,21 +188,22 @@ evaluate keyToMethods env₀ syntax₀ = do
                                             return v
                                         Just assignment₂ ->
                                             case v of
-                                                Value.Scalar Null -> do
+                                                Value.Scalar _ Null -> do
                                                     loop environment assignment₂
-                                                Value.Application (Value.Builtin Some) v₁ -> do
+                                                Value.Application _ (Value.Builtin _ Some) v₁ -> do
                                                     return v₁
                                                 v₁ -> do
                                                     return v₁
+
                                     action ((name, v₁) : environment)
 
                                 Syntax.RecordBinding{ fieldNames } -> do
                                     case v of
-                                        Value.Record hashMap -> do
+                                        Value.Record location hashMap -> do
                                             let process Syntax.NameBinding{ name, assignment = assignment₁} = do
                                                     let missing = case assignment₁ of
                                                             Nothing -> do
-                                                                return (Value.Scalar Syntax.Null)
+                                                                return (Value.Scalar location Syntax.Null)
 
                                                             Just a -> do
                                                                 loop environment a
@@ -217,18 +216,18 @@ evaluate keyToMethods env₀ syntax₀ = do
                                                         Nothing ->
                                                             missing
 
-                                                        Just (Value.Scalar Syntax.Null) ->
+                                                        Just (_, Value.Scalar _ Syntax.Null) ->
                                                             missing
 
                                                         -- If the field had a default assignment then that
                                                         -- means that the right-hand side would be elaborated
                                                         -- to be wrapped in a `some`, which we need to undo
                                                         -- here
-                                                        Just (Value.Application (Value.Builtin Some) a)
+                                                        Just (_, Value.Application _ (Value.Builtin _ Some) a)
                                                             | Just _ <- assignment₁ ->
                                                                 return a
 
-                                                        Just a -> do
+                                                        Just (_, a) -> do
                                                             return a
 
                                                     return (name, value)
@@ -240,59 +239,59 @@ evaluate keyToMethods env₀ syntax₀ = do
                                             error "Grace.Normalize.evaluate: non-records can't be destructured as records"
 
                         case monad of
-                            Nothing ->
+                            IdentityMonad ->
                                 once value₀
 
-                            Just UnknownMonad ->
-                                error "Grace.Normalize.evaluate: unknown monad"
-
-                            Just OptionalMonad ->
+                            OptionalMonad ->
                                 case value₀ of
-                                    Value.Scalar Null -> do
-                                        return (Value.Scalar Null)
-                                    Value.Application (Value.Builtin Some) value₁ -> do
+                                    Value.Scalar location Null -> do
+                                        return (Value.Scalar location Null)
+                                    Value.Application _ (Value.Builtin _ Some) value₁ -> do
                                         once value₁
                                     value₁ ->
                                         once value₁
 
-                            Just ListMonad ->
+                            ListMonad ->
                                 case value₀ of
-                                    Value.List elements -> do
+                                    Value.List location elements -> do
                                         values <- traverse once elements
 
                                         let newElements = mconcat do
-                                                Value.List xs <- toList values
+                                                Value.List _ xs <- toList values
 
                                                 return (toList xs)
 
-                                        return (Value.List (Seq.fromList newElements))
+                                        return (Value.List location (Seq.fromList newElements))
 
                                     _ ->
                                         error "Grace.Normalize.evaluate: cannot bind a non-Listin the List monad"
 
-                let monad =
-                        NonEmpty.last
-                            (Nothing :| [ m | Syntax.Bind{ monad = m } <- toList assignments ])
+                let monad = (maximum . (IdentityMonad :)) do
+                        Syntax.Bind{ monad = m } <- toList assignments
+
+                        return m
 
                 let nil environment = do
                         value <- loop environment body₀
 
                         return case monad of
-                            Nothing ->
+                            IdentityMonad ->
                                 value
-                            Just UnknownMonad ->
-                                error "Grace.Normalize.evaluate: unknown monad"
-                            Just ListMonad ->
-                                Value.List [ value ]
-                            Just OptionalMonad ->
-                                Value.Application (Value.Builtin Some) value
+                            ListMonad ->
+                                Value.List (Value.location value) [ value ]
+                            OptionalMonad ->
+                                Value.Application location (Value.Builtin location Some) value
+                              where
+                                location = Value.location value
+
                 foldr cons nil assignments env
 
-            Syntax.List{ elements } -> do
+            Syntax.List{ location, elements } -> do
                 values <- traverse (loop env) elements
-                return (Value.List values)
 
-            Syntax.Record{ fieldValues } -> do
+                pure (Value.List location values)
+
+            Syntax.Record{ location, fieldValues } -> do
                 let process Syntax.Definition{ nameLocation, name, bindings, assignment = assignment₀ } = do
                         let cons binding body = Syntax.Lambda
                                 { location = nameLocation
@@ -304,64 +303,61 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                         assignment₂ <- loop env assignment₁
 
-                        return (name, assignment₂)
+                        pure (name, (nameLocation, assignment₂))
 
                 newFieldValues <- traverse process fieldValues
 
-                return (Value.Record (HashMap.fromList newFieldValues))
+                pure (Value.Record location (HashMap.fromList newFieldValues))
 
-            Syntax.Text{ chunks = Syntax.Chunks text rest } -> do
+            Syntax.Text{ location, chunks = Syntax.Chunks text rest } -> do
                 let onChunk (interpolation, text₁) = do
                         value <- loop env interpolation
 
-                        return case value of
-                            Value.Text text₀ ->
+                        pure case value of
+                            Value.Text _ text₀ ->
                                 text₀ <> text₁
                             _ ->
                                 error "Grace.Normalize.evaluate: interpolations must be text values"
 
                 suffixes <- traverse onChunk rest
 
-                return (Value.Text (text <> Text.concat suffixes))
+                pure (Value.Text location (text <> Text.concat suffixes))
 
             Syntax.Project{ larger, smaller } -> do
-                let lookup field fieldValues = case HashMap.lookup field fieldValues of
-                        Just v -> v
-                        Nothing -> Value.Scalar Syntax.Null
+                let lookup location field fieldValues = case HashMap.lookup field fieldValues of
+                        Just (_, v) -> v
+                        Nothing -> Value.Scalar location Syntax.Null
 
                 larger' <- loop env larger
 
-                return case (larger', smaller) of
-                    (Value.Record fieldValues, Syntax.Single{ single = Syntax.Field{ field } }) ->
-                        lookup field fieldValues
+                pure case (larger', smaller) of
+                    (Value.Record location fieldValues, Syntax.Single{ single = Syntax.Field{ field } }) ->
+                        lookup location field fieldValues
 
-                    (Value.Record fieldValues, Syntax.Multiple{ multiple }) ->
-                        Value.Record newFieldValues
+                    (Value.Record location fieldValues, Syntax.Multiple{ multiple }) ->
+                        Value.Record location newFieldValues
                       where
-                        labels = do
-                            Syntax.Field{ field } <- multiple
+                        process Syntax.Field{ fieldLocation, field } =
+                            (field, (fieldLocation, lookup location field fieldValues))
 
-                            return field
-
-                        process field = (field, lookup field fieldValues)
-
-                        fvs = map process labels
+                        fvs = map process multiple
 
                         newFieldValues = HashMap.fromList fvs
 
-                    (Value.List xs, Syntax.Index{ index })
-                        | Seq.null xs -> Value.Scalar Null
+                    (Value.List location xs, Syntax.Index{ index })
+                        | Seq.null xs -> Value.Scalar location Null
                         | otherwise ->
-                            Value.Application
-                                (Value.Builtin Some)
+                            Value.Application location
+                                (Value.Builtin location Some)
                                 (Seq.index xs (fromInteger index `mod` Seq.length xs))
-                    (Value.List xs, Syntax.Slice{ begin, end })
+                    (Value.List location xs, Syntax.Slice{ begin, end })
                         | Seq.null xs ->
-                            Value.Scalar Null
+                            Value.Scalar location Null
                         | otherwise ->
                             Value.Application
-                                (Value.Builtin Some)
-                                (Value.List elements₂)
+                                location
+                                (Value.Builtin location Some)
+                                (Value.List location elements₂)
                       where
                         b = case begin of
                             Just x -> x
@@ -384,15 +380,15 @@ evaluate keyToMethods env₀ syntax₀ = do
                     _ ->
                         error "Grace.Normalize.evaluate: invalid projection"
 
-            Syntax.Alternative{ name, argument } -> do
+            Syntax.Alternative{ location, name, argument } -> do
                 newArgument <- loop env argument
 
-                pure (Value.Alternative name newArgument)
+                pure (Value.Alternative location name newArgument)
 
-            Syntax.Fold{ handlers } -> do
+            Syntax.Fold{ location, handlers } -> do
                 newHandlers <- loop env handlers
 
-                return (Value.Fold newHandlers)
+                pure (Value.Fold location newHandlers)
 
             Syntax.If{ predicate, ifTrue, ifFalse } -> do
                 predicate' <- loop env predicate
@@ -400,9 +396,9 @@ evaluate keyToMethods env₀ syntax₀ = do
                 ifTrue'  <- loop env ifTrue
                 ifFalse' <- loop env ifFalse
 
-                return case predicate' of
-                    Value.Scalar (Bool True) -> ifTrue'
-                    Value.Scalar (Bool False) -> ifFalse'
+                pure case predicate' of
+                    Value.Scalar _ (Bool True) -> ifTrue'
+                    Value.Scalar _ (Bool False) -> ifFalse'
                     _ -> error "Grace.Normalize.evaluate: if predicate must be a boolean value"
 
             Syntax.Prompt{ location, import_, arguments, schema } -> do
@@ -412,15 +408,15 @@ evaluate keyToMethods env₀ syntax₀ = do
                     Left exception -> Exception.throwIO exception
                     Right prompt -> return prompt
 
-                Status{ context } <- get
+                Status{ context } <- State.get
 
                 let solvedSchema = fmap (Context.solveType context) schema
 
-                Prompt.prompt (generateContext env location) import_ location prompt solvedSchema
+                Prompt.prompt (generateContext env) import_ location prompt solvedSchema
 
             Syntax.HTTP{ schema = Nothing } -> do
                 Exception.throwIO MissingSchema
-            Syntax.HTTP{ location, import_, arguments, schema = Just schema } -> do
+            Syntax.HTTP{ import_, arguments, schema = Just schema } -> do
                 newArguments <- loop env arguments
 
                 http <- case decode newArguments of
@@ -431,39 +427,39 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                 if import_
                     then do
-                        bindings <- liftIO (generateContext env location)
+                        bindings <- liftIO (generateContext env)
 
-                        uri <- URI.mkURI (HTTP.url http)
+                        uri <- liftIO (URI.mkURI (HTTP.url http))
 
-                        Status{ input = parent } <- State.get
+                        parent <- Reader.ask
 
-                        let child = parent <> URI uri AsCode
+                        Reader.local (\i -> i <> URI uri AsCode) do
+                            child <- Reader.ask
 
-                        State.modify (\s -> s{ input = child })
+                            Import.referentiallySane parent child
 
-                        (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema)
+                            (_, value) <- Interpret.interpretWith bindings (Just schema)
 
-                        State.modify (\s -> s{ input = parent })
-
-                        return value
+                            return value
 
                     else do
-                        Status{ context } <- get
+                        Status{ context } <- State.get
 
                         let solvedSchema = Context.solveType context schema
 
                         case solvedSchema of
-                            Type.Scalar{ scalar = Monotype.Text } ->
-                                return (Value.Text responseBody)
+                            Type.Scalar{ location, scalar = Monotype.Text } ->
+                                return (Value.Text location responseBody)
 
                             _ -> do
                                 responseValue <- liftIO (Grace.Aeson.decode responseBody)
 
-                                Infer.checkJSON solvedSchema responseValue
+                                value <- Infer.checkJSON solvedSchema responseValue
+                                return (fmap (\_ -> Unknown) value)
 
             Syntax.Read{ schema = Nothing } -> do
                 Exception.throwIO MissingSchema
-            Syntax.Read{ location, import_, arguments, schema = Just schema } -> do
+            Syntax.Read{ import_, arguments, schema = Just schema } -> do
                 newArguments <- loop env arguments
 
                 text <- case decode newArguments of
@@ -472,32 +468,33 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                 if import_
                     then do
-                        bindings <- generateContext env location
+                        bindings <- generateContext env
 
-                        Status{ input = parent } <- State.get
+                        parent <- Reader.ask
 
-                        let child = parent <> Code "(read)" text
+                        Reader.local (\i -> i <> Code "(read)" text) do
+                            child <- Reader.ask
 
-                        State.modify (\s -> s{ input = child })
+                            Import.referentiallySane parent child
 
-                        (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema)
+                            (_, value) <- Interpret.interpretWith bindings (Just schema)
 
-                        State.modify (\s -> s{ input = parent })
-
-                        return value
+                            return value
 
                     else do
                         aesonValue <- liftIO (Grace.Aeson.decode text)
 
-                        Status{ context } <- get
+                        Status{ context } <- State.get
 
                         let solvedSchema = Context.solveType context schema
 
-                        Infer.checkJSON solvedSchema aesonValue
+                        value <- Infer.checkJSON solvedSchema aesonValue
+
+                        return (fmap (\_ -> Unknown) value)
 
             Syntax.GitHub{ schema = Nothing } -> do
                 Exception.throwIO MissingSchema
-            Syntax.GitHub{ location, import_, arguments, schema = Just schema } -> do
+            Syntax.GitHub{ import_, arguments, schema = Just schema } -> do
                 newArguments <- loop env arguments
 
                 github <- case decode newArguments of
@@ -508,21 +505,20 @@ evaluate keyToMethods env₀ syntax₀ = do
 
                 if import_
                     then do
-                        bindings <- generateContext env location
+                        bindings <- generateContext env
 
-                        uri <- URI.mkURI url
+                        uri <- liftIO (URI.mkURI url)
 
-                        Status{ input = parent } <- State.get
+                        parent <- Reader.ask
 
-                        let child = parent <> URI uri AsCode
+                        Reader.local (\i -> i <> URI uri AsCode) do
+                            child <- Reader.ask
 
-                        State.modify (\s -> s{ input = child })
+                            Import.referentiallySane parent child
 
-                        (_, value) <- Interpret.interpretWith keyToMethods bindings (Just schema)
+                            (_, value) <- Interpret.interpretWith bindings (Just schema)
 
-                        State.modify (\s -> s{ input = parent })
-
-                        return value
+                            return value
 
                     else do
                         responseBody <- liftIO $ HTTP.http import_ GET
@@ -531,182 +527,207 @@ evaluate keyToMethods env₀ syntax₀ = do
                             , parameters = Nothing
                             }
 
-                        Status{ context } <- get
+                        Status{ context } <- State.get
 
                         let solvedSchema = Context.solveType context schema
 
                         case solvedSchema of
-                            Type.Scalar{ scalar = Monotype.Text } ->
-                                return (Value.Text responseBody)
+                            Type.Scalar{ location, scalar = Monotype.Text } ->
+                                return (Value.Text location responseBody)
 
                             _ -> do
                                 aesonValue <- liftIO (Grace.Aeson.decode responseBody)
 
-                                Infer.checkJSON solvedSchema aesonValue
+                                value <- Infer.checkJSON solvedSchema aesonValue
 
-            Syntax.Scalar{ scalar } ->
-                pure (Value.Scalar scalar)
+                                return (fmap (\_ -> Unknown) value)
 
-            Syntax.Operator{ operator = Syntax.And, left, right } -> do
+            Syntax.Show{ location, export = False, arguments = v } -> do
+                v' <- loop env v
+
+                case Value.toJSON v' of
+                    Just value -> do
+                        let lazyBytes = Aeson.encode value
+
+                        let strictBytes = ByteString.Lazy.toStrict lazyBytes
+
+                        case Encoding.decodeUtf8' strictBytes of
+                            Left _ ->
+                                error "Grace.Normalize.evaluate: show produced non-UTF8 text"
+                            Right text ->
+                                pure (Value.Text location text)
+
+                    Nothing -> do
+                        error "Grace.Normalize.evaluate: show argument is not valid JSON"
+
+            Syntax.Show{ location, export = True, arguments = v } -> do
+                v' <- loop env v
+
+                return (Value.Text location (Pretty.toSmart (Value.quote v')))
+
+            Syntax.Scalar{ location, scalar } ->
+                pure (Value.Scalar location scalar)
+
+            Syntax.Operator{ location, operator = Syntax.And, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
-                    (Value.Scalar (Bool l), Value.Scalar (Bool r)) ->
-                        Value.Scalar (Bool (l && r))
+                pure case (left', right') of
+                    (Value.Scalar _ (Bool l), Value.Scalar _ (Bool r)) ->
+                        Value.Scalar location (Bool (l && r))
                     _ ->
                         error "Grace.Normalize.evaluate: && arguments must be boolean values"
 
-            Syntax.Operator{ operator = Syntax.Or, left, right } -> do
+            Syntax.Operator{ location, operator = Syntax.Or, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
-                    (Value.Scalar (Bool l), Value.Scalar (Bool r)) ->
-                        Value.Scalar (Bool (l || r))
+                pure case (left', right') of
+                    (Value.Scalar _ (Bool l), Value.Scalar _ (Bool r)) ->
+                        Value.Scalar location (Bool (l || r))
                     _ ->
                         error "Grace.Normalize.evaluate: || arguments must be boolean values"
 
-            Syntax.Operator{ operator = Syntax.Equal, left, right } -> do
+            Syntax.Operator{ location, operator = Syntax.Equal, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return (Value.Scalar (Bool (left' == right')))
+                pure (Value.Scalar location (Bool (void left' == void right')))
 
-            Syntax.Operator{ operator = Syntax.NotEqual, left, right } -> do
+            Syntax.Operator{ location, operator = Syntax.NotEqual, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return (Value.Scalar (Bool (left' /= right')))
+                pure (Value.Scalar location (Bool (left' /= right')))
 
-            Syntax.Operator{ operator = Syntax.LessThan, left, right } -> do
+            Syntax.Operator{ location, operator = Syntax.LessThan, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
-                    (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
-                        Value.Scalar (Bool (m < n))
-                    (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
-                        Value.Scalar (Bool (m < n))
-                    (Value.Scalar (Real m), Value.Scalar (Real n)) ->
-                        Value.Scalar (Bool (m < n))
+                pure case (left', right') of
+                    (Value.Scalar _ (Natural m), Value.Scalar _ (Natural n)) ->
+                        Value.Scalar location (Bool (m < n))
+                    (Value.Scalar _ (Integer m), Value.Scalar _ (Integer n)) ->
+                        Value.Scalar location (Bool (m < n))
+                    (Value.Scalar _ (Real m), Value.Scalar _ (Real n)) ->
+                        Value.Scalar location (Bool (m < n))
                     _ ->
                         error "Grace.Normalize.evaluate: < arguments must be numeric values of the same type"
 
 
-            Syntax.Operator{ operator = Syntax.LessThanOrEqual, left, right } -> do
+            Syntax.Operator{ location, operator = Syntax.LessThanOrEqual, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
-                    (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
-                        Value.Scalar (Bool (m <= n))
-                    (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
-                        Value.Scalar (Bool (m <= n))
-                    (Value.Scalar (Real m), Value.Scalar (Real n)) ->
-                        Value.Scalar (Bool (m <= n))
+                pure case (left', right') of
+                    (Value.Scalar _ (Natural m), Value.Scalar _ (Natural n)) ->
+                        Value.Scalar location (Bool (m <= n))
+                    (Value.Scalar _ (Integer m), Value.Scalar _ (Integer n)) ->
+                        Value.Scalar location (Bool (m <= n))
+                    (Value.Scalar _ (Real m), Value.Scalar _ (Real n)) ->
+                        Value.Scalar location (Bool (m <= n))
                     _ ->
                         error "Grace.Normalize.evaluate: <= arguments must be numeric values of the same type"
 
-            Syntax.Operator{ operator = Syntax.GreaterThan, left, right } -> do
+            Syntax.Operator{ location, operator = Syntax.GreaterThan, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
-                    (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
-                        Value.Scalar (Bool (m > n))
-                    (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
-                        Value.Scalar (Bool (m > n))
-                    (Value.Scalar (Real m), Value.Scalar (Real n)) ->
-                        Value.Scalar (Bool (m > n))
+                pure case (left', right') of
+                    (Value.Scalar _ (Natural m), Value.Scalar _ (Natural n)) ->
+                        Value.Scalar location (Bool (m > n))
+                    (Value.Scalar _ (Integer m), Value.Scalar _ (Integer n)) ->
+                        Value.Scalar location (Bool (m > n))
+                    (Value.Scalar _ (Real m), Value.Scalar _ (Real n)) ->
+                        Value.Scalar location (Bool (m > n))
                     _ ->
                         error "Grace.Normalize.evaluate: > arguments must be numeric values of the same type"
 
-            Syntax.Operator{ operator = Syntax.GreaterThanOrEqual, left, right } -> do
+            Syntax.Operator{ location, operator = Syntax.GreaterThanOrEqual, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
-                    (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
-                        Value.Scalar (Bool (m >= n))
-                    (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
-                        Value.Scalar (Bool (m >= n))
-                    (Value.Scalar (Real m), Value.Scalar (Real n)) ->
-                        Value.Scalar (Bool (m >= n))
+                pure case (left', right') of
+                    (Value.Scalar _ (Natural m), Value.Scalar _ (Natural n)) ->
+                        Value.Scalar location (Bool (m >= n))
+                    (Value.Scalar _ (Integer m), Value.Scalar _ (Integer n)) ->
+                        Value.Scalar location (Bool (m >= n))
+                    (Value.Scalar _ (Real m), Value.Scalar _ (Real n)) ->
+                        Value.Scalar location (Bool (m >= n))
                     _ ->
                         error "Grace.Normalize.evaluate: >= arguments must be numeric values of the same type"
 
-            Syntax.Operator{ operator = Syntax.Times, left, right } -> do
+            Syntax.Operator{ location, operator = Syntax.Times, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
-                    (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
-                        Value.Scalar (Natural (m * n))
-                    (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
-                        Value.Scalar (Integer (m * n))
-                    (Value.Scalar (Real m), Value.Scalar (Real n)) ->
-                        Value.Scalar (Real (m * n))
+                pure case (left', right') of
+                    (Value.Scalar _ (Natural m), Value.Scalar _ (Natural n)) ->
+                        Value.Scalar location (Natural (m * n))
+                    (Value.Scalar _ (Integer m), Value.Scalar _ (Integer n)) ->
+                        Value.Scalar location (Integer (m * n))
+                    (Value.Scalar _ (Real m), Value.Scalar _ (Real n)) ->
+                        Value.Scalar location (Real (m * n))
                     _ ->
                         error "Grace.Normalize.evaluate: * arguments must be numeric values of the same type"
 
-            Syntax.Operator{ operator = Syntax.Plus, left, right } -> do
+            Syntax.Operator{ location, operator = Syntax.Plus, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
-                    (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
-                        Value.Scalar (Natural (m + n))
-                    (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
-                        Value.Scalar (Integer (m + n))
-                    (Value.Scalar (Real m), Value.Scalar (Real n)) ->
-                        Value.Scalar (Real (m + n))
-                    (Value.Text l, Value.Text r) ->
-                        Value.Text (l <> r)
-                    (Value.List l, Value.List r) ->
-                        Value.List (l <> r)
+                pure case (left', right') of
+                    (Value.Scalar _ (Natural m), Value.Scalar _ (Natural n)) ->
+                        Value.Scalar location (Natural (m + n))
+                    (Value.Scalar _ (Integer m), Value.Scalar _ (Integer n)) ->
+                        Value.Scalar location (Integer (m + n))
+                    (Value.Scalar _ (Real m), Value.Scalar _ (Real n)) ->
+                        Value.Scalar location (Real (m + n))
+                    (Value.Text _ l, Value.Text _ r) ->
+                        Value.Text location (l <> r)
+                    (Value.List _ l, Value.List _ r) ->
+                        Value.List location (l <> r)
                     _ ->
                         error "Grace.Normalize.evaluate: + arguments must be numeric values of the same type"
 
-            Syntax.Operator{ operator = Syntax.Minus, left, right } -> do
+            Syntax.Operator{ location, operator = Syntax.Minus, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
-                return case (left', right') of
-                    (Value.Scalar (Natural m), Value.Scalar (Natural n)) ->
-                        Value.Scalar (Integer (fromIntegral m - fromIntegral n))
-                    (Value.Scalar (Integer m), Value.Scalar (Integer n)) ->
-                        Value.Scalar (Integer (m - n))
-                    (Value.Scalar (Real m), Value.Scalar (Real n)) ->
-                        Value.Scalar (Real (m - n))
+                pure case (left', right') of
+                    (Value.Scalar _ (Natural m), Value.Scalar _ (Natural n)) ->
+                        Value.Scalar location (Integer (fromIntegral m - fromIntegral n))
+                    (Value.Scalar _ (Integer m), Value.Scalar _ (Integer n)) ->
+                        Value.Scalar location (Integer (m - n))
+                    (Value.Scalar _ (Real m), Value.Scalar _ (Real n)) ->
+                        Value.Scalar location (Real (m - n))
                     _ ->
                         error "Grace.Normalize.evaluate: - arguments must be numeric values of the same type"
 
-            Syntax.Operator{ operator = Syntax.Modulus, left, right } -> do
+            Syntax.Operator{ location, operator = Syntax.Modulus, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
                 pure do
                     let divisor = case right' of
-                            Value.Scalar (Natural n) -> n
+                            Value.Scalar _ (Natural n) -> n
                             _ -> error "Grace.Normalize.evaluate: right argument to % must be a Natural number literal"
 
                     let (quotient, remainder) = case left' of
-                            Value.Scalar (Natural n) ->
-                                ( Value.Scalar (Natural q)
-                                , Value.Scalar (Natural r)
+                            Value.Scalar _ (Natural n) ->
+                                ( Value.Scalar location (Natural q)
+                                , Value.Scalar location (Natural r)
                                 )
                               where
                                 (q, r) = n `divMod` divisor
-                            Value.Scalar (Integer n) ->
-                                ( Value.Scalar (Integer q)
-                                , Value.Scalar (Integer r)
+                            Value.Scalar _ (Integer n) ->
+                                ( Value.Scalar location (Integer q)
+                                , Value.Scalar location (Integer r)
                                 )
                               where
                                 (q, r) = n `divMod` fromIntegral divisor
-                            Value.Scalar (Real x) ->
-                                ( Value.Scalar (Integer q)
-                                , Value.Scalar (Real (fromIntegral r + f'))
+                            Value.Scalar _ (Real x) ->
+                                ( Value.Scalar location (Integer q)
+                                , Value.Scalar location (Real (fromIntegral r + f'))
                                 )
                               where
                                 (n, f) = properFraction x
@@ -721,31 +742,32 @@ evaluate keyToMethods env₀ syntax₀ = do
                                 error "Grace.Normalize.evaluate: left argument to % must be a numeric value"
 
                     Value.Record
-                        [ ("quotient", quotient)
-                        , ("remainder", remainder)
+                        location
+                        [ ("quotient", (location, quotient))
+                        , ("remainder", (location, remainder))
                         ]
 
-            Syntax.Operator{ operator = Syntax.Divide, left, right } -> do
+            Syntax.Operator{ location, operator = Syntax.Divide, left, right } -> do
                 left'  <- loop env left
                 right' <- loop env right
 
                 pure do
                     let numerator = case left' of
-                            Value.Scalar (Natural n) -> fromIntegral n
-                            Value.Scalar (Integer n) -> fromInteger n
-                            Value.Scalar (Real    n) -> Scientific.toRealFloat n
+                            Value.Scalar _ (Natural n) -> fromIntegral n
+                            Value.Scalar _ (Integer n) -> fromInteger n
+                            Value.Scalar _ (Real    n) -> Scientific.toRealFloat n
                             _ -> error "Grace.Normalize.evaluate: / arguments must be real numbers"
 
                     let denominator = case right' of
-                            Value.Scalar (Natural n) -> fromIntegral n
-                            Value.Scalar (Integer n) -> fromInteger n
-                            Value.Scalar (Real    n) -> Scientific.toRealFloat n
+                            Value.Scalar _ (Natural n) -> fromIntegral n
+                            Value.Scalar _ (Integer n) -> fromInteger n
+                            Value.Scalar _ (Real    n) -> Scientific.toRealFloat n
                             _ -> error "Grace.Normalize.evaluate: / arguments must be real numbers"
 
-                    Value.Scalar (Real (Scientific.fromFloatDigits (numerator / denominator :: Double)))
+                    Value.Scalar location (Real (Scientific.fromFloatDigits (numerator / denominator :: Double)))
 
-            Syntax.Builtin{ builtin } ->
-                pure (Value.Builtin builtin)
+            Syntax.Builtin{ location, builtin } ->
+                pure (Value.Builtin location builtin)
 
             Syntax.Embed{ embedded } ->
                 Void.absurd embedded
@@ -754,67 +776,65 @@ evaluate keyToMethods env₀ syntax₀ = do
     evaluating anonymous functions and evaluating all built-in functions.
 -}
 apply
-    :: (MonadCatch m, MonadState Status m, MonadIO m)
-    => (Text -> Methods)
-    -- ^ OpenAI methods
-    -> Value
+    :: Location
+    -> Value Location
     -- ^ Function
-    -> Value
+    -> Value Location
     -- ^ Argument
-    -> m Value
-apply keyToMethods function₀ argument₀ = loop function₀ argument₀
+    -> Grace (Value Location)
+apply applicationLocation function₀ argument₀ = loop function₀ argument₀
   where
-    loop (Value.Lambda capturedEnv (Value.Name name Nothing) body) argument =
-        evaluate keyToMethods ((name, argument) : capturedEnv) body
-    loop (Value.Lambda capturedEnv (Value.Name name (Just assignment)) body) (Value.Scalar Null) =
-        evaluate keyToMethods ((name, assignment) : capturedEnv) body
-    loop (Value.Lambda capturedEnv (Value.Name name (Just _)) body) (Value.Application (Value.Builtin Some) argument) =
-        evaluate keyToMethods ((name, argument) : capturedEnv) body
-    loop (Value.Lambda capturedEnv (Value.FieldNames fieldNames) body) (Value.Record keyValues) =
-        evaluate keyToMethods (extraEnv <> capturedEnv) body
+    loop (Value.Lambda _ capturedEnv (Value.Name _ name Nothing) body) argument =
+        evaluate ((name, argument) : capturedEnv) body
+    loop (Value.Lambda _ capturedEnv (Value.Name _ name (Just assignment)) body) (Value.Scalar _ Null) =
+        evaluate ((name, assignment) : capturedEnv) body
+    loop (Value.Lambda _ capturedEnv (Value.Name _ name (Just _)) body) (Value.Application _ (Value.Builtin _ Some) argument) =
+        evaluate ((name, argument) : capturedEnv) body
+    loop (Value.Lambda _ capturedEnv (Value.FieldNames _ fieldNames) body) (Value.Record keyValuesLocation keyValues) =
+        evaluate (extraEnv <> capturedEnv) body
       where
         extraEnv = do
-            (fieldName, assignment) <- fieldNames
+            (_, fieldName, assignment) <- fieldNames
 
             let value = case assignment of
                     Nothing -> case HashMap.lookup fieldName keyValues of
-                        Just n -> n
-                        Nothing -> Value.Scalar Null
+                        Just (_, n) -> n
+                        Nothing -> Value.Scalar keyValuesLocation Null
                     Just a -> case HashMap.lookup fieldName keyValues of
-                        Just (Value.Application (Value.Builtin Some) n) ->
+                        Just (_, Value.Application _ (Value.Builtin _ Some) n) ->
                             n
-                        Just (Value.Scalar Null) ->
+                        Just (_, Value.Scalar _ Null) ->
                             a
                         Nothing ->
                             a
                         -- This case should only be hit if elaboration fails
-                        Just n ->
+                        Just (_, n) ->
                             n
 
             return (fieldName, value)
     loop
-        (Value.Fold (Value.Record fieldValues))
-        (Value.Scalar (Bool b)) =
+        (Value.Fold _ (Value.Record fieldValuesLocation fieldValues))
+        (Value.Scalar _ (Bool b)) =
             pure (if b then trueHandler else falseHandler)
       where
         falseHandler = case HashMap.lookup "false" fieldValues of
-            Nothing -> Value.Scalar Null
-            Just v  -> v
+            Nothing     -> Value.Scalar fieldValuesLocation Null
+            Just (_, v) -> v
 
         trueHandler = case HashMap.lookup "true" fieldValues of
-            Nothing -> Value.Scalar Null
-            Just v  -> v
+            Nothing     -> Value.Scalar fieldValuesLocation Null
+            Just (_, v) -> v
     loop
-        (Value.Fold (Value.Record fieldValues))
-        (Value.Scalar (Natural n)) = go n zero
+        (Value.Fold _ (Value.Record fieldValuesLocation fieldValues))
+        (Value.Scalar _ (Natural n)) = go n zero
       where
         zero = case HashMap.lookup "zero" fieldValues of
-            Nothing -> Value.Scalar Null
-            Just v  -> v
+            Nothing     -> Value.Scalar fieldValuesLocation Null
+            Just (_, v) -> v
 
         succ = case HashMap.lookup "succ" fieldValues of
-            Nothing -> Value.Scalar Null
-            Just v  -> v
+            Nothing     -> Value.Scalar fieldValuesLocation Null
+            Just (_, v) -> v
 
         go 0 !result = do
             return result
@@ -822,26 +842,26 @@ apply keyToMethods function₀ argument₀ = loop function₀ argument₀
             x <- loop succ result
             go (m - 1) x
     loop
-        (Value.Fold (Value.Record fieldValues))
-        (Value.Application (Value.Builtin Some) x) =
+        (Value.Fold _ (Value.Record fieldValuesLocation fieldValues))
+        (Value.Application _ (Value.Builtin _ Some) x) =
             loop some x
       where
         some = case HashMap.lookup "some" fieldValues of
-            Nothing -> Value.Scalar Null
-            Just v  -> v
+            Nothing     -> Value.Scalar fieldValuesLocation Null
+            Just (_, v) -> v
 
     loop
-        (Value.Fold (Value.Record fieldValues))
-        (Value.Scalar Null)  =
+        (Value.Fold _ (Value.Record fieldValuesLocation fieldValues))
+        (Value.Scalar _ Null)  =
             pure null
       where
         null = case HashMap.lookup "null" fieldValues of
-            Nothing -> Value.Scalar Null
-            Just v  -> v
+            Nothing     -> Value.Scalar fieldValuesLocation Null
+            Just (_, v) -> v
 
     loop
-        (Value.Fold (Value.Record (sorted -> [("cons", cons), ("nil", nil)])))
-        (Value.List elements) = do
+        (Value.Fold _ (Value.Record _ (sorted -> [("cons", (_, cons)), ("nil", (_, nil))])))
+        (Value.List _ elements) = do
             inner (Seq.reverse elements) nil
       where
         inner xs !result =
@@ -853,100 +873,92 @@ apply keyToMethods function₀ argument₀ = loop function₀ argument₀
                     b <- loop a result
                     inner ys b
     loop
-        (Value.Fold (Value.Record alternativeHandlers))
-        (Value.Alternative alternative x)
-        | Just f <- HashMap.lookup alternative alternativeHandlers =
+        (Value.Fold _ (Value.Record _ alternativeHandlers))
+        (Value.Alternative _ alternative x)
+        | Just (_, f) <- HashMap.lookup alternative alternativeHandlers =
             loop f x
-    loop (Value.Fold (Value.Record fieldValues)) v0 = inner v0
+    loop (Value.Fold _ (Value.Record fieldValuesLocation fieldValues)) v0 = inner v0
       where
         array = case HashMap.lookup "array" fieldValues of
-            Nothing -> Value.Scalar Null
-            Just v  -> v
+            Nothing     -> Value.Scalar fieldValuesLocation Null
+            Just (_, v) -> v
 
         bool = case HashMap.lookup "bool" fieldValues of
-            Nothing -> Value.Scalar Null
-            Just v  -> v
+            Nothing     -> Value.Scalar fieldValuesLocation Null
+            Just (_, v) -> v
 
         integer = case HashMap.lookup "integer" fieldValues of
-            Nothing -> Value.Scalar Null
-            Just v  -> v
+            Nothing     -> Value.Scalar fieldValuesLocation Null
+            Just (_, v) -> v
 
         natural = case HashMap.lookup "natural" fieldValues of
-            Nothing -> Value.Scalar Null
-            Just v  -> v
+            Nothing     -> Value.Scalar fieldValuesLocation Null
+            Just (_, v) -> v
 
         null = case HashMap.lookup "null" fieldValues of
-            Nothing -> Value.Scalar Null
-            Just v  -> v
+            Nothing     -> Value.Scalar fieldValuesLocation Null
+            Just (_, v) -> v
 
         object = case HashMap.lookup "object" fieldValues of
-            Nothing -> Value.Scalar Null
-            Just v  -> v
+            Nothing     -> Value.Scalar fieldValuesLocation Null
+            Just (_, v) -> v
 
         real = case HashMap.lookup "real" fieldValues of
-            Nothing -> Value.Scalar Null
-            Just v  -> v
+            Nothing     -> Value.Scalar fieldValuesLocation Null
+            Just (_, v) -> v
 
         string = case HashMap.lookup "string" fieldValues of
-            Nothing -> Value.Scalar Null
-            Just v  -> v
+            Nothing     -> Value.Scalar fieldValuesLocation Null
+            Just (_, v) -> v
 
-        inner (Value.Scalar (Bool b)) =
-            loop bool (Value.Scalar (Bool b))
-        inner (Value.Scalar (Natural n)) =
-            loop natural (Value.Scalar (Natural n))
-        inner (Value.Scalar (Integer n)) =
-            loop integer (Value.Scalar (Integer n))
-        inner (Value.Scalar (Real n)) =
-            loop real (Value.Scalar (Real n))
-        inner (Value.Text t) =
-            loop string (Value.Text t)
-        inner (Value.Scalar Null) =
+        inner (Value.Scalar location (Bool b)) =
+            loop bool (Value.Scalar location (Bool b))
+        inner (Value.Scalar location (Natural n)) =
+            loop natural (Value.Scalar location (Natural n))
+        inner (Value.Scalar location (Integer n)) =
+            loop integer (Value.Scalar location (Integer n))
+        inner (Value.Scalar location (Real n)) =
+            loop real (Value.Scalar location (Real n))
+        inner (Value.Text location t) =
+            loop string (Value.Text location t)
+        inner (Value.Scalar _ Null) =
             pure null
-        inner (Value.List elements) = do
+        inner (Value.List location elements) = do
             newElements <- traverse inner elements
-            loop array (Value.List newElements)
-        inner (Value.Record keyValues) = do
+            loop array (Value.List location newElements)
+        inner (Value.Record location keyValues) = do
             elements <- traverse adapt (HashMap.toList keyValues)
-            loop object (Value.List (Seq.fromList elements))
+            loop object (Value.List location (Seq.fromList elements))
           where
-            adapt (key, value) = do
+            adapt (key, (keyLocation, value)) = do
                 newValue <- inner value
-                return (Value.Record [("key", Value.Text key), ("value", newValue)])
+                return
+                    ( Value.Record keyLocation
+                        [ ("key", (keyLocation, Value.Text keyLocation key))
+                        , ("value", (keyLocation, newValue))
+                        ]
+                    )
         inner v =
             pure v
-    loop (Value.Builtin Indexed) (Value.List elements) =
-        pure (Value.List (Seq.mapWithIndex adapt elements))
+    loop (Value.Builtin builtinLocation Indexed) (Value.List location elements) =
+        pure (Value.List location (Seq.mapWithIndex adapt elements))
       where
         adapt index value =
             Value.Record
-                [ ("index", Value.Scalar (Natural (fromIntegral index)))
-                , ("value", value)
+                builtinLocation
+                [ ("index", (builtinLocation, Value.Scalar builtinLocation (Natural (fromIntegral index))))
+                , ("value", (builtinLocation, value))
                 ]
-    loop (Value.Builtin Length) (Value.List elements) =
-        pure (Value.Scalar (Natural (fromIntegral (length elements))))
+    loop (Value.Builtin location Length) (Value.List _ elements) =
+        pure (Value.Scalar location (Natural (fromIntegral (length elements))))
     loop
-        (Value.Application (Value.Builtin Map) f)
-        (Value.List elements) = do
+        (Value.Application _ (Value.Builtin _ Map) f)
+        (Value.List location elements) = do
             newElements <- traverse (loop f) elements
-            return (Value.List newElements)
-    loop (Value.Builtin Abs) (Value.Scalar (Integer n)) =
-        pure (Value.Scalar (Natural (fromInteger (abs n))))
-    loop (Value.Builtin Show) v = do
-        case Value.toJSON v of
-            Just value -> do
-                let lazyBytes = Aeson.encode value
-
-                let strictBytes = ByteString.Lazy.toStrict lazyBytes
-
-                case Encoding.decodeUtf8' strictBytes of
-                    Left _ ->
-                        error "Grace.Normalize.evaluate: show produced non-UTF8 text"
-                    Right text ->
-                        pure (Value.Text text)
-            Nothing -> do
-                error "Grace.Normalize.evaluate: show argument is not valid JSON"
-    loop (Value.Builtin YAML) v = do
+            return (Value.List location newElements)
+    loop (Value.Builtin _ Abs) (Value.Scalar location (Integer n)) =
+        pure (Value.Scalar location (Natural (fromInteger (abs n))))
+    loop (Value.Builtin location YAML) v = do
         case Value.toJSON v of
             Just value -> do
                 let lazyBytes = YAML.encodeQuoted value
@@ -957,116 +969,13 @@ apply keyToMethods function₀ argument₀ = loop function₀ argument₀
                     Left _ ->
                         error "Grace.Normalize.evaluate: yaml produced non-UTF8 text"
                     Right text ->
-                        pure (Value.Text text)
+                        pure (Value.Text location text)
             Nothing -> do
                 error "Grace.Normalize.evaluate: yaml argument is not valid JSON"
-    loop (Value.Builtin Reveal) (Value.Scalar (Key text)) =
-        pure (Value.Text text)
+    loop (Value.Builtin _ Reveal) (Value.Scalar location (Key text)) =
+        pure (Value.Text location text)
     loop function argument =
-        pure (Value.Application function argument)
-
--- | Convert a `Value` back into the surface `Syntax`
-quote :: Value -> Syntax () Void
-quote value = case value of
-    Value.Lambda env names_ body₀ ->
-        foldl snoc newLambda env
-      where
-        binding = case names_ of
-            Value.Name name assignment ->
-                Syntax.PlainBinding
-                    { plain = Syntax.NameBinding
-                        { nameLocation = location
-                        , name
-                        , annotation = Nothing
-                        , assignment = fmap quote assignment
-                        }
-                    }
-
-            Value.FieldNames fieldNames ->
-                Syntax.RecordBinding
-                    { fieldNamesLocation = location
-                    , fieldNames = do
-                        (name, assignment) <- fieldNames
-                        return Syntax.NameBinding
-                            { nameLocation = location
-                            , name
-                            , annotation = Nothing
-                            , assignment = fmap quote assignment
-                            }
-                    }
-
-        newLambda = Syntax.Lambda
-            { location
-            , binding
-            , body = first (\_ -> location) body₀
-            }
-
-        toBinding n v = Syntax.Define
-            { assignmentLocation = location
-            , definition = Syntax.Definition
-                { name = n
-                , nameLocation = location
-                , bindings = []
-                , annotation = Nothing
-                , assignment = quote v
-                }
-            }
-
-        snoc e@Syntax.Let{ assignments = a :| as, body = body₁ } (n, v)
-            | Syntax.usedIn n e = Syntax.Let
-                { location
-                , assignments = toBinding n v :| (a : as)
-                , body = body₁
-                }
-            | otherwise = e
-        snoc e (n, v)
-            | Syntax.usedIn n e = Syntax.Let
-                { location
-                , assignments = toBinding n v :| []
-                , body = e
-                }
-            | otherwise = e
-
-    Value.Application function argument ->
-        Syntax.Application
-            { location
-            , function = quote function
-            , argument = quote argument
-            }
-
-    Value.List elements ->
-        Syntax.List{ location, elements = fmap quote elements }
-
-    Value.Record fieldValues ->
-        Syntax.Record
-            { location
-            , fieldValues = map adapt (HashMap.toList fieldValues)
-            }
-      where
-        adapt (field, value_) = Syntax.Definition
-            { nameLocation = location
-            , name = field
-            , bindings = []
-            , annotation = Nothing
-            , assignment = quote value_
-            }
-
-    Value.Alternative name argument ->
-        Syntax.Alternative{ location, name, argument  = quote argument }
-
-    Value.Fold handlers ->
-        Syntax.Fold{ location, handlers = quote handlers }
-
-    Value.Text text ->
-        Syntax.Text{ location, chunks = Syntax.Chunks text [] }
-
-    Value.Scalar scalar ->
-        Syntax.Scalar{ location, scalar }
-
-    Value.Builtin builtin ->
-        Syntax.Builtin{ location, builtin }
-  where
-    location = ()
+        pure (Value.Application applicationLocation function argument)
 
 -- | Strip all `Some`s from a `Syntax` tree
 strip :: Syntax s a -> Syntax s a

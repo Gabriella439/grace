@@ -2,25 +2,16 @@
 
 module Grace.Interpret where
 
-import Control.Exception.Safe (MonadCatch)
-import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.State (MonadState)
 import Data.Text (Text)
-import Grace.HTTP (Methods)
-import Grace.Location (Location(..))
+import Grace.Location (Location)
+import Grace.Monad (Grace)
 import Grace.Type (Type)
 import Grace.Value (Value)
 
-import {-# SOURCE #-} Grace.Infer (Status)
-
 -- | Like `interpret`, but accepts a custom list of bindings
 interpretWith
-    :: (MonadCatch m, MonadState Status m, MonadIO m)
-    => (Text -> Methods)
-    -- ^ OpenAI methods
-    -> [(Text, Type Location, Value)]
+    :: [(Text, Type Location, Value Location )]
     -- ^ @(name, type, value)@ for each custom binding
     -> Maybe (Type Location)
     -- ^ Optional expected type for the input
-    -> m (Type Location, Value)
-
+    -> Grace (Type Location, Value Location)

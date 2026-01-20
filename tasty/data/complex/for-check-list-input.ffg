@@ -1,0 +1,2 @@
+# Exercise the check judgment on Optional comprehensions
+(if let x = some 1 in x) : Optional Natural

@@ -1,0 +1,4 @@
+# This test verifies that the `check` rule for `for` assignments works
+# correctly when the type annotation is an unsolved variable,such as
+# when checking the body of a lambda without an annotation.
+\y -> for x of [ 1 ] in x

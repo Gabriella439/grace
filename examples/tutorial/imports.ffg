@@ -37,4 +37,29 @@
     GitHub code imported in this way is displayed as a \"white-label\" form
     displaying just the form without the title bar or the code editor.
     "
+
+, "Import Prelude function":
+    # Grace also has a Prelude of utility functions derived from built-in
+    # functions that you can also use.
+    #
+    # You can import functions individually, like this:
+    import github
+      { owner: "Gabriella439"
+      , repository: "grace"
+      , path: "prelude/bool/not.ffg"
+      }
+
+
+, "Import entire Prelude":
+    # You can also import the Prelude as a whole:
+    let prelude = import github
+          { owner: "Gabriella439"
+          , repository: "grace"
+          , path: "prelude/package.ffg"
+          }
+
+    # … which is a giant nested record with all the utilities nested inside.
+    in  prelude.bool.not
 }
+
+# Replace the above `prelude.bool.not` with just `prelude` and see what happens.

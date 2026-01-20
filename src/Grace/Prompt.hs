@@ -14,23 +14,20 @@ module Grace.Prompt
     , UnsupportedModelOutput(..)
     ) where
 
-import Control.Applicative (empty)
-import Control.Exception.Safe (Exception(..), MonadCatch, SomeException(..))
+import Control.Exception.Safe (Exception(..), SomeException(..))
 import Control.Monad.IO.Class (MonadIO(..))
-import Control.Monad.State (MonadState)
-import Data.Foldable (toList)
+import Data.Foldable (fold, toList)
 import Data.Text (Text)
 import Data.Typeable (Typeable)
 import Data.Vector (Vector)
-import Grace.Decode (FromGrace(..), Key(..))
-import Grace.Infer (Status(..))
+import Grace.Decode (FromGrace(..), Key(..), ToGraceType(..))
 import Grace.Input (Input(..))
 import Grace.Location (Location(..))
+import Grace.Monad (Grace)
 import Grace.Pretty (Pretty(..))
 import Grace.Prompt.Types (Effort(..), Prompt(..))
 import Grace.Type (Type(..))
 import Grace.Value (Value)
-import Numeric.Natural (Natural)
 import OpenAI.V1.Models (Model(..))
 import OpenAI.V1.ResponseFormat (JSONSchema(..), ResponseFormat(..))
 import System.FilePath ((</>))
@@ -48,18 +45,20 @@ import OpenAI.V1.Chat.Completions
 import {-# SOURCE #-} qualified Grace.Interpret as Interpret
 
 import qualified Control.Exception.Safe as Exception
-import qualified Control.Monad.State as State
+import qualified Control.Monad.Reader as Reader
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy as ByteString.Lazy
-import qualified Data.Foldable as Foldable
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
+import qualified Data.Vector as Vector
 import qualified Grace.DataFile as DataFile
 import qualified Grace.HTTP as HTTP
+import qualified Grace.Import as Import
 import qualified Grace.Infer as Infer
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Pretty as Pretty
+import qualified Grace.Prompt.Types as Prompt.Types
 import qualified Grace.Type as Type
 import qualified Grace.Value as Value
 import qualified OpenAI.V1.Chat.Completions as Completions
@@ -67,51 +66,72 @@ import qualified Prettyprinter as Pretty
 import qualified System.IO.Unsafe as Unsafe
 
 deriving anyclass instance FromGrace ReasoningEffort
+deriving anyclass instance ToGraceType ReasoningEffort
 
 -- | Context used to teach the LLM to code in Grace
-staticAssets :: Text
+staticAssets :: [ Message (Vector Completions.Content) ]
 staticAssets = Unsafe.unsafePerformIO do
+    let instructions₀ =
+            [ System
+                { name = Just "Instructions"
+                , content =
+                    [ Completions.Text
+                        { text =
+                            "Here are some resources which explain how to program using the Fall-from-Grace programming language (\"Grace\" for short)"
+                        }
+                    ]
+                }
+            ]
+
+    prompts <- do
+        let files =
+                [ "abnf.md"
+                , "inference.md"
+                ]
+
+        let process :: FilePath -> IO (Message (Vector Completions.Content))
+            process file = do
+                text <- DataFile.readDataFile ("prompts" </> file)
+
+                return System
+                    { name = Just (Text.pack file)
+                    , content = [ Completions.Text{ text } ]
+                    }
+
+        traverse process files
+
+    let instructions₁ =
+            [ System
+                { name = Just "Instructions"
+                , content =
+                    [ Completions.Text
+                        { text =
+                            "Here are some sample Grace programs showcasing various idioms and language features"
+                        }
+                    ]
+                }
+            ]
+
     examples <- do
-        let files :: [FilePath]
-            files =
+        let files =
                 [ "learn-in-y-minutes.ffg"
                 , "chaining.ffg"
                 , "prompt.ffg"
                 , "tools.ffg"
                 ]
 
-        let process file = do
-                content <- DataFile.readDataFile ("examples" </> file)
+        let process :: FilePath -> IO (Message (Vector Completions.Content))
+            process file = do
+                text <- DataFile.readDataFile ("examples" </> file)
 
-                return
-                    ( "Example: " <> Text.pack file <> "\n\
-                      \\n\
-                      \" <> content <> "\n\
-                      \\n"
-                    )
-
-        traverse process files
-
-    prompts <- do
-        let files :: [FilePath]
-            files =
-                [ "inference.md"
-                , "abnf.md"
-                ]
-
-        let process file = do
-                content <- DataFile.readDataFile ("prompts" </> file)
-
-                return
-                    ( "Post: " <> Text.pack file <> "\n\
-                      \\n\
-                      \" <> content <> "\n\
-                      \\n"
-                    )
+                return System
+                    { name = Just (Text.pack file)
+                    , content = [ Completions.Text{ text } ]
+                    }
 
         traverse process files
 
-    return (Text.concat prompts <> "\n\n" <> Text.concat examples)
+    return (instructions₀ <> prompts <> instructions₁ <> examples)
 {-# NOINLINE staticAssets #-}
 
 toJSONSchema :: Type a -> Either (UnsupportedModelOutput a) Aeson.Value
@@ -127,8 +147,7 @@ toJSONSchema original = loop original
 
         return
             ( Aeson.object
-                [ ("type", "object")
-                , ("anyOf", Aeson.toJSON ([ present, absent ] :: [ Aeson.Value ]))
+                [ ("anyOf", Aeson.toJSON ([ present, absent ] :: [ Aeson.Value ]))
                 ]
             )
 
@@ -144,6 +163,8 @@ toJSONSchema original = loop original
 
         properties <- traverse toProperty fieldTypes
 
+        let required = fmap fst fieldTypes
+
         return
             ( Aeson.object
                 [ ("type", "object")
@@ -152,13 +173,6 @@ toJSONSchema original = loop original
                 , ("required", Aeson.toJSON required)
                 ]
             )
-      where
-        required = do
-            (field, type_) <- fieldTypes
-
-            case type_ of
-                Type.Optional{ } -> empty
-                _ -> return field
     loop Type.Union{ alternatives = Type.Alternatives alternativeTypes _ } = do
         let toAnyOf (alternative, type_) = do
                 contents <- loop type_
@@ -226,14 +240,13 @@ toResponseFormat (Just type_) = do
 
 -- | Implementation of the @prompt@ keyword
 prompt
-    :: (MonadCatch m, MonadState Status m, MonadIO m)
-    => IO [(Text, Type Location, Value)]
+    :: IO [(Text, Type Location, Value Location)]
     -> Bool
     -> Location
     -> Prompt
     -> Maybe (Type Location)
-    -> m Value
-prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = key }, text, model, search, effort } schema = do
+    -> Grace (Value Location)
+prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = key }, text, history, model, search, effort } schema = do
     keyToMethods <- liftIO HTTP.getMethods
 
     let methods = keyToMethods (Text.strip key)
@@ -258,14 +271,48 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
             e <- effort
 
             return case e of
-                Low    -> ReasoningEffort_Low
-                Medium -> ReasoningEffort_Medium
-                High   -> ReasoningEffort_High
+                Minimal -> ReasoningEffort_Minimal
+                Low     -> ReasoningEffort_Low
+                Medium  -> ReasoningEffort_Medium
+                High    -> ReasoningEffort_High
 
     let toOutput ChatCompletionObject{ choices = [ Choice{ message = Assistant{ assistant_content = Just output } } ] } = do
             return output
         toOutput ChatCompletionObject{ choices } = do
             Exception.throwIO UnexpectedModelResponse{ choices }
+
+    let lastMessage = case text of
+            Nothing ->
+                [ ]
+            Just t ->
+                [ User
+                    { name = Nothing
+                    , content =
+                        [ Completions.Text{ text = t } ]
+                    }
+                ]
+
+    let initMessages = do
+            message <- fold history
+
+            return case message of
+                Prompt.Types.System{ name, text = t } -> System
+                    { name
+                    , content = [ Completions.Text{ text = t } ]
+                    }
+                Prompt.Types.Assistant{ name, text = t } -> Assistant
+                    { name
+                    , assistant_content = Just [ Completions.Text{ text = t } ]
+                    , refusal = Nothing
+                    , assistant_audio = Nothing
+                    , tool_calls = Nothing
+                    }
+                Prompt.Types.User{ name, text = t } -> User
+                    { name
+                    , content = [ Completions.Text{ text = t } ]
+                    }
+
+    let conversation = initMessages <> lastMessage
 
     if import_
         then do
@@ -274,17 +321,61 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
                     , length rest == 3 = do
                         Exception.throwIO interpretError
                     | otherwise = do
-                        let failedAttempts = do
-                                (index, (program, interpretError)) <- zip [ 0 .. ] (reverse errors)
-                                return
-                                    ( "Your failed attempt " <> Text.pack (show (index :: Natural)) <> ":\n\
-                                      \\n\
-                                      \" <> program <> "\n\
-                                      \\n\
-                                      \Error:\n\
-                                      \" <> Text.pack (displayException interpretError) <> "\n\
-                                      \\n"
-                                    )
+                        let instructions₀ = case conversation of
+                                [ ] ->
+                                    [ System
+                                        { name = Just "Instructions"
+                                        , content =
+                                            [ Completions.Text
+                                                { text = "Generate a Grace expression."
+                                                }
+                                            ]
+                                        }
+                                    ]
+
+                                [ _ ] ->
+                                    [ System
+                                        { name = Just "Instructions"
+                                        , content =
+                                            [ Completions.Text
+                                                { text = "Generate a Grace expression according to the previous message."
+                                                }
+                                            ]
+                                        }
+                                    ]
+
+                                _ ->
+                                    [ System
+                                        { name = Just "Instructions"
+                                        , content =
+                                            [ Completions.Text
+                                                { text = "Generate a Grace expression according to the previous conversation."
+                                                }
+                                            ]
+                                        }
+                                    ]
+
+                        let expect = case schema of
+                                Nothing ->
+                                    [ ]
+                                Just s ->
+                                    [ System
+                                        { name = Just "Instructions"
+                                        , content =
+                                            [ Completions.Text
+                                                { text = "Your generated Grace expression must have the following type"
+                                                }
+                                            ]
+                                        }
+                                    , System
+                                        { name = Just "Type"
+                                        , content =
+                                            [ Completions.Text
+                                                { text = Pretty.toSmart s
+                                                }
+                                            ]
+                                        }
+                                    ]
 
                         bindings <- liftIO generateContext
 
@@ -304,44 +395,79 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
                                     <>  " "
                                     <>  pretty type_
 
-                        let environment
-                                | Foldable.null bindings = ""
-                                | otherwise =
-                                    "Given the following variables:\n\
-                                    \\n\
-                                    \" <> foldMap renderAssignment bindings
+                        let environment = do
+                                binding <- bindings
 
-                        let instructions = case text of
-                                Nothing ->
-                                    ""
-                                Just p ->
-                                    "… according to these instructions:\n\
-                                    \\n\
-                                    \" <> p <> "\n\
-                                    \\n"
+                                return System
+                                    { name = Just "Value"
+                                    , content =
+                                        [ Completions.Text
+                                            { text = renderAssignment binding
+                                            }
+                                        ]
+                                    }
 
-                        let input =
-                                staticAssets <> "\n\
-                                \\n\
-                                \" <> environment <> expect <> instructions <> "\
-                                \Output a naked Grace expression without any code fence or explanation.\n\
-                                \Your response in its entirety should be a valid input to the Grace interpreter.\n\
-                                \\n\
-                                \" <> Text.concat failedAttempts
-                              where
-                                expect = case schema of
-                                    Just s ->
-                                        "Generate a standalone Grace expression matching the following type:\n\
-                                        \\n\
-                                        \" <> Pretty.toSmart s <> "\n\
-                                        \\n"
-                                    Nothing ->
-                                        ""
+                        let instructions₁ = case environment of
+                                [ ] ->
+                                    [ ]
+                                _ ->
+                                    [ System
+                                        { name = Just "Instructions"
+                                        , content =
+                                            [ Completions.Text
+                                                { text = "You may use any of the following values to generate your Grace expression, all of which are in scope."
+                                                }
+                                            ]
+                                        }
+                                    ]
 
+                        let instructions₂ =
+                                [ System
+                                    { name = Just "Instructions"
+                                    , content =
+                                        [ Completions.Text
+                                            { text = "Output a naked Grace expression without any code fence or explanation.  Your response in its entirety should be a valid input to the Grace interpreter."
+                                            }
+                                        ]
+                                    }
+                                ]
+
+                        let failedAttempts = do
+                                (program, interpretError) <- reverse errors
+
+                                let attempt = Assistant
+                                        { name = Just "Attempt"
+                                        , assistant_content = Just [ Completions.Text{ text = program } ]
+                                        , refusal = Nothing
+                                        , assistant_audio = Nothing
+                                        , tool_calls = Nothing
+                                        }
+
+                                let failure = System
+                                        { name = Just "Error"
+                                        , content =
+                                            [ Completions.Text
+                                                { text = Text.pack (displayException interpretError) }
+                                            ]
+                                        }
+
+                                [ attempt, failure ]
+
+                        let messages =
+                                Vector.fromList
+                                    (   staticAssets
+                                    <>  conversation
+                                    <>  instructions₀
+                                    <>  expect
+                                    <>  instructions₁
+                                    <>  environment
+                                    <>  instructions₂
+                                    <>  failedAttempts
+                                    )
 
                         chatCompletionObject <- liftIO do
                             HTTP.createChatCompletion methods _CreateChatCompletion
-                                { messages = [ User{ content = [ Completions.Text{ text = input } ], name = Nothing } ]
+                                { messages
                                 , model = Model defaultedModel
                                 , web_search_options
                                 , reasoning_effort
@@ -349,24 +475,57 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
 
                         output <- toOutput chatCompletionObject
 
-                        Status{ input = parent } <- State.get
+                        parent <- Reader.ask
 
-                        let child = parent <> Code "(prompt)" output
+                        Reader.local (\i -> i <> Code "(prompt)" output) do
+                            child <- Reader.ask
 
-                        State.modify (\s -> (s :: Status){ input = child })
+                            Import.referentiallySane parent child
 
-                        expression <- Interpret.interpretWith keyToMethods bindings schema
-                            `Exception.catch` \(interpretError :: SomeException) -> do
-                                retry ((output, interpretError) : errors)
+                            Interpret.interpretWith bindings schema
+                                `Exception.catch` \(interpretError :: SomeException) -> do
+                                    retry ((output, interpretError) : errors)
 
-                        State.modify (\s -> (s :: Status){ input = parent })
-
-                        return expression
 
             (_, e) <- retry []
 
             return e
+
         else do
+            let instructions₀ = case conversation of
+                    [ ] ->
+                        [ System
+                            { name = Just "Instructions"
+                            , content =
+                                [ Completions.Text
+                                    { text = "Generate JSON."
+                                    }
+                                ]
+                            }
+                        ]
+
+                    [ _ ] ->
+                        [ System
+                            { name = Just "Instructions"
+                            , content =
+                                [ Completions.Text
+                                    { text = "Generate JSON according to the previous message."
+                                    }
+                                ]
+                            }
+                        ]
+
+                    _ ->
+                        [ System
+                            { name = Just "Instructions"
+                            , content =
+                                [ Completions.Text
+                                    { text = "Generate JSON according to the previous conversation."
+                                    }
+                                ]
+                            }
+                        ]
+
             let defaultedSchema = do
                     s <- schema
 
@@ -381,35 +540,36 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
                         Left message_ -> Exception.throwIO ModelDecodingFailed{ message = message_, text = text_ }
                         Right v -> return v
 
-            let requestJSON =
-                    instructions <> jsonSchema
-                  where
-                    instructions = case text of
-                        Nothing ->
-                            ""
-                        Just p ->
-                            p <> "\n\
+            let expect = case schema of
+                    Nothing ->
+                        [ ]
+                    Just s ->
+                        [ System
+                            { name = Just "Instructions"
+                            , content =
+                                [ Completions.Text
+                                    { text = "Your generated JSON must have the following type"
+                                    }
+                                ]
+                            }
+                        , System
+                            { name = Just "Type"
+                            , content =
+                                [ Completions.Text
+                                    { text = Pretty.toSmart s
+                                    }
+                                ]
+                            }
+                        ]
 
-                            \\n"
-                    jsonSchema = case defaultedSchema of
-                        Nothing ->
-                            "Generate JSON output"
-                        Just s  ->
-                            "Generate JSON output matching the following type:\n\
-                            \\n\
-                            \" <> Pretty.toSmart s
-
+            let instructions₁ = instructions₀ <> expect
 
             let extractText = do
                     let extract text_ = do
-                            return (Value.Text text_)
-
-                    let instructions = case text of
-                            Nothing -> ""
-                            Just p  -> p
+                            return (Value.Text Unknown text_)
 
                     return
-                        ( instructions
+                        ( [ ]
                         , ResponseFormat_Text
                         , extract
                         )
@@ -422,14 +582,16 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
                     let extract text_ = do
                             v <- decode_ text_
 
-                            case defaultedSchema of
+                            value <- case defaultedSchema of
                                 Nothing -> do
                                     return (Infer.inferJSON v)
                                 Just s -> do
                                     Infer.checkJSON s v
 
+                            return (fmap (\_ -> Unknown) value)
+
                     return
-                        ( requestJSON
+                        ( instructions₁
                         , responseFormat
                         , extract
                         )
@@ -453,26 +615,38 @@ prompt generateContext import_ location Prompt{ key = Grace.Decode.Key{ text = k
                                 Just s -> do
                                     Infer.checkJSON s v
 
-                            case expression of
-                                Value.Record [("response", response)] -> do
+                            case fmap (\_ -> Unknown) expression of
+                                Value.Record _ [("response", (_, response))] -> do
                                     return response
                                 other -> do
                                     return other
 
                     return
-                        ( requestJSON
+                        ( instructions₁
                         , responseFormat
                         , extract
                         )
 
-            (text_, response_format, extract) <- case defaultedSchema of
+            (instructions₂, response_format, extract) <- case defaultedSchema of
                 Just Type.Scalar{ scalar = Monotype.Text } -> extractText
                 Just Type.Record{ } -> extractRecord
                 _ -> extractNonRecord
 
+            let messages₀ = Vector.fromList (conversation <> instructions₂)
+
+            let messages₁ = case messages₀ of
+                    [ ] ->
+                        [ User
+                            { name = Nothing
+                            , content = [ Completions.Text{ text = "" } ]
+                            }
+                        ]
+
+                    _ -> messages₀
+
             chatCompletionObject <- liftIO do
                 HTTP.createChatCompletion methods _CreateChatCompletion
-                    { messages = [ User{ content = [ Completions.Text{ text = text_ } ], name = Nothing  } ]
+                    { messages = messages₁
                     , model = Model defaultedModel
                     , response_format = Just response_format
                     , reasoning_effort

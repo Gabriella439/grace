@@ -1,0 +1,11 @@
+# These are all of the examples/tutorial from the trygrace.dev tutorial
+{ hello: ../../../examples/tutorial/hello.ffg
+, html: ../../../examples/tutorial/html.ffg
+, data: ../../../examples/tutorial/data.ffg
+, prompting: ../../../examples/tutorial/prompting.ffg
+, variables: ../../../examples/tutorial/variables.ffg
+, functions: ../../../examples/tutorial/functions.ffg
+, imports: ../../../examples/tutorial/imports.ffg
+, coding: ../../../examples/tutorial/coding.ffg
+, conclusion: ../../../examples/tutorial/conclusion.ffg
+}

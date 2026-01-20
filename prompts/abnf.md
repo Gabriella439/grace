@@ -196,6 +196,10 @@ application
   ; preceded with `import`)
   = [ "import" ] "github" projection
 
+  ; Keyword to render a JSON expression (the default) or any expression (when
+  ; preceded with `export`) as text
+  = [ "export" ] "show" projection
+
   ; Keyword to pattern match on a union
   / "fold" projection
 
@@ -397,8 +401,7 @@ field
   / string
 
 builtin
-    = "show"     ; JSON -> Text  ; Renders argument as JSON
-    / "yaml"     ; JSON -> Text  ; Renders argument as YAML
+    = "yaml"     ; JSON -> Text  ; Renders argument as YAML
     / "indexed"  ; forall (a : Type) . List a -> List { index: Natural, value: a }
     / "length"   ; forall (a : Type) . List a -> Natural
     / "map"      ; forall (a : Type) (b : Type) . (a -> b) -> List a -> List b

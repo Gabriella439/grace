@@ -9,11 +9,10 @@ module Grace
 import Control.Applicative (many, (<|>))
 import Control.Exception.Safe (Exception(..), SomeException)
 import Data.Foldable (traverse_)
-import Data.Functor (void)
 import Data.Void (Void)
-import Grace.Infer (Status(..))
 import Grace.Input (Input(..), Mode(..))
 import Grace.Location (Location(..))
+import Grace.Monad (Status(..))
 import Grace.Syntax (Builtin(..), Syntax(..))
 import Grace.Type (Type(..))
 import Options.Applicative (Parser, ParserInfo)
@@ -21,13 +20,12 @@ import Prettyprinter (Doc)
 import Prettyprinter.Render.Terminal (AnsiStyle)
 
 import qualified Control.Exception.Safe as Exception
-import qualified Control.Monad.State as State
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text.IO
 import qualified GHC.IO.Encoding
-import qualified Grace.HTTP as HTTP
 import qualified Grace.Infer as Infer
 import qualified Grace.Interpret as Interpret
+import qualified Grace.Monad as Grace
 import qualified Grace.Monotype as Monotype
 import qualified Grace.Normalize as Normalize
 import qualified Grace.Parser as Parser
@@ -180,23 +178,21 @@ main = Exception.handle handler do
 
     case options of
         Interpret{ annotate, highlight, file } -> do
-            keyToMethods <- HTTP.getMethods
-
             input <- case file of
                 "-" -> do
                     Code "(input)" <$> Text.IO.getContents
                 _ -> do
                     return (Path file AsCode)
 
-            (inferred, value) <- Interpret.interpret keyToMethods input
+            (inferred, value) <- Interpret.interpret input
 
-            let syntax = Normalize.strip (Normalize.quote value)
+            let syntax = Normalize.strip (Value.quote value)
 
             let annotatedExpression
                     | annotate = Annotation
                         { annotated = syntax
-                        , annotation = void inferred
-                        , location = ()
+                        , annotation = inferred
+                        , location = Syntax.location syntax
                         }
                     | otherwise =
                         syntax
@@ -206,8 +202,6 @@ main = Exception.handle handler do
             render (Grace.Pretty.pretty annotatedExpression <> Pretty.hardline)
 
         Grace.Text{ file } -> do
-            keyToMethods <- HTTP.getMethods
-
             input <- case file of
                 "-" -> do
                     Code "(input)" <$> Text.IO.getContents
@@ -222,12 +216,12 @@ main = Exception.handle handler do
 
             let expected = Type.Scalar{ scalar = Monotype.Text, location }
 
-            let initialStatus = Status{ count = 0, input, context = [] }
+            let initialStatus = Status{ count = 0, context = [] }
 
-            (_, value) <- State.evalStateT (Interpret.interpretWith keyToMethods [] (Just expected)) initialStatus
+            (_, value) <- Grace.evalGrace input initialStatus (Interpret.interpretWith [] (Just expected))
 
             case value of
-                Value.Text text -> Text.IO.putStr text
+                Value.Text _ text -> Text.IO.putStr text
                 _ -> do
                     Text.IO.hPutStrLn IO.stderr
                         "Internal error: Not a plain Text literal\n\
@@ -303,9 +297,7 @@ main = Exception.handle handler do
                     traverse_ (\b -> Text.IO.putStrLn "" >> displayBuiltin b) bs
 
         REPL{ } -> do
-            keyToMethods <- HTTP.getMethods
-
-            REPL.repl keyToMethods
+            REPL.repl
   where
     handler :: SomeException -> IO a
     handler e = do
