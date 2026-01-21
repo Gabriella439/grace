@@ -46,7 +46,6 @@ import qualified Data.Aeson.Yaml as YAML
 import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.HashMap.Strict.InsOrd as HashMap
 import qualified Data.List as List
-import qualified Data.Ord as Ord
 import qualified Data.Scientific as Scientific
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
@@ -86,7 +85,7 @@ lookupVariable name environment = case Prelude.lookup name environment of
     Nothing    -> error "Grace.Normalize.lookupVariable: unbound variable"
 
 sorted :: Ord key => InsOrdHashMap key value -> [(key, value)]
-sorted = List.sortBy (Ord.comparing fst) . HashMap.toList
+sorted = List.sortOn fst . HashMap.toList
 
 {-| Evaluate an expression, leaving behind a `Value` free of reducible
     sub-expressions
