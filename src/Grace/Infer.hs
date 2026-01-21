@@ -4045,7 +4045,7 @@ solveSyntax _Γ = Lens.transform (Lens.over Syntax.types (Context.solveType _Γ)
 
 -- | Convert from JSON, inferring the value purely from the JSON data
 inferJSON :: Aeson.Value -> Value ()
-inferJSON (Aeson.Object [("contents", contents), ("tag", Aeson.String tag)]) =
+inferJSON (Aeson.Object (Compat.sorted -> [("contents", contents), ("tag", Aeson.String tag)])) =
     Value.Alternative () tag value
   where
     value = inferJSON contents
@@ -4077,7 +4077,7 @@ inferJSON Aeson.Null =
 checkJSON :: Type Location -> Aeson.Value -> Grace (Value ())
 checkJSON = loop []
   where
-    loop path Type.Union{ Type.alternatives = Type.Alternatives alternativeTypes _ } (Aeson.Object [("contents", contents), ("tag", Aeson.String tag)])
+    loop path Type.Union{ Type.alternatives = Type.Alternatives alternativeTypes _ } (Aeson.Object (Compat.sorted -> [("contents", contents), ("tag", Aeson.String tag)]))
         | Just alternativeType <- Prelude.lookup tag alternativeTypes = do
             value <- loop ("contents" : path) alternativeType contents
 
