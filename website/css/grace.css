@@ -152,8 +152,8 @@ a {
 }
 
 button {
-  background-color: var(--surface0);
-  color: var(--blue);
+  background-color: var(--blue);
+  color: var(--base);
   border: 0;
   border-radius: var(--s-2);
   padding-block: var(--s-2);
@@ -163,8 +163,12 @@ button {
 }
 
 button:hover {
-  background-color: color-mix(in oklch, var(--overlay2) 30%, transparent);
+  background-color: var(--sky);
   cursor: pointer;
+}
+
+button:active {
+  background-color: var(--lavender);
 }
 
 fieldset {
@@ -204,7 +208,8 @@ li > span {
 }
 
 .grace-form .grace-form {
-  padding: 0;
+  padding-inline: 0;
+  padding-block: var(--s0) 0;
 }
 
 .grace-input-json,
@@ -283,7 +288,7 @@ li > span {
 }
 
 .grace-horizontal-rule {
-  background-color: var(--crust);
+  background-color: var(--surface0);
   border: none;
   height: var(--s-6);
 }
@@ -322,6 +327,10 @@ pre {
 
 ul, dt, pre, fieldset {
   margin: 0;
+}
+
+dl {
+  margin-block: 0;
 }
 
 dd {
@@ -442,6 +451,7 @@ ul {
   padding-inline: var(--s-2);
   padding-block: var(--s-2);
   background-color: transparent;
+  color: var(--blue);
   border-style: solid;
   border-width: 0 0 var(--s-4) 0;
   border-color: transparent;
