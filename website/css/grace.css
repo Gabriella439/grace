@@ -191,25 +191,18 @@ li > span {
   vertical-align: middle;
 }
 
-.grace-form {
+.grace-pane {
   background-color: var(--mantle);
-}
-
-.grace-pane > * {
   border-radius: var(--s-2);
-}
-
-.grace-pane.grace-tabbed > * {
-  border-radius: var(--s-2);
-}
-
-.grace-form {
   padding: var(--s0);
 }
 
-.grace-form .grace-form {
-  padding-inline: 0;
-  padding-block: var(--s0) 0;
+.grace-pane .grace-pane {
+  padding: 0;
+}
+
+.grace-success .grace-success .grace-form {
+  margin-block-start: var(--s0);
 }
 
 .grace-input-json,
