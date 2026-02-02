@@ -17,6 +17,21 @@
 
         haskell = super.haskell // {
           packages = super.haskell.packages // {
+            ghc810 = super.haskell.packages.ghc810.override (old: {
+              overrides =
+                let
+                  hlib = self.haskell.lib;
+
+                  oldOverrides = old.overrides or (_: _: {});
+
+                in
+                  self.lib.composeExtensions
+                    oldOverrides
+                    (hself: hsuper: {
+                      warp = hlib.dontCheck hsuper.warp;
+                    });
+            });
+
             "${compiler}" = super.haskell.packages."${compiler}".override (old: {
               overrides =
                 let
