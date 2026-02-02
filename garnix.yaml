@@ -11,6 +11,7 @@ builds:
  - devShells.aarch64-linux.default
  - packages.x86_64-linux.website
  - packages.aarch64-linux.website
+ - packages.aarch64-darwin.website
  - apps.aarch64-darwin.default
  - apps.x86_64-linux.default
  - apps.aarch64-linux.default
