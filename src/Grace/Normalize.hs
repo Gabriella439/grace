@@ -346,9 +346,22 @@ evaluate env₀ syntax₀ = do
                     (Value.List location xs, Syntax.Index{ index })
                         | Seq.null xs -> Value.Scalar location Null
                         | otherwise ->
-                            Value.Application location
-                                (Value.Builtin location Some)
-                                (Seq.index xs (fromInteger index `mod` Seq.length xs))
+                            case quotient of
+                                0 -> -- positive index within bounds
+                                    Value.Application location
+                                        (Value.Builtin location Some)
+                                        (Seq.index xs remainder)
+
+                                -1 -> -- negative index within bounds
+                                    Value.Application location
+                                        (Value.Builtin location Some)
+                                        (Seq.index xs remainder)
+
+                                _ -> -- out-of-bounds index
+                                    Value.Scalar location Null
+                      where
+                        (quotient, remainder) = fromInteger index `divMod` Seq.length xs
+
                     (Value.List location xs, Syntax.Slice{ begin, end })
                         | Seq.null xs ->
                             Value.Scalar location Null

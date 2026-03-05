@@ -3,9 +3,9 @@
 , "example1":
     some 5
 , "example2":
-    some 2
+    null
 , "example3":
-    some 5
+    null
 , "example4":
     null
 }
