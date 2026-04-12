@@ -1,0 +1,4 @@
+# This should return `null` and have type `forall (a : Type) . Optional a`
+# because restricting the underlying record value to the empty record type
+# deletes all the fields.
+({ x: 1 } : { }).x

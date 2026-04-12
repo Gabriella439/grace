@@ -255,7 +255,7 @@ isFieldRequired fieldType = do
                         , location
                         }
 
-            subtype fieldType optional
+            subtype (Context.solveType context fieldType) optional
 
             return False
 
@@ -407,10 +407,10 @@ subtype subType₀ superType₀ = do
             -- fields in the supertype are `Optional`
             case (subRemainingFields, superRemainingFields) of
                 _   | subRemainingFields == superRemainingFields -> do
-                        requiredB <- getRequiredFields
+                        superRequiredFields <- getRequiredFields
 
-                        Monad.unless (null requiredB) do
-                            Exception.throwIO (RecordTypeMismatch subType₀ superType₀ requiredB)
+                        Monad.unless (null superRequiredFields) do
+                            Exception.throwIO (RecordTypeMismatch subType₀ superType₀ superRequiredFields)
 
                 -- Both records type have unsolved Fields variables.  Great!
                 -- This is the most flexible case, since we can replace these
@@ -522,7 +522,7 @@ subtype subType₀ superType₀ = do
                 --
                 -- Carefully note that it's okay if the record supertype has
                 -- extra required fields.  A record with fewer fields can be
-                -- a subtype of a record with a greater number o fields.
+                -- a subtype of a record with a greater number of fields.
                 (Monotype.UnsolvedFields p₀, _) -> do
                     context₁ <- get
 
@@ -3661,91 +3661,110 @@ check Syntax.List{..} Type.List{ location = _, .. } = do
 
     return Syntax.List{ elements = newElements, .. }
 
-check Syntax.Record{ location, fieldValues = fieldValues₀ } annotation@Type.Record{ fields = Type.Fields fieldTypes fields }
-    | let mapValues = Map.fromList fieldValues₁
-    , let mapTypes  = Map.fromList fieldTypes
-    , let both = Map.intersectionWith (,) mapValues mapTypes
+check annotated@Syntax.Record{ location, fieldValues = fieldValues₀ } annotation@Type.Record{ fields = Type.Fields fieldTypes fields } = do
+    let fieldValues₁ = do
+            Syntax.Definition{ nameLocation, name, bindings, annotation = annotation₀, assignment } <- fieldValues₀
 
-    -- This is to prevent an infinite loop because we're going to recursively
-    -- call `check` again below with two non-intersecting records to generate a
-    -- type error if the check fails
-    , not (Map.null both) = do
-        let extraValues = Map.difference mapValues mapTypes
-        let extraTypes  = Map.difference mapTypes  mapValues
+            let newAssignment = case annotation₀ of
+                    Nothing -> assignment
+                    Just annotation₁ -> Syntax.Annotation
+                        { location = Syntax.location assignment
+                        , annotated = assignment
+                        , annotation = annotation₁
+                        }
 
-        isRequiredTypes <- traverse isFieldRequired extraTypes
+            let cons binding body = Syntax.Lambda
+                    { location = nameLocation
+                    , binding
+                    , body
+                    }
 
-        let extraRequiredTypes =
-                Map.difference extraTypes (Map.filter not isRequiredTypes)
+            let value = foldr cons newAssignment bindings
 
-        let extraOptionalTypes =
-                Map.difference extraTypes (Map.filter id isRequiredTypes)
+            return (name, value)
 
-        let process (field, (value, type_)) = do
-                context <- get
+    let subFieldValues  = Map.fromList fieldValues₁
+    let superFieldTypes = Map.fromList fieldTypes
 
-                newValue <- check value (Context.solveType context type_)
+    let both = Map.intersectionWith (,) subFieldValues superFieldTypes
 
-                return (field, newValue)
+    let extraValues = Map.difference subFieldValues  superFieldTypes
+    let extraTypes  = Map.difference superFieldTypes subFieldValues
 
-        overlappingValues <- traverse process (Map.toList both)
+    isRequiredTypes <- traverse isFieldRequired extraTypes
 
-        let convert (name, assignment) = Syntax.Definition
-                { nameLocation = Syntax.location assignment
-                , name
-                , bindings = []
-                , annotation = Nothing
-                , assignment
-                }
+    let extraRequiredTypes =
+            Map.difference extraTypes (Map.filter not isRequiredTypes)
 
-        let extraRecordValue = Syntax.Record
-                { location
-                , fieldValues = map convert (Map.toList extraValues)
-                }
+    let extraOptionalTypes =
+            Map.difference extraTypes (Map.filter id isRequiredTypes)
 
-        let extraRecordType = Type.Record
-                { location = Type.location annotation
-                , fields = Type.Fields (Map.toList extraRequiredTypes) fields
-                }
+    let process (field, (value, type_)) = do
+            context <- get
+
+            newValue <- check value (Context.solveType context type_)
+
+            return (field, newValue)
+
+    overlappingValues <- traverse process (Map.toList both)
+
+    let convert (name, assignment) = Syntax.Definition
+            { nameLocation = Syntax.location assignment
+            , name
+            , bindings = []
+            , annotation = Nothing
+            , assignment
+            }
+
+    let extraRecordValue = Syntax.Record
+            { location
+            , fieldValues = map convert (Map.toList extraValues)
+            }
+
+    let extraRecordType = Type.Record
+            { location = Type.location annotation
+            , fields = Type.Fields (Map.toList extraRequiredTypes) fields
+            }
+
+    Monad.unless (null extraRequiredTypes) do
+        -- TODO: Craft an exception just for this error path
+        (inferred, _) <- infer extraRecordValue
 
         context <- get
 
-        result <- check extraRecordValue (Context.solveType context extraRecordType)
+        Exception.throwIO (RecordTypeMismatch (Context.solveType context inferred) (Context.solveType context extraRecordType) (Map.keys extraRequiredTypes))
 
-        let optionalValues = do
-                (field, type_) <- Map.toList extraOptionalTypes
+    let nullValues = do
+            (field, type_) <- Map.toList extraOptionalTypes
 
-                return (field, Syntax.Scalar{ location = Type.location type_, scalar = Syntax.Null })
+            return (field, Syntax.Scalar{ location = Type.location type_, scalar = Syntax.Null })
 
-        case result of
-            Syntax.Record{ fieldValues = nonOverlappingValues } ->
-                return Syntax.Record
-                    { location
-                    , fieldValues = map convert (overlappingValues <> optionalValues) <> nonOverlappingValues
-                    }
-            other ->
-                return other
-  where
-    fieldValues₁ = do
-        Syntax.Definition{ nameLocation, name, bindings, annotation = annotation₀, assignment } <- fieldValues₀
+    nonOverlappingValues <- case fields of
+        Monotype.UnsolvedFields p -> do
+            results <- traverse infer extraValues
 
-        let newAssignment = case annotation₀ of
-                Nothing -> assignment
-                Just annotation₁ -> Syntax.Annotation
-                    { location = Syntax.location assignment
-                    , annotated = assignment
-                    , annotation = annotation₁
-                    }
+            let extraValueTypes = fmap fst results
 
-        let cons binding body = Syntax.Lambda
-                { location = nameLocation
-                , binding
-                , body
-                }
+            let newExtraValues = fmap snd results
 
-        let value = foldr cons newAssignment bindings
+            context <- get
 
-        return (name, value)
+            instantiateFieldsR
+                (Syntax.location annotated)
+                (Context.solveRecord context
+                    (Type.Fields (Map.toList extraValueTypes) Monotype.EmptyFields)
+                )
+                p
+
+            return newExtraValues
+
+        _ -> do
+            return Map.empty
+
+    return Syntax.Record
+        { location
+        , fieldValues = map convert (overlappingValues <> nullValues <> Map.toList nonOverlappingValues)
+        }
 
 check Syntax.Text{ chunks = Syntax.Chunks text₀ rest, .. } Type.Scalar{ scalar = Monotype.Text } = do
     let process (interpolation, text) = do
