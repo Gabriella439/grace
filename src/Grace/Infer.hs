@@ -3203,82 +3203,31 @@ check Syntax.Lambda{ binding = Syntax.PlainBinding{ plain = Syntax.NameBinding{ 
 
         return Syntax.Lambda{ body = newBody, binding = newBinding, .. }
 
-check Syntax.Lambda{ binding = Syntax.PlainBinding{ plain = Syntax.NameBinding{ name, nameLocation, annotation = Just annotation, assignment = Nothing } }, .. } Type.Function{ location = _, ..} = do
-    subtype annotation input
-
+check annotated@Syntax.Lambda{ binding = Syntax.PlainBinding{ plain = Syntax.NameBinding{ name, nameLocation } } } Type.Function{ location = _, input, output } = do
     scoped (Context.Annotation name input) do
+        let body = Syntax.Application
+                { location = Syntax.location annotated
+                , function = annotated
+                , argument = Syntax.Variable
+                    { location = nameLocation
+                    , name
+                    }
+                }
+
         newBody <- check body output
 
-        context <- get
-
-        let newBinding = Syntax.PlainBinding
+        return Syntax.Lambda
+            { location = Syntax.location annotated
+            , binding = Syntax.PlainBinding
                 { plain = Syntax.NameBinding
-                    { nameLocation
-                    , name
-                    , annotation = Just (Context.solveType context annotation)
+                    { name
+                    , nameLocation
+                    , annotation = Just input
                     , assignment = Nothing
                     }
                 }
-
-        return Syntax.Lambda{ body = newBody, binding = newBinding, .. }
-
-check Syntax.Lambda{ binding = Syntax.PlainBinding{ plain = Syntax.NameBinding{ nameLocation, name, annotation = Nothing, assignment = Just assignment } }, .. } Type.Function{ location = _, input = input₀, output } = do
-    existential <- fresh
-
-    push (Context.UnsolvedType existential)
-
-    let input₁ = Type.UnsolvedType
-            { location = Syntax.location assignment
-            , existential
+            , body = newBody
             }
-
-    let optional = Type.Optional
-            { location = Syntax.location assignment
-            , type_ = input₁
-            }
-
-    subtype input₀ optional
-
-    newAssignment <- check assignment input₁
-
-    scoped (Context.Annotation name input₁) do
-        newBody <- check body output
-
-        let newBinding = Syntax.PlainBinding
-                { plain = Syntax.NameBinding
-                    { nameLocation
-                    , name
-                    , annotation = Nothing
-                    , assignment = Just newAssignment
-                    }
-                }
-
-        return Syntax.Lambda{ body = newBody, binding = newBinding, .. }
-
-check Syntax.Lambda{ binding = Syntax.PlainBinding{ plain = Syntax.NameBinding{ name, nameLocation, annotation = Just annotation, assignment = Just assignment } }, .. } Type.Function{ location = _, ..} = do
-    newAssignment <- check assignment annotation
-
-    context₀ <- get
-
-    subtype (Context.solveType context₀ annotation) (Context.solveType context₀ input)
-
-    scoped (Context.Annotation name input) do
-        context₁ <- get
-
-        newBody <- check body (Context.solveType context₁ output)
-
-        context₂ <- get
-
-        let newBinding = Syntax.PlainBinding
-                { plain = Syntax.NameBinding
-                    { nameLocation
-                    , name
-                    , annotation = Just (Context.solveType context₂ annotation)
-                    , assignment = Just newAssignment
-                    }
-                }
-
-        return Syntax.Lambda{ body = newBody, binding = newBinding, .. }
 
 check e Type.Forall{..} = do
     scoped (Context.Variable domain name) do

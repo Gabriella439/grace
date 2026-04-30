@@ -1,0 +1,19 @@
+Not a subtype
+
+The following type:
+
+  Integer
+
+tasty/data/error/type/subtype-function-input.ffg:1:25: 
+  │
+1 │ (\(x : Natural) -> x) : Integer -> Natural
+  │                         ↑
+
+… cannot be a subtype of:
+
+  Natural
+
+tasty/data/error/type/subtype-function-input.ffg:1:8: 
+  │
+1 │ (\(x : Natural) -> x) : Integer -> Natural
+  │        ↑
