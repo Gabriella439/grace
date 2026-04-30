@@ -3233,7 +3233,7 @@ check e Type.Forall{..} = do
     scoped (Context.Variable domain name) do
         check e type_
 
-check Syntax.Let{ location, assignments, body } annotation₀ = do
+check Syntax.Let{ location, assignments, body = body₀ } annotation₀ = do
     let cons Syntax.Define{ assignmentLocation, definition } action = do
             ((name, annotation₁), newDefinition) <- onDefinition definition
 
@@ -3289,60 +3289,43 @@ check Syntax.Let{ location, assignments, body } annotation₀ = do
 
                     return assignmentLocation
 
-            element <- case (listMonad, optionalMonad) of
+            newBody <- case (listMonad, optionalMonad) of
                 (location₀ : _, location₁ : _) -> do
                     Exception.throwIO AssignmentMismatch
                         { location₀
                         , location₁
                         }
-                (_ : _, []) -> do
-                    context <- get
 
-                    existential <- fresh
-
-                    push (Context.UnsolvedType existential)
-
-                    let element = Type.UnsolvedType
-                            { location
-                            , existential
+                (location₀ : _, []) -> do
+                    let body₁ = Syntax.List
+                            { location = location₀
+                            , elements = [ body₀ ]
                             }
 
-                    let list = Type.List
-                            { location
-                            , type_ = element
+                    body₂ <- check body₁ annotation₀
+
+                    case body₂ of
+                        Syntax.List{ elements = [ body₃ ] } -> return body₃
+                        _ -> error "Grace.Infer.check: unexpected return value"
+
+                ([], location₁ : _) -> do
+                    let body₁ = Syntax.Application
+                            { location = location₁
+                            , function = Syntax.Builtin
+                                { location = location₁
+                                , builtin = Syntax.Some
+                                }
+                            , argument = body₀
                             }
 
-                    subtype list (Context.solveType context annotation₀)
+                    body₂ <- check body₁ annotation₀
 
-                    return element
-
-                ([], _ : _) -> do
-                    context <- get
-
-                    existential <- fresh
-
-                    push (Context.UnsolvedType existential)
-
-                    let element = Type.UnsolvedType
-                            { location
-                            , existential
-                            }
-
-                    let optional = Type.Optional
-                            { location
-                            , type_ = element
-                            }
-
-                    subtype optional (Context.solveType context annotation₀)
-
-                    return element
+                    case body₂ of
+                        Syntax.Application{ argument = body₃ } -> return body₃
+                        _ -> error "Grace.Infer.check: unexpected return value"
 
                 ([], []) -> do
-                    return annotation₀
-
-            context <- get
-
-            newBody <- check body (Context.solveType context element)
+                    check body₀ annotation₀
 
             return ([], newBody)
 
