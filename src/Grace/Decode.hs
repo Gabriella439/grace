@@ -5,7 +5,7 @@
 
     Example usage:
 
-    >>> decode (Value.Scalar (Syntax.Bool True)) :: Either DecodingError Bool
+    >>> decode (Value.Scalar Unknown (Syntax.Bool True)) :: Either DecodingError Bool
     Right True
 -}
 module Grace.Decode

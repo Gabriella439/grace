@@ -264,6 +264,407 @@ isFieldRequired fieldType = do
 
         return True
 
+-- | Computes the supertype of the two input types
+supertypeOf :: Type Location -> Type Location -> Grace (Type Location)
+supertypeOf a b = do
+    context₀ <- get
+
+    case (a, b) of
+        (UnsolvedType{ location, existential = existential₀ }, UnsolvedType { existential = existential₁ }) -> do
+            equateTypes existential₀ existential₁
+
+            return UnsolvedType{ location, existential = existential₀ }
+
+        (UnsolvedType{ existential }, type_)
+            | not (existential `Type.typeFreeIn` type_)
+            , elem (Context.UnsolvedType existential) context₀ -> do
+                instantiateTypeL existential type_
+
+                return type_
+
+        (type_, UnsolvedType{ existential })
+            | not (existential `Type.typeFreeIn` type_)
+            , elem (Context.UnsolvedType existential) context₀ -> do
+                instantiateTypeL existential type_
+
+                return type_
+
+        (Forall{ location, nameLocation, name, domain, type_ = type₀ }, type₁) -> do
+            type_ <- supertypeOf type₀ type₁
+
+            return Forall{ location, nameLocation, name, domain, type_ }
+
+        (type₀, Forall{ location, nameLocation, name, domain, type_ = type₁ }) -> do
+            type_ <- supertypeOf type₀ type₁
+
+            return Forall{ location, nameLocation, name, domain, type_ }
+
+        (VariableType{ location, name = name₀ }, VariableType{ name = name₁ })
+            | name₀ == name₁ -> do
+                return VariableType{ location, name = name₀ }
+
+        (Function{ location, input = input₀, output = output₀ }, Function{ input = input₁, output = output₁ }) -> do
+            input <- subtypeOf input₀ input₁
+
+            context <- get
+
+            output <- supertypeOf (Context.solveType context output₀) (Context.solveType context output₁)
+
+            return Function{ location, input, output }
+
+        (List{ location, type_ = type₀ }, List{ type_ = type₁ }) -> do
+            type_ <- supertypeOf type₀ type₁
+
+            return List{ location, type_ }
+
+        (Record{ location = location₀, fields = fields₀ }, Record{ location = location₁, fields = fields₁ }) -> do
+            let Type.Fields fieldTypes₀ remainingFields₀ = fields₀
+            let Type.Fields fieldTypes₁ remainingFields₁ = fields₁
+
+            let map₀ = Map.fromList fieldTypes₀
+            let map₁ = Map.fromList fieldTypes₁
+
+            let combine type₀ type₁ = do
+                    context <- get
+
+                    supertypeOf (Context.solveType context type₀) (Context.solveType context type₁)
+
+            both <- sequence (Map.intersectionWith combine map₀ map₁)
+
+            let optional location type_ = Optional{ location, type_ }
+
+            let extra₀ = fmap (optional location₀) (Map.difference map₀ map₁)
+            let extra₁ = fmap (optional location₁) (Map.difference map₁ map₀)
+
+            let fieldTypes = Map.toList (both <> extra₀ <> extra₁)
+
+            let location
+                    | null extra₁ = location₀
+                    | otherwise   = location₁
+
+            -- TODO: Check if `UnsolvedFields` are solved by now
+            case (remainingFields₀, remainingFields₁) of
+                _ | remainingFields₀ == remainingFields₁ -> do
+                    return Record
+                        { location
+                        , fields = Type.Fields fieldTypes remainingFields₀
+                        }
+
+                (Monotype.UnsolvedFields p₀, Monotype.UnsolvedFields p₁) -> do
+                    equateFields p₀ p₁
+
+                    return Record
+                        { location
+                        , fields = Type.Fields fieldTypes (Monotype.UnsolvedFields p₀)
+                        }
+
+                (Monotype.UnsolvedFields p₀, _) -> do
+                    instantiateFieldsL p₀ location₁ (Type.Fields [] remainingFields₁)
+
+                    return Record
+                        { location
+                        , fields = Type.Fields fieldTypes remainingFields₁
+                        }
+
+                (_, Monotype.UnsolvedFields p₁) -> do
+                    instantiateFieldsL p₁ location₀ (Type.Fields [] remainingFields₀)
+
+                    return Record
+                        { location
+                        , fields = Type.Fields fieldTypes remainingFields₀
+                        }
+
+                _ -> do
+                    -- TODO: Improve location
+                    Exception.throwIO (FieldsVariableMismatch location₀ remainingFields₀ location₁ remainingFields₁)
+
+        (Type.Union{ location = location₀, alternatives = alternatives₀ }, Type.Union{ location = location₁, alternatives = alternatives₁ }) -> do
+            let Type.Alternatives alternativeTypes₀ remainingAlternatives₀ = alternatives₀
+            let Type.Alternatives alternativeTypes₁ remainingAlternatives₁ = alternatives₁
+
+            let map₀ = Map.fromList alternativeTypes₀
+            let map₁ = Map.fromList alternativeTypes₁
+
+            let combine type₀ type₁ = do
+                    context <- get
+
+                    supertypeOf (Context.solveType context type₀) (Context.solveType context type₁)
+
+            both <- sequence (Map.intersectionWith combine map₀ map₁)
+
+            let extra₀ = Map.difference map₀ map₁
+            let extra₁ = Map.difference map₁ map₀
+
+            let alternativeTypes = Map.toList (both <> extra₀ <> extra₁)
+
+            let location
+                    | null extra₁ = location₀
+                    | otherwise   = location₁
+
+            -- TODO: Check if `UnsolvedAlternatives` are solved by now
+            case (remainingAlternatives₀, remainingAlternatives₁) of
+                _ | remainingAlternatives₀ == remainingAlternatives₁ -> do
+                    return Type.Union
+                        { location
+                        , alternatives =
+                            Type.Alternatives alternativeTypes remainingAlternatives₀
+                        }
+
+                (Monotype.UnsolvedAlternatives p₀, Monotype.UnsolvedAlternatives p₁) -> do
+                    equateAlternatives p₀ p₁
+
+                    return Type.Union
+                        { location
+                        , alternatives =
+                            Type.Alternatives alternativeTypes (Monotype.UnsolvedAlternatives p₀)
+                        }
+
+                (Monotype.UnsolvedAlternatives p₀, _) -> do
+                    instantiateAlternativesL p₀ location₁ (Type.Alternatives [] remainingAlternatives₁)
+
+                    return Type.Union
+                        { location
+                        , alternatives =
+                            Type.Alternatives alternativeTypes remainingAlternatives₁
+                        }
+
+                (_, Monotype.UnsolvedAlternatives p₁) -> do
+                    instantiateAlternativesL p₁ location₀ (Type.Alternatives [] remainingAlternatives₀)
+
+                    return Type.Union
+                        { location
+                        , alternatives =
+                            Type.Alternatives alternativeTypes remainingAlternatives₀
+                        }
+
+                _ -> do
+                    -- TODO: Improve location
+                    Exception.throwIO (AlternativesVariableMismatch location₀ remainingAlternatives₀ location₁ remainingAlternatives₁)
+
+        (type₀@Type.Scalar{ scalar = scalar₀ }, Type.Scalar{ scalar = scalar₁ })
+            | scalar₁ `isScalarSubtypeOf` scalar₀ -> do
+                return type₀
+
+        (Type.Scalar{ scalar = scalar₀ }, type₁@Type.Scalar{ scalar = scalar₁ })
+            | scalar₀ `isScalarSubtypeOf` scalar₁ -> do
+                return type₁
+
+        (type₀@Type.Scalar{ location, scalar = Monotype.JSON }, type₁) -> do
+            isSubtypeOfJSON location type₁
+
+            return type₀
+
+        (type₀, type₁@Type.Scalar{ location, scalar = Monotype.JSON }) -> do
+            isSubtypeOfJSON location type₀
+
+            return type₁
+
+        (Optional{ location, type_ = type₀ }, Optional{ type_ = type₁ }) -> do
+            type_ <- supertypeOf type₀ type₁
+
+            return Optional{ location, type_ }
+
+        (Optional{ location, type_ = type₀ }, type₁) -> do
+            type_ <- supertypeOf type₀ type₁
+
+            return Optional{ location, type_ }
+
+        (type₀, Optional{ location, type_ = type₁ }) -> do
+            type_ <- supertypeOf type₀ type₁
+
+            return Optional{ location, type_ }
+
+        (type₀, type₁) -> do
+            Exception.throwIO (NoSupertype type₀ type₁)
+
+-- | Computes the subtype of the two input types
+subtypeOf :: Type Location -> Type Location -> Grace (Type Location)
+subtypeOf a b = do
+    context₀ <- get
+
+    case (a, b) of
+        (UnsolvedType{ location, existential = existential₀ }, UnsolvedType { existential = existential₁ }) -> do
+            equateTypes existential₀ existential₁
+
+            return UnsolvedType{ location, existential = existential₀ }
+
+        (UnsolvedType{ existential }, type_)
+            | not (existential `Type.typeFreeIn` type_)
+            , elem (Context.UnsolvedType existential) context₀ -> do
+                instantiateTypeR type_ existential
+
+                return type_
+
+        (type_, UnsolvedType{ existential })
+            | not (existential `Type.typeFreeIn` type_)
+            , elem (Context.UnsolvedType existential) context₀ -> do
+                instantiateTypeR type_ existential
+
+                return type_
+
+        (Forall{ nameLocation, name, type_ = type₀ }, type₁) -> do
+            scopedUnsolvedType nameLocation \unsolved -> do
+                subtypeOf (Type.substituteType name 0 unsolved type₀) type₁
+
+        (type₀, Forall{ nameLocation, name, type_ = type₁ }) -> do
+            scopedUnsolvedType nameLocation \unsolved ->  do
+                subtypeOf type₀(Type.substituteType name 0 unsolved type₁)
+
+        (VariableType{ location, name = name₀ }, VariableType{ name = name₁ })
+            | name₀ == name₁ -> do
+                return VariableType{ location, name = name₀ }
+
+        (Function{ location, input = input₀, output = output₀ }, Function{ input = input₁, output = output₁ }) -> do
+            input <- supertypeOf input₀ input₁
+
+            output <- subtypeOf output₀ output₁
+
+            return Function{ location, input, output }
+
+        (List{ location, type_ = type₀ }, List{ type_ = type₁ }) -> do
+            type_ <- subtypeOf type₀ type₁
+
+            return List{ location, type_ }
+
+        (Record{ location = location₀, fields = fields₀ }, Record{ location = location₁, fields = fields₁ }) -> do
+            let Type.Fields fieldTypes₀ remainingFields₀ = fields₀
+            let Type.Fields fieldTypes₁ remainingFields₁ = fields₁
+
+            let map₀ = Map.fromList fieldTypes₀
+            let map₁ = Map.fromList fieldTypes₁
+
+            both <- sequence (Map.intersectionWith subtypeOf map₀ map₁)
+
+            let extra₀ = Map.difference map₀ map₁
+            let extra₁ = Map.difference map₁ map₀
+
+            let fieldTypes = Map.toList (both <> extra₀ <> extra₁)
+
+            let location
+                    | null extra₁ = location₀
+                    | otherwise   = location₁
+
+            -- TODO: Check if `UnsolvedFields` are solved by now
+            case (remainingFields₀, remainingFields₁) of
+                _ | remainingFields₀ == remainingFields₁ -> do
+                    return Record
+                        { location
+                        , fields = Type.Fields fieldTypes remainingFields₀
+                        }
+
+                (Monotype.UnsolvedFields p₀, Monotype.UnsolvedFields p₁) -> do
+                    equateFields p₀ p₁
+
+                    return Record
+                        { location
+                        , fields = Type.Fields fieldTypes (Monotype.UnsolvedFields p₀)
+                        }
+
+                (Monotype.UnsolvedFields p₀, _) -> do
+                    instantiateFieldsR location₁ (Type.Fields [] remainingFields₁) p₀
+
+                    return Record
+                        { location
+                        , fields = Type.Fields fieldTypes remainingFields₁
+                        }
+
+                (_, Monotype.UnsolvedFields p₁) -> do
+                    instantiateFieldsR location₀ (Type.Fields [] remainingFields₀) p₁
+
+                    return Record
+                        { location
+                        , fields = Type.Fields fieldTypes remainingFields₀
+                        }
+
+                _ -> do
+                    -- TODO: Improve location
+                    Exception.throwIO (FieldsVariableMismatch location₀ remainingFields₀ location₁ remainingFields₁)
+
+        (Type.Union{ location = location₀, alternatives = alternatives₀ }, Type.Union{ location = location₁, alternatives = alternatives₁ }) -> do
+            let Type.Alternatives alternativeTypes₀ remainingAlternatives₀ = alternatives₀
+            let Type.Alternatives alternativeTypes₁ remainingAlternatives₁ = alternatives₁
+
+            let map₀ = Map.fromList alternativeTypes₀
+            let map₁ = Map.fromList alternativeTypes₁
+
+            both <- sequence (Map.intersectionWith subtypeOf map₀ map₁)
+
+            let alternativeTypes = Map.toList both
+
+            let location = location₀
+
+            -- TODO: Check if `UnsolvedAlternatives` are solved by now
+            case (remainingAlternatives₀, remainingAlternatives₁) of
+                _ | remainingAlternatives₀ == remainingAlternatives₁ -> do
+                    return Type.Union
+                        { location
+                        , alternatives =
+                            Type.Alternatives alternativeTypes remainingAlternatives₀
+                        }
+
+                (Monotype.UnsolvedAlternatives p₀, Monotype.UnsolvedAlternatives p₁) -> do
+                    equateAlternatives p₀ p₁
+
+                    return Type.Union
+                        { location
+                        , alternatives =
+                            Type.Alternatives alternativeTypes (Monotype.UnsolvedAlternatives p₀)
+                        }
+
+                (Monotype.UnsolvedAlternatives p₀, _) -> do
+                    instantiateAlternativesR location₁ (Type.Alternatives [] remainingAlternatives₁) p₀
+
+                    return Type.Union
+                        { location
+                        , alternatives =
+                            Type.Alternatives alternativeTypes remainingAlternatives₁
+                        }
+
+                (_, Monotype.UnsolvedAlternatives p₁) -> do
+                    instantiateAlternativesR location₀ (Type.Alternatives [] remainingAlternatives₀) p₁
+
+                    return Type.Union
+                        { location
+                        , alternatives =
+                            Type.Alternatives alternativeTypes remainingAlternatives₀
+                        }
+
+                _ -> do
+                    -- TODO: Improve location
+                    Exception.throwIO (AlternativesVariableMismatch location₀ remainingAlternatives₀ location₁ remainingAlternatives₁)
+
+        (type₀@Type.Scalar{ scalar = scalar₀ }, Type.Scalar{ scalar = scalar₁ })
+            | scalar₀ `isScalarSubtypeOf` scalar₁ -> do
+                return type₀
+
+        (Type.Scalar{ scalar = scalar₀ }, type₁@Type.Scalar{ scalar = scalar₁ })
+            | scalar₁ `isScalarSubtypeOf` scalar₀ -> do
+                return type₁
+
+        (type₀, Type.Scalar{ location, scalar = Monotype.JSON }) -> do
+            isSubtypeOfJSON location type₀
+
+            return type₀
+
+        (Type.Scalar{ location, scalar = Monotype.JSON }, type₁) -> do
+            isSubtypeOfJSON location type₁
+
+            return type₁
+
+        (Optional{ location, type_ = type₀ }, Optional{ type_ = type₁ }) -> do
+            type_ <- subtypeOf type₀ type₁
+
+            return Optional{ location, type_ }
+
+        (Optional{ type_ = type₀ }, type₁) -> do
+            subtypeOf type₀ type₁
+
+        (type₀, Optional{ type_ = type₁ }) -> do
+            subtypeOf type₀ type₁
+
+        (type₀, type₁) -> do
+            Exception.throwIO (NoSubtype type₀ type₁)
+
 -- | @subtype sub super@ checks that @sub@ is a subtype of @super@
 subtype :: Type Location -> Type Location -> Grace ()
 subtype subType₀ superType₀ = do
@@ -687,7 +1088,7 @@ subtype subType₀ superType₀ = do
         -- `subtype` function and then I'll remember to add a case for my new
         -- complex type here.
         (_A, _B) -> do
-            Exception.throwIO (NotSubtype (Type.location subType₀) _A (Type.location superType₀) _B)
+            Exception.throwIO (NotSubtype _A _B)
 
 {-| This corresponds to the judgment:
 
@@ -1008,6 +1409,32 @@ instantiateTypeR _A₀ a = do
    Note that the implementation and the user-facing terminology use the term
    fields/alternatives instead of rows/variants, respectively.
 -}
+
+equateTypes
+    :: Existential Monotype -> Existential Monotype -> Grace ()
+equateTypes existential₀ existential₁ = do
+    _Γ₀ <- get
+
+    let existential₀First = do
+            (_Γ', _Γ) <- Context.splitOnUnsolvedType existential₁ _Γ₀
+
+            Monad.guard (Context.UnsolvedType existential₀ `elem` _Γ)
+
+            return (set (_Γ' <> (Context.SolvedType existential₁ (Monotype.UnsolvedType existential₀) : _Γ)))
+
+    let existential₁First = do
+            (_Γ', _Γ) <- Context.splitOnUnsolvedType existential₀ _Γ₀
+
+            Monad.guard (Context.UnsolvedType existential₁ `elem` _Γ)
+
+            return (set (_Γ' <> (Context.SolvedType existential₀ (Monotype.UnsolvedType existential₁) : _Γ)))
+
+    case existential₀First <|> existential₁First of
+        Nothing -> do
+            Exception.throwIO (MissingOneOfTypes [] existential₀ existential₁ _Γ₀)
+
+        Just setContext -> do
+            setContext
 
 equateFields
     :: Existential Monotype.Record -> Existential Monotype.Record -> Grace ()
@@ -1596,14 +2023,25 @@ infer e₀ = do
                     return (Type.List{ location, type_ = Type.UnsolvedType{..} }, Syntax.List{ location, elements = Seq.empty })
 
                 element₀ :< elements -> do
-                    (type_, newElement₀) <- infer element₀
+                    (elementType₀, _) <- infer element₀
+
+                    results <- traverse infer elements
+
+                    let (elementTypes, _) = unzip (toList results)
+
+                    let cons type₀ type₁ = do
+                            context <- get
+
+                            supertypeOf (Context.solveType context type₀) (Context.solveType context type₁)
+
+                    type_ <- Monad.foldM cons elementType₀ elementTypes
 
                     let process element = do
                             context <- get
 
                             check element (Context.solveType context type_)
 
-                    newElements <- traverse process elements
+                    newElements <- traverse process (element₀ <| elements)
 
                     context <- get
 
@@ -1611,8 +2049,7 @@ infer e₀ = do
 
                     let newList = Syntax.List
                             { location
-                            , elements =
-                                fmap (solveSyntax context) (newElement₀ <| newElements)
+                            , elements = fmap (solveSyntax context) newElements
                             }
 
                     return (inferred, newList)
@@ -2174,15 +2611,22 @@ infer e₀ = do
                 , scalar = Monotype.Bool
                 }
 
-            (annotation₀, newIfTrue) <- infer ifTrue
+            (type₀, _) <- infer ifTrue
+            (type₁, _) <- infer ifFalse
 
             context₀ <- get
 
-            let annotation₁ = Context.solveType context₀ annotation₀
+            supertype <- supertypeOf (Context.solveType context₀ type₀) (Context.solveType context₀ type₁)
 
-            newIfFalse <- check ifFalse annotation₁
+            newIfTrue  <- check ifTrue supertype
 
             context₁ <- get
+
+            newIfFalse <- check ifFalse (Context.solveType context₁ supertype)
+
+            context₂ <- get
+
+            let type_ = Context.solveType context₂ supertype
 
             let newIf = Syntax.If
                     { location
@@ -2191,7 +2635,7 @@ infer e₀ = do
                     , ifFalse = solveSyntax context₁ newIfFalse
                     }
 
-            return (annotation₁, newIf)
+            return (type_, newIf)
 
         Syntax.Text{ chunks = Syntax.Chunks text₀ rest, .. } -> do
             let process (interpolation, text) = do
@@ -2319,7 +2763,8 @@ infer e₀ = do
 
             input <- case schema of
                 Just input -> do
-                    Monad.unless export (subtype input json)
+                    Monad.unless export do
+                        isSubtypeOfJSON location input
 
                     return input
 
@@ -2423,16 +2868,23 @@ infer e₀ = do
             return (bool, newOperator)
 
         Syntax.Operator{ operator = Syntax.Equal, .. } -> do
-            (_L, newLeft ) <- infer left
-            (_R, newRight) <- infer right
+            (type₀, newLeft ) <- infer left
+            (type₁, newRight) <- infer right
 
-            _ <- check left  _R
-            _ <- check right _L
+            context₀ <- get
+
+            supertype <- supertypeOf (Context.solveType context₀ type₀) (Context.solveType context₀ type₁)
+
+            _ <- check left supertype
 
             context₁ <- get
 
-            let _L' = Context.solveType context₁ _L
-            let _R' = Context.solveType context₁ _R
+            _ <- check right (Context.solveType context₁ supertype)
+
+            context₂ <- get
+
+            let type₀' = Context.solveType context₂ type₀
+            let type₁' = Context.solveType context₂ type₁
 
             let isEquatable Type.VariableType{ } =
                     False
@@ -2470,21 +2922,28 @@ infer e₀ = do
                     , right = solveSyntax context₁ newRight
                     }
 
-            if isEquatable _L' && isEquatable _R'
+            if isEquatable type₀' && isEquatable type₁'
                 then return (bool, newOperator)
                 else Exception.throwIO (InvalidOperands "compare" (Syntax.location left) (Syntax.location right))
 
         Syntax.Operator{ operator = Syntax.NotEqual, .. } -> do
-            (_L, newLeft ) <- infer left
-            (_R, newRight) <- infer right
+            (type₀, newLeft ) <- infer left
+            (type₁, newRight) <- infer right
 
-            _ <- check left  _R
-            _ <- check right _L
+            context₀ <- get
+
+            supertype <- supertypeOf (Context.solveType context₀ type₀) (Context.solveType context₀ type₁)
+
+            _ <- check left supertype
 
             context₁ <- get
 
-            let _L' = Context.solveType context₁ _L
-            let _R' = Context.solveType context₁ _R
+            _ <- check right (Context.solveType context₁ supertype)
+
+            context₂ <- get
+
+            let type₀' = Context.solveType context₂ type₀
+            let type₁' = Context.solveType context₂ type₁
 
             let isEquatable Type.VariableType{ } =
                     False
@@ -2522,7 +2981,7 @@ infer e₀ = do
                     , right = solveSyntax context₁ newRight
                     }
 
-            if isEquatable _L' && isEquatable _R'
+            if isEquatable type₀' && isEquatable type₁'
                 then return (bool, newOperator)
                 else Exception.throwIO (InvalidOperands "compare" (Syntax.location left) (Syntax.location right))
 
@@ -3387,7 +3846,7 @@ check Syntax.HTTP{ import_, schema = Nothing, .. } annotation = do
     Monad.unless import_ do
         context <- get
 
-        subtype (Context.solveType context annotation) Type.Scalar{ location, scalar = Monotype.JSON }
+        isSubtypeOfJSON location (Context.solveType context annotation)
 
     context <- get
 
@@ -3399,7 +3858,7 @@ check Syntax.Read{ import_, schema = Nothing, .. } annotation = do
     Monad.unless import_ do
         context <- get
 
-        subtype (Context.solveType context annotation) Type.Scalar{ location, scalar = Monotype.JSON }
+        isSubtypeOfJSON location (Context.solveType context annotation)
 
     context <- get
 
@@ -3413,7 +3872,7 @@ check Syntax.GitHub{ import_, schema = Nothing, .. } annotation = do
     Monad.unless import_ do
         context <- get
 
-        subtype (Context.solveType context annotation) Type.Scalar{ location, scalar = Monotype.JSON }
+        isSubtypeOfJSON location (Context.solveType context annotation)
 
     context <- get
 
@@ -3994,6 +4453,51 @@ typeWith input context syntax = do
 solveSyntax :: Context s -> Syntax s a -> Syntax s a
 solveSyntax _Γ = Lens.transform (Lens.over Syntax.types (Context.solveType _Γ))
 
+-- | Check if a given `Type` is a subtype of `Monotype.JSON`
+isSubtypeOfJSON
+    :: Location
+    -- ^ `Location` of the `Monotype.JSON`
+    -> Type Location
+    -- ^ Type being checked against `Monotype.JSON`
+    -> Grace ()
+isSubtypeOfJSON location = loop
+  where
+    loop Type.UnsolvedType{ existential } = do
+        let json = Type.Scalar{ location, scalar = Monotype.JSON }
+
+        instantiateTypeL existential json
+    loop type_@Type.Scalar{ scalar } = do
+        Monad.when (scalar == Monotype.Key) do
+            Exception.throwIO (NotSubtypeOfJSON type_)
+    loop Type.List{ type_ } = do
+        loop type_
+    loop Type.Optional{ type_ } = do
+        loop type_
+    loop type_@Type.Record{ fields = Type.Fields fieldTypes remainingFields } = do
+        traverse_ (\(_, type₀) -> loop type₀) fieldTypes
+
+        case remainingFields of
+            Monotype.EmptyFields -> do
+                return ()
+
+            Monotype.UnsolvedFields existential -> do
+                instantiateFieldsL existential location (Type.Fields [] Monotype.EmptyFields)
+
+            _ -> do
+                Exception.throwIO (NotSubtypeOfJSON type_)
+    loop type_ = do
+        Exception.throwIO (NotSubtypeOfJSON type_)
+
+{-| This covers all the scalar subtyping rules /except/ for `Monotype.JSON`,
+    which is handled by `isSubtypeOfJSON`
+-}
+isScalarSubtypeOf :: Monotype.Scalar -> Monotype.Scalar -> Bool
+isScalarSubtypeOf Monotype.Natural Monotype.Integer = True
+isScalarSubtypeOf Monotype.Natural Monotype.Real = True
+isScalarSubtypeOf Monotype.Integer Monotype.Real = True
+isScalarSubtypeOf Monotype.Text Monotype.Key = True
+isScalarSubtypeOf scalar₀ scalar₁ = scalar₀ == scalar₁
+
 -- | Convert from JSON, inferring the value purely from the JSON data
 inferJSON :: Aeson.Value -> Value ()
 inferJSON (Aeson.Object (Compat.sorted -> [("contents", contents), ("tag", Aeson.String tag)])) =
@@ -4153,6 +4657,7 @@ data TypeInferenceError
     --
     | MissingAllAlternatives (Existential Monotype.Union) (Context Location)
     | MissingAllFields (Existential Monotype.Record) (Context Location)
+    | MissingOneOfTypes [Location] (Existential Monotype) (Existential Monotype) (Context Location)
     | MissingOneOfAlternatives [Location] (Existential Monotype.Union) (Existential Monotype.Union) (Context Location)
     | MissingOneOfFields [Location] (Existential Monotype.Record) (Existential Monotype.Record) (Context Location)
     | MissingVariable (Existential Monotype) (Context Location)
@@ -4162,7 +4667,10 @@ data TypeInferenceError
     --
     | NotAlternativesSubtype Location (Existential Monotype.Union) (Type.Union Location)
     | NotFieldsSubtype Location (Existential Monotype.Record) (Type.Record Location)
-    | NotSubtype Location (Type Location) Location (Type Location)
+    | NotSubtype (Type Location) (Type Location)
+    | NotSubtypeOfJSON (Type Location)
+    | NoSupertype (Type Location) (Type Location)
+    | NoSubtype (Type Location) (Type Location)
     --
     | UnboundAlternatives Location Text
     | UnboundFields Location Text
@@ -4171,6 +4679,8 @@ data TypeInferenceError
     --
     | RecordTypeMismatch (Type Location) (Type Location) [Text]
     | UnionTypeMismatch (Type Location) (Type Location) [Text]
+    | FieldsVariableMismatch Location Monotype.RemainingFields Location Monotype.RemainingFields
+    | AlternativesVariableMismatch Location Monotype.RemainingAlternatives Location Monotype.RemainingAlternatives
     --
     deriving stock (Eq, Show)
 
@@ -4273,6 +4783,22 @@ instance Exception TypeInferenceError where
         \\n\
         \" <> listToText _Γ
 
+    displayException (MissingOneOfTypes locations existential₀ existential₁ _Γ) =
+        "Internal error: Invalid context\n\
+        \\n\
+        \One of the following fields variables:\\n\
+        \\n\
+        \" <> listToText [Context.UnsolvedType existential₀, Context.UnsolvedType existential₁ ] <> "\n\
+        \\n\
+        \… is missing from the following context:\n\
+        \\n\
+        \" <> listToText _Γ <> "\n\
+        \\n\
+        \" <> locations'
+        where
+            locations' =
+                Text.unpack (Text.unlines (map (Location.renderError "") locations))
+
     displayException (MissingOneOfAlternatives locations p₀ p₁ _Γ) =
         "Internal error: Invalid context\n\
         \\n\
@@ -4369,20 +4895,61 @@ instance Exception TypeInferenceError where
         \\n\
         \… because the same fields variable appears within that record type."
 
-    displayException (NotSubtype locA₀ _A locB₀ _B) =
+    displayException (NotSubtype type₀ type₁) =
         "Not a subtype\n\
         \\n\
         \The following type:\n\
         \\n\
-        \" <> insert _A <> "\n\
+        \" <> insert type₀ <> "\n\
         \\n\
-        \" <> Text.unpack (Location.renderError "" locA₀) <> "\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location type₀)) <> "\n\
         \\n\
-        \… cannot be a subtype of:\n\
+        \… is not a subtype of:\n\
         \\n\
-        \" <> insert _B <> "\n\
+        \" <> insert type₁ <> "\n\
         \\n\
-        \" <> Text.unpack (Location.renderError "" locB₀)
+        \" <> Text.unpack (Location.renderError "" (Type.location type₁))
+
+    displayException (NotSubtypeOfJSON type_) =
+        "Not a subtype of JSON\n\
+        \\n\
+        \The following type:\n\
+        \\n\
+        \" <> insert type_ <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location type_)) <> "\n\
+        \\n\
+        \… is not a subtype of JSON."
+
+    displayException (NoSupertype type₀ type₁) =
+        "No supertype\n\
+        \\n\
+        \The following two types:\n\
+        \\n\
+        \" <> insert type₀ <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location type₀)) <> "\n\
+        \\n\
+        \" <> insert type₁ <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location type₁)) <> "\n\
+        \\n\
+        \… have no shared supertype."
+
+    displayException (NoSubtype type₀ type₁) =
+        "No subtype\n\
+        \\n\
+        \The following two types:\n\
+        \\n\
+        \" <> insert type₀ <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location type₀)) <> "\n\
+        \\n\
+        \" <> insert type₁ <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location type₁)) <> "\n\
+        \\n\
+        \… have no shared subtype."
 
     displayException (UnboundAlternatives location a) =
         "Unbound alternatives variable: " <> Text.unpack a <> "\n\
@@ -4473,6 +5040,40 @@ instance Exception TypeInferenceError where
         \The former union has the following extra alternatives:\n\
         \\n\
         \" <> listToText extraA
+
+    displayException (FieldsVariableMismatch location₀ remainingFields₀ location₁ remainingFields₁) =
+        "Fields variable mismatch\n\
+        \\n\
+        \This fields variable:\n\
+        \\n\
+        \" <> insert remainingFields₀ <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" location₀) <> "\n\
+        \\n\
+        \… and this fields variable:\n\
+        \\n\
+        \" <> insert remainingFields₁ <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" location₁) <> "\n\
+        \\n\
+        \… cannot be unified"
+
+    displayException (AlternativesVariableMismatch location₀ remainingAlternatives₀ location₁ remainingAlternatives₁) =
+        "Alternatives variable mismatch\n\
+        \\n\
+        \This alternatives variable:\n\
+        \\n\
+        \" <> insert remainingAlternatives₀ <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" location₀) <> "\n\
+        \\n\
+        \… and this alternatives variable:\n\
+        \\n\
+        \" <> insert remainingAlternatives₁ <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" location₁) <> "\n\
+        \\n\
+        \… cannot be unified"
 
 data AssignmentMismatch = AssignmentMismatch
     { location₀ :: Location

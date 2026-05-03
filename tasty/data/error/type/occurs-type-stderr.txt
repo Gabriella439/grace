@@ -9,7 +9,7 @@ tasty/data/error/type/occurs-type-input.ffg:2:2:
 2 │ \x -> x x
   │  ↑
 
-… cannot be a subtype of:
+… is not a subtype of:
 
   c?
 

@@ -1,23 +1,21 @@
-Union type mismatch
+Alternatives variable mismatch
 
-The following union type:
+This alternatives variable:
 
-  < Right: Bool | c? >
-
-tasty/data/error/type/alternatives-variable-input.ffg:2:44: 
-  │
-2 │ , Right true : forall (b : Alternatives) . < Right: Bool | b >
-  │                                            ↑
-
-… is not a subtype of the following union type:
-
-  < Left: Natural | a >
+  a
 
 tasty/data/error/type/alternatives-variable-input.ffg:1:40: 
   │
 1 │ [ Left 1 : forall (a : Alternatives) . < Left: Natural | a >
   │                                        ↑
 
-The former union has the following extra alternatives:
+… and this alternatives variable:
 
-• Right
+  b
+
+tasty/data/error/type/alternatives-variable-input.ffg:2:44: 
+  │
+2 │ , Right true : forall (b : Alternatives) . < Right: Bool | b >
+  │                                            ↑
+
+… cannot be unified

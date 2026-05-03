@@ -9,7 +9,7 @@ tasty/data/error/type/for-mixed-input.ffg:3:10:
 3 │ for y of some 4
   │          ↑
 
-… cannot be a subtype of:
+… is not a subtype of:
 
   List Natural
 

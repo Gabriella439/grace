@@ -1,6 +1,13 @@
-Not a subtype
+No supertype
 
-The following type:
+The following two types:
+
+  a?
+
+tasty/data/error/type/occurs-alternatives-input.ffg:2:2: 
+  │
+2 │ \x -> [ x, C x ]
+  │  ↑
 
   < C: a? | c? >
 
@@ -9,11 +16,4 @@ tasty/data/error/type/occurs-alternatives-input.ffg:2:12:
 2 │ \x -> [ x, C x ]
   │            ↑
 
-… cannot be a subtype of:
-
-  a?
-
-tasty/data/error/type/occurs-alternatives-input.ffg:2:2: 
-  │
-2 │ \x -> [ x, C x ]
-  │  ↑
+… have no shared supertype.

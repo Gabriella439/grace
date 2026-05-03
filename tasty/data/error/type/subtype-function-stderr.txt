@@ -9,7 +9,7 @@ tasty/data/error/type/subtype-function-input.ffg:1:25:
 1 │ (\(x : Natural) -> x) : Integer -> Natural
   │                         ↑
 
-… cannot be a subtype of:
+… is not a subtype of:
 
   Natural
 

@@ -44,6 +44,7 @@ import qualified Prettyprinter as Pretty
 import qualified System.Directory as Directory
 import qualified System.Environment as Environment
 import qualified System.FilePath as FilePath
+import qualified System.Timeout as Timeout
 import qualified Test.Tasty as Tasty
 import qualified Test.Tasty.HUnit as Tasty.HUnit
 import qualified Test.Tasty.Silver as Silver
@@ -74,10 +75,20 @@ fileToTestTree prefix = do
 
     let name = FilePath.takeBaseName input
 
-    eitherResult <- interpret (Path input AsCode)
+    result <- Timeout.timeout 10000000 (interpret (Path input AsCode))
 
-    case eitherResult of
-        Left e -> do
+    case result of
+        Nothing -> do
+            return
+                (Tasty.testGroup name
+                    [ Silver.goldenVsAction
+                        (name <> " - timeout")
+                        expectedStderrFile
+                        (return "timeout")
+                        id
+                    ]
+                )
+        Just (Left e) -> do
             return
                 (Tasty.testGroup name
                     [ Silver.goldenVsAction
@@ -87,7 +98,8 @@ fileToTestTree prefix = do
                         id
                     ]
                 )
-        Right (inferred, value) -> do
+
+        Just (Right (inferred, value)) -> do
             let generateTypeFile = return (pretty_ inferred)
 
             let generateOutputFile = return (pretty_ value)

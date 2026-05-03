@@ -1,6 +1,6 @@
-Not a subtype
+No supertype
 
-The following type:
+The following two types:
 
   Natural
 
@@ -9,11 +9,11 @@ tasty/data/error/type/read-fail-input.ffg:4:9:
 4 │ in  not 4
   │         ↑
 
-… cannot be a subtype of:
-
   Bool
 
 (read):1:6: 
   │
 1 │ x == false
   │      ↑
+
+… have no shared supertype.

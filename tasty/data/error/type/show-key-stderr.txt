@@ -1,0 +1,12 @@
+Not a subtype of JSON
+
+The following type:
+
+  Key
+
+tasty/data/error/type/show-key-input.ffg:1:20: 
+  │
+1 │ show ("skproj-…" : Key)
+  │                    ↑
+
+… is not a subtype of JSON.

@@ -1,0 +1,19 @@
+Not a subtype
+
+The following type:
+
+  g?
+
+tasty/data/error/type/unify-unsolved-input.ffg:2:2: 
+  │
+2 │ \r s x ->
+  │  ↑
+
+… is not a subtype of:
+
+  Optional g?
+
+tasty/data/error/type/unify-unsolved-input.ffg:2:2: 
+  │
+2 │ \r s x ->
+  │  ↑

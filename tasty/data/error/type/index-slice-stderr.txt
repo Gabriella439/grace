@@ -9,7 +9,7 @@ tasty/data/error/type/index-slice-input.ffg:2:1:
 2 │ [{ }][0:].0
   │ ↑
 
-… cannot be a subtype of:
+… is not a subtype of:
 
   List a?
 

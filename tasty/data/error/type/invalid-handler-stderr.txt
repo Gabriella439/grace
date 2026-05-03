@@ -9,7 +9,7 @@ tasty/data/error/type/invalid-handler-input.ffg:1:11:
 1 │ fold { x: 1 }
   │           ↑
 
-… cannot be a subtype of:
+… is not a subtype of:
 
   b? -> a?
 

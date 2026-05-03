@@ -3,7 +3,7 @@
     Example usage:
 
     >>> encode True
-    Scalar (Bool True)
+    Scalar () (Bool True)
 -}
 module Grace.Encode
     ( -- * Classes
