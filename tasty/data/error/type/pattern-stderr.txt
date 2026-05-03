@@ -9,7 +9,7 @@ tasty/data/error/type/pattern-input.ffg:1:10:
 1 │ { f (x : Natural): Text: x }
   │          ↑
 
-… cannot be a subtype of:
+… is not a subtype of:
 
   Text
 

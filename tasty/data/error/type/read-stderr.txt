@@ -9,7 +9,7 @@ The following type:
 1 │ 1
   │ ↑
 
-… cannot be a subtype of:
+… is not a subtype of:
 
   Text
 

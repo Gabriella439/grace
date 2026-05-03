@@ -9,7 +9,7 @@ tasty/data/error/type/variable-mismatch-input.ffg:1:54:
 1 │ let f : forall (a : Type) . forall (b : Type) . a -> b -> a
   │                                                      ↑
 
-… cannot be a subtype of:
+… is not a subtype of:
 
   a
 

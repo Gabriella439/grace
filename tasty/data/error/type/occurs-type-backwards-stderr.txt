@@ -1,6 +1,13 @@
-Not a subtype
+No supertype
 
-The following type:
+The following two types:
+
+  e? -> f?
+
+tasty/data/error/type/occurs-type-backwards-input.ffg:2:2: 
+  │
+2 │ \f -> \x -> [ f, f x ]
+  │  ↑
 
   f?
 
@@ -9,11 +16,4 @@ tasty/data/error/type/occurs-type-backwards-input.ffg:2:2:
 2 │ \f -> \x -> [ f, f x ]
   │  ↑
 
-… cannot be a subtype of:
-
-  e? -> f?
-
-tasty/data/error/type/occurs-type-backwards-input.ffg:2:2: 
-  │
-2 │ \f -> \x -> [ f, f x ]
-  │  ↑
+… have no shared supertype.

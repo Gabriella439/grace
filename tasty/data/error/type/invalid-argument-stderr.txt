@@ -9,7 +9,7 @@ tasty/data/error/type/invalid-argument-input.ffg:3:7:
 3 │ in  f ""
   │       ↑
 
-… cannot be a subtype of:
+… is not a subtype of:
 
   Natural
 

@@ -15,7 +15,7 @@ import Data.String (IsString(..))
 import Data.Text (Text)
 import GHC.Generics (Generic)
 import Grace.Existential (Existential)
-import Grace.Pretty (Pretty(..), builtin)
+import Grace.Pretty (Pretty(..), builtin, label)
 import Language.Haskell.TH.Syntax (Lift)
 
 {-| A monomorphic type
@@ -102,6 +102,14 @@ data RemainingFields
     --   variable an explicit name in the source code
     deriving stock (Eq, Generic, Lift, Show)
 
+instance Pretty RemainingFields where
+    pretty EmptyFields =
+        mempty
+    pretty (UnsolvedFields existential) =
+        label (pretty existential <> "?")
+    pretty (VariableFields name) =
+        label (pretty name)
+
 -- | A monomorphic union type
 data Union = Alternatives [(Text, Monotype)] RemainingAlternatives
     deriving stock (Eq, Generic, Show)
@@ -118,3 +126,11 @@ data RemainingAlternatives
     -- ^ Same as `UnsolvedAlternatives`, except that the user has given the
     --   alternatives variable an explicit name in the source code
     deriving stock (Eq, Generic, Lift, Show)
+
+instance Pretty RemainingAlternatives where
+    pretty EmptyAlternatives =
+        mempty
+    pretty (UnsolvedAlternatives existential) =
+        label (pretty existential <> "?")
+    pretty (VariableAlternatives name) =
+        label (pretty name)
