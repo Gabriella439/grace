@@ -1,0 +1,22 @@
+\r ->
+\s ->
+\x ->
+  let a = r.x
+
+  let b = s.y
+
+  let c = L 1
+
+  let d = R true
+
+  in  { "example0":
+          [ r, s ]
+      , "example1":
+          [ r, r ]
+      , "example2":
+          [ c, d ]
+      , "example3":
+          [ c, c ]
+      , "example4":
+          [ x, x ]
+      }

@@ -1,0 +1,16 @@
+# This test ensures that a supertype of 3 or more values doesn't wrap optional
+# fields in more than one layer of `Optional`.  The expected type should be
+#
+#     List { x: Optional Natural, y: Optional Natural, z: Optional Natural }
+#
+# … and not something like:
+#
+#     List
+#         { x: Optional (Optional Natural)
+#         , y: Optional (Optional Natural)
+#         , z: Optional Natural
+#         }
+#
+# More generally, getting this correct ensures that the most-specific supertype
+# operation is associative and commutative.
+[ { x: 1 }, { y: 1 }, { z: 1 } ]
