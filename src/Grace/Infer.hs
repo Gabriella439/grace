@@ -270,10 +270,11 @@ supertypeOf a b = do
     context₀ <- get
 
     case (a, b) of
-        (UnsolvedType{ location, existential = existential₀ }, UnsolvedType { existential = existential₁ }) -> do
-            equateTypes existential₀ existential₁
+        (type₀@UnsolvedType{ existential = existential₀ }, UnsolvedType { existential = existential₁ }) -> do
+            Monad.unless (existential₀ == existential₁) do
+                equateTypes existential₀ existential₁
 
-            return UnsolvedType{ location, existential = existential₀ }
+            return type₀
 
         (UnsolvedType{ existential }, type_)
             | not (existential `Type.typeFreeIn` type_)
@@ -331,10 +332,17 @@ supertypeOf a b = do
 
             both <- sequence (Map.intersectionWith combine map₀ map₁)
 
-            let optional location type_ = Optional{ location, type_ }
+            let optional location type_ = do
+                    context <- get
 
-            let extra₀ = fmap (optional location₀) (Map.difference map₀ map₁)
-            let extra₁ = fmap (optional location₁) (Map.difference map₁ map₀)
+                    required <- isFieldRequired (Context.solveType context type_)
+
+                    if required
+                        then return Optional{ location, type_ }
+                        else return type_
+
+            extra₀ <- traverse (optional location₀) (Map.difference map₀ map₁)
+            extra₁ <- traverse (optional location₁) (Map.difference map₁ map₀)
 
             let fieldTypes = Map.toList (both <> extra₀ <> extra₁)
 
@@ -483,10 +491,11 @@ subtypeOf a b = do
     context₀ <- get
 
     case (a, b) of
-        (UnsolvedType{ location, existential = existential₀ }, UnsolvedType { existential = existential₁ }) -> do
-            equateTypes existential₀ existential₁
+        (type₀@UnsolvedType{ existential = existential₀ }, UnsolvedType { existential = existential₁ }) -> do
+            Monad.unless (existential₀ == existential₁) do
+                equateTypes existential₀ existential₁
 
-            return UnsolvedType{ location, existential = existential₀ }
+            return type₀
 
         (UnsolvedType{ existential }, type_)
             | not (existential `Type.typeFreeIn` type_)
@@ -4786,7 +4795,7 @@ instance Exception TypeInferenceError where
     displayException (MissingOneOfTypes locations existential₀ existential₁ _Γ) =
         "Internal error: Invalid context\n\
         \\n\
-        \One of the following fields variables:\\n\
+        \One of the following type variables:\n\
         \\n\
         \" <> listToText [Context.UnsolvedType existential₀, Context.UnsolvedType existential₁ ] <> "\n\
         \\n\

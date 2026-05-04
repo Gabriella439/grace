@@ -1,0 +1,4 @@
+[ { "x": some 1, "y": null, "z": null }
+, { "y": some 1, "x": null, "z": null }
+, { "z": some 1, "x": null, "y": null }
+]
