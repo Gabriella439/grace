@@ -1,0 +1,19 @@
+forall (a : Type) .
+forall (b : Alternatives) .
+forall (c : Type) .
+forall (d : Fields) .
+forall (e : Type) .
+  { x: Optional c, d } ->
+  { y: Optional e, d } ->
+  a ->
+    { example0:
+        List { x: Optional c, y: Optional e, d }
+    , example1:
+        List { x: Optional c, d }
+    , example2:
+        List < L: Natural | R: Bool | b >
+    , example3:
+        List < L: Natural | b >
+    , example4:
+        List a
+    }
