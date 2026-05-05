@@ -1,7 +1,3 @@
-{ x: Natural } ->
-{ y: Natural } ->
-  { a:
-      List { x: Natural, z: Optional Natural }
-  , b:
-      List { y: Natural, z: Optional Natural }
-  }
+{ x: Natural, z: Natural } ->
+{ y: Natural, z: Natural } ->
+  { a: List { x: Natural, z: Natural }, b: List { y: Natural, z: Natural } }
