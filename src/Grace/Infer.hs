@@ -341,10 +341,8 @@ supertypeOf a b = do
                         then return Optional{ location, type_ }
                         else return type_
 
-            extra₀ <- traverse (optional location₀) (Map.difference map₀ map₁)
-            extra₁ <- traverse (optional location₁) (Map.difference map₁ map₀)
-
-            let fieldTypes = Map.toList (both <> extra₀ <> extra₁)
+            let extra₀ = Map.difference map₀ map₁
+            let extra₁ = Map.difference map₁ map₀
 
             let location
                     | null extra₁ = location₀
@@ -353,21 +351,102 @@ supertypeOf a b = do
             -- TODO: Check if `UnsolvedFields` are solved by now
             case (remainingFields₀, remainingFields₁) of
                 _ | remainingFields₀ == remainingFields₁ -> do
+                    optionalExtra₀ <- traverse (optional location₀) extra₀
+                    optionalExtra₁ <- traverse (optional location₁) extra₁
+
+                    let fieldTypes =
+                            Map.toList (both <> optionalExtra₀ <> optionalExtra₁)
+
                     return Record
                         { location
                         , fields = Type.Fields fieldTypes remainingFields₀
                         }
 
                 (Monotype.UnsolvedFields p₀, Monotype.UnsolvedFields p₁) -> do
-                    equateFields p₀ p₁
+                    p₂ <- fresh
+
+                    context₁ <- get
+
+                    let p₀First = do
+                            (contextAfter, contextBefore) <- Context.splitOnUnsolvedFields p₀ context₁
+
+                            Monad.guard (Context.UnsolvedFields p₁ `elem` contextAfter)
+
+                            let command =
+                                    set (   contextAfter
+                                        <>  ( Context.UnsolvedFields p₀
+                                            : Context.UnsolvedFields p₂
+                                            : contextBefore
+                                            )
+                                        )
+
+                            return command
+
+                    let p₁First = do
+                            (contextAfter, contextBefore) <- Context.splitOnUnsolvedFields p₁ context₁
+
+                            Monad.guard (Context.UnsolvedFields p₀ `elem` contextAfter)
+
+                            let command =
+                                    set (   contextAfter
+                                        <>  ( Context.UnsolvedFields p₁
+                                            : Context.UnsolvedFields p₂
+                                            : contextBefore
+                                            )
+                                        )
+
+                            return command
+
+                    case p₀First <|> p₁First of
+                        Nothing -> do
+                            Exception.throwIO (MissingOneOfFields [location₀, location₁] p₀ p₁ context₁)
+
+                        Just setContext -> do
+                            setContext
+
+                    context₂ <- get
+
+                    instantiateFieldsL
+                        p₀
+                        location₁
+                        (Context.solveRecord context₂
+                            (Type.Fields (Map.toList extra₁)
+                                (Monotype.UnsolvedFields p₂)
+                            )
+                        )
+
+                    context₃ <- get
+
+                    instantiateFieldsL
+                        p₁
+                        location₀
+                        (Context.solveRecord context₃
+                            (Type.Fields (Map.toList extra₀)
+                                (Monotype.UnsolvedFields p₂)
+                            )
+                        )
+
+                    let fieldTypes = Map.toList (both <> extra₀ <> extra₁)
 
                     return Record
                         { location
-                        , fields = Type.Fields fieldTypes (Monotype.UnsolvedFields p₀)
+                        , fields = Type.Fields fieldTypes (Monotype.UnsolvedFields p₂)
                         }
 
                 (Monotype.UnsolvedFields p₀, _) -> do
-                    instantiateFieldsL p₀ location₁ (Type.Fields [] remainingFields₁)
+                    context₁ <- get
+
+                    instantiateFieldsL
+                        p₀
+                        location₁
+                        (Context.solveRecord context₁
+                            (Type.Fields (Map.toList extra₁) remainingFields₁)
+                        )
+
+                    optionalExtra₀ <- traverse (optional location₀) extra₀
+
+                    let fieldTypes =
+                            Map.toList (both <> optionalExtra₀ <> extra₁)
 
                     return Record
                         { location
@@ -375,7 +454,19 @@ supertypeOf a b = do
                         }
 
                 (_, Monotype.UnsolvedFields p₁) -> do
-                    instantiateFieldsL p₁ location₀ (Type.Fields [] remainingFields₀)
+                    context₁ <- get
+
+                    instantiateFieldsL
+                        p₁
+                        location₀
+                        (Context.solveRecord context₁
+                            (Type.Fields (Map.toList extra₀) remainingFields₀)
+                        )
+
+                    optionalExtra₁ <- traverse (optional location₁) extra₁
+
+                    let fieldTypes =
+                            Map.toList (both <> extra₀ <> optionalExtra₁)
 
                     return Record
                         { location
@@ -403,7 +494,8 @@ supertypeOf a b = do
             let extra₀ = Map.difference map₀ map₁
             let extra₁ = Map.difference map₁ map₀
 
-            let alternativeTypes = Map.toList (both <> extra₀ <> extra₁)
+            let alternativeTypes =
+                    Map.toList (both <> extra₀ <> extra₁)
 
             let location
                     | null extra₁ = location₀
@@ -419,16 +511,81 @@ supertypeOf a b = do
                         }
 
                 (Monotype.UnsolvedAlternatives p₀, Monotype.UnsolvedAlternatives p₁) -> do
-                    equateAlternatives p₀ p₁
+                    p₂ <- fresh
+
+                    context₁ <- get
+
+                    let p₀First = do
+                            (contextAfter, contextBefore) <- Context.splitOnUnsolvedAlternatives p₀ context₁
+
+                            Monad.guard (Context.UnsolvedAlternatives p₁ `elem` contextAfter)
+
+                            let command =
+                                    set (   contextAfter
+                                        <>  ( Context.UnsolvedAlternatives p₀
+                                            : Context.UnsolvedAlternatives p₂
+                                            : contextBefore
+                                            )
+                                        )
+
+                            return command
+
+                    let p₁First = do
+                            (contextAfter, contextBefore) <- Context.splitOnUnsolvedAlternatives p₁ context₁
+
+                            Monad.guard (Context.UnsolvedAlternatives p₀ `elem` contextAfter)
+
+                            let command =
+                                    set (   contextAfter
+                                        <>  ( Context.UnsolvedAlternatives p₁
+                                            : Context.UnsolvedAlternatives p₂
+                                            : contextBefore
+                                            )
+                                        )
+
+                            return command
+
+                    case p₀First <|> p₁First of
+                        Nothing -> do
+                            Exception.throwIO (MissingOneOfAlternatives [location₀, location₁] p₀ p₁ context₁)
+
+                        Just command -> do
+                            command
+
+                    context₂ <- get
+
+                    instantiateAlternativesL
+                        p₀
+                        location₁
+                        (Context.solveUnion context₂
+                            (Type.Alternatives (Map.toList extra₁)
+                                (Monotype.UnsolvedAlternatives p₂)
+                            )
+                        )
+
+                    context₃ <- get
+
+                    instantiateAlternativesL
+                        p₁
+                        location₀
+                        (Context.solveUnion context₃
+                            (Type.Alternatives (Map.toList extra₀)
+                                (Monotype.UnsolvedAlternatives p₂)
+                            )
+                        )
+
 
                     return Type.Union
                         { location
                         , alternatives =
-                            Type.Alternatives alternativeTypes (Monotype.UnsolvedAlternatives p₀)
+                            Type.Alternatives alternativeTypes (Monotype.UnsolvedAlternatives p₂)
                         }
 
                 (Monotype.UnsolvedAlternatives p₀, _) -> do
-                    instantiateAlternativesL p₀ location₁ (Type.Alternatives [] remainingAlternatives₁)
+                    instantiateAlternativesL
+                        p₀
+                        location₁
+                        (Type.Alternatives (Map.toList extra₁) remainingAlternatives₁)
 
                     return Type.Union
                         { location
@@ -437,7 +594,10 @@ supertypeOf a b = do
                         }
 
                 (_, Monotype.UnsolvedAlternatives p₁) -> do
-                    instantiateAlternativesL p₁ location₀ (Type.Alternatives [] remainingAlternatives₀)
+                    instantiateAlternativesL
+                        p₁
+                        location₀
+                        (Type.Alternatives (Map.toList extra₀) remainingAlternatives₀)
 
                     return Type.Union
                         { location
@@ -562,15 +722,80 @@ subtypeOf a b = do
                         }
 
                 (Monotype.UnsolvedFields p₀, Monotype.UnsolvedFields p₁) -> do
-                    equateFields p₀ p₁
+                    p₂ <- fresh
 
-                    return Record
+                    context₁ <- get
+
+                    let p₀First = do
+                            (contextAfter, contextBefore) <- Context.splitOnUnsolvedFields p₀ context₁
+
+                            Monad.guard (Context.UnsolvedFields p₁ `elem` contextAfter)
+
+                            let command =
+                                    set (   contextAfter
+                                        <>  ( Context.UnsolvedFields p₀
+                                            : Context.UnsolvedFields p₂
+                                            : contextBefore
+                                            )
+                                        )
+
+                            return command
+
+                    let p₁First = do
+                            (contextAfter, contextBefore) <- Context.splitOnUnsolvedFields p₁ context₁
+
+                            Monad.guard (Context.UnsolvedFields p₀ `elem` contextAfter)
+
+                            let command =
+                                    set (   contextAfter
+                                        <>  ( Context.UnsolvedFields p₁
+                                            : Context.UnsolvedFields p₂
+                                            : contextBefore
+                                            )
+                                        )
+
+                            return command
+
+                    case p₀First <|> p₁First of
+                        Nothing -> do
+                            Exception.throwIO (MissingOneOfFields [location₀, location₁] p₀ p₁ context₁)
+
+                        Just command -> do
+                            command
+
+                    context₂ <- get
+
+                    instantiateFieldsR
+                        location₁
+                        (Context.solveRecord context₂
+                            (Type.Fields (Map.toList extra₁)
+                                (Monotype.UnsolvedFields p₂)
+                            )
+                        )
+                        p₀
+
+                    context₃ <- get
+
+                    instantiateFieldsR
+                        location₀
+                        (Context.solveRecord context₃
+                            (Type.Fields (Map.toList extra₀)
+                                (Monotype.UnsolvedFields p₂)
+                            )
+                        )
+                        p₁
+
+                    return Type.Record
                         { location
-                        , fields = Type.Fields fieldTypes (Monotype.UnsolvedFields p₀)
+                        , fields =
+                            Type.Fields fieldTypes (Monotype.UnsolvedFields p₂)
                         }
 
                 (Monotype.UnsolvedFields p₀, _) -> do
-                    instantiateFieldsR location₁ (Type.Fields [] remainingFields₁) p₀
+                    instantiateFieldsR
+                        location₁
+                        (Type.Fields (Map.toList extra₁) remainingFields₁)
+                        p₀
 
                     return Record
                         { location
@@ -578,7 +803,10 @@ subtypeOf a b = do
                         }
 
                 (_, Monotype.UnsolvedFields p₁) -> do
-                    instantiateFieldsR location₀ (Type.Fields [] remainingFields₀) p₁
+                    instantiateFieldsR
+                        location₀
+                        (Type.Fields (Map.toList extra₀) remainingFields₀)
+                        p₁
 
                     return Record
                         { location
@@ -589,7 +817,7 @@ subtypeOf a b = do
                     -- TODO: Improve location
                     Exception.throwIO (FieldsVariableMismatch location₀ remainingFields₀ location₁ remainingFields₁)
 
-        (Type.Union{ location = location₀, alternatives = alternatives₀ }, Type.Union{ location = location₁, alternatives = alternatives₁ }) -> do
+        (type₀@Type.Union{ location = location₀, alternatives = alternatives₀ }, type₁@Type.Union{ location = location₁, alternatives = alternatives₁ }) -> do
             let Type.Alternatives alternativeTypes₀ remainingAlternatives₀ = alternatives₀
             let Type.Alternatives alternativeTypes₁ remainingAlternatives₁ = alternatives₁
 
@@ -598,45 +826,128 @@ subtypeOf a b = do
 
             both <- sequence (Map.intersectionWith subtypeOf map₀ map₁)
 
-            let alternativeTypes = Map.toList both
+            let extra₀ = Map.difference map₀ map₁
+            let extra₁ = Map.difference map₁ map₀
+
+            let alternativeTypes = Map.toList (both <> extra₀ <> extra₁)
 
             let location = location₀
 
             -- TODO: Check if `UnsolvedAlternatives` are solved by now
             case (remainingAlternatives₀, remainingAlternatives₁) of
                 _ | remainingAlternatives₀ == remainingAlternatives₁ -> do
-                    return Type.Union
-                        { location
-                        , alternatives =
-                            Type.Alternatives alternativeTypes remainingAlternatives₀
-                        }
+                    if Map.null extra₀ && Map.null extra₁
+                        then do
+                            return Type.Union
+                                { location
+                                , alternatives =
+                                    Type.Alternatives alternativeTypes remainingAlternatives₀
+                                }
+                        else do
+                            Exception.throwIO (NoUnionSubtype type₀ type₁ (Map.keys extra₀) (Map.keys extra₁))
 
                 (Monotype.UnsolvedAlternatives p₀, Monotype.UnsolvedAlternatives p₁) -> do
-                    equateAlternatives p₀ p₁
+                    p₂ <- fresh
+
+                    context₁ <- get
+
+                    let p₀First = do
+                            (contextAfter, contextBefore) <- Context.splitOnUnsolvedAlternatives p₀ context₁
+
+                            Monad.guard (Context.UnsolvedAlternatives p₁ `elem` contextAfter)
+
+                            let command =
+                                    set (   contextAfter
+                                        <>  ( Context.UnsolvedAlternatives p₀
+                                            : Context.UnsolvedAlternatives p₂
+                                            : contextBefore
+                                            )
+                                        )
+
+                            return command
+
+                    let p₁First = do
+                            (contextAfter, contextBefore) <- Context.splitOnUnsolvedAlternatives p₁ context₁
+
+                            Monad.guard (Context.UnsolvedAlternatives p₀ `elem` contextAfter)
+
+                            let command =
+                                    set (   contextAfter
+                                        <>  ( Context.UnsolvedAlternatives p₁
+                                            : Context.UnsolvedAlternatives p₂
+                                            : contextBefore
+                                            )
+                                        )
+
+                            return command
+
+                    case p₀First <|> p₁First of
+                        Nothing -> do
+                            Exception.throwIO (MissingOneOfAlternatives [location₀, location₁] p₀ p₁ context₁)
+
+                        Just command -> do
+                            command
+
+                    context₂ <- get
+
+                    instantiateAlternativesL
+                        p₀
+                        location₁
+                        (Context.solveUnion context₂
+                            (Type.Alternatives (Map.toList extra₁)
+                                (Monotype.UnsolvedAlternatives p₂)
+                            )
+                        )
+
+                    context₃ <- get
+
+                    instantiateAlternativesL
+                        p₁
+                        location₀
+                        (Context.solveUnion context₃
+                            (Type.Alternatives (Map.toList extra₀)
+                                (Monotype.UnsolvedAlternatives p₂)
+                            )
+                        )
+
 
                     return Type.Union
                         { location
                         , alternatives =
-                            Type.Alternatives alternativeTypes (Monotype.UnsolvedAlternatives p₀)
+                            Type.Alternatives alternativeTypes (Monotype.UnsolvedAlternatives p₂)
                         }
 
                 (Monotype.UnsolvedAlternatives p₀, _) -> do
-                    instantiateAlternativesR location₁ (Type.Alternatives [] remainingAlternatives₁) p₀
+                    if Map.null extra₀
+                        then do
+                            instantiateAlternativesR
+                                location₁
+                                (Type.Alternatives (Map.toList extra₁) remainingAlternatives₁)
+                                p₀
 
-                    return Type.Union
-                        { location
-                        , alternatives =
-                            Type.Alternatives alternativeTypes remainingAlternatives₁
-                        }
+                            return Type.Union
+                                { location
+                                , alternatives =
+                                    Type.Alternatives alternativeTypes remainingAlternatives₁
+                                }
+                        else do
+                            Exception.throwIO (NoUnionSubtype type₀ type₁ (Map.keys extra₀) (Map.keys extra₁))
 
                 (_, Monotype.UnsolvedAlternatives p₁) -> do
-                    instantiateAlternativesR location₀ (Type.Alternatives [] remainingAlternatives₀) p₁
+                    if Map.null extra₁
+                        then do
+                            instantiateAlternativesR
+                                location₀
+                                (Type.Alternatives (Map.toList extra₀) remainingAlternatives₀)
+                                p₁
 
-                    return Type.Union
-                        { location
-                        , alternatives =
-                            Type.Alternatives alternativeTypes remainingAlternatives₀
-                        }
+                            return Type.Union
+                                { location
+                                , alternatives =
+                                    Type.Alternatives alternativeTypes remainingAlternatives₀
+                                }
+                        else do
+                            Exception.throwIO (NoUnionSubtype type₀ type₁ (Map.keys extra₀) (Map.keys extra₁))
 
                 _ -> do
                     -- TODO: Improve location
@@ -4680,6 +4991,7 @@ data TypeInferenceError
     | NotSubtypeOfJSON (Type Location)
     | NoSupertype (Type Location) (Type Location)
     | NoSubtype (Type Location) (Type Location)
+    | NoUnionSubtype (Type Location) (Type Location) [Text] [Text]
     --
     | UnboundAlternatives Location Text
     | UnboundFields Location Text
@@ -4959,6 +5271,60 @@ instance Exception TypeInferenceError where
         \" <> Text.unpack (Location.renderError "" (Type.location type₁)) <> "\n\
         \\n\
         \… have no shared subtype."
+
+    displayException (NoUnionSubtype type₀ type₁ extra₀ extra₁) | null extra₀ =
+        "No union subtype\n\
+        \\n\
+        \The following two union types:\n\
+        \\n\
+        \" <> insert type₀ <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location type₀)) <> "\n\
+        \\n\
+        \" <> insert type₁ <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location type₁)) <> "\n\
+        \\n\
+        \… have no shared subtype because the latter has these extra alternatives:\n\
+        \" <> listToText extra₁
+
+    displayException (NoUnionSubtype type₀ type₁ extra₀ extra₁) | null extra₁ =
+        "No union subtype\n\
+        \\n\
+        \The following two union types:\n\
+        \\n\
+        \" <> insert type₀ <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location type₀)) <> "\n\
+        \\n\
+        \" <> insert type₁ <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location type₁)) <> "\n\
+        \\n\
+        \… have no shared subtype because the former has these extra alternatives:\n\
+        \\n\
+        \" <> listToText extra₀
+
+    displayException (NoUnionSubtype type₀ type₁ extra₀ extra₁) =
+        "No union subtype\n\
+        \\n\
+        \The following two union types:\n\
+        \\n\
+        \" <> insert type₀ <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location type₀)) <> "\n\
+        \\n\
+        \" <> insert type₁ <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location type₁)) <> "\n\
+        \\n\
+        \… have no shared subtype because the former has these extra alternatives:\n\
+        \\n\
+        \" <> listToText extra₀ <> "\n\
+        \\n\
+        \… and the latter has these extra alternatives:\n\
+        \\n\
+        \" <> listToText extra₁
 
     displayException (UnboundAlternatives location a) =
         "Unbound alternatives variable: " <> Text.unpack a <> "\n\
