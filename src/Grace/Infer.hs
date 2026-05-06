@@ -54,7 +54,13 @@ import Grace.Type (Type(..))
 import Grace.Value (Value)
 
 import Grace.Syntax
-    (Binding, BindMonad(..), Definition(..), NameBinding, Syntax)
+    ( Assignment(..)
+    , Binding(..)
+    , BindMonad(..)
+    , Definition(..)
+    , NameBinding(NameBinding)
+    , Syntax
+    )
 
 import qualified Control.Exception.Safe as Exception
 import qualified Control.Lens as Lens
@@ -4256,30 +4262,83 @@ check Syntax.Project{ location, larger, smaller = smaller@Syntax.Index{ } } Type
 
     return Syntax.Project{ location, larger = newLarger, smaller }
 
-check Syntax.Scalar{ scalar = Syntax.Null, .. } Type.Optional{ } = do
-    return Syntax.Scalar{ scalar = Syntax.Null, .. }
+check Syntax.Scalar{ location, scalar = Syntax.Null } Type.Optional{ } = do
+    return Syntax.Scalar{ location, scalar = Syntax.Null }
 
-check Syntax.Application{ location = location₀, function = Syntax.Builtin{ location = location₁, builtin = Syntax.Some }, argument = e } Type.Optional{ type_ } = do
-    newE <- check e type_
-    return Syntax.Application{ location = location₀, function = Syntax.Builtin{ location = location₁, builtin = Syntax.Some }, argument = newE }
+check Syntax.Application{ location = location₀, function = Syntax.Builtin{ location = location₁, builtin = Syntax.Some }, argument } Type.Optional{ type_ } = do
+    newArgument <- check argument type_
 
-check e _B@Type.Optional{ type_ } = do
-    let normal = do
-            (_A₀, newE) <- infer e
+    return Syntax.Application
+        { location = location₀
+        , function = Syntax.Builtin
+            { location = location₁
+            , builtin = Syntax.Some
+            }
+        , argument = newArgument
+        }
 
-            _Θ <- get
+check annotated annotation@Type.Optional{ location, type_ = type₀ } = do
+    let name = "x"
 
-            subtype (Context.solveType _Θ _A₀) (Context.solveType _Θ _B)
+    (type₁, newAnnotated₀) <- infer annotated
 
-            return newE
+    context₀ <- get
 
-    normal `Exception.catch` \(typeInferenceError :: TypeInferenceError) -> do
-        newE <- check e type_ `Exception.catch` \(_ :: TypeInferenceError) -> do
-            Exception.throwIO typeInferenceError
+    case Context.solveType context₀ type₁ of
+        Type.Optional{ type_ = type₂ } -> do
+            scoped (Context.Annotation name type₂) do
+                let nameLocation = Type.location type₀
 
-        let location = Syntax.location e
+                let variable = Syntax.Variable{ location = nameLocation, name }
 
-        return Syntax.Application{ function = Syntax.Builtin{ builtin = Syntax.Some, .. }, argument = newE, .. }
+                context₁ <- get
+
+                elaborated <- check variable (Context.solveType context₁ type₀)
+
+                if elaborated == variable
+                    then do
+                        return newAnnotated₀
+                    else do
+                        return Syntax.Let
+                            { location
+                            , assignments =
+                                [ Bind
+                                    { assignmentLocation = location
+                                    , monad = OptionalMonad
+                                    , binding = PlainBinding
+                                        { plain = NameBinding
+                                            { nameLocation
+                                            , name
+                                            , annotation = Just type₂
+                                            , assignment = Nothing
+                                            }
+                                        }
+                                    , assignment = newAnnotated₀
+                                    }
+                                ]
+                            , body = elaborated
+                            }
+
+        Type.UnsolvedType{ existential } -> do
+            instantiateTypeL existential (Context.solveType context₀ annotation)
+
+            context₁ <- get
+
+            return (solveSyntax context₁ newAnnotated₀)
+
+        _ -> do
+            newAnnotated₁ <- check annotated (Context.solveType context₀ type₀)
+
+            context₁ <- get
+
+            return Syntax.Application
+                { location
+                , function = Syntax.Builtin
+                    { location
+                    , builtin = Syntax.Some
+                    }
+                , argument = solveSyntax context₁ newAnnotated₁
+                }
 
 check Syntax.Operator{ location, left, operatorLocation, operator = Syntax.Times, right } annotation@Type.Scalar{ scalar }
     | scalar `elem` ([ Monotype.Natural, Monotype.Integer, Monotype.Real ] :: [Monotype.Scalar]) = do
