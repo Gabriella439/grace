@@ -1,0 +1,1 @@
+\x -> (if let (x : Natural) of x in some x) : Optional (Optional Natural)
