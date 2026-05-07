@@ -141,24 +141,14 @@
     , "greeting":
         "Hello, world!"
     , "makeUser":
-        let greeting = "Hello, world!"
+        \{ user } ->
+          let home = "/home/${user}"
 
-        let greet = \{ name } -> "Hello, ${name}!"
+          let privateKey = "${home}/.ssh/id_ed25519"
 
-        in  \{ user } ->
-              let home = "/home/${user}"
+          let publicKey = "${privateKey}.pub"
 
-              let privateKey = "${home}/.ssh/id_ed25519"
-
-              let publicKey = "${privateKey}.pub"
-
-              in  { "home":
-                      home
-                  , "privateKey":
-                      privateKey
-                  , "publicKey":
-                      publicKey
-                  }
+          in  { "home": home, "privateKey": privateKey, "publicKey": publicKey }
     , "users":
         [ { "home":
               "/home/bill"

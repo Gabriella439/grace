@@ -1,1 +1,1 @@
-\x -> (\(x : Integer) -> x) (x : Integer)
+\a -> (\(x : Integer) -> x) (a : Integer)
