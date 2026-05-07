@@ -3973,10 +3973,8 @@ check :: Syntax Location Input -> Type Location -> Grace (Syntax Location Void)
 -- type annotations to fix any type errors that they might encounter, which is
 -- a desirable property!
 
-check Syntax.Lambda{ binding = Syntax.PlainBinding{ plain = Syntax.NameBinding{ name, nameLocation, annotation = Nothing, assignment = Nothing } }, ..} Type.Function{ location = _, .. } = do
+check Syntax.Lambda{ location, binding = Syntax.PlainBinding{ plain = Syntax.NameBinding{ name, nameLocation, annotation = Nothing, assignment = Nothing } }, body } Type.Function{ input, output } = do
     scoped (Context.Annotation name input) do
-        newBody <- check body output
-
         let newBinding = Syntax.PlainBinding
                 { plain = Syntax.NameBinding
                     { nameLocation
@@ -3986,33 +3984,61 @@ check Syntax.Lambda{ binding = Syntax.PlainBinding{ plain = Syntax.NameBinding{ 
                     }
                 }
 
-        return Syntax.Lambda{ body = newBody, binding = newBinding, .. }
+        newBody <- check body output
 
-check annotated@Syntax.Lambda{ binding = Syntax.PlainBinding{ plain = Syntax.NameBinding{ name, nameLocation } } } Type.Function{ location = _, input, output } = do
+        return Syntax.Lambda{ location, binding = newBinding, body = newBody }
+
+check annotated Type.Function{ input, output } = do
+    let candidates₀ = Set.fromList (map Text.singleton [ 'a' .. 'z' ])
+
+    let free = Syntax.freeVariables annotated
+
+    let name = case Set.toList (Set.difference candidates₀ free) of
+            n : _ -> n
+            _ ->
+                let as = Set.filter (Text.isPrefixOf "a") free
+
+                in  head do
+                        suffix <- [ (0 :: Int) .. ]
+
+                        let candidate = Text.pack ("a" <> show suffix)
+
+                        Monad.guard (not (Set.member candidate as))
+
+                        return candidate
+
+    let nameLocation = Type.location input
+
     scoped (Context.Annotation name input) do
+        let argument = Syntax.Variable{ location = nameLocation, name }
+
         let body = Syntax.Application
                 { location = Syntax.location annotated
                 , function = annotated
-                , argument = Syntax.Variable
-                    { location = nameLocation
-                    , name
-                    }
+                , argument
                 }
 
-        newBody <- check body output
+        context <- get
 
-        return Syntax.Lambda
-            { location = Syntax.location annotated
-            , binding = Syntax.PlainBinding
-                { plain = Syntax.NameBinding
-                    { name
-                    , nameLocation
-                    , annotation = Just input
-                    , assignment = Nothing
-                    }
-                }
-            , body = newBody
-            }
+        newBody <- check body (Context.solveType context output)
+
+        case newBody of
+            Syntax.Application{ function = newAnnotated, argument = Syntax.Variable{ name = newName } }
+                | name == newName && not (Syntax.usedIn name newAnnotated) ->
+                    return newAnnotated
+            _ -> do
+                    return Syntax.Lambda
+                        { location = Syntax.location annotated
+                        , binding = Syntax.PlainBinding
+                            { plain = Syntax.NameBinding
+                                { name
+                                , nameLocation
+                                , annotation = Nothing
+                                , assignment = Nothing
+                                }
+                            }
+                        , body = newBody
+                        }
 
 check e Type.Forall{..} = do
     scoped (Context.Variable domain name) do

@@ -1,6 +1,6 @@
-Not a subtype
+Not a function type
 
-The following type:
+An expression of the following type:
 
   Natural
 
@@ -9,11 +9,5 @@ tasty/data/error/type/fold-typo-field-input.ffg:4:14:
 4 │ fold{ false: 0, tru: 1 }
   │              ↑
 
-… is not a subtype of:
-
-  b? -> a?
-
-tasty/data/error/type/fold-typo-field-input.ffg:4:1: 
-  │
-4 │ fold{ false: 0, tru: 1 }
-  │ ↑
+… was invoked as if it were a function, but the above type is not a function
+type.

@@ -9,6 +9,7 @@ module Grace.Syntax
     ( -- * Syntax
       Syntax(..)
     , usedIn
+    , freeVariables
     , effects
     , types
     , complete
@@ -33,6 +34,7 @@ import Data.List.NonEmpty (NonEmpty(..))
 import Data.Monoid (Any)
 import Data.Scientific (Scientific)
 import Data.Sequence (Seq((:<|)))
+import Data.Set (Set)
 import Data.String (IsString(..))
 import Data.Text (Text)
 import GHC.Generics (Generic)
@@ -62,6 +64,7 @@ import Prettyprinter.Internal
 import qualified Control.Lens as Lens
 import qualified Control.Monad as Monad
 import qualified Data.Aeson as Aeson
+import qualified Data.Set as Set
 import qualified Data.Text as Text
 import qualified Grace.Context as Context
 import qualified Grace.Pretty as Pretty
@@ -734,7 +737,7 @@ usedIn name₀ List{ elements } =
 usedIn name₀ Record{ fieldValues } = any onDefinition fieldValues
   where
     onDefinition Definition{ bindings, assignment } =
-        name₀ `notElem` concatMap toNames bindings || usedIn name₀ assignment
+        name₀ `notElem` concatMap toNames bindings && usedIn name₀ assignment
 
     toName NameBinding{ name = name₁ } = name₁
 
@@ -747,7 +750,7 @@ usedIn name₀ Alternative{ argument } =
 usedIn name₀ Fold{ handlers } =
     usedIn name₀ handlers
 usedIn name₀ If{ predicate, ifTrue, ifFalse } =
-    usedIn name₀ predicate && usedIn name₀ ifTrue && usedIn name₀ ifFalse
+    usedIn name₀ predicate || usedIn name₀ ifTrue || usedIn name₀ ifFalse
 usedIn name₀ Text{ chunks = Chunks _ pairs } =
     any (usedIn name₀ . fst) pairs
 usedIn _ Scalar{ } =
@@ -763,11 +766,85 @@ usedIn name₀ GitHub{ arguments } =
 usedIn name₀ Show{ arguments } =
     usedIn name₀ arguments
 usedIn name₀ Operator{ left, right } =
-    usedIn name₀ left && usedIn name₀ right
+    usedIn name₀ left || usedIn name₀ right
 usedIn _ Builtin{ } =
     False
 usedIn _ Embed{ } =
     False
+
+-- | Returns all free variables within an expression
+freeVariables :: Syntax s a -> Set Text
+freeVariables Variable{ name } = Set.singleton name
+freeVariables Lambda{ binding = PlainBinding{ plain = NameBinding{ name } }, body } =
+    Set.delete name (freeVariables body)
+freeVariables Lambda{ binding = RecordBinding{ fieldNames }, body } =
+    Set.difference (freeVariables body) (Set.fromList (map toName fieldNames))
+  where
+    toName NameBinding{ name = name₁ } = name₁
+freeVariables Application{ function, argument } =
+    Set.union (freeVariables function) (freeVariables argument)
+freeVariables Annotation{ annotated } =
+    freeVariables annotated
+freeVariables Let{ assignments = Define{ definition = Definition{ name, assignment } } :| [], body } =
+    Set.union (freeVariables assignment) (Set.delete name (freeVariables body))
+freeVariables Let{ assignments = Bind{ binding, assignment } :| [], body } =
+    Set.union (freeVariables assignment) (Set.difference (freeVariables body) (Set.fromList (toNames binding)))
+  where
+    toName NameBinding{ name = name₁ } = name₁
+
+    toNames PlainBinding{ plain } = [ toName plain ]
+    toNames RecordBinding{ fieldNames } = map toName fieldNames
+freeVariables Let{ location, assignments = Define{ definition = Definition{ name, assignment } } :| (a : as), body } =
+    Set.union (freeVariables assignment) (Set.delete name (freeVariables Let{ location, assignments = a :| as, body }))
+freeVariables Let{ location, assignments = Bind{ binding, assignment } :| (a : as), body } =
+    Set.union (freeVariables assignment) (Set.difference (freeVariables Let{ location, assignments = a :| as, body }) (Set.fromList (toNames binding)))
+  where
+    toName NameBinding{ name = name₁ } = name₁
+
+    toNames PlainBinding{ plain } = [ toName plain ]
+    toNames RecordBinding{ fieldNames } = map toName fieldNames
+freeVariables List{ elements } =
+    Set.unions (fmap freeVariables elements)
+freeVariables Record{ fieldValues } = Set.unions (fmap onDefinition fieldValues)
+  where
+    onDefinition Definition{ bindings, assignment } =
+        Set.difference (freeVariables assignment) (Set.fromList (concatMap toNames bindings))
+
+    toName NameBinding{ name = name₁ } = name₁
+
+    toNames PlainBinding{ plain } = [ toName plain ]
+    toNames RecordBinding{ fieldNames } = map toName fieldNames
+freeVariables Project{ larger } =
+    freeVariables larger
+freeVariables Alternative{ argument } =
+    freeVariables argument
+freeVariables Fold{ handlers } =
+    freeVariables handlers
+freeVariables If{ predicate, ifTrue, ifFalse } =
+    Set.unions
+        ( [freeVariables predicate, freeVariables ifTrue, freeVariables ifFalse]
+        :: [Set Text]
+        )
+freeVariables Text{ chunks = Chunks _ pairs } =
+    Set.unions (fmap (freeVariables . fst) pairs)
+freeVariables Scalar{ } =
+    Set.empty
+freeVariables Prompt{ arguments } =
+    freeVariables arguments
+freeVariables HTTP{ arguments } =
+    freeVariables arguments
+freeVariables Read{ arguments } =
+    freeVariables arguments
+freeVariables GitHub{ arguments } =
+    freeVariables arguments
+freeVariables Show{ arguments } =
+    freeVariables arguments
+freeVariables Operator{ left, right } =
+    Set.union (freeVariables left) (freeVariables right)
+freeVariables Builtin{ } =
+    Set.empty
+freeVariables Embed{ } =
+    Set.empty
 
 -- | `Getting` that matches all effects within a `Syntax` tree
 effects :: Getting Any (Syntax s a) ()

@@ -1,0 +1,1 @@
+\a -> fold { "true": 0, "false": 1 } a : Integer
