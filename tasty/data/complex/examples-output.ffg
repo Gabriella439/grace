@@ -67,7 +67,7 @@
                 , "effort":
                     null
                 }
-                : forall (p : Type) . p
+                : forall (n : Type) . n
           , "structuredNames":
               prompt
                 { "key":

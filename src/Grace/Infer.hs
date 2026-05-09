@@ -1978,7 +1978,11 @@ instantiateAlternativesR location alternatives@(Type.Alternatives kAs rest) p₀
 
 onNameBinding
     :: NameBinding Location Input
-    -> Grace ((Text, Type Location), Entry Location, NameBinding Location Void)
+    -> Grace
+        ( (Text, Type Location)
+        , Entry Location
+        , Grace (NameBinding Location Void)
+        )
 onNameBinding Syntax.NameBinding{ nameLocation, name, annotation = Nothing, assignment = Nothing } = do
     existential <- fresh
 
@@ -1993,29 +1997,38 @@ onNameBinding Syntax.NameBinding{ nameLocation, name, annotation = Nothing, assi
 
     let entry = Context.Annotation name annotation
 
-    let newNameBinding = Syntax.NameBinding
-            { nameLocation
-            , name
-            , annotation = Nothing
-            , assignment = Nothing
-            }
+    let generateNameBinding = do
+            return Syntax.NameBinding
+                { nameLocation
+                , name
+                , annotation = Nothing
+                , assignment = Nothing
+                }
 
-    return (fieldType, entry, newNameBinding)
+    return (fieldType, entry, generateNameBinding)
 onNameBinding Syntax.NameBinding{ nameLocation, name, annotation = Just annotation, assignment = Nothing } = do
     let fieldType = (name, annotation)
 
     let entry = Context.Annotation name annotation
 
-    let newNameBinding = Syntax.NameBinding
-            { nameLocation
-            , name
-            , annotation = Just annotation
-            , assignment = Nothing
-            }
+    let generateNameBinding = do
+            return Syntax.NameBinding
+                { nameLocation
+                , name
+                , annotation = Just annotation
+                , assignment = Nothing
+                }
 
-    return (fieldType, entry, newNameBinding)
+    return (fieldType, entry, generateNameBinding)
 onNameBinding Syntax.NameBinding{ nameLocation, name, annotation = Nothing, assignment = Just assignment } = do
-    (annotation₀, newAssignment) <- infer assignment
+    existential <- fresh
+
+    push (Context.UnsolvedType existential)
+
+    let annotation₀ = Type.UnsolvedType
+            { location = Syntax.location assignment
+            , existential
+            }
 
     let annotation₁ = Type.Optional
             { location = Syntax.location assignment
@@ -2026,48 +2039,57 @@ onNameBinding Syntax.NameBinding{ nameLocation, name, annotation = Nothing, assi
 
     let entry = Context.Annotation name annotation₀
 
-    let newNameBinding = Syntax.NameBinding
-            { nameLocation
-            , name
-            , annotation = Nothing
-            , assignment = Just newAssignment
-            }
+    let generateNameBinding = do
+            newAssignment <- check assignment annotation₀
 
-    return (fieldType, entry, newNameBinding)
+            return Syntax.NameBinding
+                { nameLocation
+                , name
+                , annotation = Nothing
+                , assignment = Just newAssignment
+                }
+
+    return (fieldType, entry, generateNameBinding)
 onNameBinding Syntax.NameBinding{ nameLocation, name, annotation = Just annotation₀, assignment = Just assignment } = do
     let annotation₁ = Type.Optional
             { location = Syntax.location assignment
             , type_ = annotation₀
             }
 
-    context <- get
-
-    newAssignment <- check assignment (Context.solveType context annotation₀)
-
     let fieldType = (name, annotation₁)
 
     let entry = Context.Annotation name annotation₀
 
-    let newNameBinding = Syntax.NameBinding
-            { nameLocation
-            , name
-            , annotation = Just annotation₀
-            , assignment = Just newAssignment
-            }
+    let generateNameBinding = do
+            context <- get
 
-    return (fieldType, entry, newNameBinding)
+            newAssignment <- check assignment (Context.solveType context annotation₀)
+
+            return Syntax.NameBinding
+                { nameLocation
+                , name
+                , annotation = Just annotation₀
+                , assignment = Just newAssignment
+                }
+
+    return (fieldType, entry, generateNameBinding)
 
 onBinding
     :: Binding Location Input
-    -> Grace (Type Location, Context Location, Binding Location Void)
+    -> Grace (Type Location, Context Location, Grace (Binding Location Void))
 onBinding Syntax.PlainBinding{ plain } = do
-    ((_, annotation), entry, newPlain) <- onNameBinding plain
+    ((_, annotation), entry, generateNameBinding) <- onNameBinding plain
 
-    return (annotation, [ entry ], Syntax.PlainBinding{ plain = newPlain })
+    let generateBinding = do
+            newPlain <- generateNameBinding
+
+            return Syntax.PlainBinding{ plain = newPlain }
+
+    return (annotation, [ entry ], generateBinding)
 onBinding Syntax.RecordBinding{ fieldNamesLocation, fieldNames } = do
     tuples <- traverse onNameBinding fieldNames
 
-    let (fieldTypes, entries, newFieldNames) = unzip3 tuples
+    let (fieldTypes, entries, generateNameBindings) = unzip3 tuples
 
     existential <- fresh
 
@@ -2079,16 +2101,19 @@ onBinding Syntax.RecordBinding{ fieldNamesLocation, fieldNames } = do
                 Type.Fields fieldTypes (Monotype.UnsolvedFields existential)
             }
 
-    let newBinding = Syntax.RecordBinding
-            { fieldNamesLocation
-            , fieldNames = newFieldNames
-            }
+    let generateBinding = do
+            newFieldNames <- sequence generateNameBindings
 
-    return (annotation, entries, newBinding)
+            return Syntax.RecordBinding
+                { fieldNamesLocation
+                , fieldNames = newFieldNames
+                }
+
+    return (annotation, entries, generateBinding)
 
 onDefinition
     :: Definition Location Input
-    -> Grace ((Text, Type Location), Definition Location Void)
+    -> Grace ((Text, Type Location), Grace (Definition Location Void))
 onDefinition Syntax.Definition
     { nameLocation
     , name
@@ -2098,7 +2123,7 @@ onDefinition Syntax.Definition
     } = do
         results <- traverse onBinding bindings
 
-        let (inputs, entriess, newBindings) = unzip3 results
+        let (inputs, entriess, generateBindings) = unzip3 results
 
         annotation₁ <- case annotation₀ of
             Just annotation₁ -> do
@@ -2114,19 +2139,25 @@ onDefinition Syntax.Definition
                     , existential
                     }
 
-        let nil = check assignment₀ annotation₁
+        let generateDefinition = do
+                newBindings <- sequence generateBindings
 
-        assignment₁ <- foldr scoped nil (concat entriess)
+                let nil = do
+                        context <- get
 
-        context <- get
+                        check assignment₀ (Context.solveType context annotation₁)
 
-        let newDefinition = Syntax.Definition
-                { nameLocation
-                , name
-                , bindings = newBindings
-                , annotation = annotation₀
-                , assignment = solveSyntax context assignment₁
-                }
+                assignment₁ <- foldr scoped nil (concat entriess)
+
+                context <- get
+
+                return Syntax.Definition
+                    { nameLocation
+                    , name
+                    , bindings = newBindings
+                    , annotation = annotation₀
+                    , assignment = solveSyntax context assignment₁
+                    }
 
         let cons input output = Type.Function
                 { location = nameLocation
@@ -2134,12 +2165,11 @@ onDefinition Syntax.Definition
                 , output
                 }
 
-        let annotation₂ =
-                Context.solveType context (foldr cons annotation₁ inputs)
+        let annotation₂ = foldr cons annotation₁ inputs
 
         let fieldType = (name, annotation₂)
 
-        return (fieldType, newDefinition)
+        return (fieldType, generateDefinition)
 
 {-| This corresponds to the judgment:
 
@@ -2163,7 +2193,7 @@ infer e₀ = do
             return (inferred, Syntax.Variable{ location, name })
 
         Syntax.Lambda{ location, binding, body } -> do
-            (input, entries, newBinding) <- onBinding binding
+            (input, entries, generateBinding) <- onBinding binding
 
             existential <- fresh
 
@@ -2180,6 +2210,8 @@ infer e₀ = do
                     context <- get
 
                     let inferred = Type.Function{ location, input, output }
+
+                    newBinding <- generateBinding
 
                     let newLambda = Syntax.Lambda
                             { location
@@ -2224,7 +2256,9 @@ infer e₀ = do
 
         Syntax.Let{ location, assignments, body } -> do
             let cons Syntax.Define{ assignmentLocation, definition } action = do
-                    ((name, annotation), newDefinition) <- onDefinition definition
+                    ((name, annotation), generateDefinition) <- onDefinition definition
+
+                    newDefinition <- generateDefinition
 
                     let entry = Context.Annotation name annotation
 
@@ -2239,7 +2273,9 @@ infer e₀ = do
                         return (newAssignment : newAssignments, newBody)
 
                 cons Syntax.Bind{ assignmentLocation, monad, binding, assignment = value } action = do
-                    (annotation₀, newEntries, newBinding) <- onBinding binding
+                    (annotation₀, newEntries, generateBinding) <- onBinding binding
+
+                    newBinding <- generateBinding
 
                     (newAssignments, newBody) <- foldr scoped action newEntries
 
@@ -2369,7 +2405,9 @@ infer e₀ = do
         Syntax.Record{ location, fieldValues } -> do
             result <- traverse onDefinition fieldValues
 
-            let (fieldTypes, newFieldValues) = unzip result
+            let (fieldTypes, generateDefinitions) = unzip result
+
+            newFieldValues <- sequence generateDefinitions
 
             let inferred = Type.Record
                     { location
@@ -3095,15 +3133,17 @@ infer e₀ = do
                     | otherwise -> do
                         return json
 
-            newArguments <- check arguments input
+            context₀ <- get
 
-            context <- get
+            newArguments <- check arguments (Context.solveType context₀ input)
+
+            context₁ <- get
 
             let newShow = Syntax.Show
                     { location
                     , export
-                    , arguments = solveSyntax context newArguments
-                    , schema = Just input
+                    , arguments = solveSyntax context₁ newArguments
+                    , schema = Just (Context.solveType context₁ input)
                     }
 
             let type_ = Type.Scalar{ location, scalar = Monotype.Text }
@@ -3964,6 +4004,55 @@ check :: Syntax Location Input -> Type Location -> Grace (Syntax Location Void)
 -- type annotations to fix any type errors that they might encounter, which is
 -- a desirable property!
 
+check Syntax.Variable{ location, name } annotation@Type.UnsolvedType{ existential = existential₀ } = do
+    context <- get
+
+    type₀ <- Context.lookup name context `orDie` UnboundVariable location name
+
+    let type₁ = Context.solveType context type₀
+
+    case type₁ of
+        Type.UnsolvedType{ existential = existential₁ }
+            | existential₀ == existential₁ -> do
+                return ()
+        _   | existential₀ `Type.typeFreeIn` type₁ -> do
+                Exception.throwIO (Occurs annotation type₁)
+            | otherwise -> do
+                instantiateTypeR type₁ existential₀
+
+    return Syntax.Variable{ location, name }
+
+check Syntax.Lambda{ location, binding, body } Type.UnsolvedType{ existential = existential₀ } = do
+    existential₁ <- fresh
+
+    push (Context.UnsolvedType existential₁)
+
+    let output = Type.UnsolvedType
+            { location = Syntax.location body
+            , existential = existential₁
+            }
+
+    (input, entries, generateBinding) <- onBinding binding
+
+    let type_ = Type.Function{ location, input, output }
+
+    instantiateTypeR type_ existential₀
+
+    newBinding <- generateBinding
+
+    let nil = do
+            context <- get
+
+            newBody <- check body (Context.solveType context output)
+
+            return Syntax.Lambda
+                { location
+                , binding = newBinding
+                , body = newBody
+                }
+
+    foldr scoped nil entries
+
 check Syntax.Lambda{ location, binding = Syntax.PlainBinding{ plain = Syntax.NameBinding{ name, nameLocation, annotation = Nothing, assignment = Nothing } }, body } Type.Function{ input, output } = do
     scoped (Context.Annotation name input) do
         let newBinding = Syntax.PlainBinding
@@ -4037,7 +4126,9 @@ check e Type.Forall{..} = do
 
 check Syntax.Let{ location, assignments, body = body₀ } annotation₀ = do
     let cons Syntax.Define{ assignmentLocation, definition } action = do
-            ((name, annotation₁), newDefinition) <- onDefinition definition
+            ((name, annotation₁), generateDefinition) <- onDefinition definition
+
+            newDefinition <- generateDefinition
 
             let entry = Context.Annotation name annotation₁
 
@@ -4052,7 +4143,9 @@ check Syntax.Let{ location, assignments, body = body₀ } annotation₀ = do
                 return (newAssignment : newAssignments, newBody)
 
         cons Syntax.Bind{ assignmentLocation, monad, binding, assignment = value } action = do
-            (annotation₁, newEntries, newBinding) <- onBinding binding
+            (annotation₁, newEntries, generateBinding) <- onBinding binding
+
+            newBinding <- generateBinding
 
             (newAssignments, newBody) <- foldr scoped action newEntries
 
@@ -4593,7 +4686,9 @@ check Syntax.Record{ location, fieldValues } annotation₀@Type.Scalar{ scalar =
 
     result <- traverse process fieldValues
 
-    let (_, newFieldValues) = unzip result
+    let (_, generateDefinitions) = unzip result
+
+    newFieldValues <- sequence generateDefinitions
 
     return Syntax.Record{ location, fieldValues = newFieldValues }
 
@@ -4874,7 +4969,12 @@ isSubtypeOfJSON location = loop
     loop Type.Optional{ type_ } = do
         loop type_
     loop type_@Type.Record{ fields = Type.Fields fieldTypes remainingFields } = do
-        traverse_ (\(_, type₀) -> loop type₀) fieldTypes
+        let process (_, type₀) = do
+                context <- get
+
+                loop (Context.solveType context type₀)
+
+        traverse_ process fieldTypes
 
         case remainingFields of
             Monotype.EmptyFields -> do
@@ -5083,6 +5183,7 @@ data TypeInferenceError
     | FieldsVariableMismatch Location Monotype.RemainingFields Location Monotype.RemainingFields
     | AlternativesVariableMismatch Location Monotype.RemainingAlternatives Location Monotype.RemainingAlternatives
     --
+    | Occurs (Type Location) (Type Location)
     deriving stock (Eq, Show)
 
 instance Exception TypeInferenceError where
@@ -5529,6 +5630,23 @@ instance Exception TypeInferenceError where
         \" <> Text.unpack (Location.renderError "" location₁) <> "\n\
         \\n\
         \… cannot be unified"
+
+    displayException (Occurs type₀ type₁) =
+        "Type variable self-reference\n\
+        \\n\
+        \This unsolved type variable:\n\
+        \\n\
+        \" <> insert type₀ <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location type₀)) <> "\n\
+        \\n\
+        \… cannot match this type:\n\
+        \\n\
+        \" <> insert type₁ <> "\n\
+        \\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location type₁)) <> "\n\
+        \\n\
+        \… because the latter type contains a reference to the former type variable"
 
 data AssignmentMismatch = AssignmentMismatch
     { location₀ :: Location

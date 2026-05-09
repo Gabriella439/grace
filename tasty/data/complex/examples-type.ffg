@@ -1,9 +1,9 @@
 forall (k : Fields) .
 forall (l : Fields) .
 forall (m : Fields) .
-forall (n : Fields) .
+forall (n : Type) .
 forall (o : Fields) .
-forall (p : Type) .
+forall (p : Fields) .
 forall (q : Fields) .
   { hello:
       Text
@@ -47,7 +47,7 @@ forall (q : Fields) .
   , prompting:
       { "OpenAI API key": Key, q } ->
         { names:
-            p
+            n
         , structuredNames:
             List Text
         , fullNames:
@@ -61,7 +61,7 @@ forall (q : Fields) .
       Natural
   , functions:
       { greet:
-          { name: Text, o } -> Text
+          { name: Text, m } -> Text
       , greeting:
           Text
       , makeUser:
@@ -83,7 +83,7 @@ forall (q : Fields) .
               >
           , "Taxable income":
               Real
-          , n
+          , l
           } ->
             { "Tax": Real }
       , "GitHub import":
@@ -99,7 +99,7 @@ forall (q : Fields) .
               >
           , "Taxable income":
               Real
-          , m
+          , k
           } ->
             { "Tax": Real }
       , "Short link":
@@ -110,9 +110,9 @@ forall (q : Fields) .
           Bool -> Bool
       }
   , coding:
-      { "OpenAI API key": Key, l } ->
+      { "OpenAI API key": Key, p } ->
       { "Job Description": Text } ->
         { "Is Finance?": Bool, "Rationale": Text }
   , conclusion:
-      { "Want to get involved?": Bool, k } -> Text
+      { "Want to get involved?": Bool, o } -> Text
   }
