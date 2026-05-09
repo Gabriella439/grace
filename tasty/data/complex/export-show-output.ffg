@@ -3,5 +3,5 @@
 , "Example 1":
     "\\x -> x"
 , "Example 2":
-    \x -> export show (x : forall (b : Type) . b)
+    \x -> export show (x : forall (a : Type) . a)
 }

@@ -1,6 +1,15 @@
-Not a subtype
+Type variable self-reference
 
-The following type:
+This unsolved type variable:
+
+  c?
+
+tasty/data/error/type/occurs-type-input.ffg:2:2: 
+  │
+2 │ \x -> x x
+  │  ↑
+
+… cannot match this type:
 
   c? -> d?
 
@@ -9,11 +18,4 @@ tasty/data/error/type/occurs-type-input.ffg:2:2:
 2 │ \x -> x x
   │  ↑
 
-… is not a subtype of:
-
-  c?
-
-tasty/data/error/type/occurs-type-input.ffg:2:2: 
-  │
-2 │ \x -> x x
-  │  ↑
+… because the latter type contains a reference to the former type variable
