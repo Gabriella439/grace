@@ -272,724 +272,712 @@ isFieldRequired fieldType = do
 
 -- | Computes the supertype of the two input types
 supertypeOf :: Type Location -> Type Location -> Grace (Type Location)
-supertypeOf a b = do
-    context₀ <- get
+supertypeOf type₀@UnsolvedType{ existential = existential₀ } UnsolvedType{ existential = existential₁ } = do
+    Monad.unless (existential₀ == existential₁) do
+        equateTypes existential₀ existential₁
 
-    case (a, b) of
-        (type₀@UnsolvedType{ existential = existential₀ }, UnsolvedType { existential = existential₁ }) -> do
-            Monad.unless (existential₀ == existential₁) do
-                equateTypes existential₀ existential₁
+    return type₀
 
-            return type₀
+supertypeOf UnsolvedType{ existential } type_
+    | not (existential `Type.typeFreeIn` type_) = do
+        instantiateTypeL existential type_
 
-        (UnsolvedType{ existential }, type_)
-            | not (existential `Type.typeFreeIn` type_)
-            , elem (Context.UnsolvedType existential) context₀ -> do
-                instantiateTypeL existential type_
+        return type_
 
-                return type_
+supertypeOf type_ UnsolvedType{ existential }
+    | not (existential `Type.typeFreeIn` type_) = do
+        instantiateTypeL existential type_
 
-        (type_, UnsolvedType{ existential })
-            | not (existential `Type.typeFreeIn` type_)
-            , elem (Context.UnsolvedType existential) context₀ -> do
-                instantiateTypeL existential type_
+        return type_
 
-                return type_
+supertypeOf Forall{ location, nameLocation, name, domain, type_ = type₀ } type₁ = do
+    type_ <- supertypeOf type₀ type₁
 
-        (Forall{ location, nameLocation, name, domain, type_ = type₀ }, type₁) -> do
-            type_ <- supertypeOf type₀ type₁
+    return Forall{ location, nameLocation, name, domain, type_ }
 
-            return Forall{ location, nameLocation, name, domain, type_ }
+supertypeOf type₀ Forall{ location, nameLocation, name, domain, type_ = type₁ } = do
+    type_ <- supertypeOf type₀ type₁
 
-        (type₀, Forall{ location, nameLocation, name, domain, type_ = type₁ }) -> do
-            type_ <- supertypeOf type₀ type₁
+    return Forall{ location, nameLocation, name, domain, type_ }
 
-            return Forall{ location, nameLocation, name, domain, type_ }
+supertypeOf VariableType{ location, name = name₀ } VariableType{ name = name₁ }
+    | name₀ == name₁ = do
+        return VariableType{ location, name = name₀ }
 
-        (VariableType{ location, name = name₀ }, VariableType{ name = name₁ })
-            | name₀ == name₁ -> do
-                return VariableType{ location, name = name₀ }
+supertypeOf Function{ location, input = input₀, output = output₀ } Function{ input = input₁, output = output₁ } = do
+    input <- subtypeOf input₀ input₁
 
-        (Function{ location, input = input₀, output = output₀ }, Function{ input = input₁, output = output₁ }) -> do
-            input <- subtypeOf input₀ input₁
+    context <- get
 
+    output <- supertypeOf (Context.solveType context output₀) (Context.solveType context output₁)
+
+    return Function{ location, input, output }
+
+supertypeOf List{ location, type_ = type₀ } List{ type_ = type₁ } = do
+    type_ <- supertypeOf type₀ type₁
+
+    return List{ location, type_ }
+
+supertypeOf Record{ location = location₀, fields = fields₀ } Record{ location = location₁, fields = fields₁ } = do
+    let Type.Fields fieldTypes₀ remainingFields₀ = fields₀
+    let Type.Fields fieldTypes₁ remainingFields₁ = fields₁
+
+    let map₀ = Map.fromList fieldTypes₀
+    let map₁ = Map.fromList fieldTypes₁
+
+    let combine type₀ type₁ = do
             context <- get
 
-            output <- supertypeOf (Context.solveType context output₀) (Context.solveType context output₁)
+            supertypeOf (Context.solveType context type₀) (Context.solveType context type₁)
 
-            return Function{ location, input, output }
+    both <- sequence (Map.intersectionWith combine map₀ map₁)
 
-        (List{ location, type_ = type₀ }, List{ type_ = type₁ }) -> do
-            type_ <- supertypeOf type₀ type₁
+    let optional location type_ = do
+            context <- get
 
-            return List{ location, type_ }
+            required <- isFieldRequired (Context.solveType context type_)
 
-        (Record{ location = location₀, fields = fields₀ }, Record{ location = location₁, fields = fields₁ }) -> do
-            let Type.Fields fieldTypes₀ remainingFields₀ = fields₀
-            let Type.Fields fieldTypes₁ remainingFields₁ = fields₁
+            if required
+                then return Optional{ location, type_ }
+                else return type_
 
-            let map₀ = Map.fromList fieldTypes₀
-            let map₁ = Map.fromList fieldTypes₁
+    let extra₀ = Map.difference map₀ map₁
+    let extra₁ = Map.difference map₁ map₀
 
-            let combine type₀ type₁ = do
-                    context <- get
+    let location
+            | null extra₁ = location₀
+            | otherwise   = location₁
 
-                    supertypeOf (Context.solveType context type₀) (Context.solveType context type₁)
+    -- TODO: Check if `UnsolvedFields` are solved by now
+    case (remainingFields₀, remainingFields₁) of
+        _ | remainingFields₀ == remainingFields₁ -> do
+            optionalExtra₀ <- traverse (optional location₀) extra₀
+            optionalExtra₁ <- traverse (optional location₁) extra₁
 
-            both <- sequence (Map.intersectionWith combine map₀ map₁)
+            let fieldTypes =
+                    Map.toList (both <> optionalExtra₀ <> optionalExtra₁)
 
-            let optional location type_ = do
-                    context <- get
+            return Record
+                { location
+                , fields = Type.Fields fieldTypes remainingFields₀
+                }
 
-                    required <- isFieldRequired (Context.solveType context type_)
+        (Monotype.UnsolvedFields p₀, Monotype.UnsolvedFields p₁) -> do
+            p₂ <- fresh
 
-                    if required
-                        then return Optional{ location, type_ }
-                        else return type_
+            context₁ <- get
 
-            let extra₀ = Map.difference map₀ map₁
-            let extra₁ = Map.difference map₁ map₀
+            let p₀First = do
+                    (contextAfter, contextBefore) <- Context.splitOnUnsolvedFields p₀ context₁
 
-            let location
-                    | null extra₁ = location₀
-                    | otherwise   = location₁
+                    Monad.guard (Context.UnsolvedFields p₁ `elem` contextAfter)
 
-            -- TODO: Check if `UnsolvedFields` are solved by now
-            case (remainingFields₀, remainingFields₁) of
-                _ | remainingFields₀ == remainingFields₁ -> do
-                    optionalExtra₀ <- traverse (optional location₀) extra₀
-                    optionalExtra₁ <- traverse (optional location₁) extra₁
+                    let command =
+                            set (   contextAfter
+                                <>  ( Context.UnsolvedFields p₀
+                                    : Context.UnsolvedFields p₂
+                                    : contextBefore
+                                    )
+                                )
 
-                    let fieldTypes =
-                            Map.toList (both <> optionalExtra₀ <> optionalExtra₁)
+                    return command
 
-                    return Record
-                        { location
-                        , fields = Type.Fields fieldTypes remainingFields₀
-                        }
+            let p₁First = do
+                    (contextAfter, contextBefore) <- Context.splitOnUnsolvedFields p₁ context₁
 
-                (Monotype.UnsolvedFields p₀, Monotype.UnsolvedFields p₁) -> do
-                    p₂ <- fresh
+                    Monad.guard (Context.UnsolvedFields p₀ `elem` contextAfter)
 
-                    context₁ <- get
+                    let command =
+                            set (   contextAfter
+                                <>  ( Context.UnsolvedFields p₁
+                                    : Context.UnsolvedFields p₂
+                                    : contextBefore
+                                    )
+                                )
 
-                    let p₀First = do
-                            (contextAfter, contextBefore) <- Context.splitOnUnsolvedFields p₀ context₁
+                    return command
 
-                            Monad.guard (Context.UnsolvedFields p₁ `elem` contextAfter)
+            case p₀First <|> p₁First of
+                Nothing -> do
+                    Exception.throwIO (MissingOneOfFields [location₀, location₁] p₀ p₁ context₁)
 
-                            let command =
-                                    set (   contextAfter
-                                        <>  ( Context.UnsolvedFields p₀
-                                            : Context.UnsolvedFields p₂
-                                            : contextBefore
-                                            )
-                                        )
+                Just setContext -> do
+                    setContext
 
-                            return command
+            context₂ <- get
 
-                    let p₁First = do
-                            (contextAfter, contextBefore) <- Context.splitOnUnsolvedFields p₁ context₁
+            instantiateFieldsL
+                p₀
+                location₁
+                (Context.solveRecord context₂
+                    (Type.Fields (Map.toList extra₁)
+                        (Monotype.UnsolvedFields p₂)
+                    )
+                )
 
-                            Monad.guard (Context.UnsolvedFields p₀ `elem` contextAfter)
+            context₃ <- get
 
-                            let command =
-                                    set (   contextAfter
-                                        <>  ( Context.UnsolvedFields p₁
-                                            : Context.UnsolvedFields p₂
-                                            : contextBefore
-                                            )
-                                        )
+            instantiateFieldsL
+                p₁
+                location₀
+                (Context.solveRecord context₃
+                    (Type.Fields (Map.toList extra₀)
+                        (Monotype.UnsolvedFields p₂)
+                    )
+                )
 
-                            return command
+            let fieldTypes = Map.toList (both <> extra₀ <> extra₁)
 
-                    case p₀First <|> p₁First of
-                        Nothing -> do
-                            Exception.throwIO (MissingOneOfFields [location₀, location₁] p₀ p₁ context₁)
+            return Record
+                { location
+                , fields = Type.Fields fieldTypes (Monotype.UnsolvedFields p₂)
+                }
 
-                        Just setContext -> do
-                            setContext
+        (Monotype.UnsolvedFields p₀, _) -> do
+            context₁ <- get
 
-                    context₂ <- get
+            instantiateFieldsL
+                p₀
+                location₁
+                (Context.solveRecord context₁
+                    (Type.Fields (Map.toList extra₁) remainingFields₁)
+                )
 
-                    instantiateFieldsL
-                        p₀
-                        location₁
-                        (Context.solveRecord context₂
-                            (Type.Fields (Map.toList extra₁)
-                                (Monotype.UnsolvedFields p₂)
-                            )
-                        )
+            optionalExtra₀ <- traverse (optional location₀) extra₀
 
-                    context₃ <- get
+            let fieldTypes =
+                    Map.toList (both <> optionalExtra₀ <> extra₁)
 
-                    instantiateFieldsL
-                        p₁
-                        location₀
-                        (Context.solveRecord context₃
-                            (Type.Fields (Map.toList extra₀)
-                                (Monotype.UnsolvedFields p₂)
-                            )
-                        )
+            return Record
+                { location
+                , fields = Type.Fields fieldTypes remainingFields₁
+                }
 
-                    let fieldTypes = Map.toList (both <> extra₀ <> extra₁)
+        (_, Monotype.UnsolvedFields p₁) -> do
+            context₁ <- get
 
-                    return Record
-                        { location
-                        , fields = Type.Fields fieldTypes (Monotype.UnsolvedFields p₂)
-                        }
+            instantiateFieldsL
+                p₁
+                location₀
+                (Context.solveRecord context₁
+                    (Type.Fields (Map.toList extra₀) remainingFields₀)
+                )
 
-                (Monotype.UnsolvedFields p₀, _) -> do
-                    context₁ <- get
+            optionalExtra₁ <- traverse (optional location₁) extra₁
 
-                    instantiateFieldsL
-                        p₀
-                        location₁
-                        (Context.solveRecord context₁
-                            (Type.Fields (Map.toList extra₁) remainingFields₁)
-                        )
+            let fieldTypes =
+                    Map.toList (both <> extra₀ <> optionalExtra₁)
 
-                    optionalExtra₀ <- traverse (optional location₀) extra₀
+            return Record
+                { location
+                , fields = Type.Fields fieldTypes remainingFields₀
+                }
 
-                    let fieldTypes =
-                            Map.toList (both <> optionalExtra₀ <> extra₁)
+        _ -> do
+            -- TODO: Improve location
+            Exception.throwIO (FieldsVariableMismatch location₀ remainingFields₀ location₁ remainingFields₁)
 
-                    return Record
-                        { location
-                        , fields = Type.Fields fieldTypes remainingFields₁
-                        }
+supertypeOf Type.Union{ location = location₀, alternatives = alternatives₀ } Type.Union{ location = location₁, alternatives = alternatives₁ } = do
+    let Type.Alternatives alternativeTypes₀ remainingAlternatives₀ = alternatives₀
+    let Type.Alternatives alternativeTypes₁ remainingAlternatives₁ = alternatives₁
 
-                (_, Monotype.UnsolvedFields p₁) -> do
-                    context₁ <- get
+    let map₀ = Map.fromList alternativeTypes₀
+    let map₁ = Map.fromList alternativeTypes₁
 
-                    instantiateFieldsL
-                        p₁
-                        location₀
-                        (Context.solveRecord context₁
-                            (Type.Fields (Map.toList extra₀) remainingFields₀)
-                        )
+    let combine type₀ type₁ = do
+            context <- get
 
-                    optionalExtra₁ <- traverse (optional location₁) extra₁
+            supertypeOf (Context.solveType context type₀) (Context.solveType context type₁)
 
-                    let fieldTypes =
-                            Map.toList (both <> extra₀ <> optionalExtra₁)
+    both <- sequence (Map.intersectionWith combine map₀ map₁)
 
-                    return Record
-                        { location
-                        , fields = Type.Fields fieldTypes remainingFields₀
-                        }
+    let extra₀ = Map.difference map₀ map₁
+    let extra₁ = Map.difference map₁ map₀
 
-                _ -> do
-                    -- TODO: Improve location
-                    Exception.throwIO (FieldsVariableMismatch location₀ remainingFields₀ location₁ remainingFields₁)
+    let alternativeTypes =
+            Map.toList (both <> extra₀ <> extra₁)
 
-        (Type.Union{ location = location₀, alternatives = alternatives₀ }, Type.Union{ location = location₁, alternatives = alternatives₁ }) -> do
-            let Type.Alternatives alternativeTypes₀ remainingAlternatives₀ = alternatives₀
-            let Type.Alternatives alternativeTypes₁ remainingAlternatives₁ = alternatives₁
+    let location
+            | null extra₁ = location₀
+            | otherwise   = location₁
 
-            let map₀ = Map.fromList alternativeTypes₀
-            let map₁ = Map.fromList alternativeTypes₁
+    -- TODO: Check if `UnsolvedAlternatives` are solved by now
+    case (remainingAlternatives₀, remainingAlternatives₁) of
+        _ | remainingAlternatives₀ == remainingAlternatives₁ -> do
+            return Type.Union
+                { location
+                , alternatives =
+                    Type.Alternatives alternativeTypes remainingAlternatives₀
+                }
 
-            let combine type₀ type₁ = do
-                    context <- get
+        (Monotype.UnsolvedAlternatives p₀, Monotype.UnsolvedAlternatives p₁) -> do
+            p₂ <- fresh
 
-                    supertypeOf (Context.solveType context type₀) (Context.solveType context type₁)
+            context₁ <- get
 
-            both <- sequence (Map.intersectionWith combine map₀ map₁)
+            let p₀First = do
+                    (contextAfter, contextBefore) <- Context.splitOnUnsolvedAlternatives p₀ context₁
 
-            let extra₀ = Map.difference map₀ map₁
-            let extra₁ = Map.difference map₁ map₀
+                    Monad.guard (Context.UnsolvedAlternatives p₁ `elem` contextAfter)
 
-            let alternativeTypes =
-                    Map.toList (both <> extra₀ <> extra₁)
+                    let command =
+                            set (   contextAfter
+                                <>  ( Context.UnsolvedAlternatives p₀
+                                    : Context.UnsolvedAlternatives p₂
+                                    : contextBefore
+                                    )
+                                )
 
-            let location
-                    | null extra₁ = location₀
-                    | otherwise   = location₁
+                    return command
 
-            -- TODO: Check if `UnsolvedAlternatives` are solved by now
-            case (remainingAlternatives₀, remainingAlternatives₁) of
-                _ | remainingAlternatives₀ == remainingAlternatives₁ -> do
+            let p₁First = do
+                    (contextAfter, contextBefore) <- Context.splitOnUnsolvedAlternatives p₁ context₁
+
+                    Monad.guard (Context.UnsolvedAlternatives p₀ `elem` contextAfter)
+
+                    let command =
+                            set (   contextAfter
+                                <>  ( Context.UnsolvedAlternatives p₁
+                                    : Context.UnsolvedAlternatives p₂
+                                    : contextBefore
+                                    )
+                                )
+
+                    return command
+
+            case p₀First <|> p₁First of
+                Nothing -> do
+                    Exception.throwIO (MissingOneOfAlternatives [location₀, location₁] p₀ p₁ context₁)
+
+                Just command -> do
+                    command
+
+            context₂ <- get
+
+            instantiateAlternativesL
+                p₀
+                location₁
+                (Context.solveUnion context₂
+                    (Type.Alternatives (Map.toList extra₁)
+                        (Monotype.UnsolvedAlternatives p₂)
+                    )
+                )
+
+            context₃ <- get
+
+            instantiateAlternativesL
+                p₁
+                location₀
+                (Context.solveUnion context₃
+                    (Type.Alternatives (Map.toList extra₀)
+                        (Monotype.UnsolvedAlternatives p₂)
+                    )
+                )
+
+
+            return Type.Union
+                { location
+                , alternatives =
+                    Type.Alternatives alternativeTypes (Monotype.UnsolvedAlternatives p₂)
+                }
+
+        (Monotype.UnsolvedAlternatives p₀, _) -> do
+            instantiateAlternativesL
+                p₀
+                location₁
+                (Type.Alternatives (Map.toList extra₁) remainingAlternatives₁)
+
+            return Type.Union
+                { location
+                , alternatives =
+                    Type.Alternatives alternativeTypes remainingAlternatives₁
+                }
+
+        (_, Monotype.UnsolvedAlternatives p₁) -> do
+            instantiateAlternativesL
+                p₁
+                location₀
+                (Type.Alternatives (Map.toList extra₀) remainingAlternatives₀)
+
+            return Type.Union
+                { location
+                , alternatives =
+                    Type.Alternatives alternativeTypes remainingAlternatives₀
+                }
+
+        _ -> do
+            -- TODO: Improve location
+            Exception.throwIO (AlternativesVariableMismatch location₀ remainingAlternatives₀ location₁ remainingAlternatives₁)
+
+supertypeOf type₀@Type.Scalar{ scalar = scalar₀ } Type.Scalar{ scalar = scalar₁ }
+    | scalar₁ `isScalarSubtypeOf` scalar₀ = do
+        return type₀
+
+supertypeOf Type.Scalar{ scalar = scalar₀ } type₁@Type.Scalar{ scalar = scalar₁ }
+    | scalar₀ `isScalarSubtypeOf` scalar₁ = do
+        return type₁
+
+supertypeOf type₀@Type.Scalar{ location, scalar = Monotype.JSON } type₁ = do
+    isSubtypeOfJSON location type₁
+
+    return type₀
+
+supertypeOf type₀ type₁@Type.Scalar{ location, scalar = Monotype.JSON } = do
+    isSubtypeOfJSON location type₀
+
+    return type₁
+
+supertypeOf Optional{ location, type_ = type₀ } Optional{ type_ = type₁ } = do
+    type_ <- supertypeOf type₀ type₁
+
+    return Optional{ location, type_ }
+
+supertypeOf Optional{ location, type_ = type₀ } type₁ = do
+    type_ <- supertypeOf type₀ type₁
+
+    return Optional{ location, type_ }
+
+supertypeOf type₀ Optional{ location, type_ = type₁ } = do
+    type_ <- supertypeOf type₀ type₁
+
+    return Optional{ location, type_ }
+
+supertypeOf type₀ type₁ = do
+    Exception.throwIO (NoSupertype type₀ type₁)
+
+-- | Computes the subtype of the two input types
+subtypeOf :: Type Location -> Type Location -> Grace (Type Location)
+subtypeOf type₀@UnsolvedType{ existential = existential₀ } UnsolvedType { existential = existential₁ } = do
+    Monad.unless (existential₀ == existential₁) do
+        equateTypes existential₀ existential₁
+
+    return type₀
+
+subtypeOf UnsolvedType{ existential } type_
+    | not (existential `Type.typeFreeIn` type_) = do
+        instantiateTypeR type_ existential
+
+        return type_
+
+subtypeOf type_ UnsolvedType{ existential }
+    | not (existential `Type.typeFreeIn` type_) = do
+        instantiateTypeR type_ existential
+
+        return type_
+
+subtypeOf Forall{ nameLocation, name, type_ = type₀ } type₁ = do
+    scopedUnsolvedType nameLocation \unsolved -> do
+        subtypeOf (Type.substituteType name 0 unsolved type₀) type₁
+
+subtypeOf type₀ Forall{ nameLocation, name, type_ = type₁ } = do
+    scopedUnsolvedType nameLocation \unsolved ->  do
+        subtypeOf type₀(Type.substituteType name 0 unsolved type₁)
+
+subtypeOf VariableType{ location, name = name₀ } VariableType{ name = name₁ }
+    | name₀ == name₁ = do
+        return VariableType{ location, name = name₀ }
+
+subtypeOf Function{ location, input = input₀, output = output₀ } Function{ input = input₁, output = output₁ } = do
+    input <- supertypeOf input₀ input₁
+
+    output <- subtypeOf output₀ output₁
+
+    return Function{ location, input, output }
+
+subtypeOf List{ location, type_ = type₀ } List{ type_ = type₁ } = do
+    type_ <- subtypeOf type₀ type₁
+
+    return List{ location, type_ }
+
+subtypeOf Record{ location = location₀, fields = fields₀ } Record{ location = location₁, fields = fields₁ } = do
+    let Type.Fields fieldTypes₀ remainingFields₀ = fields₀
+    let Type.Fields fieldTypes₁ remainingFields₁ = fields₁
+
+    let map₀ = Map.fromList fieldTypes₀
+    let map₁ = Map.fromList fieldTypes₁
+
+    both <- sequence (Map.intersectionWith subtypeOf map₀ map₁)
+
+    let extra₀ = Map.difference map₀ map₁
+    let extra₁ = Map.difference map₁ map₀
+
+    let fieldTypes = Map.toList (both <> extra₀ <> extra₁)
+
+    let location
+            | null extra₁ = location₀
+            | otherwise   = location₁
+
+    -- TODO: Check if `UnsolvedFields` are solved by now
+    case (remainingFields₀, remainingFields₁) of
+        _ | remainingFields₀ == remainingFields₁ -> do
+            return Record
+                { location
+                , fields = Type.Fields fieldTypes remainingFields₀
+                }
+
+        (Monotype.UnsolvedFields p₀, Monotype.UnsolvedFields p₁) -> do
+            p₂ <- fresh
+
+            context₁ <- get
+
+            let p₀First = do
+                    (contextAfter, contextBefore) <- Context.splitOnUnsolvedFields p₀ context₁
+
+                    Monad.guard (Context.UnsolvedFields p₁ `elem` contextAfter)
+
+                    let command =
+                            set (   contextAfter
+                                <>  ( Context.UnsolvedFields p₀
+                                    : Context.UnsolvedFields p₂
+                                    : contextBefore
+                                    )
+                                )
+
+                    return command
+
+            let p₁First = do
+                    (contextAfter, contextBefore) <- Context.splitOnUnsolvedFields p₁ context₁
+
+                    Monad.guard (Context.UnsolvedFields p₀ `elem` contextAfter)
+
+                    let command =
+                            set (   contextAfter
+                                <>  ( Context.UnsolvedFields p₁
+                                    : Context.UnsolvedFields p₂
+                                    : contextBefore
+                                    )
+                                )
+
+                    return command
+
+            case p₀First <|> p₁First of
+                Nothing -> do
+                    Exception.throwIO (MissingOneOfFields [location₀, location₁] p₀ p₁ context₁)
+
+                Just command -> do
+                    command
+
+            context₂ <- get
+
+            instantiateFieldsR
+                location₁
+                (Context.solveRecord context₂
+                    (Type.Fields (Map.toList extra₁)
+                        (Monotype.UnsolvedFields p₂)
+                    )
+                )
+                p₀
+
+            context₃ <- get
+
+            instantiateFieldsR
+                location₀
+                (Context.solveRecord context₃
+                    (Type.Fields (Map.toList extra₀)
+                        (Monotype.UnsolvedFields p₂)
+                    )
+                )
+                p₁
+
+            return Type.Record
+                { location
+                , fields =
+                    Type.Fields fieldTypes (Monotype.UnsolvedFields p₂)
+                }
+
+        (Monotype.UnsolvedFields p₀, _) -> do
+            instantiateFieldsR
+                location₁
+                (Type.Fields (Map.toList extra₁) remainingFields₁)
+                p₀
+
+            return Record
+                { location
+                , fields = Type.Fields fieldTypes remainingFields₁
+                }
+
+        (_, Monotype.UnsolvedFields p₁) -> do
+            instantiateFieldsR
+                location₀
+                (Type.Fields (Map.toList extra₀) remainingFields₀)
+                p₁
+
+            return Record
+                { location
+                , fields = Type.Fields fieldTypes remainingFields₀
+                }
+
+        _ -> do
+            -- TODO: Improve location
+            Exception.throwIO (FieldsVariableMismatch location₀ remainingFields₀ location₁ remainingFields₁)
+
+subtypeOf type₀@Type.Union{ location = location₀, alternatives = alternatives₀ } type₁@Type.Union{ location = location₁, alternatives = alternatives₁ } = do
+    let Type.Alternatives alternativeTypes₀ remainingAlternatives₀ = alternatives₀
+    let Type.Alternatives alternativeTypes₁ remainingAlternatives₁ = alternatives₁
+
+    let map₀ = Map.fromList alternativeTypes₀
+    let map₁ = Map.fromList alternativeTypes₁
+
+    both <- sequence (Map.intersectionWith subtypeOf map₀ map₁)
+
+    let extra₀ = Map.difference map₀ map₁
+    let extra₁ = Map.difference map₁ map₀
+
+    let alternativeTypes = Map.toList (both <> extra₀ <> extra₁)
+
+    let location = location₀
+
+    -- TODO: Check if `UnsolvedAlternatives` are solved by now
+    case (remainingAlternatives₀, remainingAlternatives₁) of
+        _ | remainingAlternatives₀ == remainingAlternatives₁ -> do
+            if Map.null extra₀ && Map.null extra₁
+                then do
                     return Type.Union
                         { location
                         , alternatives =
                             Type.Alternatives alternativeTypes remainingAlternatives₀
                         }
+                else do
+                    Exception.throwIO (NoUnionSubtype type₀ type₁ (Map.keys extra₀) (Map.keys extra₁))
 
-                (Monotype.UnsolvedAlternatives p₀, Monotype.UnsolvedAlternatives p₁) -> do
-                    p₂ <- fresh
+        (Monotype.UnsolvedAlternatives p₀, Monotype.UnsolvedAlternatives p₁) -> do
+            p₂ <- fresh
 
-                    context₁ <- get
+            context₁ <- get
 
-                    let p₀First = do
-                            (contextAfter, contextBefore) <- Context.splitOnUnsolvedAlternatives p₀ context₁
+            let p₀First = do
+                    (contextAfter, contextBefore) <- Context.splitOnUnsolvedAlternatives p₀ context₁
 
-                            Monad.guard (Context.UnsolvedAlternatives p₁ `elem` contextAfter)
+                    Monad.guard (Context.UnsolvedAlternatives p₁ `elem` contextAfter)
 
-                            let command =
-                                    set (   contextAfter
-                                        <>  ( Context.UnsolvedAlternatives p₀
-                                            : Context.UnsolvedAlternatives p₂
-                                            : contextBefore
-                                            )
-                                        )
+                    let command =
+                            set (   contextAfter
+                                <>  ( Context.UnsolvedAlternatives p₀
+                                    : Context.UnsolvedAlternatives p₂
+                                    : contextBefore
+                                    )
+                                )
 
-                            return command
+                    return command
 
-                    let p₁First = do
-                            (contextAfter, contextBefore) <- Context.splitOnUnsolvedAlternatives p₁ context₁
+            let p₁First = do
+                    (contextAfter, contextBefore) <- Context.splitOnUnsolvedAlternatives p₁ context₁
 
-                            Monad.guard (Context.UnsolvedAlternatives p₀ `elem` contextAfter)
+                    Monad.guard (Context.UnsolvedAlternatives p₀ `elem` contextAfter)
 
-                            let command =
-                                    set (   contextAfter
-                                        <>  ( Context.UnsolvedAlternatives p₁
-                                            : Context.UnsolvedAlternatives p₂
-                                            : contextBefore
-                                            )
-                                        )
+                    let command =
+                            set (   contextAfter
+                                <>  ( Context.UnsolvedAlternatives p₁
+                                    : Context.UnsolvedAlternatives p₂
+                                    : contextBefore
+                                    )
+                                )
 
-                            return command
+                    return command
 
-                    case p₀First <|> p₁First of
-                        Nothing -> do
-                            Exception.throwIO (MissingOneOfAlternatives [location₀, location₁] p₀ p₁ context₁)
+            case p₀First <|> p₁First of
+                Nothing -> do
+                    Exception.throwIO (MissingOneOfAlternatives [location₀, location₁] p₀ p₁ context₁)
 
-                        Just command -> do
-                            command
+                Just command -> do
+                    command
 
-                    context₂ <- get
+            context₂ <- get
 
-                    instantiateAlternativesL
-                        p₀
-                        location₁
-                        (Context.solveUnion context₂
-                            (Type.Alternatives (Map.toList extra₁)
-                                (Monotype.UnsolvedAlternatives p₂)
-                            )
-                        )
+            instantiateAlternativesL
+                p₀
+                location₁
+                (Context.solveUnion context₂
+                    (Type.Alternatives (Map.toList extra₁)
+                        (Monotype.UnsolvedAlternatives p₂)
+                    )
+                )
 
-                    context₃ <- get
+            context₃ <- get
 
-                    instantiateAlternativesL
-                        p₁
-                        location₀
-                        (Context.solveUnion context₃
-                            (Type.Alternatives (Map.toList extra₀)
-                                (Monotype.UnsolvedAlternatives p₂)
-                            )
-                        )
+            instantiateAlternativesL
+                p₁
+                location₀
+                (Context.solveUnion context₃
+                    (Type.Alternatives (Map.toList extra₀)
+                        (Monotype.UnsolvedAlternatives p₂)
+                    )
+                )
 
 
-                    return Type.Union
-                        { location
-                        , alternatives =
-                            Type.Alternatives alternativeTypes (Monotype.UnsolvedAlternatives p₂)
-                        }
+            return Type.Union
+                { location
+                , alternatives =
+                    Type.Alternatives alternativeTypes (Monotype.UnsolvedAlternatives p₂)
+                }
 
-                (Monotype.UnsolvedAlternatives p₀, _) -> do
-                    instantiateAlternativesL
-                        p₀
+        (Monotype.UnsolvedAlternatives p₀, _) -> do
+            if Map.null extra₀
+                then do
+                    instantiateAlternativesR
                         location₁
                         (Type.Alternatives (Map.toList extra₁) remainingAlternatives₁)
+                        p₀
 
                     return Type.Union
                         { location
                         , alternatives =
                             Type.Alternatives alternativeTypes remainingAlternatives₁
                         }
+                else do
+                    Exception.throwIO (NoUnionSubtype type₀ type₁ (Map.keys extra₀) (Map.keys extra₁))
 
-                (_, Monotype.UnsolvedAlternatives p₁) -> do
-                    instantiateAlternativesL
-                        p₁
+        (_, Monotype.UnsolvedAlternatives p₁) -> do
+            if Map.null extra₁
+                then do
+                    instantiateAlternativesR
                         location₀
                         (Type.Alternatives (Map.toList extra₀) remainingAlternatives₀)
+                        p₁
 
                     return Type.Union
                         { location
                         , alternatives =
                             Type.Alternatives alternativeTypes remainingAlternatives₀
                         }
+                else do
+                    Exception.throwIO (NoUnionSubtype type₀ type₁ (Map.keys extra₀) (Map.keys extra₁))
 
-                _ -> do
-                    -- TODO: Improve location
-                    Exception.throwIO (AlternativesVariableMismatch location₀ remainingAlternatives₀ location₁ remainingAlternatives₁)
+        _ -> do
+            -- TODO: Improve location
+            Exception.throwIO (AlternativesVariableMismatch location₀ remainingAlternatives₀ location₁ remainingAlternatives₁)
 
-        (type₀@Type.Scalar{ scalar = scalar₀ }, Type.Scalar{ scalar = scalar₁ })
-            | scalar₁ `isScalarSubtypeOf` scalar₀ -> do
-                return type₀
+subtypeOf type₀@Type.Scalar{ scalar = scalar₀ } Type.Scalar{ scalar = scalar₁ }
+    | scalar₀ `isScalarSubtypeOf` scalar₁ = do
+        return type₀
 
-        (Type.Scalar{ scalar = scalar₀ }, type₁@Type.Scalar{ scalar = scalar₁ })
-            | scalar₀ `isScalarSubtypeOf` scalar₁ -> do
-                return type₁
+subtypeOf Type.Scalar{ scalar = scalar₀ } type₁@Type.Scalar{ scalar = scalar₁ }
+    | scalar₁ `isScalarSubtypeOf` scalar₀ = do
+        return type₁
 
-        (type₀@Type.Scalar{ location, scalar = Monotype.JSON }, type₁) -> do
-            isSubtypeOfJSON location type₁
+subtypeOf type₀ Type.Scalar{ location, scalar = Monotype.JSON } = do
+    isSubtypeOfJSON location type₀
 
-            return type₀
+    return type₀
 
-        (type₀, type₁@Type.Scalar{ location, scalar = Monotype.JSON }) -> do
-            isSubtypeOfJSON location type₀
+subtypeOf Type.Scalar{ location, scalar = Monotype.JSON } type₁ = do
+    isSubtypeOfJSON location type₁
 
-            return type₁
+    return type₁
 
-        (Optional{ location, type_ = type₀ }, Optional{ type_ = type₁ }) -> do
-            type_ <- supertypeOf type₀ type₁
+subtypeOf Optional{ location, type_ = type₀ } Optional{ type_ = type₁ } = do
+    type_ <- subtypeOf type₀ type₁
 
-            return Optional{ location, type_ }
+    return Optional{ location, type_ }
 
-        (Optional{ location, type_ = type₀ }, type₁) -> do
-            type_ <- supertypeOf type₀ type₁
+subtypeOf Optional{ type_ = type₀ } type₁ = do
+    subtypeOf type₀ type₁
 
-            return Optional{ location, type_ }
+subtypeOf type₀ Optional{ type_ = type₁ } = do
+    subtypeOf type₀ type₁
 
-        (type₀, Optional{ location, type_ = type₁ }) -> do
-            type_ <- supertypeOf type₀ type₁
-
-            return Optional{ location, type_ }
-
-        (type₀, type₁) -> do
-            Exception.throwIO (NoSupertype type₀ type₁)
-
--- | Computes the subtype of the two input types
-subtypeOf :: Type Location -> Type Location -> Grace (Type Location)
-subtypeOf a b = do
-    context₀ <- get
-
-    case (a, b) of
-        (type₀@UnsolvedType{ existential = existential₀ }, UnsolvedType { existential = existential₁ }) -> do
-            Monad.unless (existential₀ == existential₁) do
-                equateTypes existential₀ existential₁
-
-            return type₀
-
-        (UnsolvedType{ existential }, type_)
-            | not (existential `Type.typeFreeIn` type_)
-            , elem (Context.UnsolvedType existential) context₀ -> do
-                instantiateTypeR type_ existential
-
-                return type_
-
-        (type_, UnsolvedType{ existential })
-            | not (existential `Type.typeFreeIn` type_)
-            , elem (Context.UnsolvedType existential) context₀ -> do
-                instantiateTypeR type_ existential
-
-                return type_
-
-        (Forall{ nameLocation, name, type_ = type₀ }, type₁) -> do
-            scopedUnsolvedType nameLocation \unsolved -> do
-                subtypeOf (Type.substituteType name 0 unsolved type₀) type₁
-
-        (type₀, Forall{ nameLocation, name, type_ = type₁ }) -> do
-            scopedUnsolvedType nameLocation \unsolved ->  do
-                subtypeOf type₀(Type.substituteType name 0 unsolved type₁)
-
-        (VariableType{ location, name = name₀ }, VariableType{ name = name₁ })
-            | name₀ == name₁ -> do
-                return VariableType{ location, name = name₀ }
-
-        (Function{ location, input = input₀, output = output₀ }, Function{ input = input₁, output = output₁ }) -> do
-            input <- supertypeOf input₀ input₁
-
-            output <- subtypeOf output₀ output₁
-
-            return Function{ location, input, output }
-
-        (List{ location, type_ = type₀ }, List{ type_ = type₁ }) -> do
-            type_ <- subtypeOf type₀ type₁
-
-            return List{ location, type_ }
-
-        (Record{ location = location₀, fields = fields₀ }, Record{ location = location₁, fields = fields₁ }) -> do
-            let Type.Fields fieldTypes₀ remainingFields₀ = fields₀
-            let Type.Fields fieldTypes₁ remainingFields₁ = fields₁
-
-            let map₀ = Map.fromList fieldTypes₀
-            let map₁ = Map.fromList fieldTypes₁
-
-            both <- sequence (Map.intersectionWith subtypeOf map₀ map₁)
-
-            let extra₀ = Map.difference map₀ map₁
-            let extra₁ = Map.difference map₁ map₀
-
-            let fieldTypes = Map.toList (both <> extra₀ <> extra₁)
-
-            let location
-                    | null extra₁ = location₀
-                    | otherwise   = location₁
-
-            -- TODO: Check if `UnsolvedFields` are solved by now
-            case (remainingFields₀, remainingFields₁) of
-                _ | remainingFields₀ == remainingFields₁ -> do
-                    return Record
-                        { location
-                        , fields = Type.Fields fieldTypes remainingFields₀
-                        }
-
-                (Monotype.UnsolvedFields p₀, Monotype.UnsolvedFields p₁) -> do
-                    p₂ <- fresh
-
-                    context₁ <- get
-
-                    let p₀First = do
-                            (contextAfter, contextBefore) <- Context.splitOnUnsolvedFields p₀ context₁
-
-                            Monad.guard (Context.UnsolvedFields p₁ `elem` contextAfter)
-
-                            let command =
-                                    set (   contextAfter
-                                        <>  ( Context.UnsolvedFields p₀
-                                            : Context.UnsolvedFields p₂
-                                            : contextBefore
-                                            )
-                                        )
-
-                            return command
-
-                    let p₁First = do
-                            (contextAfter, contextBefore) <- Context.splitOnUnsolvedFields p₁ context₁
-
-                            Monad.guard (Context.UnsolvedFields p₀ `elem` contextAfter)
-
-                            let command =
-                                    set (   contextAfter
-                                        <>  ( Context.UnsolvedFields p₁
-                                            : Context.UnsolvedFields p₂
-                                            : contextBefore
-                                            )
-                                        )
-
-                            return command
-
-                    case p₀First <|> p₁First of
-                        Nothing -> do
-                            Exception.throwIO (MissingOneOfFields [location₀, location₁] p₀ p₁ context₁)
-
-                        Just command -> do
-                            command
-
-                    context₂ <- get
-
-                    instantiateFieldsR
-                        location₁
-                        (Context.solveRecord context₂
-                            (Type.Fields (Map.toList extra₁)
-                                (Monotype.UnsolvedFields p₂)
-                            )
-                        )
-                        p₀
-
-                    context₃ <- get
-
-                    instantiateFieldsR
-                        location₀
-                        (Context.solveRecord context₃
-                            (Type.Fields (Map.toList extra₀)
-                                (Monotype.UnsolvedFields p₂)
-                            )
-                        )
-                        p₁
-
-                    return Type.Record
-                        { location
-                        , fields =
-                            Type.Fields fieldTypes (Monotype.UnsolvedFields p₂)
-                        }
-
-                (Monotype.UnsolvedFields p₀, _) -> do
-                    instantiateFieldsR
-                        location₁
-                        (Type.Fields (Map.toList extra₁) remainingFields₁)
-                        p₀
-
-                    return Record
-                        { location
-                        , fields = Type.Fields fieldTypes remainingFields₁
-                        }
-
-                (_, Monotype.UnsolvedFields p₁) -> do
-                    instantiateFieldsR
-                        location₀
-                        (Type.Fields (Map.toList extra₀) remainingFields₀)
-                        p₁
-
-                    return Record
-                        { location
-                        , fields = Type.Fields fieldTypes remainingFields₀
-                        }
-
-                _ -> do
-                    -- TODO: Improve location
-                    Exception.throwIO (FieldsVariableMismatch location₀ remainingFields₀ location₁ remainingFields₁)
-
-        (type₀@Type.Union{ location = location₀, alternatives = alternatives₀ }, type₁@Type.Union{ location = location₁, alternatives = alternatives₁ }) -> do
-            let Type.Alternatives alternativeTypes₀ remainingAlternatives₀ = alternatives₀
-            let Type.Alternatives alternativeTypes₁ remainingAlternatives₁ = alternatives₁
-
-            let map₀ = Map.fromList alternativeTypes₀
-            let map₁ = Map.fromList alternativeTypes₁
-
-            both <- sequence (Map.intersectionWith subtypeOf map₀ map₁)
-
-            let extra₀ = Map.difference map₀ map₁
-            let extra₁ = Map.difference map₁ map₀
-
-            let alternativeTypes = Map.toList (both <> extra₀ <> extra₁)
-
-            let location = location₀
-
-            -- TODO: Check if `UnsolvedAlternatives` are solved by now
-            case (remainingAlternatives₀, remainingAlternatives₁) of
-                _ | remainingAlternatives₀ == remainingAlternatives₁ -> do
-                    if Map.null extra₀ && Map.null extra₁
-                        then do
-                            return Type.Union
-                                { location
-                                , alternatives =
-                                    Type.Alternatives alternativeTypes remainingAlternatives₀
-                                }
-                        else do
-                            Exception.throwIO (NoUnionSubtype type₀ type₁ (Map.keys extra₀) (Map.keys extra₁))
-
-                (Monotype.UnsolvedAlternatives p₀, Monotype.UnsolvedAlternatives p₁) -> do
-                    p₂ <- fresh
-
-                    context₁ <- get
-
-                    let p₀First = do
-                            (contextAfter, contextBefore) <- Context.splitOnUnsolvedAlternatives p₀ context₁
-
-                            Monad.guard (Context.UnsolvedAlternatives p₁ `elem` contextAfter)
-
-                            let command =
-                                    set (   contextAfter
-                                        <>  ( Context.UnsolvedAlternatives p₀
-                                            : Context.UnsolvedAlternatives p₂
-                                            : contextBefore
-                                            )
-                                        )
-
-                            return command
-
-                    let p₁First = do
-                            (contextAfter, contextBefore) <- Context.splitOnUnsolvedAlternatives p₁ context₁
-
-                            Monad.guard (Context.UnsolvedAlternatives p₀ `elem` contextAfter)
-
-                            let command =
-                                    set (   contextAfter
-                                        <>  ( Context.UnsolvedAlternatives p₁
-                                            : Context.UnsolvedAlternatives p₂
-                                            : contextBefore
-                                            )
-                                        )
-
-                            return command
-
-                    case p₀First <|> p₁First of
-                        Nothing -> do
-                            Exception.throwIO (MissingOneOfAlternatives [location₀, location₁] p₀ p₁ context₁)
-
-                        Just command -> do
-                            command
-
-                    context₂ <- get
-
-                    instantiateAlternativesL
-                        p₀
-                        location₁
-                        (Context.solveUnion context₂
-                            (Type.Alternatives (Map.toList extra₁)
-                                (Monotype.UnsolvedAlternatives p₂)
-                            )
-                        )
-
-                    context₃ <- get
-
-                    instantiateAlternativesL
-                        p₁
-                        location₀
-                        (Context.solveUnion context₃
-                            (Type.Alternatives (Map.toList extra₀)
-                                (Monotype.UnsolvedAlternatives p₂)
-                            )
-                        )
-
-
-                    return Type.Union
-                        { location
-                        , alternatives =
-                            Type.Alternatives alternativeTypes (Monotype.UnsolvedAlternatives p₂)
-                        }
-
-                (Monotype.UnsolvedAlternatives p₀, _) -> do
-                    if Map.null extra₀
-                        then do
-                            instantiateAlternativesR
-                                location₁
-                                (Type.Alternatives (Map.toList extra₁) remainingAlternatives₁)
-                                p₀
-
-                            return Type.Union
-                                { location
-                                , alternatives =
-                                    Type.Alternatives alternativeTypes remainingAlternatives₁
-                                }
-                        else do
-                            Exception.throwIO (NoUnionSubtype type₀ type₁ (Map.keys extra₀) (Map.keys extra₁))
-
-                (_, Monotype.UnsolvedAlternatives p₁) -> do
-                    if Map.null extra₁
-                        then do
-                            instantiateAlternativesR
-                                location₀
-                                (Type.Alternatives (Map.toList extra₀) remainingAlternatives₀)
-                                p₁
-
-                            return Type.Union
-                                { location
-                                , alternatives =
-                                    Type.Alternatives alternativeTypes remainingAlternatives₀
-                                }
-                        else do
-                            Exception.throwIO (NoUnionSubtype type₀ type₁ (Map.keys extra₀) (Map.keys extra₁))
-
-                _ -> do
-                    -- TODO: Improve location
-                    Exception.throwIO (AlternativesVariableMismatch location₀ remainingAlternatives₀ location₁ remainingAlternatives₁)
-
-        (type₀@Type.Scalar{ scalar = scalar₀ }, Type.Scalar{ scalar = scalar₁ })
-            | scalar₀ `isScalarSubtypeOf` scalar₁ -> do
-                return type₀
-
-        (Type.Scalar{ scalar = scalar₀ }, type₁@Type.Scalar{ scalar = scalar₁ })
-            | scalar₁ `isScalarSubtypeOf` scalar₀ -> do
-                return type₁
-
-        (type₀, Type.Scalar{ location, scalar = Monotype.JSON }) -> do
-            isSubtypeOfJSON location type₀
-
-            return type₀
-
-        (Type.Scalar{ location, scalar = Monotype.JSON }, type₁) -> do
-            isSubtypeOfJSON location type₁
-
-            return type₁
-
-        (Optional{ location, type_ = type₀ }, Optional{ type_ = type₁ }) -> do
-            type_ <- subtypeOf type₀ type₁
-
-            return Optional{ location, type_ }
-
-        (Optional{ type_ = type₀ }, type₁) -> do
-            subtypeOf type₀ type₁
-
-        (type₀, Optional{ type_ = type₁ }) -> do
-            subtypeOf type₀ type₁
-
-        (type₀, type₁) -> do
-            Exception.throwIO (NoSubtype type₀ type₁)
+subtypeOf type₀ type₁ = do
+    Exception.throwIO (NoSubtype type₀ type₁)
 
 -- | @subtype sub super@ checks that @sub@ is a subtype of @super@
 subtype :: Type Location -> Type Location -> Grace ()
@@ -1016,13 +1004,11 @@ subtype subType₀ superType₀ = do
             -- and union types so that Fields variables and Alternatives
             -- variables cannot refer to the record or union that they belong
             -- to, respectively.
-            | not (subExistential `Type.typeFreeIn` superType₀)
-            , elem (Context.UnsolvedType subExistential) context₀ -> do
+            | not (subExistential `Type.typeFreeIn` superType₀) -> do
                 instantiateTypeL subExistential superType₀
 
         (_, Type.UnsolvedType{ existential = superExistential })
-            | not (superExistential `Type.typeFreeIn` subType₀)
-            , elem (Context.UnsolvedType superExistential) context₀ -> do
+            | not (superExistential `Type.typeFreeIn` subType₀) -> do
                 instantiateTypeR subType₀ superExistential
 
         (Type.Function{ input = subInput, output = subOutput }, Type.Function{ input = superInput, output = superOutput }) -> do
