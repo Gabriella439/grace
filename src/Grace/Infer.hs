@@ -2930,21 +2930,23 @@ infer e₀ = do
 
             supertype <- supertypeOf (Context.solveType context₀ type₀) (Context.solveType context₀ type₁)
 
-            newIfTrue  <- check ifTrue supertype
-
             context₁ <- get
 
-            newIfFalse <- check ifFalse (Context.solveType context₁ supertype)
+            newIfTrue  <- check ifTrue (Context.solveType context₁ supertype)
 
             context₂ <- get
 
-            let type_ = Context.solveType context₂ supertype
+            newIfFalse <- check ifFalse (Context.solveType context₂ supertype)
+
+            context₃ <- get
+
+            let type_ = Context.solveType context₃ supertype
 
             let newIf = Syntax.If
                     { location
-                    , predicate = solveSyntax context₁ newPredicate
-                    , ifTrue = solveSyntax context₁ newIfTrue
-                    , ifFalse = solveSyntax context₁ newIfFalse
+                    , predicate = solveSyntax context₃ newPredicate
+                    , ifTrue = solveSyntax context₃ newIfTrue
+                    , ifFalse = solveSyntax context₃ newIfFalse
                     }
 
             return (type_, newIf)
@@ -3578,17 +3580,20 @@ infer e₀ = do
                             , type_ = element
                             }
 
-                    newLeft  <- check left  list
-                    newRight <- check right list
+                    newLeft <- check left  list
 
                     context₂ <- get
 
+                    newRight <- check right (Context.solveType context₂ list)
+
+                    context₃ <- get
+
                     let newOperator = Syntax.Operator
                             { location
-                            , left = solveSyntax context₂ newLeft
+                            , left = solveSyntax context₃ newLeft
                             , operatorLocation
                             , operator = Syntax.Plus
-                            , right = solveSyntax context₂ newRight
+                            , right = solveSyntax context₃ newRight
                             }
 
                     return (list, newOperator)
@@ -4422,9 +4427,13 @@ check Syntax.If{ location, predicate, ifTrue, ifFalse } annotation = do
         , scalar = Monotype.Bool
         }
 
-    newIfTrue <- check ifTrue annotation
+    context₀ <- get
 
-    newIfFalse <- check ifFalse annotation
+    newIfTrue <- check ifTrue (Context.solveType context₀ annotation)
+
+    context₁ <- get
+
+    newIfFalse <- check ifFalse (Context.solveType context₁ annotation)
 
     return Syntax.If
         { location
