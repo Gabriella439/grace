@@ -71,6 +71,7 @@ import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Encode.Pretty as Aeson.Pretty
 import qualified Data.ByteString.Lazy as ByteString.Lazy
 import qualified Data.HashMap.Strict.InsOrd as Map
+import qualified Data.List as List
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Scientific as Scientific
 import qualified Data.Sequence as Seq
@@ -169,6 +170,26 @@ scopedUnsolvedAlternatives k = do
         push (Context.UnsolvedAlternatives a)
 
         k (Type.Alternatives [] (Monotype.UnsolvedAlternatives a))
+
+freshName :: Syntax s a -> Text
+freshName expression = case Set.toList (Set.difference candidates₀ free) of
+    n : _ ->
+        n
+    _ ->
+        head do
+            let as = Set.filter (Text.isPrefixOf "a") free
+
+            suffix <- [ (0 :: Int) .. ]
+
+            let candidate = Text.pack ("a" <> show suffix)
+
+            Monad.guard (not (Set.member candidate as))
+
+            return candidate
+  where
+    candidates₀ = Set.fromList (map Text.singleton [ 'a' .. 'z' ])
+
+    free = Syntax.freeVariables expression
 
 {-| @wellFormed context type@ checks that all type/fields/alternatives
     variables within @type@ are declared within the @context@
@@ -978,6 +999,564 @@ subtypeOf type₀ Optional{ type_ = type₁ } = do
 
 subtypeOf type₀ type₁ = do
     Exception.throwIO (NoSubtype type₀ type₁)
+
+{-| @isSubTypeOf e₀ T₀ T₁@ checks that @T₀@ is a subtype of @T₁@ and elaborates
+    @e₀@ accordingly
+-}
+isSubtypeOf
+    :: Syntax Location Void
+    -> Type Location
+    -> Type Location
+    -> Grace (Syntax Location Void)
+isSubtypeOf expression subType@Type.VariableType{ name = subName } Type.VariableType{ name = superName }
+    | subName == superName = do
+        context <- get
+
+        wellFormed context subType
+
+        return expression
+
+isSubtypeOf expression Type.UnsolvedType{ existential = subExistential } Type.UnsolvedType{ existential = superExistential }
+    | subExistential == superExistential = do
+        return expression
+
+isSubtypeOf expression Type.UnsolvedType{ existential = subExistential } superType
+    | not (subExistential `Type.typeFreeIn` superType) = do
+        instantiateTypeL subExistential superType
+
+        return expression
+
+isSubtypeOf expression subType Type.UnsolvedType{ existential = superExistential }
+    | not (superExistential `Type.typeFreeIn` subType) = do
+        instantiateTypeR subType superExistential
+        return expression
+
+isSubtypeOf expression Type.Function{ input = subInput, output = subOutput } superType@Type.Function{ input = superInput, output = superOutput } = do
+    let name = freshName expression
+
+    scoped (Context.Annotation name superInput) do
+        let variable₀ = Syntax.Variable
+                { location = Type.location subInput
+                , name
+                }
+
+        variable₁ <- isSubtypeOf variable₀ superInput subInput
+
+        context <- get
+
+        let application₀ = Syntax.Application
+                { location = Syntax.location expression
+                , function = expression
+                , argument = variable₁
+                }
+
+        application₁ <- isSubtypeOf application₀ (Context.solveType context subOutput) (Context.solveType context superOutput)
+
+        if application₀ == application₁
+            then do
+                return expression
+            else do
+                return Syntax.Lambda
+                    { location = Type.location superType
+                    , binding = Syntax.PlainBinding
+                        { plain = Syntax.NameBinding
+                            { nameLocation = Type.location superInput
+                            , name
+                            , annotation = Nothing
+                            , assignment = Nothing
+                            }
+                        }
+                    , body = application₁
+                    }
+
+isSubtypeOf expression subType₀ Type.Forall{ name, domain, type_ } = do
+    scoped (Context.Variable domain name) do
+        isSubtypeOf expression subType₀ type_
+
+isSubtypeOf expression Type.Forall{ nameLocation, name, domain = Domain.Type, type_ } superType₀ = do
+    scopedUnsolvedType nameLocation \unsolved -> do
+        isSubtypeOf expression (Type.substituteType name 0 unsolved type_) superType₀
+
+isSubtypeOf expression Type.Forall{ name, domain = Domain.Fields, type_ } superType₀ = do
+    scopedUnsolvedFields \unsolved -> do
+        isSubtypeOf expression (Type.substituteFields name 0 unsolved type_) superType₀
+
+isSubtypeOf expression Type.Forall{ name, domain = Domain.Alternatives, type_ } superType₀ = do
+    scopedUnsolvedAlternatives \unsolved -> do
+        isSubtypeOf expression (Type.substituteAlternatives name 0 unsolved type_) superType₀
+
+isSubtypeOf expression Type.Scalar{ scalar = subScalar } Type.Scalar{ scalar = superScalar }
+    | subScalar == superScalar = do
+        return expression
+
+isSubtypeOf expression Type.Scalar{ scalar = Monotype.Natural } superType@Type.Scalar{ scalar = Monotype.Integer } = do
+    return Syntax.Annotation
+        { location = Syntax.location expression
+        , annotated = expression
+        , annotation = superType
+        }
+
+isSubtypeOf expression Type.Scalar{ scalar = Monotype.Natural } superType@Type.Scalar{ scalar = Monotype.Real } = do
+    return Syntax.Annotation
+        { location = Syntax.location expression
+        , annotated = expression
+        , annotation = superType
+        }
+
+isSubtypeOf expression Type.Scalar{ scalar = Monotype.Integer } superType@Type.Scalar{ scalar = Monotype.Real } = do
+    return Syntax.Annotation
+        { location = Syntax.location expression
+        , annotated = expression
+        , annotation = superType
+        }
+
+isSubtypeOf expression Type.Scalar{ scalar = Monotype.Text } superType@Type.Scalar{ scalar = Monotype.Key } = do
+    return Syntax.Annotation
+        { location = Syntax.location expression
+        , annotated = expression
+        , annotation = superType
+        }
+
+isSubtypeOf expression subType@Type.Optional{ type_ = subType₁ } superType@Type.Optional{ type_ = superType₁ } = do
+    let name = "x"
+
+    scoped (Context.Annotation name subType₁) do
+        let variable = Syntax.Variable{ location = Type.location subType, name }
+
+        elaboratedVariable <- isSubtypeOf variable subType₁ superType₁
+
+        if variable == elaboratedVariable
+            then do
+                return expression
+
+            else do
+                return Syntax.Let
+                    { location = Type.location superType
+                    , assignments =
+                        [ Syntax.Bind
+                            { assignmentLocation = Type.location superType
+                            , monad = OptionalMonad
+                            , binding = PlainBinding
+                                { plain = NameBinding
+                                    { nameLocation = Type.location subType
+                                    , name
+                                    , annotation = Nothing
+                                    , assignment = Nothing
+                                    }
+                                }
+                            , assignment = expression
+                            }
+                        ]
+                    , body = elaboratedVariable
+                    }
+
+isSubtypeOf expression₀ subType Type.Optional{ location, type_ = superType } = do
+    expression₁ <- isSubtypeOf expression₀ subType superType
+
+    return Syntax.Application
+        { location
+        , function = Syntax.Builtin{ location, builtin = Syntax.Some }
+        , argument = expression₁
+        }
+
+isSubtypeOf expression subType@Type.List{ type_ = subType₁ } superType@Type.List{ type_ = superType₁ } = do
+    let name = "x"
+
+    scoped (Context.Annotation name subType₁) do
+        let variable = Syntax.Variable{ location = Type.location subType, name }
+
+        elaboratedVariable <- isSubtypeOf variable subType₁ superType₁
+
+        if variable == elaboratedVariable
+            then do
+               return expression
+            else do
+                return Syntax.Let
+                    { location = Type.location superType
+                    , assignments =
+                        [ Syntax.Bind
+                            { assignmentLocation = Type.location superType
+                            , monad = ListMonad
+                            , binding = PlainBinding
+                                { plain = NameBinding
+                                    { nameLocation = Type.location subType
+                                    , name
+                                    , annotation = Nothing
+                                    , assignment = Nothing
+                                    }
+                                }
+                            , assignment = expression
+                            }
+                        ]
+                    , body = elaboratedVariable
+                    }
+
+isSubtypeOf expression subType Type.Scalar{ location, scalar = Monotype.JSON } = do
+    isSubtypeOfJSON location subType
+
+    return expression
+
+isSubtypeOf expression subType@Type.Record{ fields = Type.Fields subFieldTypesList subRemainingFields } superType@Type.Record{ fields = Type.Fields superFieldTypesList superRemainingFields } = do
+    -- TODO: Strip extra fields from subType
+    let subFieldTypes   = Map.fromList subFieldTypesList
+    let superFieldTypes = Map.fromList superFieldTypesList
+
+    let subExtraFieldTypes   = Map.difference subFieldTypes   superFieldTypes
+    let superExtraFieldTypes = Map.difference superFieldTypes subFieldTypes
+
+    let subtypeField name subType₁ superType₁ = do
+            context <- get
+
+            let variable = Syntax.Variable
+                    { name
+                    , location = Type.location subType₁
+                    }
+
+            let subType₂   = Context.solveType context subType₁
+            let superType₂ = Context.solveType context superType₁
+
+            elaboratedVariable <- isSubtypeOf variable subType₂ superType₂
+
+            return (variable == elaboratedVariable, Type.location subType₂, name, elaboratedVariable)
+
+    bothFields <- sequence (Map.intersectionWithKey subtypeField subFieldTypes superFieldTypes)
+
+    let toLet elaboratedFields
+            | and [ match | (match, _, _, _) <- elaboratedFields ] =
+                expression
+            | otherwise = Syntax.Let
+                { location = Type.location superType
+                , assignments =
+                    [ Bind
+                        { assignmentLocation = Type.location superType
+                        , monad = IdentityMonad
+                        , binding = RecordBinding
+                            { fieldNamesLocation = Type.location superType
+                            , fieldNames = do
+                                (_, nameLocation, name, _) <- elaboratedFields
+
+                                return NameBinding
+                                    { nameLocation
+                                    , name
+                                    , annotation = Nothing
+                                    , assignment = Nothing
+                                    }
+                            }
+                        , assignment = expression
+                        }
+                    ]
+                , body = Syntax.Record
+                    { location = Type.location superType
+                    , fieldValues = do
+                        (_, nameLocation, name, elaboratedVariable) <- elaboratedFields
+
+                        return Syntax.Definition
+                            { nameLocation
+                            , name
+                            , bindings = []
+                            , annotation = Nothing
+                            , assignment = elaboratedVariable
+                            }
+                    }
+                }
+
+    let getRequiredFields = do
+            let process (name, fieldType) = do
+                    required <- isFieldRequired fieldType
+
+                    let location = Type.location fieldType
+
+                    let result =
+                            ( False
+                            , location
+                            , name
+                            , Syntax.Scalar{ location, scalar = Syntax.Null }
+                            )
+
+                    return (required, result)
+
+            results <- traverse process (Map.toList superExtraFieldTypes)
+
+            let (required, optional) = List.partition fst results
+
+            let names = do
+                    (_, _, name, _) <- map snd required
+
+                    return name
+
+            return (names, map snd optional)
+
+    case (subRemainingFields, superRemainingFields) of
+        _   | subRemainingFields == superRemainingFields -> do
+                (requiredFields, optionalFields) <- getRequiredFields
+
+                Monad.unless (null requiredFields) do
+                    Exception.throwIO (RecordTypeMismatch subType superType requiredFields)
+
+                return (toLet (toList bothFields <> optionalFields))
+
+        (Monotype.UnsolvedFields p₀, Monotype.UnsolvedFields p₁) -> do
+            p₂ <- fresh
+
+            context₁ <- get
+
+            let p₀First = do
+                    (contextAfter, contextBefore) <- Context.splitOnUnsolvedFields p₀ context₁
+
+                    Monad.guard (Context.UnsolvedFields p₁ `elem` contextAfter)
+
+                    let command =
+                            set (   contextAfter
+                                <>  ( Context.UnsolvedFields p₀
+                                    : Context.UnsolvedFields p₂
+                                    : contextBefore
+                                    )
+                                )
+
+                    return command
+
+            let p₁First = do
+                    (contextAfter, contextBefore) <- Context.splitOnUnsolvedFields p₁ context₁
+
+                    Monad.guard (Context.UnsolvedFields p₀ `elem` contextAfter)
+
+                    let command =
+                            set (   contextAfter
+                                <>  ( Context.UnsolvedFields p₁
+                                    : Context.UnsolvedFields p₂
+                                    : contextBefore
+                                    )
+                                )
+
+                    return command
+
+            case p₀First <|> p₁First of
+                Nothing -> do
+                    Exception.throwIO (MissingOneOfFields [Type.location subType, Type.location superType] p₀ p₁ context₁)
+
+                Just setContext -> do
+                    setContext
+
+            context₂ <- get
+
+            instantiateFieldsL
+                p₀
+                (Type.location superType)
+                (Context.solveRecord context₂
+                    (Type.Fields (Map.toList superExtraFieldTypes)
+                        (Monotype.UnsolvedFields p₂)
+                    )
+                )
+
+            context₃ <- get
+
+            instantiateFieldsR
+                (Type.location subType)
+                (Context.solveRecord context₃
+                    (Type.Fields (Map.toList subExtraFieldTypes)
+                        (Monotype.UnsolvedFields p₂)
+                    )
+                )
+                p₁
+
+            return (toLet (toList bothFields))
+
+        (Monotype.UnsolvedFields p₀, _) -> do
+            context₁ <- get
+
+            instantiateFieldsL
+                p₀
+                (Type.location superType)
+                (Context.solveRecord context₁
+                    (Type.Fields (Map.toList superExtraFieldTypes) superRemainingFields)
+                )
+
+            return (toLet (toList bothFields))
+
+        (_, Monotype.UnsolvedFields p₁) -> do
+            (requiredFields, optionalFields) <- getRequiredFields
+
+            Monad.unless (null requiredFields) do
+                Exception.throwIO (RecordTypeMismatch subType superType requiredFields)
+
+            context₁ <- get
+
+            instantiateFieldsR
+                (Type.location subType)
+                (Context.solveRecord context₁
+                    (Type.Fields (Map.toList subExtraFieldTypes) subRemainingFields)
+                )
+                p₁
+
+            return (toLet (toList bothFields <> optionalFields))
+
+        _   | otherwise -> do
+                (required, _) <- getRequiredFields
+
+                Exception.throwIO (RecordTypeMismatch subType superType required)
+
+isSubtypeOf expression subType@Type.Union{ alternatives = Type.Alternatives subAlternativeTypesList subRemainingAlternatives } superType@Type.Union{ alternatives = Type.Alternatives superAlternativesTypesList superRemainingAlternatives } = do
+    let subAlternativeTypes   = Map.fromList subAlternativeTypesList
+    let superAlternativeTypes = Map.fromList superAlternativesTypesList
+
+    let subExtraAlternativeTypes =
+            Map.difference subAlternativeTypes superAlternativeTypes
+    let superExtraAlternativeTypes =
+            Map.difference superAlternativeTypes subAlternativeTypes
+
+    let subtypeAlternative name subType₁ superType₁ = do
+            context <- get
+
+            let variable = Syntax.Variable
+                    { name = "x"
+                    , location = Type.location subType₁
+                    }
+
+            let subType₂   = Context.solveType context subType₁
+            let superType₂ = Context.solveType context superType₁
+
+            elaboratedVariable <- isSubtypeOf variable subType₂ superType₂
+
+            return (variable == elaboratedVariable, Type.location subType₂, name, elaboratedVariable)
+
+    bothAlternatives <- sequence (Map.intersectionWithKey subtypeAlternative subAlternativeTypes superAlternativeTypes)
+
+    let toFold elaboratedAlternatives
+            | and [ match | (match, _, _, _) <- elaboratedAlternatives ] =
+                expression
+            | otherwise = Syntax.Application
+                { location = Type.location superType
+                , function = Syntax.Fold
+                    { location = Type.location superType
+                    , handlers = Syntax.Record
+                        { location = Type.location superType
+                        , fieldValues = do
+                            (_, nameLocation, name, elaboratedVariable) <- elaboratedAlternatives
+                            return Definition
+                                { nameLocation
+                                , name
+                                , bindings =
+                                    [ PlainBinding
+                                        { plain = NameBinding
+                                            { name = "x"
+                                            , nameLocation
+                                            , annotation = Nothing
+                                            , assignment = Nothing
+                                            }
+                                        }
+                                    ]
+                                , annotation = Nothing 
+                                , assignment = Syntax.Alternative
+                                    { location = nameLocation
+                                    , name
+                                    , argument = elaboratedVariable
+                                    }
+                                }
+                        }
+                    }
+                , argument = expression
+                }
+
+    case (subRemainingAlternatives, superRemainingAlternatives) of
+        _   | subRemainingAlternatives == superRemainingAlternatives && Map.null subExtraAlternativeTypes -> do
+                return ()
+
+        (Monotype.UnsolvedAlternatives p₀, Monotype.UnsolvedAlternatives p₁) -> do
+            p₂ <- fresh
+
+            context₁ <- get
+
+            let p₀First = do
+                    (contextAfter, contextBefore) <- Context.splitOnUnsolvedAlternatives p₀ context₁
+
+                    Monad.guard (Context.UnsolvedAlternatives p₁ `elem` contextAfter)
+
+                    let command =
+                            set (   contextAfter
+                                <>  ( Context.UnsolvedAlternatives p₀
+                                    : Context.UnsolvedAlternatives p₂
+                                    : contextBefore
+                                    )
+                                )
+
+                    return command
+
+            let p₁First = do
+                    (contextAfter, contextBefore) <- Context.splitOnUnsolvedAlternatives p₁ context₁
+
+                    Monad.guard (Context.UnsolvedAlternatives p₀ `elem` contextAfter)
+
+                    let command =
+                            set (   contextAfter
+                                <>  ( Context.UnsolvedAlternatives p₁
+                                    : Context.UnsolvedAlternatives p₂
+                                    : contextBefore
+                                    )
+                                )
+
+                    return command
+
+            case p₀First <|> p₁First of
+                Nothing -> do
+                    Exception.throwIO (MissingOneOfAlternatives [Type.location subType, Type.location superType] p₀ p₁ context₁)
+
+                Just command -> do
+                    command
+
+            context₂ <- get
+
+            instantiateAlternativesL
+                p₀
+                (Type.location superType)
+                (Context.solveUnion context₂
+                    (Type.Alternatives (Map.toList superExtraAlternativeTypes)
+                        (Monotype.UnsolvedAlternatives p₂)
+                    )
+                )
+
+            context₃ <- get
+
+            instantiateAlternativesR
+                (Type.location subType)
+                (Context.solveUnion context₃
+                    (Type.Alternatives (Map.toList subExtraAlternativeTypes)
+                        (Monotype.UnsolvedAlternatives p₂)
+                    )
+                )
+                p₁
+
+        (Monotype.UnsolvedAlternatives p₀, _)
+            | Map.null subExtraAlternativeTypes -> do
+                context₁ <- get
+
+                instantiateAlternativesL
+                    p₀
+                    (Type.location superType)
+                    (Context.solveUnion context₁
+                        (Type.Alternatives (Map.toList superExtraAlternativeTypes)
+                            superRemainingAlternatives
+                        )
+                    )
+
+        (_, Monotype.UnsolvedAlternatives p₁) -> do
+            context₁ <- get
+
+            instantiateAlternativesR
+                (Type.location subType)
+                (Context.solveUnion context₁
+                    (Type.Alternatives (Map.toList subExtraAlternativeTypes)
+                        subRemainingAlternatives
+                    )
+                )
+                p₁
+
+        _   | otherwise -> do
+                Exception.throwIO (UnionTypeMismatch subType superType (Map.keys subExtraAlternativeTypes))
+
+    return (toFold (toList bothAlternatives))
+
+isSubtypeOf _ subType superType = do
+    Exception.throwIO (NotSubtype subType superType)
 
 -- | @subtype sub super@ checks that @sub@ is a subtype of @super@
 subtype :: Type Location -> Type Location -> Grace ()
@@ -4066,23 +4645,7 @@ check Syntax.Lambda{ location, binding = Syntax.PlainBinding{ plain = Syntax.Nam
         return Syntax.Lambda{ location, binding = newBinding, body = newBody }
 
 check annotated Type.Function{ input, output } = do
-    let candidates₀ = Set.fromList (map Text.singleton [ 'a' .. 'z' ])
-
-    let free = Syntax.freeVariables annotated
-
-    let name = case Set.toList (Set.difference candidates₀ free) of
-            n : _ -> n
-            _ ->
-                let as = Set.filter (Text.isPrefixOf "a") free
-
-                in  head do
-                        suffix <- [ (0 :: Int) .. ]
-
-                        let candidate = Text.pack ("a" <> show suffix)
-
-                        Monad.guard (not (Set.member candidate as))
-
-                        return candidate
+    let name = freshName annotated
 
     let nameLocation = Type.location input
 
@@ -4851,14 +5414,12 @@ check annotated annotation@Type.Scalar{ scalar = Monotype.Key } = do
             return newAnnotated
 
 -- Sub
-check e _B = do
-    (_A, newE) <- infer e
+check expression annotation = do
+    (type_, newExpression) <- infer expression
 
-    _Θ <- get
+    context <- get
 
-    subtype (Context.solveType _Θ _A) (Context.solveType _Θ _B)
-
-    return newE
+    isSubtypeOf newExpression (Context.solveType context type_) (Context.solveType context annotation)
 
 {-| This corresponds to the judgment:
 
@@ -4918,7 +5479,7 @@ inferApplication Type.Function{..} e = do
 inferApplication Type.VariableType{..} _ = do
     Exception.throwIO (NotNecessarilyFunctionType location name)
 inferApplication _A _ = do
-    Exception.throwIO (NotFunctionType (location _A) _A)
+    Exception.throwIO (NotFunctionType _A)
 
 -- | Infer the `Type` of the given `Syntax` tree
 typeOf
@@ -5159,7 +5720,7 @@ data TypeInferenceError
     | MissingOneOfFields [Location] (Existential Monotype.Record) (Existential Monotype.Record) (Context Location)
     | MissingVariable (Existential Monotype) (Context Location)
     --
-    | NotFunctionType Location (Type Location)
+    | NotFunctionType (Type Location)
     | NotNecessarilyFunctionType Location Text
     --
     | NotAlternativesSubtype Location (Existential Monotype.Union) (Type.Union Location)
@@ -5341,14 +5902,14 @@ instance Exception TypeInferenceError where
         \\n\
         \" <> listToText _Γ
 
-    displayException (NotFunctionType location _A) =
+    displayException (NotFunctionType type_) =
         "Not a function type\n\
         \\n\
         \An expression of the following type:\n\
         \\n\
-        \" <> insert _A <> "\n\
+        \" <> insert type_ <> "\n\
         \\n\
-        \" <> Text.unpack (Location.renderError "" location) <> "\n\
+        \" <> Text.unpack (Location.renderError "" (Type.location type_)) <> "\n\
         \\n\
         \… was invoked as if it were a function, but the above type is not a function\n\
         \type."
