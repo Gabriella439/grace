@@ -1,0 +1,27 @@
+\r ->
+  let { "Example 0", "Example 1", "Example 2", "Example 3", "Example 4", "Example 6", "Example 7", "Example 8", "Example 9", "Example 10", "Example 11" }
+        = r
+
+  in  { "Example 0":
+          .'Example 0' : Integer
+      , "Example 1":
+          .'Example 1' : Real
+      , "Example 2":
+          .'Example 2' : Real
+      , "Example 3":
+          .'Example 3' : Key
+      , "Example 4":
+          .'Example 4'
+      , "Example 6":
+          some .'Example 6'
+      , "Example 7":
+          if let x of .'Example 7' in x : Integer
+      , "Example 8":
+          for x of .'Example 8' in x : Integer
+      , "Example 9":
+          let { x } = .'Example 9' in { "x": x : Integer }
+      , "Example 10":
+          fold { "A" x: A (x : Integer) } .'Example 10'
+      , "Example 11":
+          \a -> .'Example 11' (a : Integer) : Integer
+      }

@@ -1,0 +1,29 @@
+# This exercises various cases of the `isSubtypeOf` judgment, which elaborates
+# an arbitrary expression to fix any subtype/supertype mismatch
+(\r -> r)
+  :   { "Example 0": Natural
+      , "Example 1": Natural
+      , "Example 2": Integer
+      , "Example 3": Text
+      , "Example 4": Bool
+      , "Example 5": Bool
+      , "Example 6": Bool
+      , "Example 7": Optional Natural
+      , "Example 8": List Natural
+      , "Example 9": { x: Natural }
+      , "Example 10": < A: Natural >
+      , "Example 11": Integer -> Natural
+      }
+  ->  { "Example 0": Integer
+      , "Example 1": Real
+      , "Example 2": Real
+      , "Example 3": Key
+      , "Example 4": Bool
+      , "Example 4": JSON
+      , "Example 6": Optional Bool
+      , "Example 7": Optional Integer
+      , "Example 8": List Integer
+      , "Example 9": { x: Integer }
+      , "Example 10": < A: Integer >
+      , "Example 11": Natural -> Integer
+      }
