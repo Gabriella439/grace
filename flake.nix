@@ -2,9 +2,9 @@
   inputs = {
     garnix-lib.url = "github:garnix-io/garnix-lib";
 
-    nixpkgs.url = github:NixOS/nixpkgs/24.11;
+    nixpkgs.url = "github:NixOS/nixpkgs/25.11";
 
-    utils.url = github:numtide/flake-utils;
+    utils.url = "github:numtide/flake-utils";
   };
 
   outputs = { garnix-lib, nixpkgs, utils, self }:
@@ -170,7 +170,7 @@
           super.haskell-language-server.override (old: {
             haskellPackages = super.haskell.packages."${compiler}";
 
-            supportedGhcVersions = [ "96" ];
+            supportedGhcVersions = [ "910" ];
           });
 
         docker-stream =
@@ -296,7 +296,7 @@
                 inherit (pkgs) docker-image docker-stream website;
               };
 
-          ghc = withCompiler "ghc96";
+          ghc = withCompiler "ghc910";
 
           ghcjs = withCompiler "ghcjs";
 
@@ -331,7 +331,7 @@
               ghcjs = ghcjs.grace.env;
             };
           }) // {
-            overlays = nixpkgs.lib.genAttrs [ "ghc96" "ghcjs" ] overlay;
+            overlays = nixpkgs.lib.genAttrs [ "ghc910" "ghcjs" ] overlay;
 
             nixosConfigurations =
               let
