@@ -2,17 +2,10 @@
 {-# LANGUAGE RecordWildCards  #-}
 {-# LANGUAGE OverloadedLists  #-}
 
-{-| This module is based on the bidirectional type-checking algorithm from:
+{-| This module is loosely based on the bidirectional type-checking algorithm
+    from:
 
     Dunfield, Jana, and Neelakantan R. Krishnaswami. \"Complete and easy bidirectional typechecking for higher-rank polymorphism.\" ACM SIGPLAN Notices 48.9 (2013): 429-442.
-
-    The main differences from the original algorithm are:
-
-    * This uses `Control.Monad.State.Strict.StateT` to thread around
-      `Context`s and manipulate them instead of explicit `Context` passing as
-      in the original paper
-
-    * This algorithm adds support for row polymorphism and polymorphic variants
 -}
 module Grace.Infer
     ( -- * Type inference
@@ -98,15 +91,10 @@ Nothing `orDie` e = Exception.throwIO e
 -- | Generate a fresh existential variable (of any type)
 fresh :: MonadState Status m => m (Existential a)
 fresh = do
-    let update Status{ count = count₀, .. } =
-            (fromIntegral count₀, Status{ count = count₁, .. })
-          where
-            count₁ = count₀ + 1
+    let update Status{ count, .. } =
+            (fromIntegral count, Status{ count = count + 1, .. })
 
     State.state update
-
--- Unlike the original paper, we don't explicitly thread the `Context` around.
--- Instead, we modify the ambient state using the following utility functions:
 
 -- | Push a new `Context` `Entry` onto the stack
 push :: MonadState Status m => Entry Location -> m ()
@@ -147,6 +135,21 @@ scopedUnsolvedType :: MonadState Status m => s -> (Type.Type s -> m a) -> m a
 scopedUnsolvedType location k = do
     existential <- fresh
 
+    -- [NOTE: Marker]
+    --
+    -- You might wonder why we don't just do:
+    --
+    --     scoped (Context.UnsolvedType existential) do
+    --         k Type.UnsolvedType{ location, existential }
+    --
+    -- The reason why is that inference can insert new unsolved type variables
+    -- *before* the `UnsolvedType` (but still after the `MarkerType`).  For
+    -- example, when `instantiateTypeL` instantiates an unsolved variable to
+    -- a `Function` type it will insert two fresh unsolved variables right
+    -- before it in the context.  If `scoped` were to discard the context up
+    -- until the `UnsolvedType` it would leave behind those two variables in the
+    -- context, which would then lead to an ill-formed `Context` outside of the
+    -- `scoped` block.
     scoped (Context.MarkerType existential) do
         push (Context.UnsolvedType existential)
 
@@ -156,6 +159,7 @@ scopedUnsolvedFields :: MonadState Status m => (Type.Record s -> m a) -> m a
 scopedUnsolvedFields k = do
     a <- fresh
 
+    -- See: [NOTE: Marker]
     scoped (Context.MarkerFields a) do
         push (Context.UnsolvedFields a)
 
@@ -166,6 +170,7 @@ scopedUnsolvedAlternatives
 scopedUnsolvedAlternatives k = do
     a <- fresh
 
+    -- See: [NOTE: Marker]
     scoped (Context.MarkerAlternatives a) do
         push (Context.UnsolvedAlternatives a)
 
@@ -259,10 +264,10 @@ wellFormed context Type.Union{ location, alternatives = Type.Alternatives kAs re
 wellFormed _ Type.Scalar{} = do
     return ()
 
--- A field is required if and only if it is a subtype of @Optional T@ for some
+-- A type is required if and only if it is a subtype of @Optional T@ for some
 -- type @T@
-isFieldRequired :: Type Location -> Grace Bool
-isFieldRequired type_ = do
+isRequired :: Type Location -> Grace Bool
+isRequired type_ = do
     context <- get
 
     case Context.solveType context type_ of
@@ -288,7 +293,7 @@ isFieldRequired type_ = do
         _ -> do
             return True
 
--- | Computes the supertype of the two input types
+-- | Computes the most-specific supertype of the two input types
 supertypeOf :: Type Location -> Type Location -> Grace (Type Location)
 supertypeOf type₀@UnsolvedType{ existential = existential₀ } UnsolvedType{ existential = existential₁ } = do
     Monad.unless (existential₀ == existential₁) do
@@ -353,7 +358,7 @@ supertypeOf Record{ location = location₀, fields = fields₀ } Record{ locatio
     let optional location type_ = do
             context <- get
 
-            required <- isFieldRequired (Context.solveType context type_)
+            required <- isRequired (Context.solveType context type_)
 
             if required
                 then return Optional{ location, type_ }
@@ -663,7 +668,7 @@ supertypeOf type₀ Optional{ location, type_ = type₁ } = do
 supertypeOf type₀ type₁ = do
     Exception.throwIO (NoSupertype type₀ type₁)
 
--- | Computes the subtype of the two input types
+-- | Computes the most-general subtype of the two input types
 subtypeOf :: Type Location -> Type Location -> Grace (Type Location)
 subtypeOf type₀@UnsolvedType{ existential = existential₀ } UnsolvedType { existential = existential₁ } = do
     Monad.unless (existential₀ == existential₁) do
@@ -1260,7 +1265,7 @@ isSubtypeOf expression subType@Type.Record{ fields = Type.Fields subFieldTypesLi
 
     let getRequiredFields = do
             let process (name, fieldType) = do
-                    required <- isFieldRequired fieldType
+                    required <- isRequired fieldType
 
                     let location = Type.location fieldType
 
@@ -4717,13 +4722,13 @@ check annotated@Syntax.Record{ location, fieldValues = fieldValues₀ } annotati
     let extraValues = Map.difference subFieldValues  superFieldTypes
     let extraTypes  = Map.difference superFieldTypes subFieldValues
 
-    isRequiredTypes <- traverse isFieldRequired extraTypes
+    requiredTypes <- traverse isRequired extraTypes
 
     let extraRequiredTypes =
-            Map.difference extraTypes (Map.filter not isRequiredTypes)
+            Map.difference extraTypes (Map.filter not requiredTypes)
 
     let extraOptionalTypes =
-            Map.difference extraTypes (Map.filter id isRequiredTypes)
+            Map.difference extraTypes (Map.filter id requiredTypes)
 
     let process (field, (value, type_)) = do
             context <- get
