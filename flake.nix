@@ -12,7 +12,7 @@
       overlay = compiler: self: super: {
         codemirror = self.fetchzip {
           url = "https://codemirror.net/5/codemirror.zip";
-          sha256 = "sha256-TS4JVTRIwdWj/CihELhhC3Rte9DT0Tv239eZKR6MT6w=";
+          sha256 = "sha256-l3SXJlgBThJZvIa8cX/Ym5psaX5DpyHV30ilV58kQXg=";
         };
 
         haskell = super.haskell // {
